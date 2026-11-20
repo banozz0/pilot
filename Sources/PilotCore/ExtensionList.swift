@@ -400,9 +400,42 @@ extension Extension {
     static func sound(_ name: String?) -> String? { name.flatMap { sounds.contains($0) ? $0 : nil } }
 }
 
-/// A list, detail or form command's answer: its items, its detail, its Raycast Form (T10), or why there is nothing (cards agent-bo-95423243, 245).
+extension Extension {
+    /// A Raycast List.EmptyView (T26): what a list with no rows shows in their place, centred. Its title, description
+    /// and icon, an SF Symbol name or an emoji as a row's are, and its ActionPanel's actions (T28), Return's the first.
+    public struct Empty: Equatable, Sendable, Decodable {
+        public let title: String, description: String?, symbol: String?, icon: String?
+        public let actions: [Item.Action]
+
+        public init(title: String, description: String? = nil, symbol: String? = nil, icon: String? = nil, actions: [Item.Action] = []) {
+            self.title = title; self.description = description; self.symbol = symbol; self.icon = icon; self.actions = actions
+        }
+
+        private enum CodingKeys: String, CodingKey { case title, description, symbol, icon, actions }
+
+        /// Read as a row's icon is: an emoji alone, a symbol name only when it is one; its actions as a row's.
+        public init(from decoder: any Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            title = (try? c.decode(String.self, forKey: .title)) ?? ""
+            description = (try? c.decode(String.self, forKey: .description)).flatMap { $0.isEmpty ? nil : $0 }
+            symbol = (try? c.decode(String.self, forKey: .symbol)).flatMap(Item.symbolName)
+            icon = (try? c.decode(String.self, forKey: .icon)).flatMap { ScriptCommand.isEmoji($0) ? $0 : nil }
+            actions = (try? Item.Action.decode(c, .actions))?.0 ?? []
+        }
+
+        /// The one row its actions are pressed on while it shows (the menu's Return and Cmd+K, `pilot ext act`); nil when
+        /// it offers none.
+        public var item: Item? {
+            actions.isEmpty ? nil : Item(title: title, subtitle: description, icon: icon, actions: actions, symbol: symbol)
+        }
+    }
+}
+
+/// A list, detail or form command's answer: its items, its detail, its Raycast Form (T10), a Raycast list's empty view
+/// with no rows (T26), or why there is nothing (cards agent-bo-95423243, 245).
 public enum ListOutcome: Equatable, Sendable {
     case items([Extension.Item]), detail(Extension.Detail), form(Extension.Form), error(String)
+    case empty(Extension.Empty)
 
     /// The Raycast Form this is, if it is one (T10).
     public var form: Extension.Form? { if case .form(let form) = self { form } else { nil } }
@@ -438,7 +471,7 @@ extension ExtensionRun {
         "did not answer in \(String(format: "%g", timeout.inSeconds)) s"
     }
 
-    private struct Answer: Decodable { let type: String, text: String?, items: [Extension.Item]?, ack: Int?, isLoading: Bool? }
+    private struct Answer: Decodable { let type: String, text: String?, items: [Extension.Item]?, ack: Int?, isLoading: Bool?, empty: Extension.Empty? }
 
     /// The list, the detail or the reason in what a view's program printed: the first error, else the last answer.
     static func answer(_ output: String) -> ListOutcome {
@@ -470,7 +503,9 @@ extension ExtensionRun {
         let meta = Meta(ack: answer.ack, loading: answer.isLoading == true)
         switch answer.type {
         case "error": return .answer(.error("says: \(answer.text ?? "it failed")"), meta)
-        case "list": return .answer(.items(answer.items ?? []), meta)
+        case "list":
+            if answer.items?.isEmpty != false, let empty = answer.empty { return .answer(.empty(empty), meta) }
+            return .answer(.items(answer.items ?? []), meta)
         case "detail": return .answer((try? decoder.decode(Extension.Detail.self, from: data)).map(ListOutcome.detail) ?? .error(unreadable), meta)
         case "form": return .answer((try? decoder.decode(Extension.Form.self, from: data)).map(ListOutcome.form) ?? .error(unreadable), meta)
         default: return .skip
@@ -494,8 +529,14 @@ public enum ExtensionList {
         }
     }
 
-    /// A row's icon: its own emoji, else its own symbol (T5), else the command's emoji over a terminal.
+    /// A row's icon: its own emoji, else its own picture (T28), else its own symbol (T5), else the command's emoji over a
+    /// terminal.
     static func icon(of item: Extension.Item, in command: Extension.Command) -> MenuIcon {
+        if item.icon == nil, let image = item.image {
+            var icon = MenuIcon.command(emoji: command.icon)
+            icon.image = image
+            return icon
+        }
         if item.icon == nil, let symbol = item.symbol { return .glyph(symbol, .neutral) }
         return .command(emoji: item.icon ?? command.icon)
     }

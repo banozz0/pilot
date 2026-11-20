@@ -374,21 +374,26 @@ extension ExtensionCheck {
     /// on a temporary data and cache folder, with no saved values and no Keychain, so a preference is its default. A run
     /// fails when it is too slow, exits with an error, says nothing Pilot reads as an answer, or prints a line outside the
     /// protocol (stricter than Pilot, which shows a no-view command's plain last line: harness.py's rule). A command
-    /// answering with its own error message has answered. With a required preference that has no default nothing runs,
-    /// as Pilot would run nothing, and every command fails: the extension does not work as installed.
+    /// answering with its own error message has answered. A command a required preference with no default applies to
+    /// does not run, as Pilot would run nothing, and fails: it does not work as installed (T28: per command, so a
+    /// command's own required key stops only that command).
     public static func runs(_ ext: Extension, environment pilot: [String: String] = ProcessInfo.processInfo.environment) async -> [Run] {
         let box = FileManager.default.temporaryDirectory.appending(path: "pilot-ext-test-\(UUID().uuidString)")
         defer { try? FileManager.default.removeItem(at: box) }
         for folder in ["home", "tmp"] { try? FileManager.default.createDirectory(at: box.appending(path: folder), withIntermediateDirectories: true) }
         let environment = ["HOME": box.appending(path: "home").path, "TMPDIR": box.appending(path: "tmp").path + "/", "USER": pilot["USER"] ?? NSUserName()]
-        let inputs: ExtensionRun.Inputs
-        do { inputs = try ExtensionStorage(data: box.appending(path: "data"), cache: box.appending(path: "cache"), keychain: NoKeychain()).inputs(for: ext) }
-        catch {
-            let why = (error as? ExtensionStorage.Unset).map { "not run: \($0.message(in: ext))" } ?? "not run: \(error.localizedDescription)"
-            return ext.commands.map { Run(command: $0.name, ranAs: kind(of: $0, in: ext).ranAs, ok: false, first: "", why: why) }
-        }
+        let storage = ExtensionStorage(data: box.appending(path: "data"), cache: box.appending(path: "cache"), keychain: NoKeychain())
         var runs: [Run] = []
-        for command in ext.commands { runs.append(await run(command, in: ext, inputs: inputs, environment: environment)) }
+        for command in ext.commands {
+            let inputs: ExtensionRun.Inputs
+            do { inputs = try storage.inputs(for: ext, command: command) }
+            catch {
+                let why = (error as? ExtensionStorage.Unset).map { "not run: \($0.message(in: ext))" } ?? "not run: \(error.localizedDescription)"
+                runs.append(Run(command: command.name, ranAs: kind(of: command, in: ext).ranAs, ok: false, first: "", why: why))
+                continue
+            }
+            runs.append(await run(command, in: ext, inputs: inputs, environment: environment))
+        }
         return runs
     }
 

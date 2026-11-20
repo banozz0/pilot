@@ -74,6 +74,8 @@ public struct ExtensionInstaller: Sendable {
     /// The folders an install of `id` replaces: the installed extension with that id, wherever it is, and a folder named
     /// `id` that reads as it. Throws when a folder named `id` holds another extension or none.
     func replaced(_ id: String) throws -> [URL] {
+        // A Raycast install that took one of Pilot's own ids before T28 moves to its own first, so it is never replaced.
+        RaycastManifest.migrate(in: extensions, data: extensions.deletingLastPathComponent().appending(path: "ExtensionData"))
         let found = Extension.find(in: extensions)
         var folders = found.extensions.filter { $0.id == id }.map { $0.folder.resolvingSymlinksInPath() }
         let named = extensions.appending(path: id).resolvingSymlinksInPath()
@@ -101,9 +103,9 @@ public struct ExtensionInstaller: Sendable {
 
 /// A Raycast extension's folder from GitHub, built on this Mac without Node (ADR 0017, T6): pilot-ext-host's `--fetch`
 /// lists the folder once and fetches its files into `workspace` (each checked against its git blob hash), and answers
-/// the plan the question is made from; after Allow its `--build` gets esbuild into `tools` once and the lockfile's
+/// the plan; its `--build` then gets esbuild into `tools` once and the lockfile's
 /// tarballs (each checked by its sha512, no install script run) and bundles each command. Pilot then checks and installs
-/// the built folder as a local one. `workspace` is Pilot's alone, made beside the Extensions folder, and gone after.
+/// the built folder as a local one, with no question (T26). `workspace` is Pilot's alone, made beside the Extensions folder, and gone after.
 public struct GitHubInstall: Sendable {
     public struct Plan: Codable, Sendable {
         public struct Command: Codable, Sendable { public let name, title, mode: String }
@@ -131,10 +133,10 @@ public struct GitHubInstall: Sendable {
 
     static let prefix = ".ext-github-"
 
-    /// The plan, once Pilot holds every remote word the question shows to its own rules too, as the host's plan() does:
+    /// The plan, once Pilot holds every remote word its answer and refusals show to its own rules too, as the host's plan() does:
     /// the id as Extension.isName, every command name as Extension.isCommandName (Raycast's capitals kept), Raycast's three modes, each preference name a letter then
     /// letters, digits, _ and -, the tree 40 lowercase hex digits, each package's key names, real name and version npm's,
-    /// and the title, the one free text, at most 80 Unicode scalars (escaped, never refused: the question and every
+    /// and the title, the one free text, at most 80 Unicode scalars (escaped, never refused: the result line and every
     /// refusal the pilot command echoes pass it through ControlGate.Ask.visible; the version shows only when
     /// ExtensionCatalogue.Version reads it). A workspace over an
     /// hour old, left by a run that stopped midway, is swept first.
@@ -150,7 +152,7 @@ public struct GitHubInstall: Sendable {
         let plan = try JSONDecoder().decode(Plan.self, from: last)
         guard Extension.isName(plan.id), plan.title.unicodeScalars.count <= 80,
               plan.commands.allSatisfy({ Extension.isCommandName($0.name) && ["view", "no-view", "menu-bar"].contains($0.mode) }) else {
-            throw Refused(errorDescription: "its package.json names it outside Pilot's id rule (a-z, 0-9 and hyphens) or a command outside letters, digits and hyphens")
+            throw Refused(errorDescription: "its package.json names it outside Pilot's id rule (a-z, 0-9 and hyphens) or a command outside letters, digits, hyphens and underscores")
         }
         guard plan.preferences.allSatisfy({ $0.count <= 64 && $0.wholeMatch(of: #/[A-Za-z][A-Za-z0-9_-]*/#) != nil }) else {
             throw Refused(errorDescription: "its package.json names a preference outside a letter then letters, digits, _ and -")
@@ -176,11 +178,11 @@ public struct GitHubInstall: Sendable {
     public struct Built: Decodable, Sendable {
         public let folder, esbuild, esbuildPath, esbuildVersion: String
         public let needs: [String]?
-        /// `needs`, each a Node module name (a-z, digits, _ and /), so nothing the extension wrote reaches the question.
+        /// `needs`, each a Node module name (a-z, digits, _ and /), so nothing the extension wrote reaches the result line.
         public var missingModules: [String] { (needs ?? []).filter { $0.count <= 40 && $0.wholeMatch(of: #/[a-z][a-z0-9_]*(\/[a-z0-9_]+)?/#) != nil } }
     }
 
-    /// The build, and each request it made; `plan` is the one asked about. The host gets the prelude, which it reads for
+    /// The build, and each request it made; `plan` is the one fetched. The host gets the prelude, which it reads for
     /// the modules Pilot has.
     public func build(_ plan: Plan) async throws -> (Built, [Fetched]) {
         let prelude = ExtensionRun.host(environment: ProcessInfo.processInfo.environment)?.prelude

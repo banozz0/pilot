@@ -150,57 +150,6 @@ final class ExtensionTools {
         }
     }
 
-    /// A GitHub install's question (ADR 0017, T6), asked once its folder is fetched and before anything is downloaded or
-    /// built: where it comes from, its commands and preferences, what is downloaded after Allow and how each is checked,
-    /// and what it replaces. Past what the prompt shows whole (ControlGate.Ask.longest), the commands, preferences and
-    /// packages are counted instead of named, so a big extension is still asked; one still too long (long folder paths)
-    /// is denied unasked, as any question is. Every remote word it shows is held to a rule by the host and again by
-    /// GitHubInstall.fetch before this is asked: the id and command names (the id rule), the modes (Raycast's three), the
-    /// preference names (a letter, then letters, digits, _ and -), the tree (40 hex digits), each package's key, real name
-    /// and version (npm's); the version only when it reads as one (`checked`). The title is the one free text: at most 80
-    /// Unicode scalars, last on its line, escaped here with ControlGate.Ask.visible so the question's text (which the
-    /// gate's denials and the pilot command repeat) never carries a control code; an installed copy's title on the
-    /// replaces line likewise (`shown`).
-    func githubAsk(_ plan: GitHubInstall.Plan, tools: URL, whole: Bool = true) -> (ask: ControlGate.Ask, whole: Bool) {
-        let modes = Dictionary(grouping: plan.commands, by: \.mode).sorted { $0.key < $1.key }.map { "\($0.value.count) \($0.key)" }
-        let commands = whole ? plan.commands.map { "ext.\(plan.id).\($0.name) (\($0.mode))" }.joined(separator: ", ")
-            : "\(plan.commands.count) (\(modes.joined(separator: ", ")))"
-        let preferences = whole ? (plan.preferences.isEmpty ? "none" : plan.preferences.joined(separator: ", ")) : "\(plan.preferences.count)"
-        let esbuild = plan.esbuild == "reuse" ? "esbuild \(plan.esbuildVersion) is already in \(tools.path), reused"
-            : "esbuild \(plan.esbuildVersion) (\(ByteCountFormatter.string(fromByteCount: Int64(plan.esbuildBytes), countStyle: .file)), checked by its pinned sha512) into \(tools.path)"
-        let packages = "\(plan.packages.count) package\(plan.packages.count == 1 ? "" : "s"), each checked by its lockfile's sha512, no install script run"
-            + (whole && !plan.packages.isEmpty ? ": " + plan.packages.map { package in
-                let place = package.key.dropFirst("node_modules/".count), alias = place.components(separatedBy: "/node_modules/").last ?? ""
-                return "\(place)@\(package.version)" + (alias == package.name ? "" : " (\(package.name))")
-            }.joined(separator: ", ") : "")
-        let (replaces, headline, fromLine) = replacing(plan.id, plan.version, from: "From GitHub: \(plan.source)")
-        let ask = ControlGate.Ask.install(.extension, lines: [
-            "\(Self.titled(plan.id, plan.version)) from \(plan.source), tree \(plan.tree.prefix(12)), its title: \(oneLine(plan.title))",
-            "into \(extensions.appending(path: plan.id).path)",
-            "commands, run as you in Pilot's extension host: \(commands)",
-            "preferences: \(preferences)",
-            "fetched to ask this: \(plan.files) files, \(ByteCountFormatter.string(fromByteCount: Int64(plan.bytes), countStyle: .file)) from GitHub, each checked by its git blob hash",
-            "downloads from registry.npmjs.org after Allow: \(esbuild); \(packages)",
-            "built with esbuild on this Mac, then checked as an extension; the temporary folder goes after",
-            replaces,
-        ]).summed(headline, ["Runs its \(plan.commands.count) command\(plan.commands.count == 1 ? "" : "s") as you, built on this Mac. \(fromLine)",
-                             "Downloads \(plan.esbuild == "reuse" ? "" : "esbuild and ")\(plan.packages.count) package\(plan.packages.count == 1 ? "" : "s") from registry.npmjs.org, each hash checked"])
-        let shown = ask.text + "\n" + headline
-        guard whole, shown.unicodeScalars.count > ControlGate.Ask.longest || shown.unicodeScalars.count { $0 == "\n" } > ControlGate.Ask.mostLines else { return (ask, whole) }
-        return githubAsk(plan, tools: tools, whole: false)
-    }
-
-    /// The second question of a GitHub install whose built code requires Node modules the prelude lacks or only loads
-    /// (T25): asked after the build, before anything is installed; `missing` are Node's own module names.
-    func modulesAsk(_ plan: GitHubInstall.Plan, _ missing: [String]) -> ControlGate.Ask {
-        let line = "needs Node modules Pilot doesn't have yet: \(missing.joined(separator: ", ")); it may not work"
-        return ControlGate.Ask.install(.extension, lines: [
-            "\(Self.titled(plan.id, plan.version)), built from \(plan.source), its title: \(oneLine(plan.title))",
-            line,
-            "Allow installs it anyway into \(extensions.appending(path: plan.id).path); Deny installs nothing",
-        ]).summed("Install \(oneLine(plan.title)) anyway?", ["It \(line)."])
-    }
-
     /// Read again after Allow: an extension changed or gone while asking denies.
     func removeAsk(_ id: String) -> ControlGate.Ask {
         guard let ext = installed(id) else { return .remove(.extension, "\(id), not installed") }
@@ -254,7 +203,7 @@ extension ControlVerbs {
     static let extSubcommands: [(name: String, usage: String, help: String)] = [
         ("new", "ext new <id> [--mode <mode>] [--title <title>] [--dir <folder>]", "Makes an extension folder from a template, outside Pilot's Extensions folder."),
         ("test", "ext test [<folder>] [--check]", "Checks a folder as an extension, then runs each command once after Allow; --check only checks. A folder outside the temporary folders and ~/Downloads is read only after Allow."),
-        ("install", "ext install <folder> | ext install github:<owner>/<repo>/<folder>", "Copies a checked folder into Pilot's Extensions folder after Allow. A Raycast extension's GitHub folder is fetched (each file checked by its git blob hash) and asked about, then built on this Mac without Node: esbuild downloaded once into Tools and the lockfile's packages from the npm registry, each checked by its sha512, no install script run."),
+        ("install", "ext install <folder> | ext install github:<owner>/<repo>/<folder>", "Copies a checked folder into Pilot's Extensions folder after Allow. A Raycast extension's GitHub folder installs straight away, with no question: fetched (each file checked by its git blob hash), then built on this Mac without Node (esbuild downloaded once into Tools and the lockfile's packages from the npm registry, each checked by its sha512, no install script run); its result line says how many packages came and which Node modules Pilot lacks."),
         ("remove", "ext remove <id>", "Moves an installed extension to the Trash after Allow; its data and settings stay."),
         ("show", "ext show <id>", "An installed extension's card: version, description, examples, what it says it touches, commands, the preferences it still needs."),
         ("broken", "ext broken", "The folders in Extensions that do not read as extensions, each with why."),
@@ -263,7 +212,7 @@ extension ControlVerbs {
         ("page", "ext page <id>", "Asks its page command once after Allow and answers its blocks, as its page shows them; nothing is read back while a password preference is set."),
         ("act", "ext act <id> <action> [--input <text>] [--answer <text>] [--alt] | ext act <id> <row> [--command <name>] [--query <text>] | ext act <id> --handler <id> [--command <name>] [--then <row>|escape] | ext act <id> [<action>] [--type <field>=<text>] [--submit [<json values>]]", "Presses one of its page's actions after Allow, named as ext page shows it (a button, a row or row/action, a link, row/Move up, an input box's action): runs its command and answers what it said and the page after. --input is an input box's text, --alt its Option+Return, --answer what the action asks. An open, copy, paste, Pilot action, timer or alert is answered, not performed. A Raycast-format extension, which has no page, presses a row's action (row or row/action, as ext run shows it, or --handler by its id) in its first view, or --command's, opened searched for --query, with its host kept open: a callback runs and it answers the rows before and after; a typed action (open, copy, paste) is answered, not performed, as Pilot performs it on a press in the menu; --then presses again in the view the first press left, escape going back a view. On a Raycast Form, --type types a text field's text one change per character as keystrokes come, and --submit sets the fields its JSON object names, by id, then presses the form's SubmitForm (or the action named); it answers the form before, each line typing drew, the form filled and the view after, submitted false while a field shows an error."),
         ("gaps", "ext gaps [<id>]", "The Raycast APIs a Raycast-format extension used that Pilot lacks (ADR 0017), as its runs recorded them: each with how many runs used it, when last and from which commands, the most used first; every such extension without an id."),
-        ("store", "ext store [<query>] [--refresh] | ext store info <folder> | ext store install <folder> | ext store root <typed>", "Raycast's store: the folders of github.com/raycast/extensions/extensions, from one GitHub listing without an account (kept a day; --refresh reads it again), searched by name and by what each read package.json says, each with installed or not. info reads one folder's package.json (title, description, author, icon). install is ext install github:raycast/extensions/extensions/<folder>, with its same question. root is Hyper+Space's root search for <typed> as the menu lists it (its first 20 rows, each with its heading, kind and target): the store rows come from the listing kept on disk, never GitHub."),
+        ("store", "ext store [<query>] [--refresh] | ext store info <folder> | ext store install <folder> | ext store root <typed>", "Raycast's store: the folders of github.com/raycast/extensions/extensions, from one GitHub listing without an account (kept a day; --refresh reads it again), searched by name and by what each read package.json says, each with installed or not. info reads one folder's package.json (title, description, author, icon). install is ext install github:raycast/extensions/extensions/<folder>, with no question and its same result line. root is Hyper+Space's root search for <typed> as the menu lists it (its first 20 rows, each with its heading, kind and target): the store rows come from the listing kept on disk, never GitHub."),
         ("catalogue", "ext catalogue [<query>] [--refresh]", "Pilot's extension catalogue, searched, each entry with install, update or installed; --refresh reads it again."),
         ("get", "ext get <id>", "Installs a catalogue extension, or updates the installed one to the catalogue's version, after Allow."),
         ("publish", "ext publish <id>", "Sends an installed extension to the catalogue as a pull request, from the clone set in extensions.catalogueClone, after Allow; a debug build sends from a fork on your GitHub account when you cannot push to the catalogue's repo."),
@@ -506,59 +455,65 @@ extension ControlVerbs {
         }
     }
 
-    /// `ext install github:<owner>/<repo>/<folder>` (ADR 0017, T6): the folder fetched and planned, asked about, then
-    /// built and installed as a checked local folder. The workspace goes whatever happens: success, a refusal or a No.
-    /// Answers every request made, with the host it went to and the check it passed. The Raycast store's Install (T24)
-    /// comes here too, `from` naming where it was pressed in Pilot's log.
+    /// `ext install github:<owner>/<repo>/<folder>` (ADR 0017, T6): the folder fetched and planned, then built and installed
+    /// as a checked local folder, with no question (Sven, 2026-11-20, T26: "just install automatically"). Every check that
+    /// is not a question stays: the folder listing and blob hashes, the lockfile's integrity, no install script, the
+    /// host's caps and the Raycast file limits. The workspace goes whatever happens: success or a refusal. Answers every
+    /// request made, with the host it went to and the check it passed, and `result`, the one line each surface shows after
+    /// (installed, the packages fetched, and the Node modules the prelude lacks or only loads, T25). The Raycast store's
+    /// Install (T24) comes here too, `from` naming where it was pressed in Pilot's log.
     static func installFromGitHub(_ github: GitHubInstall, _ tools: ExtensionTools, peer: ControlPeer?, from: String) async throws(ControlError) -> JSONValue {
         defer { github.remove() }
         func refused(_ error: any Error, _ what: String) -> ControlError {
             ControlError(.badValue, "github:\(oneLine(github.spec)) not \(what): \(oneLine(ExtensionCatalogue.Problem.reason(error)))")
         }
         let plan: GitHubInstall.Plan, fetched: [GitHubInstall.Fetched]
-        do { (plan, fetched) = try await github.fetch() } catch { throw refused(error, "fetched, nothing asked") }
-        do { _ = try ExtensionCheck.replaced(plan.id, in: tools.extensions) } catch {
-            throw ControlError(.badValue, oneLine(ExtensionCatalogue.Problem.reason(error)) + " Nothing asked.")
+        do { (plan, fetched) = try await github.fetch() } catch { throw refused(error, "fetched, nothing installed") }
+        // What it replaces, read before the build and again after it; the build takes a while, so a difference installs nothing.
+        // Keyed as Pilot keys it: one of Pilot's own names is raycast-<name> (T28), so Pilot's own is never what it replaces.
+        let id = RaycastManifest.id(plan.id)
+        let named: [URL]
+        do { named = try ExtensionCheck.replaced(id, in: tools.extensions) } catch {
+            throw ControlError(.badValue, oneLine(ExtensionCatalogue.Problem.reason(error)) + " Nothing installed.")
         }
-        // Built again after Allow, as the local route's is: an extension installed or removed under this id while asking
-        // changes the question, and the gate then denies.
-        return try await tools.gate.allow(tools.githubAsk(plan, tools: github.tools).ask, peer: peer) { () throws(ControlError) in
-            let whole = tools.githubAsk(plan, tools: github.tools).whole
-            // What the question named as replaced, the gate having just read it again; the build takes a while, so it is
-            // read once more after it, and a difference installs nothing.
-            let named: [URL]
-            do { named = try ExtensionCheck.replaced(plan.id, in: tools.extensions) } catch { throw refused(error, "built, nothing installed") }
-            let built: GitHubInstall.Built, more: [GitHubInstall.Fetched]
-            do { (built, more) = try await github.build(plan) } catch { throw refused(error, "built, nothing installed") }
-            let staged: ExtensionCheck.Staged
-            do { staged = try await ExtensionCheck.stage(URL(filePath: built.folder)) } catch { throw refused(error, "installed") }
-            defer { staged.remove() }
-            guard let ext = staged.ext, staged.entry != nil, ext.id == plan.id else {
-                throw ControlError(.badValue, "github:\(oneLine(github.spec)) built, but fails the check, so nothing was installed:\n"
-                                   + (staged.problems.isEmpty ? ["it is not extension \(plan.id)"] : staged.problems).map { "- \(oneLine($0))" }.joined(separator: "\n"))
-            }
-            let old: [URL]
-            do { old = try ExtensionCheck.replaced(ext.id, in: tools.extensions) } catch { throw refused(error, "installed") }
-            guard old.map(\.standardizedFileURL.path) == named.map(\.standardizedFileURL.path) else {
-                throw ControlError(.badValue, "github:\(oneLine(github.spec)) built, but what it replaces changed while building "
-                                   + "(asked: \(named.isEmpty ? "nothing" : named.map(\.path).joined(separator: ", ")); now: "
-                                   + "\(old.isEmpty ? "nothing" : old.map(\.path).joined(separator: ", "))), so nothing was installed")
-            }
-            // Node modules its built code requires that the prelude lacks or only loads (T25): known only once built, so a
-            // second question names them before anything is installed.
-            let missing = built.missingModules
-            let done: Extension = try await tools.gate.allow(missing.isEmpty ? nil : tools.modulesAsk(plan, missing), peer: peer) { () throws(ControlError) in
-                do { return try await ExtensionCheck.install(staged, extensions: tools.extensions, trash: tools.trash) } catch { throw refused(error, "installed") }
-            }
-            log.notice("ext install: \(done.id, privacy: .public) from github:\(github.spec, privacy: .public), from \(from, privacy: .public)")
-            return .object(["installed": .string(done.id), "folder": .string(done.folder.path), "from": .string(plan.source), "tree": .string(plan.tree),
-                            "commands": .array(done.listed.map { .string($0.actionID) }), "replaced": .array(old.map { .string($0.path) }),
-                            "question": .string(whole ? "whole" : "counted"), "needs": .array(missing.map(JSONValue.string)),
-                            "esbuild": .object(["was": .string(built.esbuild), "version": .string(built.esbuildVersion), "path": .string(built.esbuildPath)]),
-                            "fetched": .array((fetched + more).map { f in
-                                .object(["host": .string(f.host), "what": .string(oneLine(f.what)), "bytes": .number(Double(f.bytes)), "check": .string(f.check)])
-                            })])
+        let built: GitHubInstall.Built, more: [GitHubInstall.Fetched]
+        do { (built, more) = try await github.build(plan) } catch { throw refused(error, "built, nothing installed") }
+        let staged: ExtensionCheck.Staged
+        do { staged = try await ExtensionCheck.stage(URL(filePath: built.folder)) } catch { throw refused(error, "installed") }
+        defer { staged.remove() }
+        guard let ext = staged.ext, staged.entry != nil, ext.id == id else {
+            throw ControlError(.badValue, "github:\(oneLine(github.spec)) built, but fails the check, so nothing was installed:\n"
+                               + (staged.problems.isEmpty ? ["it is not extension \(id)"] : staged.problems).map { "- \(oneLine($0))" }.joined(separator: "\n"))
         }
+        let old: [URL]
+        do { old = try ExtensionCheck.replaced(ext.id, in: tools.extensions) } catch { throw refused(error, "installed") }
+        guard old.map(\.standardizedFileURL.path) == named.map(\.standardizedFileURL.path) else {
+            throw ControlError(.badValue, "github:\(oneLine(github.spec)) built, but what it replaces changed while building "
+                               + "(before: \(named.isEmpty ? "nothing" : named.map(\.path).joined(separator: ", ")); now: "
+                               + "\(old.isEmpty ? "nothing" : old.map(\.path).joined(separator: ", "))), so nothing was installed")
+        }
+        let done: Extension
+        do { done = try await ExtensionCheck.install(staged, extensions: tools.extensions, trash: tools.trash) } catch { throw refused(error, "installed") }
+        let missing = built.missingModules
+        log.notice("ext install: \(done.id, privacy: .public) from github:\(github.spec, privacy: .public), from \(from, privacy: .public)")
+        return .object(["installed": .string(done.id), "folder": .string(done.folder.path), "from": .string(plan.source), "tree": .string(plan.tree),
+                        "result": .string(installed(plan, missing: missing)),
+                        "commands": .array(done.listed.map { .string($0.actionID) }), "replaced": .array(old.map { .string($0.path) }),
+                        "needs": .array(missing.map(JSONValue.string)),
+                        "esbuild": .object(["was": .string(built.esbuild), "version": .string(built.esbuildVersion), "path": .string(built.esbuildPath)]),
+                        "fetched": .array((fetched + more).map { f in
+                            .object(["host": .string(f.host), "what": .string(oneLine(f.what)), "bytes": .number(Double(f.bytes)), "check": .string(f.check)])
+                        })])
+    }
+
+    /// A GitHub install's one line after (T26), as the store row's HUD, the page and `pilot ext store install` show it:
+    /// "Installed Speedtest: 3 packages fetched. Needs Node modules Pilot doesn't have yet: zlib; it may not work." The
+    /// title is the one free text, cut to 80 scalars and escaped by GitHubInstall.fetch and oneLine; the module names are
+    /// Node's own (Built.missingModules).
+    static func installed(_ plan: GitHubInstall.Plan, missing: [String]) -> String {
+        let packages = "\(plan.packages.count) package\(plan.packages.count == 1 ? "" : "s") fetched"
+        return "Installed \(oneLine(plan.title)): \(packages)."
+            + (missing.isEmpty ? "" : " Needs Node modules Pilot doesn't have yet: \(missing.joined(separator: ", ")); it may not work.")
     }
 
     private static func removeExtension(_ args: ControlArguments, _ tools: ExtensionTools, peer: ControlPeer?) async throws(ControlError) -> JSONValue {

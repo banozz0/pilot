@@ -67,10 +67,21 @@ public struct Extension: Equatable, Sendable {
         }
 
         public let name: String, title: String, kind: Kind, required: Bool, `default`: JSONValue?, description: String?
+        /// The commands that declare it, a Raycast command's own preference (T28); nil for the whole extension's, which every
+        /// command needs. A required one stops only these commands.
+        public var commands: Set<String>?
 
-        public init(name: String, title: String, kind: Kind, required: Bool = false, default: JSONValue? = nil, description: String? = nil) {
+        public init(name: String, title: String, kind: Kind, required: Bool = false, default: JSONValue? = nil, description: String? = nil,
+                    commands: Set<String>? = nil) {
             self.name = name; self.title = title; self.kind = kind; self.required = required; self.default = `default`
-            self.description = description
+            self.description = description; self.commands = commands
+        }
+
+        /// Whether a run of `command` needs it: the extension's always, a command's own only for that command; with no
+        /// command (an action outliving its run, whose command already started) only the extension's.
+        public func applies(to command: Command?) -> Bool {
+            guard let commands else { return true }
+            return command.map { commands.contains($0.name) } ?? false
         }
 
         /// What the manifest says, checked by `init(_:)`.
@@ -104,7 +115,7 @@ public struct Extension: Equatable, Sendable {
             saved.flatMap { fits($0) ? $0 : nil } ?? `default` ?? (kind == .checkbox ? .bool(false) : nil)
         }
 
-        /// A required preference without `value`, an empty string counting as none: its commands do not run.
+        /// A required preference without `value`, an empty string counting as none: the commands it applies to do not run.
         public func isMissing(_ value: JSONValue?) -> Bool { required && (value == nil || value == .string("")) }
 
         /// Whether `value` is one this preference takes: a boolean for a checkbox, one of its options for a dropdown, a string otherwise.
@@ -410,9 +421,10 @@ public struct Extension: Equatable, Sendable {
     static func isName(_ s: String) -> Bool { s.wholeMatch(of: /[a-z0-9][a-z0-9-]*/) != nil }
 
     /// A Raycast-format command's name (ADR 0017): Raycast's own spelling, capitals kept (`searchNoteCommand`), still only
-    /// letters, digits and hyphens, so the id splits one way and a question shows no space or punctuation (T6's review 1);
-    /// an extension.json command keeps `isName`. Install.swift's `plan()` holds a fetched manifest to the same rule.
-    static func isCommandName(_ s: String) -> Bool { s.count <= 64 && s.wholeMatch(of: /[A-Za-z0-9][A-Za-z0-9-]*/) != nil }
+    /// letters, digits, hyphens and underscores (Todo List's `menu_bar`, T28), so the id splits one way and a question shows
+    /// no space or punctuation (T6's review 1); an extension.json command keeps `isName`. Install.swift's `plan()` holds a
+    /// fetched manifest to the same rule.
+    static func isCommandName(_ s: String) -> Bool { s.count <= 64 && s.wholeMatch(of: /[A-Za-z0-9][A-Za-z0-9_-]*/) != nil }
 
     /// `icon` when it is one emoji, the only icon Pilot draws for now.
     private static func emoji(_ icon: String?) -> String? { icon.flatMap { ScriptCommand.isEmoji($0) ? $0 : nil } }

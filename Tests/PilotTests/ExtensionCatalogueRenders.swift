@@ -11,6 +11,7 @@ import Testing
 /// In Instrument, a catalogue entry and an installed one picked, plus the list while the catalogue is read and
 /// when it could not be. Then Raycast's store (raycast-extensions T24): the page's Raycast Store, Hyper+Space's Raycast
 /// Store, and the root search typed "raycast", with the first rows "raycast", "store" and "install" rank printed. Then
+/// T26: a Raycast list's List.EmptyView in the menu's empty look (menu-t26-empty); T28: a Raycast row's own picture (menu-t28-pictures).
 /// T25: the page's All (an installed Raycast extension with its icon, then the store; Pilot's own set aside), its search
 /// over both, Pilot's own (old), and the root search typed "process", the Raycast command read as Extension beside the
 /// store's hit, their first rows printed.
@@ -130,6 +131,22 @@ struct ExtensionCatalogueRenders {
             print("T25 ROOT \(word): " + root.rows.prefix(8).enumerated().map { "\($0.offset + 1). \($0.element.shownTitle) [\($0.element.kindWord ?? "-")\($0.element.subtitle.map { " · \($0)" } ?? "")]" }.joined(separator: " | "))
             if word != "pomodoro" { try InstrumentMenuRenders.render(MenuView(model: MenuModel(nav: root)), "menu-root-t25-\(word)", in: out) }
         }
+        // T26: a Raycast list with no rows shows its List.EmptyView (Speedtest's failure view: Icon.LevelMeter, the error);
+        // T28: with its actions, Return's named under it and its one row kept behind the look.
+        let speedtestFailed = Extension.Empty(title: "Could not install speedtest cli", description: "Check your connection, then press Restart.",
+                                     symbol: "gauge.with.dots.needle.67percent",
+                                     actions: [.init(kind: .invoke(handler: "1.onAction"), title: "Restart"), .init(kind: .invoke(handler: "2.onAction"), title: "Copy Error")])
+        var emptied = MenuNavigator(list: speedtestFailed.item.map { ExtensionList.entries([$0], of: raycast.commands[0]) } ?? [],
+                                    title: "Speedtest", live: true)
+        emptied.emptyView = speedtestFailed
+        try InstrumentMenuRenders.render(MenuView(model: MenuModel(nav: emptied)), "menu-t26-empty", in: out)
+        // T28: a Raycast row's own picture in Hyper+Space, in its glyph's place (Weather's forecast rows wear one each).
+        let picture = try Data(contentsOf: raycast.folder.appending(path: "assets/icon.png"))
+        let forecast = [Extension.Item(title: "20 °C", subtitle: "Clear", actions: [], image: picture),
+                        Extension.Item(title: "Saturday", subtitle: "14 °C to 19 °C", actions: [], image: picture),
+                        Extension.Item(title: "Sunday", subtitle: "A symbol, no picture", actions: [], symbol: "cloud.sun")]
+        let pictured = MenuNavigator(list: ExtensionList.entries(forecast, of: raycast.commands[0]), title: "Weather", live: true)
+        try InstrumentMenuRenders.render(MenuView(model: MenuModel(nav: pictured)), "menu-t28-pictures", in: out)
     }
 
     /// Kill Process as a store install leaves it (T25): Raycast's package.json, its icon in assets/, its built command.

@@ -1,7 +1,8 @@
 // The web globals a bare JSContext lacks and Raycast extensions use (ADR 0017, T3), written from the WHATWG and MDN
 // descriptions: atob and btoa, TextEncoder and TextDecoder (UTF-8), URL and URLSearchParams (parsed by Foundation in
 // the host), AbortController, Headers, Response and fetch (URLSession in the host, http and https only, the body as
-// text). A response's binary body is not here yet and records its use.
+// text and, since T26, as bytes: arrayBuffer, bytes and a ReadableStream body), and a ReadableStream of its own (the
+// queue, a reader and async iteration; no pipeTo or tee).
 import { lack } from "./gaps.js";
 
 const native = globalThis.__native;
@@ -171,6 +172,9 @@ globalThis.Headers = class Headers {
   append(k, v) { const key = String(k).toLowerCase(), old = this.#map.get(key); this.#map.set(key, old == null ? String(v) : `${old}, ${v}`); }
   set(k, v) { this.#map.set(String(k).toLowerCase(), String(v)); }
   get(k) { return this.#map.get(String(k).toLowerCase()) ?? null; }
+  // Each Set-Cookie on its own (fetch's spec), split from the joined value at a comma before the next `name=`, so an
+  // `Expires=Sat, 21 Nov …` date stays whole (Stock Tracker reads Yahoo's cookie this way, T27).
+  getSetCookie() { return this.#map.get("set-cookie")?.split(/,\s*(?=[^;,=\s]+=)/) ?? []; }
   has(k) { return this.#map.has(String(k).toLowerCase()); }
   delete(k) { this.#map.delete(String(k).toLowerCase()); }
   forEach(fn, self) { for (const [k, v] of this.#map) fn.call(self, v, k, this); }
@@ -180,11 +184,82 @@ globalThis.Headers = class Headers {
   [Symbol.iterator]() { return this.#map.entries(); }
 };
 
+/** WHATWG's ReadableStream, its plain form: a source's start, pull and cancel, a queue, one reader at a time. */
+globalThis.ReadableStream ??= class ReadableStream {
+  #queue = [];
+  #closed = false;
+  #failure = null;
+  #waiting = [];
+  #pulling = false;
+  #source;
+  #reader = null;
+  constructor(source = {}) {
+    this.#source = source;
+    const controller = {
+      enqueue: (chunk) => { if (this.#waiting.length) this.#waiting.shift().resolve({ value: chunk, done: false }); else this.#queue.push(chunk); },
+      close: () => { this.#closed = true; for (const w of this.#waiting.splice(0)) w.resolve({ value: undefined, done: true }); },
+      error: (error) => { this.#failure = error ?? new Error("errored"); for (const w of this.#waiting.splice(0)) w.reject(this.#failure); },
+      get desiredSize() { return 1; },
+    };
+    this.controller = controller;
+    Promise.resolve().then(() => source.start?.(controller)).catch((error) => controller.error(error));
+  }
+  get locked() { return this.#reader !== null; }
+  #pull() {
+    if (this.#pulling || !this.#source.pull || this.#closed || this.#failure) return;
+    this.#pulling = true;
+    Promise.resolve().then(() => this.#source.pull(this.controller)).then(() => { this.#pulling = false; if (this.#waiting.length) this.#pull(); },
+      (error) => { this.#pulling = false; this.controller.error(error); });
+  }
+  read() {
+    if (this.#queue.length) return Promise.resolve({ value: this.#queue.shift(), done: false });
+    if (this.#failure) return Promise.reject(this.#failure);
+    if (this.#closed) return Promise.resolve({ value: undefined, done: true });
+    const answer = new Promise((resolve, reject) => this.#waiting.push({ resolve, reject }));
+    this.#pull();
+    return answer;
+  }
+  getReader() {
+    if (this.#reader) throw new TypeError("ReadableStream is locked");
+    const reader = {
+      read: () => this.read(),
+      releaseLock: () => { this.#reader = null; },
+      cancel: (reason) => this.cancel(reason),
+      closed: new Promise((resolve) => { const check = () => (this.#closed ? resolve() : setTimeout(check, 10)); check(); }),
+    };
+    this.#reader = reader;
+    return reader;
+  }
+  async cancel(reason) {
+    this.#queue = [];
+    this.#closed = true;
+    for (const w of this.#waiting.splice(0)) w.resolve({ value: undefined, done: true });
+    await this.#source.cancel?.(reason);
+  }
+  async *[Symbol.asyncIterator]() {
+    while (true) {
+      const { value, done } = await this.read();
+      if (done) return;
+      yield value;
+    }
+  }
+  values() { return this[Symbol.asyncIterator](); }
+  pipeTo() { return lack("ReadableStream.pipeTo"); }
+  pipeThrough() { return lack("ReadableStream.pipeThrough"); }
+  tee() { return lack("ReadableStream.tee"); }
+};
+
+const utf8 = (text) => new TextEncoder().encode(text);
+
 globalThis.Response = class Response {
-  #body;
+  #text;
+  #bytes;
   #used = false;
+  /** `body` text, bytes (a Uint8Array or ArrayBuffer) or nothing; a fetch's answer carries both its text and its bytes. */
   constructor(body = "", init = {}) {
-    this.#body = body == null ? "" : String(body);
+    if (body instanceof ArrayBuffer) body = new Uint8Array(body);
+    if (body instanceof Uint8Array) this.#bytes = body; else this.#text = body == null ? "" : String(body);
+    if (init.bytes instanceof Uint8Array) this.#bytes = init.bytes;
     this.status = init.status ?? 200;
     this.statusText = init.statusText ?? "";
     this.headers = new Headers(init.headers);
@@ -193,13 +268,31 @@ globalThis.Response = class Response {
     this.redirected = false;
     this.type = "basic";
   }
+  #take() {
+    if (this.#used) throw new TypeError("Body is unusable: Body has already been read");
+    this.#used = true;
+  }
+  #textOf() { return this.#text ?? new TextDecoder().decode(this.#bytes); }
+  #bytesOf() { return this.#bytes ?? utf8(this.#text); }
   get bodyUsed() { return this.#used; }
-  async text() { this.#used = true; return this.#body; }
-  async json() { this.#used = true; return JSON.parse(this.#body); }
-  async arrayBuffer() { lack("Response.arrayBuffer"); }
+  async text() { this.#take(); return this.#textOf(); }
+  async json() { this.#take(); return JSON.parse(this.#textOf()); }
+  async arrayBuffer() { this.#take(); const b = this.#bytesOf(); return b.buffer.slice(b.byteOffset, b.byteOffset + b.byteLength); }
+  async bytes() { this.#take(); return this.#bytesOf().slice(); }
   async blob() { lack("Response.blob"); }
-  get body() { return lack("Response.body"); }
-  clone() { return new Response(this.#body, { status: this.status, statusText: this.statusText, headers: this.headers, url: this.url }); }
+  /** The bytes as one chunk of a ReadableStream, read once. */
+  get body() {
+    if (this.#stream) return this.#stream;
+    const bytes = this.#bytesOf();
+    this.#stream = new ReadableStream({
+      start: (controller) => { this.#used = true; if (bytes.length) controller.enqueue(bytes); controller.close(); },
+    });
+    return this.#stream;
+  }
+  #stream = null;
+  clone() {
+    return new Response(this.#text ?? this.#bytes, { status: this.status, statusText: this.statusText, headers: this.headers, url: this.url, bytes: this.#bytes });
+  }
 };
 
 const fetches = new Map();
@@ -229,7 +322,7 @@ globalThis.__pilotFetched = (id, answer) => {
   if (!waiting) return;
   fetches.delete(id);
   if (answer.error) return waiting.reject(new TypeError(`fetch failed: ${answer.error}`));
-  waiting.resolve(new Response(answer.body, { status: answer.status, statusText: answer.statusText, headers: answer.headers, url: answer.url }));
+  waiting.resolve(new Response(answer.body, { status: answer.status, statusText: answer.statusText, headers: answer.headers, url: answer.url, bytes: answer.bytes }));
 };
 
 // MARK: Web Crypto, the two calls extensions use

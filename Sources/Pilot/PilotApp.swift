@@ -56,6 +56,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         Look.shared.followSystem()
         CursorSets.shared.start()  // the saved cursor set, re-applied at login, wake and display changes (P84)
         CursorEffects.shared.start()  // the saved trail and halos; with none on, nothing is made (P84)
+        // A Raycast install that took one of Pilot's own ids before T28 moves to its own, before anything reads its bar.
+        for line in RaycastManifest.migrate(in: Extension.folder, data: ExtensionStorage.dataFolder) {
+            dlog.notice("extension: moved \(line, privacy: .public)")
+        }
         Engine.shared?.launch()
         // Sparkle's daily check, in a release bundle only (SH6); it asks the user first, on the second launch.
         PilotUpdates.shared.start()

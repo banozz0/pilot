@@ -56,6 +56,10 @@ struct MenuBody: View {
                 TranslatePanes(model: model).overlay(alignment: .bottomTrailing) { rowActions }
             } else if nav.rows.isEmpty {
                 empty
+            } else if nav.emptyView?.item != nil {
+                // A Raycast empty view's actions ride its one row, kept behind the look (T28): Return and Cmd+K press them,
+                // and the foot names Return's.
+                empty.overlay(alignment: .bottomTrailing) { rowActions }
             } else if model.hasLineChips, nav.branch == .emoji {
                 EmojiGridView(model: model, pointer: pointer).overlay(alignment: .bottomTrailing) { rowActions }
             } else {
@@ -137,8 +141,29 @@ struct MenuBody: View {
     }
 
     /// Nothing to list: the first sentence as the line, the rest under it, centred in the list's room under a glyph
-    /// that says why (a spinner while a list is read).
-    private var empty: some View {
+    /// that says why (a spinner while a list is read). A Raycast list's empty view (T26) fills the same look with its own
+    /// title, description and icon; when it offers actions (T28) the foot names Return's, as a row's.
+    @ViewBuilder private var empty: some View {
+        if let view = nav.emptyView { extensionEmpty(view) } else { emptyLine }
+    }
+
+    private func extensionEmpty(_ view: Extension.Empty) -> some View {
+        VStack(spacing: 6) {
+            if let icon = view.icon {
+                Text(icon).font(style.font(\.search)).padding(.bottom, 4).accessibilityHidden(true)
+            } else {
+                Image(systemName: view.symbol ?? "list.bullet").font(style.font(\.search))
+                    .foregroundStyle(style.color(\.text3)).padding(.bottom, 4).accessibilityHidden(true)
+            }
+            if !view.title.isEmpty { Text(view.title).styleText(\.strong).foregroundStyle(style.color(\.text)) }
+            if let line = view.description { Text(line).styleText(\.caption).foregroundStyle(style.color(\.text3)) }
+        }
+        .multilineTextAlignment(.center).fixedSize(horizontal: false, vertical: true)
+        .padding(.horizontal, 32)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private var emptyLine: some View {
         let text = model.emptyText
         let cut = text.range(of: ". ")
         return VStack(spacing: 6) {

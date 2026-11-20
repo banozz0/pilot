@@ -19,12 +19,14 @@ import { loadOnly, modules as more } from "./buffer.js";
 import { sqlite } from "./sqlite.js";
 import { consentClosed, consentFor } from "./automation.js";
 import { modules as asserts } from "./assert.js";
+import { modules as streams } from "./stream.js";
+import { modules as zlib } from "./zlib.js";
 
 const native = globalThis.__native;
 let view = null;
 
 /** The Node modules `require` finds, by name without `node:`. */
-const nodeModules = () => ({ ...node, ...more, ...asserts, sqlite });
+const nodeModules = () => ({ ...node, ...more, ...asserts, ...streams, ...zlib, sqlite });
 
 function requirer(api) {
   const modules = { ...nodeModules(), react: React, "react/jsx-runtime": JSX, "react/jsx-dev-runtime": JSX, "@raycast/api": api };

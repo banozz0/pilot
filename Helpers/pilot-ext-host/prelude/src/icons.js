@@ -29,7 +29,7 @@ export const symbols = {
   Heart: "heart", HeartDisabled: "heart.slash", Heartbeat: "waveform.path.ecg", Highlight: "highlighter", Hourglass: "hourglass",
   House: "house", Image: "photo", Important: "exclamationmark.circle", Info: "info.circle", Italics: "italic", Key: "key",
   Keyboard: "keyboard", Layers: "square.3.layers.3d", Leaf: "leaf", LightBulb: "lightbulb", LightBulbOff: "lightbulb.slash",
-  LineChart: "chart.xyaxis.line", Link: "link", List: "list.bullet", Livestream: "dot.radiowaves.left.and.right", Lock: "lock",
+  LevelMeter: "gauge.with.dots.needle.67percent", LineChart: "chart.xyaxis.line", Link: "link", List: "list.bullet", Livestream: "dot.radiowaves.left.and.right", Lock: "lock",
   LockDisabled: "lock.slash", LockUnlocked: "lock.open", Logout: "rectangle.portrait.and.arrow.right", Lorry: "truck.box",
   MagnifyingGlass: "magnifyingglass", Map: "map", MapPin: "mappin.and.ellipse", Maximize: "arrow.up.left.and.arrow.down.right",
   Megaphone: "megaphone", MemoryChip: "memorychip", Message: "message", Microphone: "mic", MicrophoneDisabled: "mic.slash",

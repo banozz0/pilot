@@ -88,7 +88,7 @@ final class ExtensionPopoverModel {
         ext = found?.ext
         guard let (ext, bar) = found else { return say("\(id) has no bar item now.") }
         var why: String?
-        inputs = await ExtensionsModule.inputs(for: ext, storage: storage, hud: { why = $0 })
+        inputs = await ExtensionsModule.inputs(for: ext, command: bar.command, storage: storage, hud: { why = $0 })
         guard let inputs else { return say(why ?? "\(ext.title) needs a setting first.") }
         stack[0] = View(command: bar.command.name, title: nil, context: nil, blocks: stack[0].blocks)
         guard bar.command.runtime == .raycast else { return await refresh() }
@@ -114,6 +114,8 @@ final class ExtensionPopoverModel {
         guard let ext, stack.count == 1 else { return }
         switch outcome {
         case .items(let items): (stack[0].blocks, stack[0].problem, stack[0].updated) = ([.list(title: nil, items: items)], nil, now())
+        // A list's empty view (T26): its title over no rows.
+        case .empty(let empty): (stack[0].blocks, stack[0].problem, stack[0].updated) = ([.list(title: empty.title, items: [])], nil, now())
         case .error(let why): stack[0].problem = "\(ext.title) \(why)"
         case .detail, .form: stack[0].problem = "\(ext.title) \(ExtensionRun.unreadable)"
         }

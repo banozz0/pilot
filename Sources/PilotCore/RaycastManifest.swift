@@ -13,6 +13,43 @@ import Foundation
 public enum RaycastManifest {
     public static let name = "package.json"
 
+    /// Pilot's own extensions' ids (`catalogue/extensions`; T23 retires them with that format). A Raycast extension named
+    /// one of these is keyed `raycast-<name>` (T28): it installs beside Pilot's own, in a folder of that name, never
+    /// replacing it, and Pilot's built-in dock widgets, which read their own extension's bar by id, keep reading Pilot's.
+    /// Keyed by the name alone, never by what is installed, so an extension's id never changes under it.
+    public static let pilotOwn: Set<String> = ["ai-usage", "claude-sessions", "dev-utils", "easy-cd", "ghostex", "git", "github", "markets",
+                                               "now-playing", "obsidian-search", "pomodoro", "ports", "ssh-hosts", "summarise", "tailscale",
+                                               "todo", "video-downloader", "weather"]
+    public static let namespace = "raycast-"
+
+    /// The id Pilot keys a Raycast extension named `name` by: `raycast-<name>` for one of Pilot's own names, else its name.
+    public static func id(_ name: String) -> String { pilotOwn.contains(name) ? namespace + name : name }
+
+    /// The Raycast name of the extension Pilot keys `id` (`environment.extensionName`, the store's folder): `id` less the
+    /// namespace `id(_:)` adds.
+    public static func name(_ id: String) -> String {
+        id.hasPrefix(namespace) && pilotOwn.contains(String(id.dropFirst(namespace.count))) ? String(id.dropFirst(namespace.count)) : id
+    }
+
+    /// Moves a Raycast install that took one of Pilot's own ids before T28 to its own (`id(_:)`): its folder, named the
+    /// old id, renamed to the new one, and its settings and data (`ExtensionData/<old>`) copied to the new id's, which
+    /// Pilot's own extension of that id keeps using. Skipped when the new folder already exists; a Keychain password stays
+    /// under the old id, so a password preference is asked again. Each move is one line of what it did.
+    @discardableResult
+    public static func migrate(in extensions: URL, data: URL) -> [String] {
+        let fm = FileManager.default
+        var moved: [String] = []
+        for old in pilotOwn.sorted() {
+            let folder = extensions.appending(path: old), target = extensions.appending(path: id(old))
+            guard holds(folder), !fm.fileExists(atPath: target.path), (try? Extension(folder: folder))?.id == id(old) else { continue }
+            do { try fm.moveItem(at: folder, to: target) } catch { moved.append("\(old): not moved (\(error.localizedDescription))"); continue }
+            let kept = data.appending(path: old), copy = data.appending(path: id(old))
+            let copied = fm.fileExists(atPath: kept.path) && !fm.fileExists(atPath: copy.path) && (try? fm.copyItem(at: kept, to: copy)) != nil
+            moved.append("\(old) -> \(id(old))\(copied ? ", its settings and data copied" : "")")
+        }
+        return moved
+    }
+
     /// Whether `folder` is Raycast-format: a `package.json` and no `extension.json`, which always wins while both formats run.
     public static func holds(_ folder: URL) -> Bool {
         let fm = FileManager.default
@@ -59,16 +96,32 @@ public enum RaycastManifest {
 
     /// The extension's preferences, then each command's, as one list, as `getPreferenceValues()` answers them all: a
     /// name given twice keeps its first. Read and checked as an extension.json preference is, its title its `title`,
-    /// else a checkbox's `label`, else its name.
+    /// else a checkbox's `label`, else its name. A command's own is scoped to the commands that declare it (T28), so a
+    /// required one stops only those (Summarize asked for an Anthropic key before any command); the extension's stays
+    /// every command's.
     static func preferences(_ manifest: Manifest) throws -> [Extension.Preference] {
+        let shared = Set((manifest.preferences ?? []).map(\.name))
+        var declaring: [String: Set<String>] = [:]
+        for c in manifest.commands { for p in c.preferences ?? [] where !shared.contains(p.name) { declaring[p.name, default: []].insert(c.name) } }
         var names = Set<String>()
         return try ((manifest.preferences ?? []) + manifest.commands.flatMap { $0.preferences ?? [] }).compactMap { p in
             guard names.insert(p.name).inserted else { return nil }
             guard let type = kinds[p.type] else { throw Extension.Problem.unknownPreferenceType(preference: p.name, type: p.type) }
             let title = [p.title, p.label].compactMap { $0?.trimmingCharacters(in: .whitespaces) }.first { !$0.isEmpty } ?? p.name
-            return try Extension.Preference(Extension.Preference.Line(name: p.name, type: type, title: title, required: p.required,
-                                                                      default: macOS(p.default), description: p.description, data: p.data))
+            var preference = try Extension.Preference(Extension.Preference.Line(name: p.name, type: type, title: title, required: p.required,
+                                                                      default: dropdownDefault(macOS(p.default), p), description: p.description, data: p.data))
+            preference.commands = declaring[p.name]
+            return preference
         }
+    }
+
+    /// A dropdown's default that is none of its options' values (Timers' `Submarine`, T28) as its first option's, the one
+    /// a dropdown shows when nothing matches; any other default as it is. Raycast's docs say only that a dropdown's
+    /// default is "the value of an object in the data array"; an extension.json dropdown keeps the refusal (badDefault).
+    static func dropdownDefault(_ given: JSONValue?, _ p: Manifest.Preference) -> JSONValue? {
+        guard p.type == "dropdown", let given, let first = p.data?.first,
+              !(p.data ?? []).contains(where: { JSONValue.string($0.value) == given }) else { return given }
+        return .string(first.value)
     }
 
     /// A default given per platform (`{"macOS": "com.apple.Terminal", "Windows": "Terminal"}`, Raycast's cross-platform
@@ -108,6 +161,7 @@ extension Extension {
         do { manifest = try JSONDecoder().decode(RaycastManifest.Manifest.self, from: data) }
         catch { throw Problem.unreadable("\(RaycastManifest.name) is not a Raycast manifest") }
         guard Self.isName(manifest.name) else { throw Problem.badID(manifest.name) }
+        let id = RaycastManifest.id(manifest.name)
         var names = Set<String>()
         let picture = RaycastManifest.iconFile(manifest.icon, in: folder)
         commands = try manifest.commands.map { c in
@@ -122,16 +176,16 @@ extension Extension {
             }
             guard let bundle = RaycastManifest.bundle(c.name, in: folder) else { throw Problem.missingProgram(command: c.name, run: "\(c.name).js") }
             let menuBar = c.mode == "menu-bar"
-            return Command(id: CommandID(extension: manifest.name, command: c.name), title: c.title, icon: nil, mode: mode, filter: .pilot,
+            return Command(id: CommandID(extension: id, command: c.name), title: c.title, icon: nil, mode: mode, filter: .pilot,
                            session: false, program: bundle, hidden: menuBar,
-                           keyword: c.takesArguments && !menuBar ? Self.keyword(.string(c.name)) : nil, runtime: .raycast,
+                           keyword: c.takesArguments && !menuBar ? c.name.lowercased() : nil, runtime: .raycast,
                            picture: RaycastManifest.iconFile(c.icon, in: folder) ?? picture)
         }
         bars = zip(manifest.commands, commands).filter { $0.0.mode == "menu-bar" }.map { c, command in
             Surface(kind: .bar, command: command, every: Surface.raycastPace(c.interval))
         }
         guard !commands.isEmpty else { throw Problem.noCommands }
-        id = manifest.name
+        self.id = id
         title = manifest.title
         icon = nil
         self.picture = picture

@@ -54,7 +54,7 @@ extension ControlVerbs {
         let (query, input) = (args.value("query"), args.value("input") ?? Extension.input(inAction: action))
         let extra = [query.map { "search \(ControlGate.Ask.visible($0))" }, input.map { "input \(ControlGate.Ask.visible($0))" }].compactMap { $0 }
         return try await tools.readBack(ext, command, extra, peer: peer) { () throws(ControlError) in
-            let inputs = try await tools.inputs(ext)
+            let inputs = try await tools.inputs(ext, command)
             var answer: [String: JSONValue] = ["ran": .string(command.actionID), "mode": .string(command.mode.rawValue)]
             if command.mode == .noView {
                 switch await Task.detached(operation: { await ExtensionRun.noView(command, input: input, inputs: inputs) }).value {
@@ -72,6 +72,7 @@ extension ControlVerbs {
                     else { await ExtensionRun.list(command, query: query ?? "", inputs: inputs) }
                 switch ran {
                 case .items(let items): answer["items"] = .array(items.map(Self.item))
+                case .empty(let empty): (answer["items"], answer["empty"]) = (.array([]), Self.empty(empty))
                 case .detail(let detail): answer["detail"] = Self.detail(detail)
                 case .form(let form): answer["form"] = Self.form(form)
                 case .error(let why): throw tools.failed(command, why, in: ext)
@@ -87,7 +88,7 @@ extension ControlVerbs {
         let ext = try await tools.require(try args.word(1, "id"))
         guard let page = ext.page else { throw ControlError(.badValue, "\(ext.id) declares no page; pilot ext show \(ext.id) says what it has") }
         return try await tools.readBack(ext, page.command, ["for its page"], peer: peer) { () throws(ControlError) in
-            switch await ExtensionRun.surface(page, inputs: try await tools.inputs(ext)) {
+            switch await ExtensionRun.surface(page, inputs: try await tools.inputs(ext, page.command)) {
             case .blocks(let blocks, let refresh):
                 var answer: [String: JSONValue] = ["page": .string(ext.id), "command": .string(page.command.actionID), "blocks": .array(blocks.map(Self.block))]
                 answer["refresh"] = refresh.map { .number(Double($0)) }
@@ -119,6 +120,16 @@ extension ControlVerbs {
         case .invoke(let handler): o["handler"] = .string(handler)
         }
         return .object(o)
+    }
+
+    /// A Raycast list's empty view (T26), as `ext run` and `ext act` show it beside no rows.
+    static func empty(_ empty: Extension.Empty) -> JSONValue {
+        var out: [String: JSONValue] = ["title": .string(empty.title)]
+        out["description"] = empty.description.map(JSONValue.string)
+        out["symbol"] = empty.symbol.map(JSONValue.string)
+        out["icon"] = empty.icon.map(JSONValue.string)
+        if !empty.actions.isEmpty { out["actions"] = .array(empty.actions.map(Self.action)) }
+        return .object(out)
     }
 
     static func item(_ item: Extension.Item) -> JSONValue {
@@ -245,10 +256,10 @@ extension ExtensionTools {
         return ControlError(.badValue, "\(command.actionID) stopped with an error; Pilot's log says why")
     }
 
-    /// What a run of `ext` is handed, as Hyper+Space hands it, or bad-value saying the preference to set first.
-    func inputs(_ ext: Extension) async throws(ControlError) -> ExtensionRun.Inputs {
+    /// What a run of `command` is handed, as Hyper+Space hands it, or bad-value saying the preference to set first.
+    func inputs(_ ext: Extension, _ command: Extension.Command) async throws(ControlError) -> ExtensionRun.Inputs {
         var why: String?
-        guard let inputs = await ExtensionsModule.inputs(for: ext, storage: storage, hud: { why = $0 }) else {
+        guard let inputs = await ExtensionsModule.inputs(for: ext, command: command, storage: storage, hud: { why = $0 }) else {
             throw ControlError(.badValue, (why ?? "\(ext.title) did not start") + " pilot list ext-prefs shows what is missing.")
         }
         return inputs

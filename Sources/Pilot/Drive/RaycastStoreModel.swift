@@ -5,7 +5,7 @@ import PilotCore
 /// The Raycast store's state (raycast-extensions T24), one for Hyper+Space's Raycast Store, the Extensions page's store and
 /// `pilot ext store`: the listing (kept a day, RaycastStore), each picked folder's package.json, which folders are
 /// installed, and each install while it runs, with why it failed. An install is T6's GitHub route itself
-/// (ControlVerbs.installFromGitHub), with its same question and answer.
+/// (ControlVerbs.installFromGitHub), with no question (T26) and its same answer.
 @MainActor @Observable
 final class RaycastStoreModel {
     static let shared = RaycastStoreModel(source: RaycastStoreModel.source())
@@ -135,8 +135,9 @@ final class RaycastStoreModel {
         (listing?.folders ?? []).filter { RaycastStore.matches($0, infos[$0.name], query: query) }
     }
 
-    /// The installed extension a folder stands for: by its package.json's name once read, else by the folder's name.
-    func installedExtension(_ folder: String) -> Extension? { installed[infos[folder]?.name ?? folder] }
+    /// The installed extension a folder stands for: by its package.json's name once read, else by the folder's name, keyed
+    /// as Pilot keys a Raycast extension (raycast-<name> for one of Pilot's own names, T28), so Pilot's own never counts.
+    func installedExtension(_ folder: String) -> Extension? { installed[RaycastManifest.id(infos[folder]?.name ?? folder)] }
 
     func title(_ folder: String) -> String { infos[folder]?.title ?? folder }
 
@@ -167,7 +168,7 @@ final class RaycastStoreModel {
         return await task.value
     }
 
-    /// T6's install of a listed folder, `github:raycast/extensions/extensions/<folder>`, with its question and answer;
+    /// T6's install of a listed folder, `github:raycast/extensions/extensions/<folder>`, with no question and its answer;
     /// `from` names the surface in Pilot's log. The installed ones are read again after, whatever happened.
     func install(_ folder: String, tools: ExtensionTools, peer: ControlPeer?, from: String) async throws(ControlError) -> JSONValue {
         guard listing?.folder(folder) != nil else {
@@ -186,11 +187,13 @@ final class RaycastStoreModel {
         return try result.get()
     }
 
-    /// Install from a press (the menu or the page): Allow asked on screen, then one HUD line.
+    /// Install from a press (the menu or the page), with no question (T26): one HUD line after, the install's own result
+    /// (installed, the packages fetched, and the Node modules Pilot lacks).
     func installPressed(_ folder: String, from: String) async -> String {
         let title = title(folder)
         do {
-            _ = try await install(folder, tools: ExtensionTools(), peer: nil, from: from)
+            let answer = try await install(folder, tools: ExtensionTools(), peer: nil, from: from)
+            if case .object(let o) = answer, case .string(let line)? = o["result"] { return line }
             return "Installed \(title)."
         } catch {
             return "\(title) not installed: \(error.message)"

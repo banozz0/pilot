@@ -848,6 +848,8 @@ public struct MenuNavigator: Sendable {
     public let back: Spot?
     /// A live picker, whose rows its source replaces as Sven types (an extension's list, card agent-bo-95423243).
     public let isLive: Bool
+    /// A live view's Raycast List.EmptyView while its list has no rows (T26), drawn in the panel's empty look.
+    public var emptyView: Extension.Empty?
 
     /// `branch` opens the menu inside it, as Omarchy's apps menu opens in Apps; `frecency` ranks the entries as of `now`;
     /// `root` orders and hides the root's branches and places the extras switched on among them.

@@ -115,7 +115,7 @@ extension ControlVerbs {
         // The first Allow reads the page; the press asks its own, built from what the page answered, naming what runs.
         let reading = ["to find \(ControlGate.Ask.visible(word)) on it; the press asks again"]
         return try await tools.readBack(ext, page.command, reading, peer: peer) { () throws(ControlError) in
-            let inputs = try await tools.inputs(ext)
+            let inputs = try await tools.inputs(ext, page.command)
             let before = try await Self.blocks(of: page, ext, tools, inputs)
             let target = try Self.target(word, in: Self.targets(before), page: ext.id)
             let action = try Self.pressed(target, args)
@@ -146,7 +146,7 @@ extension ControlVerbs {
             else { try args.word(2, "row, by its title as pilot ext run \(command.actionID) shows it (or row/action), or --handler <id>") }
         let reading = ["to find \(word.map(ControlGate.Ask.visible) ?? "its form") in it; the press asks again"]
         return try await tools.readBack(ext, command, reading, peer: peer) { () throws(ControlError) in
-            let inputs = try await tools.inputs(ext)
+            let inputs = try await tools.inputs(ext, command)
             let session = ExtensionSession(command, context: nil, inputs: inputs, folder: ext.folder)
             let answer: Result<JSONValue, ControlError>
             do throws(ControlError) { answer = .success(try await Self.press(word, handler: handler, query: args.value("query") ?? "", then: args.value("then"), fill: filling ? args : nil, in: session, command, ext, tools, peer: peer)) }
@@ -165,6 +165,7 @@ extension ControlVerbs {
             let json = try Self.outcome(outcome, command, ext, tools)
             switch outcome {
             case .items(let items): return (items, json)
+            case .empty(let empty): return (empty.item.map { [$0] } ?? [], json)
             case .detail(let detail): return (ExtensionList.items(detail, of: command), json)
             case .form(let form): return ([Extension.Item(title: command.title, actions: form.actions)], json)
             case .error: return ([], json)
@@ -324,6 +325,7 @@ extension ControlVerbs {
     private static func outcome(_ outcome: ListOutcome, _ command: Extension.Command, _ ext: Extension, _ tools: ExtensionTools) throws(ControlError) -> [String: JSONValue] {
         switch outcome {
         case .items(let items): return ["items": .array(items.map(Self.item))]
+        case .empty(let empty): return ["items": .array([]), "empty": Self.empty(empty)]
         case .detail(let detail): return ["detail": Self.detail(detail)]
         case .form(let form): return ["form": Self.form(form)]
         case .error(let why): throw tools.failed(command, why, in: ext)
@@ -434,6 +436,7 @@ extension ControlVerbs {
             var out: [String: JSONValue] = ["showed": .string(command.actionID)]
             switch await ExtensionRun.list(command, query: "", context: context, inputs: inputs) {
             case .items(let items): out["items"] = .array(items.map(Self.item))
+            case .empty(let empty): (out["items"], out["empty"]) = (.array([]), Self.empty(empty))
             case .detail(let detail): out["detail"] = Self.detail(detail)
             case .form(let form): out["form"] = Self.form(form)
             case .error(let why): throw tools.failed(command, why, in: ext)

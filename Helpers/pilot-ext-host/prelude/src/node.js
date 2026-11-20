@@ -1,10 +1,14 @@
 // The Node subset Raycast extensions reach for (ADR 0017, T3), written from Node's documentation: `fs` (sync, callback
-// and promise forms, text only: a read answers a string), `path` (POSIX), `os`, `crypto`'s hashes, `child_process`
+// and promise forms; a read with no encoding answers a Buffer, and descriptors, read and write streams and a Buffer's
+// write carry bytes, T26), `path` (POSIX, with win32's rules beside it), `os`, `crypto`'s hashes, `child_process`
 // (spawn, exec, execFile and their sync forms; a `detached` child gets its own session and outlives the host; an
 // osascript child starts only once the extension may run AppleScript, T9's automation.js),
 // `events`, `util` and `url`. Every module is guarded: a member Node has and this lacks records its use (gaps.js), and
 // a module this lacks records `require("<name>")`.
 import { guard, lack } from "./gaps.js";
+import { EventEmitter } from "./events.js";
+import { Buffer } from "./buffer.js";
+import { Readable as StreamReadable, Writable as StreamWritable } from "./stream.js";
 import { hexBytes } from "./web.js";
 import { consent, consentNow, runsAppleScript } from "./automation.js";
 
@@ -81,12 +85,55 @@ const path = {
 };
 path.posix = path;
 
+// Windows' rules (Node's path.win32, from its docs), for code that reads them on any platform: node-tar takes
+// win32.isAbsolute and win32.parse at load to strip a drive, UNC or slash root from an entry's path (T26, Speedtest).
+// Either separator; a root is `\\server\share\`, `C:\`, `C:` or one slash.
+const winRoot = (s) => (/^[\\/]{2}[^\\/]+[\\/]+[^\\/]+[\\/]*/.exec(s) ?? /^[a-zA-Z]:[\\/]?/.exec(s) ?? /^[\\/]/.exec(s))?.[0] ?? "";
+const win32 = {
+  sep: "\\", delimiter: ";",
+  isAbsolute: (p) => /^([\\/]|[a-zA-Z]:[\\/])/.test(String(p)),
+  normalize(p) {
+    const s = String(p);
+    if (!s) return ".";
+    const root = winRoot(s).replace(/\//g, "\\"), absolute = /[\\/]$/.test(root) || root.startsWith("\\");
+    const rest = normalizeParts(s.slice(winRoot(s).length).split(/[\\/]/), absolute).join("\\");
+    return root + (rest || (absolute ? "" : ".")) + (/[\\/]$/.test(s) && rest ? "\\" : "");
+  },
+  join: (...parts) => win32.normalize(parts.filter((p) => p !== "").map(String).join("\\") || "."),
+  basename(p, ext) {
+    const s = String(p).slice(winRoot(String(p)).length).replace(/[\\/]+$/, ""), base = s.slice(Math.max(s.lastIndexOf("/"), s.lastIndexOf("\\")) + 1);
+    return ext && base.endsWith(ext) && base !== ext ? base.slice(0, -ext.length) : base;
+  },
+  dirname(p) {
+    const s = String(p), root = winRoot(s), rest = s.slice(root.length).replace(/[\\/]+$/, "");
+    const at = Math.max(rest.lastIndexOf("/"), rest.lastIndexOf("\\"));
+    return at < 0 ? root || "." : root + rest.slice(0, at);
+  },
+  extname(p) {
+    const base = win32.basename(p), at = base.lastIndexOf(".");
+    return at <= 0 ? "" : base.slice(at);
+  },
+  parse(p) {
+    const s = String(p), root = winRoot(s), base = win32.basename(s), ext = win32.extname(s);
+    const dir = /[\\/]/.test(s.slice(root.length).replace(/[\\/]+$/, "")) ? win32.dirname(s) : root;
+    return { root, dir, base, ext, name: ext ? base.slice(0, -ext.length) : base };
+  },
+  format: (o) => {
+    const base = o.base ?? `${o.name ?? ""}${o.ext ?? ""}`, dir = o.dir ?? o.root ?? "";
+    return dir ? (/[\\/]$/.test(dir) ? dir + base : `${dir}\\${base}`) : base;
+  },
+  toNamespacedPath: (p) => p,
+};
+win32.win32 = path.win32 = win32;
+win32.posix = path;
+
 // MARK: fs
 
 class Stats {
   constructor(s) {
-    Object.assign(this, { size: s.size, mode: s.mode, mtimeMs: s.mtimeMs, birthtimeMs: s.birthtimeMs, ctimeMs: s.mtimeMs, atimeMs: s.mtimeMs });
-    this.mtime = new Date(s.mtimeMs); this.ctime = this.mtime; this.atime = this.mtime; this.birthtime = new Date(s.birthtimeMs);
+    Object.assign(this, { size: s.size, mode: s.mode, mtimeMs: s.mtimeMs, birthtimeMs: s.birthtimeMs, ctimeMs: s.ctimeMs ?? s.mtimeMs,
+      atimeMs: s.atimeMs ?? s.mtimeMs, uid: s.uid ?? 0, gid: s.gid ?? 0, ino: s.ino ?? 0, dev: s.dev ?? 0, nlink: s.nlink ?? 1 });
+    this.mtime = new Date(this.mtimeMs); this.ctime = new Date(this.ctimeMs); this.atime = new Date(this.atimeMs); this.birthtime = new Date(s.birthtimeMs);
     this._kind = s;
   }
   isFile() { return this._kind.isFile; }
@@ -98,13 +145,16 @@ const encodingOf = (options) => (typeof options === "string" ? options : options
 
 const sync = {
   existsSync: (p) => !native.fsStat(text(p), true).error,
+  // UTF-8 text as the host reads it; with no encoding a Buffer of the file's bytes, as Node answers (T26: sha256-file
+  // hashes it); another encoding is those bytes as that text.
   readFileSync(p, options) {
     const encoding = encodingOf(options);
-    if (encoding && !/^utf-?8$/i.test(encoding)) lack(`fs.readFileSync as ${encoding}`);
-    return check(native.fsRead(text(p)), "open");
+    if (encoding && /^utf-?8$/i.test(encoding)) return check(native.fsRead(text(p)), "open");
+    const bytes = check(native.fsReadBytes(text(p)), "open"), buffer = Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+    return encoding && encoding !== "buffer" ? buffer.toString(encoding) : buffer;
   },
-  writeFileSync: (p, data) => { check(native.fsWrite(text(p), String(data), false), "open"); },
-  appendFileSync: (p, data) => { check(native.fsWrite(text(p), String(data), true), "open"); },
+  writeFileSync: (p, data, options) => { if (data instanceof Uint8Array) return writeBytes(p, data, "w", options); check(native.fsWrite(text(p), String(data), false), "open"); },
+  appendFileSync: (p, data, options) => { if (data instanceof Uint8Array) return writeBytes(p, data, "a", options); check(native.fsWrite(text(p), String(data), true), "open"); },
   statSync(p, options) {
     const s = native.fsStat(text(p), true);
     if (s?.error && options?.throwIfNoEntry === false) return undefined;
@@ -132,6 +182,44 @@ const sync = {
   copyFileSync: (a, b) => { check(native.fsCopy(text(a), text(b)), "copyfile"); },
   realpathSync: (p) => check(native.fsReal(text(p)), "realpath"),
   accessSync: (p) => { check(native.fsStat(text(p), true), "access"); },
+  readlinkSync: (p) => check(native.fsReadlink(text(p)), "readlink"),
+  chmodSync: (p, mode) => { check(native.fsChmod(text(p), modeOf(mode)), "chmod"); },
+  utimesSync: (p, atime, mtime) => { check(native.fsTimes(text(p), timeOf(atime), timeOf(mtime), true), "utime"); },
+  lutimesSync: (p, atime, mtime) => { check(native.fsTimes(text(p), timeOf(atime), timeOf(mtime), false), "lutime"); },
+  // MARK: Descriptors (T26: node-tar's fs-minipass streams, Speedtest)
+  openSync: (p, flags = "r", mode = 0o666) => check(native.fdOpen(text(p), flagsOf(flags), modeOf(mode)), "open"),
+  closeSync: (fd) => { check(native.fdClose(fd), "close"); },
+  fstatSync: (fd) => new Stats(check(native.fdStat(fd), "fstat")),
+  fchmodSync: (fd, mode) => { check(native.fdChmod(fd, modeOf(mode)), "fchmod"); },
+  futimesSync: (fd, atime, mtime) => { check(native.fdTimes(fd, timeOf(atime), timeOf(mtime)), "futime"); },
+  fsyncSync: () => {},
+  fdatasyncSync: () => {},
+  /** readSync(fd, buffer, offset, length, position) or (fd, buffer, { offset, length, position }): the bytes read. */
+  readSync(fd, buffer, offset = 0, length, position = null) {
+    if (offset && typeof offset === "object") ({ offset = 0, length, position = null } = offset);
+    length ??= buffer.byteLength - offset;
+    const bytes = check(native.fdRead(fd, length, position == null ? -1 : Number(position)), "read");
+    new Uint8Array(buffer.buffer, buffer.byteOffset, buffer.byteLength).set(bytes, offset);
+    return bytes.length;
+  },
+  /** writeSync(fd, buffer, offset, length, position) or (fd, string, position, encoding): the bytes written. */
+  writeSync(fd, data, offset, length, position) {
+    let bytes;
+    if (typeof data === "string") { bytes = Buffer.from(data, typeof length === "string" ? length : "utf8"); position = offset; }
+    else {
+      if (offset && typeof offset === "object") ({ offset = 0, length, position } = offset);
+      offset ??= 0;
+      bytes = new Uint8Array(data.buffer, data.byteOffset + offset, length ?? data.byteLength - offset);
+    }
+    return check(native.fdWrite(fd, bytes, position == null ? -1 : Number(position)), "write");
+  },
+  writevSync(fd, buffers, position) {
+    let written = 0;
+    for (const b of buffers) {
+      written += sync.writeSync(fd, b, 0, b.byteLength, position == null ? null : Number(position) + written);
+    }
+    return written;
+  },
 };
 sync.realpathSync.native = sync.realpathSync;
 
@@ -149,10 +237,130 @@ for (const [name, fn] of Object.entries(sync)) {
     queueMicrotask(() => done(failure, result));
   };
 }
-const constants = { F_OK: 0, R_OK: 4, W_OK: 2, X_OK: 1 };
+// Node's callback answers that carry more than one value: read and write give the count and the buffer back.
+const answered = (fn, more) => (...args) => {
+  const done = typeof args[args.length - 1] === "function" ? args.pop() : () => {};
+  let result, failure = null;
+  try { result = fn(...args); } catch (error) { failure = error; }
+  queueMicrotask(() => (failure ? done(failure) : done(null, result, more(args))));
+};
+callbacks.read = answered(sync.readSync, (args) => args[1]);
+callbacks.write = answered(sync.writeSync, (args) => args[1]);
+callbacks.writev = answered(sync.writevSync, (args) => args[1]);
+
+// macOS's own numbers (<sys/fcntl.h>, <sys/stat.h>), as Node's fs.constants has them on a Mac.
+const constants = {
+  F_OK: 0, R_OK: 4, W_OK: 2, X_OK: 1, O_RDONLY: 0, O_WRONLY: 1, O_RDWR: 2, O_NONBLOCK: 4, O_APPEND: 8, O_SYNC: 128,
+  O_NOFOLLOW: 256, O_CREAT: 512, O_TRUNC: 1024, O_EXCL: 2048, O_NOCTTY: 131072, O_DIRECTORY: 1048576, O_SYMLINK: 2097152,
+  S_IFMT: 0o170000, S_IFREG: 0o100000, S_IFDIR: 0o40000, S_IFCHR: 0o20000, S_IFBLK: 0o60000, S_IFIFO: 0o10000,
+  S_IFLNK: 0o120000, S_IFSOCK: 0o140000, COPYFILE_EXCL: 1, COPYFILE_FICLONE: 2, COPYFILE_FICLONE_FORCE: 4, UV_FS_O_FILEMAP: 0,
+};
+/** Node's flag words as open(2)'s flags; a number as it is. */
+function flagsOf(flags) {
+  if (typeof flags === "number") return flags;
+  const c = constants, word = String(flags).replace("s", "");
+  const table = { r: c.O_RDONLY, "r+": c.O_RDWR, w: c.O_TRUNC | c.O_CREAT | c.O_WRONLY, wx: c.O_TRUNC | c.O_CREAT | c.O_WRONLY | c.O_EXCL,
+    xw: c.O_TRUNC | c.O_CREAT | c.O_WRONLY | c.O_EXCL, "w+": c.O_TRUNC | c.O_CREAT | c.O_RDWR, "wx+": c.O_TRUNC | c.O_CREAT | c.O_RDWR | c.O_EXCL,
+    "xw+": c.O_TRUNC | c.O_CREAT | c.O_RDWR | c.O_EXCL, a: c.O_APPEND | c.O_CREAT | c.O_WRONLY, ax: c.O_APPEND | c.O_CREAT | c.O_WRONLY | c.O_EXCL,
+    xa: c.O_APPEND | c.O_CREAT | c.O_WRONLY | c.O_EXCL, "a+": c.O_APPEND | c.O_CREAT | c.O_RDWR, "ax+": c.O_APPEND | c.O_CREAT | c.O_RDWR | c.O_EXCL,
+    "xa+": c.O_APPEND | c.O_CREAT | c.O_RDWR | c.O_EXCL };
+  if (!(word in table)) throw Object.assign(new TypeError(`The value "${flags}" is invalid for option "flags"`), { code: "ERR_INVALID_ARG_VALUE" });
+  return table[word];
+}
+const modeOf = (mode) => (typeof mode === "string" ? parseInt(mode, 8) : Number(mode ?? 0o666));
+/** A time Node takes (a Date, seconds as a number or numeric text) as milliseconds. */
+const timeOf = (t) => (t instanceof Date ? t.getTime() : Number(t) * 1000);
+
+/** A Buffer's write to a whole file, through a descriptor. */
+function writeBytes(p, data, flags, options) {
+  const fd = sync.openSync(p, options?.flag ?? flags, options?.mode ?? 0o666);
+  try { sync.writeSync(fd, data, 0, data.byteLength, null); } finally { sync.closeSync(fd); }
+}
+
+/** fs.ReadStream: a file's bytes from `start` to `end` (inclusive), read by descriptor as they are asked for. */
+class ReadStream extends StreamReadable {
+  constructor(p, options = {}) {
+    if (typeof options === "string") options = { encoding: options };
+    super({ highWaterMark: options.highWaterMark ?? 65536, encoding: options.encoding, emitClose: options.emitClose, autoDestroy: options.autoClose !== false });
+    this.path = p == null ? undefined : text(p);
+    this.fd = options.fd ?? null;
+    this.flags = options.flags ?? "r";
+    this.mode = options.mode ?? 0o666;
+    this.start = options.start;
+    this.end = options.end ?? Infinity;
+    this.pos = this.start;
+    this.bytesRead = 0;
+    this.pending = this.fd === null;
+  }
+  _construct(cb) {
+    if (this.fd !== null) return cb();
+    try { this.fd = sync.openSync(this.path, this.flags, this.mode); } catch (error) { return cb(error); }
+    this.pending = false;
+    this.emit("open", this.fd);
+    this.emit("ready");
+    cb();
+  }
+  _read(n) {
+    const left = this.end === Infinity ? n : Math.min(n, this.end - (this.pos ?? this.bytesRead) + 1);
+    if (left <= 0) return this.push(null);
+    let bytes;
+    try { bytes = check(native.fdRead(this.fd, left, this.pos ?? -1), "read"); } catch (error) { return this.destroy(error); }
+    if (this.pos !== undefined) this.pos += bytes.length;
+    this.bytesRead += bytes.length;
+    this.push(bytes.length ? Buffer.from(bytes.buffer, bytes.byteOffset, bytes.length) : null);
+  }
+  _destroy(error, cb) {
+    if (this.fd !== null && this.fd !== undefined) { native.fdClose(this.fd); this.fd = null; }
+    cb(error);
+  }
+  close(cb) { this.destroy(null, cb); }
+}
+
+/** fs.WriteStream: chunks written by descriptor in order, at `start` when given. */
+class WriteStream extends StreamWritable {
+  constructor(p, options = {}) {
+    if (typeof options === "string") options = { encoding: options };
+    super({ highWaterMark: options.highWaterMark, defaultEncoding: options.encoding ?? "utf8", emitClose: options.emitClose, autoDestroy: options.autoClose !== false });
+    this.path = p == null ? undefined : text(p);
+    this.fd = options.fd ?? null;
+    this.flags = options.flags ?? "w";
+    this.mode = options.mode ?? 0o666;
+    this.start = options.start;
+    this.pos = this.start;
+    this.bytesWritten = 0;
+    this.pending = this.fd === null;
+  }
+  _construct(cb) {
+    if (this.fd !== null) return cb();
+    try { this.fd = sync.openSync(this.path, this.flags, this.mode); } catch (error) { return cb(error); }
+    this.pending = false;
+    this.emit("open", this.fd);
+    this.emit("ready");
+    cb();
+  }
+  _write(chunk, encoding, cb) {
+    try {
+      const written = sync.writeSync(this.fd, chunk, 0, chunk.byteLength, this.pos ?? null);
+      if (this.pos !== undefined) this.pos += written;
+      this.bytesWritten += written;
+    } catch (error) { return cb(error); }
+    cb();
+  }
+  _destroy(error, cb) {
+    if (this.fd !== null && this.fd !== undefined) { native.fdClose(this.fd); this.fd = null; }
+    cb(error);
+  }
+  close(cb) { if (cb) this.once("close", cb); this.end(); }
+  destroySoon() { this.end(); }
+}
+
+// fs.promises has no descriptor calls (its open answers a FileHandle, which is not here): they record their use.
+for (const name of ["open", "close", "fstat", "fchmod", "futimes", "fsync", "fdatasync", "read", "write", "writev"]) delete promises[name];
 const fsPromises = guard("fs.promises", { ...promises, constants });
 const fs = guard("fs", {
-  ...sync, ...callbacks, promises: fsPromises, constants,
+  ...sync, ...callbacks, promises: fsPromises, constants, ReadStream, WriteStream,
+  createReadStream: (p, options) => new ReadStream(p, options),
+  createWriteStream: (p, options) => new WriteStream(p, options),
   exists: (p, done) => queueMicrotask(() => done(sync.existsSync(p))),
 });
 
@@ -179,18 +387,21 @@ function encoded(hex, encoding) {
   if (encoding === "hex") return hex;
   if (encoding === "base64") return hex64(hex);
   if (encoding === "base64url") return hex64(hex).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
-  return lack(`crypto digest as ${encoding ?? "a Buffer"}`);
+  if (encoding === undefined || encoding === "buffer") return Buffer.from(hex, "hex");
+  return lack(`crypto digest as ${encoding}`);
 }
 const crypto = guard("crypto", {
+  // Text is hashed as it always was; once bytes come (T26: sha256-file's stream chunks), every part goes as bytes.
   createHash(algorithm) {
-    let data = "";
+    let data = "", parts = null;
     const hash = guard("crypto.Hash", {
-      update(more) {
-        if (typeof more !== "string") lack("crypto.Hash.update with bytes");
-        data += more;
+      update(more, encoding) {
+        if (typeof more === "string" && !parts && (!encoding || /^utf-?8$/i.test(encoding))) { data += more; return hash; }
+        parts ??= data ? [Buffer.from(data)] : [];
+        parts.push(typeof more === "string" ? Buffer.from(more, encoding) : more instanceof Uint8Array ? more : Buffer.from(more));
         return hash;
       },
-      digest: (encoding) => encoded(check(native.hash(String(algorithm), data), "digest"), encoding),
+      digest: (encoding) => encoded(check(parts ? native.hashBytes(String(algorithm), Buffer.concat(parts)) : native.hash(String(algorithm), data), "digest"), encoding),
     });
     return hash;
   },
@@ -199,34 +410,6 @@ const crypto = guard("crypto", {
   getHashes: () => ["md5", "sha1", "sha256", "sha384", "sha512"],
   webcrypto: globalThis.crypto,
 });
-
-// MARK: events
-
-class EventEmitter {
-  #events = new Map();
-  on(name, fn) { (this.#events.get(name) ?? this.#events.set(name, []).get(name)).push(fn); return this; }
-  addListener(name, fn) { return this.on(name, fn); }
-  prependListener(name, fn) { (this.#events.get(name) ?? this.#events.set(name, []).get(name)).unshift(fn); return this; }
-  once(name, fn) { const once = (...a) => { this.off(name, once); fn.apply(this, a); }; once.listener = fn; return this.on(name, once); }
-  off(name, fn) { const list = this.#events.get(name); if (list) this.#events.set(name, list.filter((f) => f !== fn && f.listener !== fn)); return this; }
-  removeListener(name, fn) { return this.off(name, fn); }
-  removeAllListeners(name) { if (name === undefined) this.#events.clear(); else this.#events.delete(name); return this; }
-  emit(name, ...args) {
-    const list = this.#events.get(name);
-    if (!list?.length) { if (name === "error") throw args[0]; return false; }
-    for (const fn of [...list]) fn.apply(this, args);
-    return true;
-  }
-  listeners(name) { return [...(this.#events.get(name) ?? [])]; }
-  listenerCount(name) { return this.#events.get(name)?.length ?? 0; }
-  eventNames() { return [...this.#events.keys()]; }
-  setMaxListeners() { return this; }
-  getMaxListeners() { return 10; }
-}
-EventEmitter.EventEmitter = EventEmitter;
-// events.setMaxListeners(n, ...targets): listeners are never capped here, so it does nothing (T15: execa calls it).
-EventEmitter.setMaxListeners = () => {};
-EventEmitter.once = (emitter, name) => new Promise((resolve) => emitter.once(name, (...a) => resolve(a)));
 
 // MARK: child_process
 
@@ -451,7 +634,7 @@ const url = guard("url", {
   pathToFileURL: (p) => new URL(`file://${encodeURI(path.resolve(String(p)))}`),
 });
 
-// MARK: tty and timers/promises (T15: Video Downloader's colour and debug helpers ask, and its waits)
+// MARK: tty, timers and timers/promises (T15: Video Downloader's colour and debug helpers ask, and its waits)
 
 // No terminal is ever attached to a host's descriptors, so every isatty is false; the stream classes are only named.
 const tty = guard("tty", { isatty: () => false, ReadStream: class ReadStream {}, WriteStream: class WriteStream {} });
@@ -459,6 +642,14 @@ const tty = guard("tty", { isatty: () => false, ReadStream: class ReadStream {},
 const timersPromises = guard("timers/promises", {
   setTimeout: (ms, value) => new Promise((resolve) => setTimeout(() => resolve(value), ms)),
   setImmediate: (value) => new Promise((resolve) => setImmediate(() => resolve(value))),
+});
+
+// `timers` itself is the globals by another name (T28: Summarize YouTube Videos requires it at load), its promises as above.
+const timers = guard("timers", {
+  setTimeout: (...a) => globalThis.setTimeout(...a), clearTimeout: (id) => globalThis.clearTimeout(id),
+  setInterval: (...a) => globalThis.setInterval(...a), clearInterval: (id) => globalThis.clearInterval(id),
+  setImmediate: (...a) => globalThis.setImmediate(...a), clearImmediate: (id) => globalThis.clearImmediate(id),
+  promises: timersPromises,
 });
 
 // MARK: querystring (T15: Google Translate builds its request with it), as nodejs.org documents it: `+` reads as a space,
@@ -487,6 +678,6 @@ const querystring = guard("querystring", {
 /** The modules `require` finds, by name, `node:` or not. */
 export { path, childProcess, check };
 export const modules = {
-  fs, "fs/promises": fsPromises, path, "path/posix": path, os, crypto, child_process: childProcess,
-  events: EventEmitter, util, url, tty, "timers/promises": timersPromises, querystring,
+  fs, "fs/promises": fsPromises, path, "path/posix": path, "path/win32": win32, os, crypto, child_process: childProcess,
+  events: EventEmitter, util, url, tty, timers, "timers/promises": timersPromises, querystring,
 };
