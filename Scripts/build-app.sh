@@ -170,7 +170,7 @@ cp -R "$ROOT/Packaging/Fonts" "$APP/Contents/Resources/Fonts"  # the themes' dis
 cp -R "$ROOT/Packaging/provider-icons" "$APP/Contents/Resources/provider-icons"  # the AI providers' pictures, 64 px (AIPage.icon, CatalogueIcons)
 cp -R "$ROOT/Packaging/webapp-icons" "$APP/Contents/Resources/webapp-icons"  # the recommended web apps' own icons, 128 px (WebAppIdea, Scripts/webapp-icons.swift)
 cp -R "$ROOT/Packaging/folder-designs" "$APP/Contents/Resources/folder-designs"  # the folder designs Pilot draws: 1024 px and 256 px HEIC and a 64 px PNG each (FolderDesigns, P54)
-cp -R "$ROOT/Packaging/ext-template" "$APP/Contents/Resources/ext-template"  # pilot ext new's templates, one folder per mode (ExtensionTemplate)
+cp -R "$ROOT/Packaging/ext-template" "$APP/Contents/Resources/ext-template"  # pilot ext new's Raycast templates, one folder per mode and common/ (ExtensionTemplate)
 cp "$ROOT/Packaging/pilot-agent.md" "$APP/Contents/Resources/"  # the AI helper's system prompt (AIChat.Agent, AISettings.agent)
 cp -R "$ROOT/Packaging/skills" "$APP/Contents/Resources/skills"  # the AI's skills: the Skills list, pilot guide <topic>, /extension's prompt (AISkills)
 cp -R "$ROOT/Packaging/widgets" "$APP/Contents/Resources/widgets"  # the desk widgets' look kit (kit/) and the six desk-* widget folders, each with its own copy of the kit (ADR 0016)
