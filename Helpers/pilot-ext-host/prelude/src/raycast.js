@@ -26,6 +26,13 @@ function withParts(name) {
   return component;
 }
 
+/** An API Pilot lacks that answers a Promise in Raycast: its use is recorded and the Promise rejects, so an
+ *  extension's own `.catch` handles it, as it would a failure (T7: Obsidian's getDefaultApplication). */
+function rejecting(api) {
+  const call = missing(api);
+  return (...args) => { try { return Promise.resolve(call(...args)); } catch (error) { return Promise.reject(error); } };
+}
+
 /** An action Pilot lacks: rendering it records it, and it shows nothing, so the rest of its panel still works. */
 function lacking(api) {
   const component = () => { record(api); return null; };
@@ -196,7 +203,7 @@ export function makeAPI(message, mode) {
     Alert: stubs("Alert", [], { ActionStyle: Object.freeze({ Default: "default", Cancel: "cancel", Destructive: "destructive" }) }),
     // Views and namespaces that come in later tasks, or not at all: each records its use.
     // A view Pilot lacks records and throws on render, so the run shows why it has nothing to draw.
-    Grid: missing("Grid"), Form: missing("Form"), MenuBarExtra: missing("MenuBarExtra"),
+    Grid: Object.assign(missing("Grid"), { Inset: names(), Fit: names(), ItemSize: names() }), Form: missing("Form"), MenuBarExtra: missing("MenuBarExtra"),
     AI: stubs("AI", ["ask"], { Model: names() }),
     OAuth: stubs("OAuth", ["PKCEClient"], { RedirectMethod: Object.freeze({ Web: "web", App: "app", AppURI: "appURI" }) }),
     BrowserExtension: stubs("BrowserExtension", ["getContent", "getTabs"]),
@@ -204,6 +211,6 @@ export function makeAPI(message, mode) {
   };
   for (const name of ["confirmAlert", "trash", "getApplications", "getDefaultApplication", "getFrontmostApplication", "getSelectedText",
     "getSelectedFinderItems", "launchCommand", "updateCommandMetadata", "openExtensionPreferences", "openCommandPreferences",
-    "captureException"]) api[name] = missing(name);
+    "captureException"]) api[name] = name === "captureException" ? missing(name) : rejecting(name);
   return guard("", api);
 }

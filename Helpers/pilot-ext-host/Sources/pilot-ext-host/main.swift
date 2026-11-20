@@ -67,6 +67,7 @@ func put(_ line: String, to handle: FileHandle) {
         native.setObject(setTimer, forKeyedSubscript: "setTimer" as NSString)
         native.setObject(clearTimer, forKeyedSubscript: "clearTimer" as NSString)
         installSystem(into: native)
+        SQLiteBridge.install(into: native)  // node:sqlite, read-only (T7)
         context.setObject(native, forKeyedSubscript: "__native" as NSString)
     }
 

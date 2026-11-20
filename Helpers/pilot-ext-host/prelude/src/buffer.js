@@ -4,6 +4,7 @@
 // still arrives as text (node.js), so most extensions only build and print Buffers. Anything else of Node's buffer
 // (the read and write number methods, `transcode`, `Blob`) is not here.
 import { stubs } from "./gaps.js";
+import { sqlite } from "./sqlite.js";
 
 const encoder = new TextEncoder(), decoder = new TextDecoder();
 
@@ -158,5 +159,6 @@ export const modules = {
   string_decoder: { StringDecoder },
   get process() { return globalThis.process; },
   // Only loaded, not yet Node's streams: @raycast/utils' exec helpers import it whole; each member records its use and throws.
+  sqlite,
   stream: stubs("stream", ["Readable", "Writable", "Duplex", "Transform", "PassThrough", "Stream", "pipeline", "finished"]),
 };

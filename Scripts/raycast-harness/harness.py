@@ -37,14 +37,19 @@ FROZEN = [
 # Phase 1's gate (spec raycast-extensions, Decisions › Coverage): each one's view, the search that shows content, and its
 # primary action's press as `pilot ext act` takes it. `row` names a row by its title ("{victim}" is the sleep's name),
 # `expect` what the measure log must hold after the press: the kind of call and a piece of it; `prefs` preferences set
-# first (Kill Process's confirmation is an alert Pilot lacks until T11).
+# first (Kill Process's confirmation is an alert Pilot lacks until T11; Obsidian's append command's required note);
+# `storage` the extension's own LocalStorage in the sandbox, as an earlier run leaves it (Chrome remembers that it found
+# Chrome and skips asking AppleScript again); "{first}" in `row` is the first row's title.
 GATE = {
     "kill-process": {"command": "index", "query": "{victim}", "row": "{victim}", "expect": ("exec", "kill"),
                      "prefs": {"skipConfirmation": "true"}},
-    "brew": {"command": "installed", "query": "", "row": None, "expect": ("exec", "brew")},
-    "obsidian": {"command": "searchNoteCommand", "query": "", "row": None, "expect": ("open", "obsidian://")},
-    "google-chrome": {"command": "search-history", "query": "", "row": None, "expect": ("applescript", "Google Chrome")},
-    "visual-studio-code-recent-projects": {"command": "index", "query": "", "row": None, "expect": ("open", "")},
+    "brew": {"command": "installed", "query": "", "row": "{first}/Pin Formula", "expect": ("exec", "brew pin")},
+    "obsidian": {"command": "searchNoteCommand", "query": "", "row": None, "expect": ("open", "obsidian://"),
+                 "prefs": {"notePath": "/nonexistent/t7-harness.md"}},
+    "google-chrome": {"command": "search-history", "query": "", "row": None, "expect": ("applescript", "make new tab"),
+                      "storage": {"is-installed": True}},
+    # Its recent projects read VS Code's own database, which needs VS Code in /Applications; installed extensions do not.
+    "visual-studio-code-recent-projects": {"command": "extensions", "query": "", "row": None, "expect": ("open", "vscode")},
     "google-search": {"command": "index", "query": "pilot", "row": None, "expect": ("open", "google.com/search")},
 }
 
@@ -118,6 +123,9 @@ def ensure(ns, folder):
         return None
     ext = json.load(open(os.path.join(kept, "package.json")))["name"]
     if ext in ns.have:
+        if not getattr(ns, "extensions", None):
+            _, card, _ = pilot(["ext", "show", ext], ns)
+            ns.extensions = os.path.dirname(card["folder"]) if isinstance(card, dict) and card.get("folder") else None
         return ext
     if not getattr(ns, "extensions", None):
         code, answer, _ = pilot(["ext", "install", os.path.join(ns.work, "installed", "kill-process")], ns)
@@ -230,19 +238,39 @@ def phase_act(ns):
             continue
         for name, value in spec.get("prefs", {}).items():
             pilot(["add", "ext-prefs", "--pref", "%s.%s" % (ext, name), "--value", value], ns)
+        if spec.get("storage") and getattr(ns, "extensions", None):
+            data = os.path.join(os.path.dirname(ns.extensions), "ExtensionData", ext, "data")
+            os.makedirs(data, exist_ok=True)
+            with open(os.path.join(data, ".raycast-local-storage.json"), "w") as out:
+                json.dump(spec["storage"], out)
+            say("# seeded %s's LocalStorage in the sandbox: %s" % (ext, json.dumps(spec["storage"])))
         query = spec["query"].replace("{victim}", victim)
         action = "ext.%s.%s" % (ext, spec["command"])
         _, answer, _ = pilot(["ext", "run", action, "--query", query], ns, timeout=60)
         hosts_left(ns)
+        for again in (2, 3):
+            if content(answer):
+                break
+            # A slow first load (Brew's `brew` calls) ends a one-shot run while loading; a later one reads the cache it kept.
+            say("# no content yet; run %d, as another open would, reads the extension's own cache" % again)
+            _, answer, _ = pilot(["ext", "run", action, "--query", query], ns, timeout=60)
+            hosts_left(ns)
         items = (answer or {}).get("items", []) if isinstance(answer, dict) else []
-        row = spec["row"].replace("{victim}", victim) if spec["row"] else first_pressable(items)
+        first = items[0].get("title", "") if items and isinstance(items[0], dict) else ""
+        row = spec["row"].replace("{victim}", victim).replace("{first}", first) if spec["row"] else first_pressable(items)
         result = {"id": ext, "command": action, "query": query, "content": content(answer), "row": row}
         if not row:
             result["pressed"] = False
             results[folder] = result
             continue
         since = lines_in(ns)
-        code, pressed, _ = pilot(["ext", "act", ext, row, "--command", spec["command"]] + (["--query", query] if query else []), ns, timeout=60)
+        press = ["ext", "act", ext, row, "--command", spec["command"]] + (["--query", query] if query else [])
+        code, pressed, _ = pilot(press, ns, timeout=60)
+        if code != 0:
+            # A slow synchronous call at load (Chrome's `brew --prefix`) can hold a view's first answer past 2 s: once more.
+            say("# the press failed; once more")
+            since = lines_in(ns)
+            code, pressed, _ = pilot(press, ns, timeout=60)
         left = hosts_left(ns)
         time.sleep(0.5)
         records, _ = measured(ns, since)
@@ -252,6 +280,10 @@ def phase_act(ns):
             say(json.dumps(call, sort_keys=True))
         kind, piece = spec["expect"]
         hit = [c for c in calls if c.get("kind") == kind and piece in json.dumps(c)]
+        # A typed action (Action.Open and the rest) is Pilot's to perform: `ext act` answers it, and the host never sees it.
+        if isinstance(pressed, dict) and pressed.get("note", "").startswith("answered") and piece in json.dumps(pressed.get("action")):
+            hit.append({"kind": kind, "answeredByPilot": pressed.get("action")})
+            say("# the press answered a typed action, Pilot's to perform: %s" % json.dumps(pressed.get("action"), sort_keys=True))
         result.update({"actExit": code, "calls": calls, "expected": "%s %s" % (kind, piece), "issued": bool(hit), "hostsLeft": len(left)})
         if folder == "kill-process":
             alive = subprocess.run(["/bin/kill", "-0", str(ns.victim)], capture_output=True).returncode == 0
@@ -262,9 +294,9 @@ def phase_act(ns):
 
 
 def first_pressable(items):
-    """The first row with a callback, by its title, as `ext act` takes it."""
+    """The first row with an action, by its title, as `ext act` takes it: its first action is the primary one."""
     for item in items:
-        if isinstance(item, dict) and any(isinstance(a, dict) and a.get("handler") for a in item.get("actions", [])):
+        if isinstance(item, dict) and item.get("actions"):
             return item.get("title")
     return None
 

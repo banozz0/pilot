@@ -51,6 +51,9 @@ globalThis.setInterval = (fn, ms, ...args) => arm(fn, ms, args, true);
 globalThis.clearTimeout = disarm;
 globalThis.clearInterval = disarm;
 globalThis.queueMicrotask = (fn) => { Promise.resolve().then(fn); };
+// Node's setImmediate as the next timer turn (T7: fast-glob, Obsidian's notes).
+globalThis.setImmediate = (fn, ...args) => arm(fn, 0, args, false);
+globalThis.clearImmediate = disarm;
 
 const started = Date.now();
 globalThis.performance = { now: () => Date.now() - started };

@@ -275,7 +275,8 @@ enum Installer {
             let meta = workspace.appending(path: "meta-\(name).json")
             try esbuildRun(esbuild.url, in: source, [
                 entry, "--bundle", "--platform=node", "--format=cjs", "--target=es2022", "--jsx=automatic", "--log-level=error",
-                "--tsconfig-raw=\(tsconfigRaw(source))", "--define:process.env.NODE_ENV=\"production\"", "--external:@raycast/api", "--external:react",
+                // dynamic import() becomes require(): a bare JSContext has no module loader (useSQL's node:sqlite, T7).
+                "--tsconfig-raw=\(tsconfigRaw(source))", "--supported:dynamic-import=false", "--define:process.env.NODE_ENV=\"production\"", "--external:@raycast/api", "--external:react",
                 "--external:react/*", "--metafile=\(meta.path)", "--outfile=\(built.appending(path: "dist/\(name).js").path)",
             ])
             // Every file bundled must be the folder's own or a package unpacked into it: Node's lookup also climbs to

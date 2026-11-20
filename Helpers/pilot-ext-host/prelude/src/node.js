@@ -160,6 +160,9 @@ const env = () => globalThis.process.env;
 const os = guard("os", {
   EOL: "\n", homedir: () => env().HOME ?? "", tmpdir: () => String(env().TMPDIR ?? "/tmp").replace(/\/+$/, "") || "/tmp",
   platform: () => "darwin", type: () => "Darwin", arch: () => "arm64", hostname: () => native.hostname(), release: () => native.osRelease(),
+  // Four blank CPUs (T7): extensions read only the count, to size a pool (fast-glob's concurrency).
+  cpus: () => Array.from({ length: 4 }, () => ({ model: "", speed: 0, times: { user: 0, nice: 0, sys: 0, idle: 0, irq: 0 } })),
+  availableParallelism: () => 4,
   userInfo: () => ({ username: env().USER ?? "", homedir: env().HOME ?? "", shell: env().SHELL ?? "/bin/zsh", uid: -1, gid: -1 }),
   endianness: () => "LE", availableParallelism: () => 4,
 });
