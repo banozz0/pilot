@@ -5,8 +5,9 @@
 // typed actions (open, copy, paste, show in Finder), Detail's metadata, toast and HUD, Clipboard, LocalStorage and
 // Cache in ADR 0010's folders, `open`, `showInFinder` and the environment. Anything that acts on the Mac goes to Pilot
 // as an ADR 0010 line (a no-view command's `hud` and `action`, a view's `toast` and `action`), so Pilot performs it and
-// `pilot ext run` answers it unperformed. Every other Raycast export is a stub that records its use (gaps.js).
-import { createElement } from "react";
+// `pilot ext run` answers it unperformed. T8 adds the view stack: `Action.Push` and `useNavigation()`, whose push and
+// pop host.js performs on the run's layers. Every other Raycast export is a stub that records its use (gaps.js).
+import { createContext, createElement, useContext } from "react";
 import { guard, missing, record, store, stubs } from "./gaps.js";
 import { childProcess, path } from "./node.js";
 
@@ -59,10 +60,17 @@ ActionPanel.Section = host("ActionPanel.Section");
 ActionPanel.Submenu = host("ActionPanel.Submenu");
 export const Action = host("Action");
 for (const name of ["OpenInBrowser", "CopyToClipboard", "Paste", "Open", "OpenWith", "ShowInFinder"]) Action[name] = host(`Action.${name}`);
-for (const name of ["Push", "SubmitForm", "CreateQuicklink", "CreateSnippet", "Trash", "PickDate", "ToggleQuickLook", "OpenInBrowserTab"]) {
+// A push is pressed by its handler id as an Action's onAction is; host.js mounts its `target` over the view (T8).
+Action.Push = host("Action.Push");
+for (const name of ["SubmitForm", "CreateQuicklink", "CreateSnippet", "Trash", "PickDate", "ToggleQuickLook", "OpenInBrowserTab"]) {
   Action[name] = lacking(`Action.${name}`);
 }
 Action.Style = Object.freeze({ Regular: "regular", Destructive: "destructive" });
+
+/** The run's view stack (host.js provides it to every layer): `push(view, onPop)` mounts a view over the current one,
+ *  `pop()` goes back to the one under it, its state kept. */
+export const Navigation = createContext(null);
+const useNavigation = () => useContext(Navigation);
 
 /** Raycast's named constants (Icon, Color): each name answers itself, so `Icon.Checkmark` is "Checkmark" (host.js maps an Icon name to its SF Symbol, T5). */
 const names = () => new Proxy({}, { get: (_, key) => (typeof key === "string" ? key : undefined) });
@@ -179,7 +187,7 @@ export function makeAPI(message, mode) {
 
   const api = {
     List, Detail, ActionPanel, Action, Toast, showToast, showHUD: hud, Clipboard, open, showInFinder, LocalStorage, Cache, environment,
-    getPreferenceValues: () => preferences,
+    getPreferenceValues: () => preferences, useNavigation,
     closeMainWindow: () => Promise.resolve(), popToRoot: () => Promise.resolve(), clearSearchBar: () => Promise.resolve(),
     Icon: names(), Color: names(), Image: Object.freeze({ Mask: Object.freeze({ Circle: "circle", RoundedRectangle: "roundedRectangle" }) }),
     Keyboard: Object.freeze({ Shortcut: Object.freeze({ Common: shortcut() }) }),
@@ -195,7 +203,7 @@ export function makeAPI(message, mode) {
     WindowManagement: stubs("WindowManagement", ["getActiveWindow", "getWindowsOnActiveDesktop", "getDesktops", "setWindowBounds"]),
   };
   for (const name of ["confirmAlert", "trash", "getApplications", "getDefaultApplication", "getFrontmostApplication", "getSelectedText",
-    "getSelectedFinderItems", "launchCommand", "updateCommandMetadata", "useNavigation", "openExtensionPreferences", "openCommandPreferences",
+    "getSelectedFinderItems", "launchCommand", "updateCommandMetadata", "openExtensionPreferences", "openCommandPreferences",
     "captureException"]) api[name] = missing(name);
   return guard("", api);
 }
