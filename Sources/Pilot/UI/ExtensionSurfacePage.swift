@@ -215,6 +215,9 @@ struct ExtensionSurfacePage: View {
     @Environment(\.ink) private var ink
     /// The window shows: the page asks on its pace only then.
     let onScreen: Bool
+    /// The window is on screen, key or not: a live page's command runs only then (T30), so a form's panel or another app
+    /// taking the keyboard never restarts it; nil reads `onScreen`.
+    var shown: Bool?
     @State private var model: ExtensionPageModel
     /// Opens the Extensions list at it: the page of one that is gone says so there.
     let settings: (String) -> Void
@@ -227,8 +230,9 @@ struct ExtensionSurfacePage: View {
     @State private var settingsOpen = false
     static let wideFrom: CGFloat = 720, paneWidth: CGFloat = 380
 
-    init(id: String, onScreen: Bool, model: ExtensionPageModel? = nil, settings: @escaping (String) -> Void) {
+    init(id: String, onScreen: Bool, shown: Bool? = nil, model: ExtensionPageModel? = nil, settings: @escaping (String) -> Void) {
         self.onScreen = onScreen
+        self.shown = shown
         let model = model ?? ExtensionPageModel(id: id)
         _model = State(initialValue: model)
         _prefs = State(initialValue: ExtensionsSettings(folder: model.folder, storage: model.storage))
@@ -243,7 +247,7 @@ struct ExtensionSurfacePage: View {
             ink.line.frame(height: 1)
             // A Raycast view command live (T30) fills the page under the header; Settings opens over it as on any page.
             if let live = model.livePage, !settingsOpen {
-                ExtensionLivePage(model: live, onScreen: onScreen)
+                ExtensionLivePage(model: live, onScreen: shown ?? onScreen)
             } else {
                 blocksPage
             }
