@@ -63,6 +63,7 @@ func put(_ line: String, to handle: FileHandle) { handle.write(Data((line + "\n"
         native.setObject(setTimer, forKeyedSubscript: "setTimer" as NSString)
         native.setObject(clearTimer, forKeyedSubscript: "clearTimer" as NSString)
         installSystem(into: native)
+        installApps(into: native)
         context.setObject(native, forKeyedSubscript: "__native" as NSString)
     }
 

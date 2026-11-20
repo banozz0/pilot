@@ -6,7 +6,7 @@
 // a module this lacks records `require("<name>")`.
 import { guard, lack } from "./gaps.js";
 import { hexBytes } from "./web.js";
-import { consent, consentNow, scan } from "./automation.js";
+import { consent, consentNow, scan, stdinApps } from "./automation.js";
 
 const native = globalThis.__native;
 
@@ -314,7 +314,7 @@ function held(id, file, args, made, script) {
         if (live) return native.childEnd(id);
         if (ended) return;
         ended = true;
-        if (script.stdin) decide(scan("osascript", ["-e", input]).apps);
+        if (script.stdin) decide(stdinApps(input, script.js));
       },
     };
   }
@@ -374,7 +374,7 @@ function spawnSync(file, args = [], options = {}) {
   if (options.shell) [file, args] = shell([file, ...args].join(" "), options);
   const made = spawnOptions(options);
   const script = scan(String(file), args.map(String), made);
-  const refused = script && consentNow(script.stdin ? scan("osascript", ["-e", options.input == null ? "" : String(options.input)]).apps : script.apps);
+  const refused = script && consentNow(script.stdin ? stdinApps(options.input == null ? "" : String(options.input), script.js) : script.apps);
   if (refused) return { pid: 0, status: null, signal: null, stdout: "", stderr: "", output: [null, "", ""], error: refused };
   const r = native.spawnSync(String(file), args.map(String), made, options.input == null ? "" : String(options.input));
   if (r.error) return { pid: 0, status: null, signal: null, stdout: "", stderr: "", output: [null, "", ""], error: Object.assign(new Error(r.message), { code: r.error }) };

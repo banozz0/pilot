@@ -6,8 +6,9 @@
 // Typed actions (T3) go out as the open, copy or paste action Pilot already performs, and a Detail's Metadata as its facts.
 // The table is rebuilt on every answer; an id it lacks is stale. Each query or invoke Pilot numbers (`seq`) is
 // answered by the next line, which carries `ack`: the commit it caused, else the current view again.
-// AppleScript consent (T9): while automation.js asks about an app, the answer is its question as two rows, Allow and
-// Don't Allow, pressed as callbacks like any other; the extension's own view comes back once it is answered.
+// AppleScript consent (T9): while automation.js asks about an app, the answer is its question as two rows, Don't Allow
+// and Allow, pressed as callbacks like any other, their ids carrying the question's serial so a press meant for one
+// question is stale for the next; the extension's own view comes back once it is answered.
 // Icons (T5): a Raycast `Icon` name goes out as the SF Symbol Pilot draws (icons.js), an emoji as itself, and an asset
 // file or an http(s) URL as the row's `image`, read once by the host (Images.swift) and sent in a later line once it lands.
 import { createContext, createElement } from "react";
@@ -15,7 +16,7 @@ import Reconciler from "react-reconciler";
 import { ConcurrentRoot, DefaultEventPriority, DiscreteEventPriority, NoEventPriority } from "react-reconciler/constants";
 import { effects } from "./raycast.js";
 import { symbols } from "./icons.js";
-import { answer as answerConsent, asking, onConsentChange } from "./automation.js";
+import { answer as answerConsent, consentSearch, onConsentChange, question as consentQuestion } from "./automation.js";
 
 const native = globalThis.__native;
 
@@ -225,7 +226,7 @@ function view(nodes) {
 /** The answer the tree shows, its handlers entered in `handlers`; a List still loading says so, so Pilot draws its
  *  loading row. */
 function answer(container, handlers) {
-  const consent = asking();
+  const consent = consentQuestion();
   if (consent) return question(consent, handlers);
   const root = view(container.children);
   if (!root) return null;
@@ -240,13 +241,17 @@ function answer(container, handlers) {
   return list;
 }
 
-/** The consent question as its two rows, each pressed by its own handler. */
-function question({ question: text }, handlers) {
-  const row = (title, handler, allowed, symbol) => {
-    handlers.set(handler, { props: { onAction: () => answerConsent(allowed) } });
-    return { id: handler.split(".")[0], title, subtitle: text, symbol, actions: [{ type: "invoke", handler, title }] };
+/** The consent question as its two rows, Don't Allow first, each pressed by a handler of this question alone; they carry
+ *  the search as typed, so Pilot's filter never hides them. */
+function question({ serial, slug, typed, text }, handlers) {
+  const row = (title, allowed, symbol) => {
+    const id = `consent-${serial}-${slug}-${allowed ? "allow" : "deny"}`, handler = `${id}.onAction`;
+    handlers.set(handler, { props: { onAction: () => answerConsent(serial, allowed) } });
+    const out = { id, title, subtitle: text, symbol, actions: [{ type: "invoke", handler, title }] };
+    if (typed.trim()) out.keywords = typed;
+    return out;
   };
-  return { type: "list", items: [row("Allow", "consent-allow.onAction", true, "checkmark.shield"), row("Don't Allow", "consent-deny.onAction", false, "xmark.shield")] };
+  return { type: "list", items: [row("Don't Allow", false, "xmark.shield"), row("Allow", true, "checkmark.shield")] };
 }
 
 onConsentChange(() => { for (const flush of changed) flush(); });
@@ -317,6 +322,7 @@ export function render(component, message) {
   return {
     /** A later search: the List's own onSearchTextChange, when it takes one. */
     search(text, seq) {
+      consentSearch(text);
       request(seq, () => {
         const list = view(container.children);
         const handler = list?.props?.onSearchTextChange;

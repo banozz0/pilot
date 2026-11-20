@@ -60,7 +60,7 @@ globalThis.__pilotQuery = (text, seq) => { view ? view.search(text, seq) : fail(
 globalThis.__pilotInvoke = (handler, seq) => { view ? view.invoke(handler, seq) : fail(new Error("no view is open"), seq); };
 
 globalThis.__pilotClose = () => {
-  consentClosed();
+  try { consentClosed(); } catch (error) { console.error(error); }
   try { view?.close(); } catch (error) { console.error(error); }
   view = null;
 };

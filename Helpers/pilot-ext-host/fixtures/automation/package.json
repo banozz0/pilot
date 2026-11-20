@@ -5,12 +5,45 @@
   "description": "A fixture for pilot-ext-host's AppleScript consent (T9): each command runs its own osascript stand-in (shim/osascript), never the real one, naming an app the way extensions do.",
   "author": "banozz",
   "license": "MIT",
-  "categories": ["Developer Tools"],
+  "categories": [
+    "Developer Tools"
+  ],
   "commands": [
-    { "name": "index", "title": "Notes", "description": "At mount, execFile with -e naming Notes.", "mode": "view" },
-    { "name": "music", "title": "Music", "description": "At mount, exec's shell line naming Music with tell app.", "mode": "view" },
-    { "name": "forms", "title": "Forms", "description": "At mount, one call per way a script names its app.", "mode": "view" },
-    { "name": "sync", "title": "Sync", "description": "At mount, execFileSync naming Finder.", "mode": "view" },
-    { "name": "quiet", "title": "Quiet", "description": "A no-view command naming TextEdit.", "mode": "no-view" }
+    {
+      "name": "index",
+      "title": "Notes",
+      "description": "At mount, execFile with -e naming Notes.",
+      "mode": "view"
+    },
+    {
+      "name": "music",
+      "title": "Music",
+      "description": "At mount, exec's shell line naming Music with tell app.",
+      "mode": "view"
+    },
+    {
+      "name": "forms",
+      "title": "Forms",
+      "description": "At mount, one call per way a script names its app.",
+      "mode": "view"
+    },
+    {
+      "name": "sync",
+      "title": "Sync",
+      "description": "At mount, execFileSync naming Finder.",
+      "mode": "view"
+    },
+    {
+      "name": "bypass",
+      "title": "Bypass",
+      "description": "At mount, every way review 1 found to name Music past the check, each through the shim.",
+      "mode": "view"
+    },
+    {
+      "name": "quiet",
+      "title": "Quiet",
+      "description": "A no-view command naming TextEdit.",
+      "mode": "no-view"
+    }
   ]
 }
