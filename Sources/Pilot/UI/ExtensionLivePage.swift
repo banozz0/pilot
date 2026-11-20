@@ -7,7 +7,8 @@ import SwiftUI
 /// (ExtensionListSession over the command's host), the same navigator ranking its rows and holding Cmd+K's actions, and
 /// the same picks: Return presses the selected row's first action, Cmd+K lists them all, a push opens its view over this
 /// one (Escape goes back), a form opens in its own panel (ExtensionFormPanel), a press that changes the list is drawn as
-/// the host answers.
+/// the host answers. Its host runs only while the page shows: leaving the page, or the window going away, stops it, as a
+/// kept page stops its timers (9ca2f84); showing it again starts the command afresh.
 @Observable @MainActor
 final class ExtensionLivePageModel {
     let ext: Extension
@@ -189,6 +190,7 @@ final class ExtensionLivePageModel {
 struct ExtensionLivePage: View {
     @Environment(\.ink) private var ink
     @Bindable var model: ExtensionLivePageModel
+    /// The window shows the page: only then does its command run.
     let onScreen: Bool
     @FocusState private var focused: Bool
 
@@ -200,10 +202,12 @@ struct ExtensionLivePage: View {
             ink.line.frame(height: 1)
             foot
         }
-        .task {
+        .task(id: onScreen) {
+            guard onScreen else { return model.stop() }
             await model.start()
             focused = true
         }
+        .onDisappear { model.stop() }
     }
 
     private var search: some View {

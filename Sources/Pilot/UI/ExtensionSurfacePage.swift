@@ -135,6 +135,8 @@ final class ExtensionPageModel {
             let wait = updated.map { Double(every) - now().timeIntervalSince($0) } ?? 0
             if wait > 0 { guard (try? await sleep(.seconds(wait))) != nil else { return } }
             await refresh()
+            // A live page's host draws as it changes, and a page with nothing to ask has nothing to refresh (T30).
+            if livePage != nil || ext?.shownSurface == nil { return }
             guard (try? await sleep(.seconds(every))) != nil else { return }
         }
     }
