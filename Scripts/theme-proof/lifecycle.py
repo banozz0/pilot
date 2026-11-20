@@ -32,7 +32,7 @@ def digest(path):
 WALLPAPER_A = base64.b64decode('iVBORw0KGgoAAAANSUhEUgAAAAIAAAABCAIAAAB7QOjdAAAADUlEQVR42mOQdEwBIgAEowF9QIvmEgAAAABJRU5ErkJggg==')
 WALLPAPER_B = base64.b64decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAACCAIAAAAW4yFwAAAADklEQVR42mMIEIliAGIABeQBfbSeD6oAAAAASUVORK5CYII=')
 # The packs whose wide picture Pilot.app bundled as HEIC until public-repo spec T35 (the rest were PNG).
-HEIC_WIDE = {'folio', 'wisteria', 'void', 'garnet', 'porcelain', 'toybox-night', 'toybox'}
+HEIC_WIDE = {'folio', 'wisteria', 'void', 'garnet', 'porcelain'}
 _HEIC = None
 
 
@@ -268,7 +268,7 @@ def run(seam_only=False, fixes_only=False):
         assert f.actual.read_bytes() == pre and not f.generated.exists() and not f.call('theme', 'status')['owned']
         passed('a later edit to the generated file or the loader block is written over like any other, with a copy of it saved first')
 
-        for stale in ['target', 'pack', 'asset', 'style', 'binding', 'ledger', 'link']:
+        for stale in ['target', 'pack', 'asset', 'binding', 'ledger', 'link']:
             saved = f.snapshot()
             path = f.actual
             if stale == 'asset':
@@ -281,8 +281,6 @@ def run(seam_only=False, fixes_only=False):
                 f.packs[0]['title'] += ' changed'; f.save_pack(f.packs[0])
             elif stale == 'asset':
                 (f.root / 'packs/a/image.png').write_bytes(WALLPAPER_B)
-            elif stale == 'style':
-                f.controls(style='toybox')
             elif stale == 'binding':
                 old = f.manifest.read_text(); f.manifest.write_text(old + ' '); restore = lambda: f.manifest.write_text(old)
             elif stale == 'ledger':
@@ -297,7 +295,7 @@ def run(seam_only=False, fixes_only=False):
         passed('immutable plans reject changed files/pack/assets/style/bindings/ledger/link without writes')
 
         # Changes during the real Allow suspension, plus a concurrent mutation request.
-        for stale in ['target', 'pack', 'asset', 'binding', 'ledger', 'style', 'link']:
+        for stale in ['target', 'pack', 'asset', 'binding', 'ledger', 'link']:
             for flag in ['asked', 'go']:
                 (f.root / flag).unlink(missing_ok=True)
             f.controls(hold='yes')
@@ -317,8 +315,6 @@ def run(seam_only=False, fixes_only=False):
                     old = f.manifest.read_bytes(); f.manifest.write_bytes(old + b' '); undo = lambda: f.manifest.write_bytes(old)
                 elif stale == 'ledger':
                     target = f.root / 'state/ownership.json'; old = target.read_bytes(); target.write_bytes(old + b' '); undo = lambda: target.write_bytes(old)
-                elif stale == 'style':
-                    f.controls(style='toybox', hold='yes'); undo = lambda: None
                 elif stale == 'link':
                     f.config.unlink(); f.config.symlink_to('pilot-theme.conf'); undo = lambda: (f.config.unlink(), f.config.symlink_to('dotfiles/ghostty'))
                 unchanged = f.snapshot()

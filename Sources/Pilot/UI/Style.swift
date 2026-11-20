@@ -11,14 +11,6 @@ extension StyleTokens {
     /// A row's or a control's height drawn by hand: `points` times the surface's scale (C3), whole points.
     func points(_ points: CGFloat) -> CGFloat { (points * scale).rounded() }
 
-    /// Toybox's bundled faces (Toy.nunito, fredoka, mono) at `size` times the surface's scale (C3): one step bigger in the
-    /// window, its pages and the menu, as they were on the panels, the bar and the HUDs.
-    @MainActor func toyNunito(_ weight: Int, _ size: CGFloat) -> Font { Toy.nunito(weight, size * scale) }
-    @MainActor func toyFredoka(_ size: CGFloat) -> Font { Toy.fredoka(size * scale) }
-    @MainActor func toyMono(_ size: CGFloat, bold: Bool = false) -> Font {
-        Font(DisplayFaces.font(StyleTokens.jetBrainsMono(bold ? 700 : 500), size: size * scale))
-    }
-
     /// The role's face at its size: the system's, the theme's display face, the picked monospace family or a bundled face.
     @MainActor
     func font(_ role: KeyPath<StyleTypography, TypeRole>) -> Font { Self.font(type[keyPath: role]) }

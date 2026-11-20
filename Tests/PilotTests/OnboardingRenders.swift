@@ -7,8 +7,8 @@ import Testing
 @testable import Pilot
 
 /// Onboarding 1.1 (T54, variant C, Q841-Q843): a sandbox run of Set up with a recording system in place of the Mac, so
-/// nothing installs and no default, key or setting of this Mac changes; then each screen drawn from that run, Instrument
-/// and Toybox. The run's record goes to `sandbox-run.txt` beside the images. Opt-in like the other renders, in a moved
+/// nothing installs and no default, key or setting of this Mac changes; then each screen drawn from that run, Instrument.
+/// The run's record goes to `sandbox-run.txt` beside the images. Opt-in like the other renders, in a moved
 /// home:
 /// `CFFIXED_USER_HOME=<fresh dir> PILOT_RENDER_DIR=<fresh dir> swift test --filter OnboardingRenders`
 extension SharedLook {
@@ -67,13 +67,9 @@ struct OnboardingRenders {
             model.step = step
             try instrument(model, engine, name, dir)
         }
-        model.step = .welcome
-        try toybox(model, engine, "1-hyper", dir)
         let pcKeyboard = OnboardingModel(setup: setup, walk: GrantWalk(system: RecordingGrants()))
         pcKeyboard.keyboards = [13364]
         try instrument(pcKeyboard, engine, "1b-hyper-other-keyboard", dir)
-        model.step = .permissions
-        try toybox(model, engine, "2-access", dir)
         // Access after Allow, with System Settings open: step 2 is live (no Allow is pressed here, so nothing opens).
         // On a model of its own, never started, so no refresh reads the Mac's own Settings or grant into it.
         let waiting = OnboardingModel(setup: setup, walk: GrantWalk(system: RecordingGrants()))
@@ -105,11 +101,9 @@ struct OnboardingRenders {
             try instrument(keysStep, engine, "2c-keys-keep-\(theme)", dir)
         }
         look.themeID = Self.env["PILOT_RENDER_THEME"] ?? "tokyo-night"
-        try toybox(keysStep, engine, "2c-keys-keep", dir)
         engine.binds.use(.easy)
         setup.keys = nil
         model.step = .extras
-        try toybox(model, engine, "3a-fork", dir)
         // Pick by hand: the Files key, launch at login, and Convert, which ticks ffmpeg, webp and Homebrew (Sven,
         // 2026-11-19). Unticking Convert leaves Homebrew; unticking Update, Homebrew, unticks every helper.
         setup.phase = .pick
@@ -142,7 +136,6 @@ struct OnboardingRenders {
         let ran3 = OnboardingModel(setup: fresh)
         ran3.step = .extras
         try instrument(ran3, engine, "3c-run", dir)
-        try toybox(ran3, engine, "3c-run", dir)
         defaults.removeObject(forKey: OnboardingSetup.ledgerKey)
 
         // An earlier release's run, which offered every item: its record keeps each row and Undo here.
@@ -177,14 +170,12 @@ struct OnboardingRenders {
         // for Settings › Permissions, and Screen Recording is asked before it is ever read (ADR 0012).
         model.startTryIt()
         try instrument(model, engine, "4a-try-it", dir)
-        try toybox(model, engine, "4a-try-it", dir)
         // The demo done (Sven, 2026-11-19): the whole tab says so, the rail's step ticked.
         let demo = OnboardingModel(setup: setup, walk: GrantWalk(system: RecordingGrants()))
         demo.startTryIt()
         demo.seedDemoDone()
         #expect(demo.demoDone(engine))
         try instrument(demo, engine, "4e-demo-done", dir)
-        try toybox(demo, engine, "4e-demo-done", dir)
         // Try it after a Scratch pick (T13): no key opens the menu, so its row is left out, and the hold says there are
         // no binds yet. Back on Easy after, for the renders that follow.
         setup.keys = .scratch
@@ -198,7 +189,6 @@ struct OnboardingRenders {
         // More open (tester, 2026-11-18): the panels scroll inside Set up's height, so the window stays on the screen.
         model.showsMore = true
         try instrument(model, engine, "4d-try-it-more", dir)
-        try toybox(model, engine, "4d-try-it-more", dir)
         model.showsMore = false
         #expect(grants.log.isEmpty && model.walk.phase == .ready)
         // The walk on a model of its own, drawn without a window's appear and disappear: a closed render window's late
@@ -226,7 +216,6 @@ struct OnboardingRenders {
         // Allowed, Screen Recording's helper stays for its Quit & Reopen; the next steps close only their own.
         #expect(!grants.log.contains("close helper screenRecording") && grants.log.contains("close helper fullDiskAccess"))
         try instrument(walking, engine, "4c-allow-the-rest-done", dir)
-        try toybox(walking, engine, "4c-allow-the-rest-done", dir)
         let walked = grants.log
 
         // A Stop during an awaited read, or a Skip during a tick's read, ends that turn (reviewer, T58): nothing is asked,
@@ -336,27 +325,6 @@ struct OnboardingRenders {
         Look.shared.style = .instrument
         try SharedLook.InstrumentPanelsRenders.renderWindow(InstrumentOnboarding(model: model, confirming: .constant(nil), finish: {})
             .environment(engine).styled(.onboarding).pilotTheme(), name: "\(name)-instrument", in: dir)
-    }
-
-    /// Toybox's steps through OnboardingView, in its own titled window as PilotApp opens it.
-    private func toybox(_ model: OnboardingModel, _ engine: Engine, _ name: String, _ dir: URL) throws {
-        Look.shared.style = .toybox
-        defer { Look.shared.style = .instrument }
-        let host = NSHostingView(rootView: OnboardingView(model: model).environment(engine))
-        host.frame.size = host.fittingSize
-        let w = NSWindow(contentRect: host.frame, styleMask: [.titled, .closable], backing: .buffered, defer: false)
-        w.title = "Welcome to Pilot"
-        w.isReleasedWhenClosed = false
-        w.contentView = host
-        defer { w.close() }
-        RunLoop.main.run(until: Date().addingTimeInterval(0.6))
-        let chrome = try #require(w.contentView?.superview)
-        chrome.layoutSubtreeIfNeeded()
-        try #require(snapshot(chrome, scale: 2)?.representation(using: .png, properties: [:]))
-            .write(to: dir.appendingPathComponent("\(name)-toybox.png"))
-        w.close()
-        // The window's onDisappear (the model's stop) lands now, not in the middle of what the test does next.
-        RunLoop.main.run(until: Date().addingTimeInterval(0.3))
     }
 }
 }

@@ -94,7 +94,6 @@ struct FilesWindowRenders {
         let grid = Self.model(pictures, home: home)
         grid.mode = .grid
         try await Self.settle(grid)
-        look.style = .toybox
         look.themeID = "porcelain"
         grid.select(try #require(grid.items.first))
         grid.select(grid.items[2], modifiers: .shift)

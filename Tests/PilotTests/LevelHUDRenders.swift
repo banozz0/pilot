@@ -6,12 +6,12 @@ import SwiftUI
 import Testing
 @testable import Pilot
 
-/// The brightness level HUD (story 144, card agent-bo-95423314) in Instrument and Toybox, each in
-/// a dark theme, a light one and Toybox's own, through HUD.makePanel as LevelHUD.show builds it: no level, a level, a full
+/// The brightness level HUD (story 144, card agent-bo-95423314) in Instrument, in
+/// a dark theme and a light one, through HUD.makePanel as LevelHUD.show builds it: no level, a level, a full
 /// one, a screen with no control, one still being read, and a long screen name; per pass a sheet stacks them, so the
 /// fixed width shows. Opt-in like the other renders, in a moved home:
 /// `CFFIXED_USER_HOME=/tmp/pilot-render-home PILOT_RENDER_DIR=/tmp/pilot-renders swift test --filter LevelHUDRenders`
-/// `PILOT_RENDER_STYLES=instrument,toybox` and `PILOT_RENDER_THEME=tokyo-night,folio,toybox` (the defaults) narrow it.
+/// `PILOT_RENDER_STYLES=instrument` and `PILOT_RENDER_THEME=tokyo-night,folio` (the defaults) narrow it.
 extension SharedLook {
 @MainActor
 @Suite("Level HUD renders")
@@ -48,9 +48,9 @@ struct LevelHUDRenders {
         defer { (look.style, look.themeID, look.glass) = saved }
         let out = URL(fileURLWithPath: try #require(Self.env["PILOT_RENDER_DIR"]))
 
-        for style in Self.list("PILOT_RENDER_STYLES", "instrument,toybox") {
+        for style in Self.list("PILOT_RENDER_STYLES", "instrument") {
             look.style = try #require(PilotStyle(rawValue: style))
-            for theme in Self.list("PILOT_RENDER_THEME", "tokyo-night,folio,toybox") {
+            for theme in Self.list("PILOT_RENDER_THEME", "tokyo-night,folio") {
                 look.themeID = theme
                 let tag = "\(style)-\(theme)"
                 let dir = out.appendingPathComponent("level-\(tag)")

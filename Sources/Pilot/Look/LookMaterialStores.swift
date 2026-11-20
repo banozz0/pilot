@@ -13,7 +13,7 @@ struct LookMaterialStores {
     /// `look`'s Material on the shared bar and the engine's dock.
     static func of(_ look: Look) -> LookMaterialStores { .init(look: look, bar: .shared, dock: Engine.shared?.dock) }
 
-    /// The stored switches, never what is drawn now: Reduce transparency, Transparency 0 % or Toybox draw Glass solid
+    /// The stored switches, never what is drawn now: Reduce transparency or Transparency 0 % draw Glass solid
     /// without making the material read Custom.
     var surfaces: LookMaterial.Surfaces {
         .init(bar: bar.background, dock: dock?.settings.style ?? DockSettings().style, glass: look.glass, blur: look.glassBlur)

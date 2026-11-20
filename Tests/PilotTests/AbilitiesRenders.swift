@@ -7,7 +7,7 @@ import Testing
 @testable import Pilot
 
 /// Binds › Abilities and a page with ⓘ tips (story 155), opt-in like the other renders: the window on Abilities in
-/// Instrument and Toybox under Tokyo Night at 1440 by 900, Instrument at 760 too; the list searched for "wallpaper", and for
+/// Instrument under Tokyo Night at 1440 by 900 and at 760; the list searched for "wallpaper", and for
 /// "bitwarden" (More abilities); Binds' own bar with its Abilities button; Clipboard in Instrument with its tips
 /// (Pomodoro's page, the other, left Pilot on 2026-10-10).
 /// `CFFIXED_USER_HOME=<fresh dir> PILOT_RENDER_DIR=<fresh dir> swift test --filter AbilitiesRenders`
@@ -61,13 +61,13 @@ struct AbilitiesRenders {
                 try shoot(AppPlace(.clipboard), "tips-clipboard-\(name)")
             }
             let page = AbilitiesList(query: "wallpaper") { _ in }
-                .styleLayout().background(Color(nsColor: .windowBackgroundColor))
+                .background(Color(nsColor: .windowBackgroundColor))
                 .styled(.page(.binds)).environment(engine).frame(width: 1000, height: 420).pilotTheme(look: look)
             try writeRender(page, to: dir.appendingPathComponent("search-\(name).png"))
             // Abilities ship minimal (2026-10-10): this fresh home added none, so Bitwarden's wait under More abilities.
             if style == .instrument {
                 let more = AbilitiesList(query: "bitwarden") { _ in }
-                    .styleLayout().background(Color(nsColor: .windowBackgroundColor))
+                    .background(Color(nsColor: .windowBackgroundColor))
                     .styled(.page(.binds)).environment(engine).frame(width: 1000, height: 520).pilotTheme(look: look)
                 try writeRender(more, to: dir.appendingPathComponent("more-\(name).png"))
             }
@@ -79,7 +79,7 @@ struct AbilitiesRenders {
         engine.binds.replace("apps.generatePassword", with: Key("p", .shift))
         for query in ["folder", "password"] {
             let page = AbilitiesList(query: query) { _ in }
-                .styleLayout().background(Color(nsColor: .windowBackgroundColor))
+                .background(Color(nsColor: .windowBackgroundColor))
                 .styled(.page(.binds)).environment(engine).frame(width: 1000, height: 900).pilotTheme(look: look)
             try writeRender(page, to: dir.appendingPathComponent("settings-\(query)-instrument.png"))
         }

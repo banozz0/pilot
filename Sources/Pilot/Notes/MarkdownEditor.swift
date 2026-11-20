@@ -271,27 +271,6 @@ struct MarkdownStyle: Equatable {
         (link, ticked, unticked) = (text, accent, color(\.text3))
         (quote, quoteBar, rule) = (color(\.text2), color(\.text3), color(\.line2))
         codeLine = (code.pointSize * 1.6).rounded()
-        if style.kind == .toybox { toybox(style) }
-    }
-
-    /// Toybox's (card agent-bo-95423182): Nunito at 15 on a 1.6 line with its 800 for bold, Fredoka for `#` and `##`,
-    /// JetBrains Mono on the sunk fill; the caret and a link in the sun's darker edge, a ticked box the sun with the ink's
-    /// tick, as the menu's picked row.
-    @MainActor private mutating func toybox(_ style: StyleTokens) {
-        func color(_ role: KeyPath<StyleColors, Paint>) -> NSColor { Self.color(role, style) }
-        body = DisplayFaces.font(StyleTokens.nunito(600), size: 15 + Self.step)
-        bold = DisplayFaces.font(StyleTokens.nunito(800), size: 15 + Self.step)
-        code = DisplayFaces.font(StyleTokens.jetBrainsMono(500), size: 13 + Self.step)
-        h1 = Heading(font: DisplayFaces.font(StyleTokens.fredoka(600), size: 30), line: 38, after: 6)
-        h2 = Heading(font: DisplayFaces.font(StyleTokens.fredoka(600), size: 23), line: 30, after: 2)
-        line = 27
-        inset = NSSize(width: 26, height: 22)
-        codeRadius = 6
-        (box, boxRadius, boxGap, tick) = (18, 5, 10, 10)
-        accent = color(\.accentText); onAccent = color(\.onAccent); codeFill = color(\.sunken)
-        (link, ticked, unticked) = (color(\.accentText), color(\.accent), color(\.text3))
-        quoteBar = color(\.accent)
-        codeLine = 24
     }
 
     /// How much bigger the note's words are than the style's body (Sven 2026-10-15).

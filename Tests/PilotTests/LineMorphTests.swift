@@ -18,7 +18,6 @@ struct LineMorphTests {
         testApp()
         let entries = try SharedLook.LineMenuRenders.built()
         let model = MenuModel(nav: MenuNavigator(entries: entries))
-        model.layout = .line
         let panel = PanelTestSupport.hide(PilotMenu.makePanel(model))
         let sizer = MenuSizer(panel: panel, model: model)
         panel.makeKeyAndOrderFront(nil)

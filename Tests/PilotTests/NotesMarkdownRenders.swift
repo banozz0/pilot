@@ -8,7 +8,7 @@ import Testing
 
 /// Offscreen renders of the notes panel's Markdown round (Q114 to Q116, Sven 2026-10-15) on SuperCmd's reference note:
 /// the note as it reads, the caret on a line showing its marks, and the list with the keyboard previewing it, in
-/// Instrument and Toybox, dark and light, through HUD.makePanel as Pilot shows it. Seeded in a temporary folder, never
+/// Instrument, dark and light, through HUD.makePanel as Pilot shows it. Seeded in a temporary folder, never
 /// Pilot's own. Opt-in like the other renders, in a moved home:
 /// `CFFIXED_USER_HOME=/tmp/pilot-render-home PILOT_RENDER_DIR=/tmp/pilot-renders swift test --filter NotesMarkdownRenders`
 extension SharedLook {
@@ -17,7 +17,7 @@ extension SharedLook {
 struct NotesMarkdownRenders {
     nonisolated static let env = ProcessInfo.processInfo.environment
 
-    @Test("The reference note renders as it reads, with the caret's line raw, and previewed from the list, in both styles dark and light",
+    @Test("The reference note renders as it reads, with the caret's line raw, and previewed from the list, in Instrument dark and light",
           .enabled(if: env["PILOT_RENDER_DIR"] != nil && env["CFFIXED_USER_HOME"] != nil))
     func render() throws {
         let home = try #require(Self.env["CFFIXED_USER_HOME"])
@@ -36,8 +36,7 @@ struct NotesMarkdownRenders {
         let store = try NotesPanelRenders.seed(folder)
         let reference = try store.create(text: NotesMarkdownTests.reference)
 
-        let passes: [(PilotStyle, String, String)] = [(.instrument, "tokyo-night", "dark"), (.instrument, "folio", "light"),
-                                                      (.toybox, "toybox-night", "dark"), (.toybox, "toybox", "light")]
+        let passes: [(PilotStyle, String, String)] = [(.instrument, "tokyo-night", "dark"), (.instrument, "folio", "light")]
         for (style, theme, side) in passes {
             look.style = style
             look.themeID = theme

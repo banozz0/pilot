@@ -5,7 +5,7 @@ import SwiftUI
 import PilotCore
 
 /// Pilot's own two fonts (Sven, Q711: "in pilot ... use fonts that i want"): its words and its mono, each an installed
-/// family or nil for the style's own (Geist and Geist Mono in Instrument, Nunito and JetBrains Mono in Toybox). Ink and
+/// family or nil for the style's own (Geist and Geist Mono in Instrument). Ink and
 /// Theme.mono read them as they draw, so every page follows at once; `pilot get|set fonts.ui|fonts.mono` reach them.
 @Observable @MainActor
 final class PilotFonts {

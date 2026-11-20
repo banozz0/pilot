@@ -98,7 +98,7 @@ enum VideoEditor {
         let glass = look.material(on: .hud) == .glass
         let host = NSHostingView(rootView: VideoEditorView(model: model, glass: glass).styled(.hud, look: look).pilotTheme(look: look))
         host.frame = CGRect(origin: .zero, size: size)
-        // Look's Glass behind the editor, as behind the thumbnail and the HUD (solid in Toybox, or with Glass off); no shadow.
+        // Look's Glass behind the editor, as behind the thumbnail and the HUD (solid with Glass off); no shadow.
         let backdrop = MaterialBackdrop(content: host, cornerRadius: tokens.radii.pop)
         backdrop.show(look.material(on: .hud), tint: look.glassTint(tokens.color(\.panel)))
         panel.contentView = backdrop

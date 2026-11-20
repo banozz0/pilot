@@ -180,7 +180,7 @@ struct SettingsSchemaTests {
         let rig = Rig()
         for (args, code) in [(["look.glass", "maybe"], ControlError.Code.badValue), (["look.transparency", "lots"], .badValue),
                              (["look.transparency", "101"], .outOfRange), (["look.defocusShakeWithin", "0.1"], .outOfRange),
-                             (["passwords.length", "8"], .outOfRange), (["look.style", "neon"], .badValue),
+                             (["passwords.length", "8"], .outOfRange), (["look.glass", "neon"], .badValue),
                              (["look.windowBorderColour", "red"], .badValue), (["folders.repos", "/no/such/folder"], .badValue),
                              (["folders.repos", "relative/path"], .badValue), (["ai.model.claudeCode", "gpt-5"], .badValue),
                              (["ai.baseURL.ollama", "ftp://host"], .badValue), (["no.such.key", "1"], .unknownKey),
@@ -337,7 +337,7 @@ struct SettingsSchemaTests {
         #expect(throws: ControlError.self) { try get("no.such.key") }
         let look = try #require(try settings("look"))
         #expect(look.hasPrefix("pilot settings --page look\n") && look.contains("look.theme") && !look.contains("look.windowLayout")
-                && look.split(separator: "\n").count == 17)
+                && !look.contains("look.style") && look.split(separator: "\n").count == 16)
         guard case .object(let index) = rig.verbs.schemaIndex, case .array(let listed)? = index["verbs"],
               let entry = listed.first(where: { if case .object(let o) = $0 { o["name"] == .string("settings") } else { false } }),
               case .object(let part) = entry else { Issue.record("no settings entry"); return }

@@ -86,7 +86,7 @@ struct WidgetsAddList: View {
     }
 }
 
-/// A small heading in the style: Instrument's mono eyebrow, Toybox's bold line.
+/// A small heading in the style: Instrument's mono eyebrow.
 struct WidgetsEyebrow: View {
     @Environment(\.ink) private var ink
     let text: String

@@ -9,8 +9,6 @@ extension SettingsSchema {
     func registerLook(_ look: Look) {
         let cursors = CursorSets.of(look), effects = CursorEffects.of(look)
         register([
-            .choice("look.style", "Style", page: "look", PilotStyle.allCases, standard: .instrument,
-                    read: { look.style }, write: { look.style = $0 }),
             .choice("look.theme", "Stock theme catalog; current style choices: pilot theme colours", page: "look", PilotTheme.designed.map(\.id), standard: PilotTheme.defaultID,
                     read: { look.themeID }, write: { id throws(ControlError) in
                         guard PilotTheme.named(id) != nil, look.shows(id), ThemeNativePalette.stock(id).compatible(with: look.style.rawValue) else { throw ControlError(.badValue, "unknown or incompatible stock theme; pilot theme colours lists current choices") }

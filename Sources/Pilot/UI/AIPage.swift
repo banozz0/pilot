@@ -150,7 +150,7 @@ private struct AIPageBody: View {
     }
 
     /// The page's bottom inset under the chat card, as the style's page leaves it.
-    private var foot: CGFloat { style.kind == .toybox ? 32 : style.density.page }
+    private var foot: CGFloat { style.density.page }
 
     /// codex's sign-in to Pilot's own Codex home, from the empty chat (CodexSignIn).
     private func connect(_ route: AIProvider) {

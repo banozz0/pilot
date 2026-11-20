@@ -49,7 +49,7 @@ struct KeyboardLockView: View {
 
     @ViewBuilder private var title: some View {
         let text = Text("Keyboard locked").foregroundStyle(style.color(\.text)).accessibilityAddTraits(.isHeader)
-        if style.kind == .toybox { text.styleText(\.display) } else { text.font(ink.themeMono(46, weight: .ultraLight)).tracking(-1.4) }
+        text.font(ink.themeMono(46, weight: .ultraLight)).tracking(-1.4)
     }
 
     /// Cleaning since when, and the safety unlock counting down, read once a second.

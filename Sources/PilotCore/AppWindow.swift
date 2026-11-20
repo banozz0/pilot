@@ -425,11 +425,11 @@ public enum AppSection: String, CaseIterable, Sendable {
     /// Look's Catalogue (public-repo-catalogue T22, Sven's variant C): every theme pack in Pilot's catalogue as a gallery
     /// of desks, each acting from its own tile (Get, Update, Apply, Remove).
     case themeCatalogue
-    /// Look's More (simplify-pages T20) and its places: the style (the window's layout went with the panel, pilot-ui-redesign
-    /// T2 and T3); the Hyper+Space menu's layout
+    /// Look's places. Look has no More: the window's layout went with the panel (pilot-ui-redesign T2 and T3) and the style
+    /// in the feature trim (2026-11-19), its last two blocks. The Hyper+Space menu's layout
     /// and how apps show are places on Launcher's More since Sven's notes on build 19 (Look's until then); the glass's transparency and blur (under Glass, pages round 5), the cursor,
     /// and the folders and order the wallpaper cycles through are places on the front (pages round 4, Sven's Q99).
-    case lookMore, lookStyle, appsShowAs, glassTuning, cursor, wallpaperCycle
+    case appsShowAs, glassTuning, cursor, wallpaperCycle
     /// Pilot's places on its front beside `permissions` and `about` (on its More from simplify-pages T7 until pages round 4,
     /// Sven's Q106, when the page lost its More): the Hyper keys and their options, what runs, and Pilot's folder, command
     /// and Uninstall.
@@ -507,7 +507,7 @@ public enum AppSection: String, CaseIterable, Sendable {
         case .agents: .configs
         case .aiSetup, .aiFallback, .aiKeys, .aiNewChat: .ai
         case .recording, .captureHistory: .captures
-        case .wallpaper, .themeCatalogue, .lookMore, .lookStyle, .glassTuning, .cursor, .wallpaperCycle: .look
+        case .wallpaper, .themeCatalogue, .glassTuning, .cursor, .wallpaperCycle: .look
         }
     }
 
@@ -531,7 +531,6 @@ public enum AppSection: String, CaseIterable, Sendable {
         case .upkeep: .upkeepMore
         case .binds: .bindsMore
         case .workspaces: .workspacesMore
-        case .look: .lookMore
         case .dock: .dockMore
         case .clipboard: .clipMore
         case .tiling: .tilingMore
@@ -547,7 +546,7 @@ public enum AppSection: String, CaseIterable, Sendable {
                                                      .helpers, .hiddenApps, .reports,
                                                      .exportImport, .cleaning,
                                                      .workspaceScrolling, .workspaceSwipe,
-                                                     .lookStyle, .appsShowAs,
+                                                     .appsShowAs,
                                                      .dockLook, .clipNever, .clipExpire, .clipPanel, .clipTags,
                                                      .focusedBorder, .focusedDim]
 
@@ -611,7 +610,7 @@ public enum AppSection: String, CaseIterable, Sendable {
         case .status: "Status"
         case .data: "Data"
         case .notifications: "Notifications"
-        case .voiceMore, .capturesMore, .menuMore, .installMore, .upkeepMore, .bindsMore, .workspacesMore, .lookMore, .dockMore, .clipMore,
+        case .voiceMore, .capturesMore, .menuMore, .installMore, .upkeepMore, .bindsMore, .workspacesMore, .dockMore, .clipMore,
              .tilingMore: "More"
         case .dockLook: "Placement and effects"
         case .focusedBorder: "Border"
@@ -664,7 +663,6 @@ public enum AppSection: String, CaseIterable, Sendable {
         case .captureHistory: "History"
         case .wallpaper: "Wallpaper"
         case .themeCatalogue: "Catalogue"
-        case .lookStyle: "Style"
         case .appsShowAs: "Apps show as"
         case .glassTuning: "Transparency and blur"
         case .cursor: "Cursor"
@@ -694,7 +692,7 @@ public enum AppSection: String, CaseIterable, Sendable {
         case .data: ["folder", "application support", "pilot command", "cli", "link", "developer", "developer pages", "more pages", "uninstall", "terminal",
                      "ghostty"]
         case .notifications: ["notification", "notifications", "banner", "bell", "cards", "notification center", "hide banner"]
-        case .voiceMore, .capturesMore, .menuMore, .installMore, .upkeepMore, .bindsMore, .workspacesMore, .lookMore, .dockMore, .clipMore,
+        case .voiceMore, .capturesMore, .menuMore, .installMore, .upkeepMore, .bindsMore, .workspacesMore, .dockMore, .clipMore,
              .tilingMore: []
         // The Dock front's finer words, moved with their rows to its More (pilot-ui-redesign T17).
         case .dockLook: ["magnification", "magnify", "placement", "attached", "floating", "icon colours", "icon colors", "tint",
@@ -760,7 +758,6 @@ public enum AppSection: String, CaseIterable, Sendable {
         case .recording: ["recording", "screen recording", "record", "movies", "mp4", "countdown", "count down", "recordings folder"]
         case .captureHistory: ["capture history", "past captures", "old screenshots", "combine images", "stitch images", "size cap"]
         case .wallpaper: ["wallpaper", "desktop picture", "background", "next wallpaper", "previous wallpaper", "change on its own"]
-        case .lookStyle: ["style", "instrument", "toybox", "look of pilot"]
         case .appsShowAs: ["apps show as", "app icons", "icon only", "title only", "app names"]
         case .glassTuning: ["transparency", "blur", "see through", "frosted"]
         case .cursor: ["cursor", "pointer", "trail", "ripple", "spotlight", "cursor colour", "cursor shape", "cursor size", "bigger cursor",
@@ -798,6 +795,8 @@ public struct AppPlace: Hashable, Sendable {
         // More tabs gone since Sven ticked their blocks back onto the fronts (pages round 4).
         "openWithMore": AppPlace(.openWith), "clipboardMore": AppPlace(.clipboard),
         "aiMore": AppPlace(.aiSetup), "pilotMore": AppPlace(.general),
+        // Look's More, gone with its last two blocks: the window layout (pilot-ui-redesign T3) and the style (feature trim).
+        "lookMore": AppPlace(.look),
     ]
 
     /// The place a page name stands for: a page, a part, an old name, or nil.

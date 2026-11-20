@@ -168,15 +168,7 @@ def run(seam_only=False, fixes_only=False):
         f=fixture('style');f.start();p=f.create();p['styles']=['toybox'];rev=f.call('theme','show','user-a')['revision'];f.call('theme','edit','user-a',f.folder(p,'restricted'),rev)
         assert 'user-a' not in [x['id'] for x in f.call('theme','list')] and 'user-a' in [x['id'] for x in f.call('theme','list-all')]
         before=f.effects();f.call('theme','check','user-a',ok=False);f.call('theme','plan','apply','user-a',ok=False);assert f.effects()==before
-        f.controls(style='toybox');plan=f.plan('user-a');f.controls(style='instrument');f.call('theme','apply',plan,ok=False)
-        f.controls(style='toybox');f.apply('user-a');f.restore();f.stop()
-        passed('Toybox compatibility enforced by discovery/check/plan/apply freshness beyond picker; hand-authored restriction and common stock coexist')
-        f=fixture('memory');f.start();assert 'toybox' not in [x['id'] for x in f.call('theme','colours')];native=f.native_value();native['palette']={'stock':{'_0':'dracula'}};f.native.write_text(json.dumps(native))
-        f.call('theme','fixture-style','toybox');assert 'toybox' in [x['id'] for x in f.call('theme','colours')];native=f.native_value();native['palette']={'stock':{'_0':'toybox'}};f.native.write_text(json.dumps(native))
-        assert f.call('theme','fixture-style','instrument')=={'stock':{'_0':'dracula'}}
-        assert f.call('theme','fixture-style','toybox')=={'stock':{'_0':'toybox'}}
-        f.stop();f.start();assert f.call('theme','fixture-style','instrument')=={'stock':{'_0':'dracula'}};f.stop()
-        passed('native shared compatible-style memory returns prior Instrument/Toybox palette and persists across process restart')
+        passed('a pack restricted to a style Pilot lacks is hidden and refused by check and plan; common stock coexists')
 
 
         for kind in ['schema','id','colour','traversal','absolute','unknown-app','authority','bad-image','missing','collision','file-directory','material']:

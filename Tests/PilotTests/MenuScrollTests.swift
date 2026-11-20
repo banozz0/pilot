@@ -21,34 +21,6 @@ struct MenuScrollTests {
         try body()
     }
 
-    @Test("Arrow Down to the last row of a long list scrolls it whole into view", arguments: [PilotStyle.toybox])
-    func lastRowShows(_ style: PilotStyle) throws { try Self.picking(style) { try lastRowShows() } }
-
-    func lastRowShows() throws {
-        testApp()
-        let apps = (1...30).map { MenuEntry(title: "Appy \($0)", target: .app("dev.banozz.test.appy\($0)"), home: .apps) }
-        var nav = MenuNavigator(entries: apps)
-        nav.query = "appy"
-        let model = MenuModel(nav: nav)
-        let panel = Self.panel(model)
-        defer { panel.orderOut(nil) }
-        panel.orderFront(nil)
-        PanelTestSupport.pump()
-        // The offers sit after the best match (Q182), so the list ends with its last app.
-        #expect(model.nav.rows.last?.kind == .app)
-        for _ in model.nav.rows.indices {
-            _ = model.nav.handle(.down)
-            PanelTestSupport.pump()
-        }
-        #expect(model.nav.selection == model.nav.rows.count - 1)
-        let scroll = try #require(Self.scrollViews(in: panel.contentView).first)
-        let document = try #require(scroll.documentView)
-        // The list ends with the last row and the list's inset; the whole row must be inside what shows. Waited for, not
-        // pumped a fixed while: a loaded run starves the scroll past pump's quiet turns (full runs, 2026-10-11).
-        #expect(AliasesListTests.until(within: 10) { Self.bottomGap(scroll) <= 10 },
-                "visible \(scroll.documentVisibleRect), document \(document.bounds), flipped \(document.isFlipped)")
-    }
-
     /// Sven, 2026-10-07: an app's ten Cmd+K actions rode over the search line and the kind tabs, the last one hidden with
     /// no hint. They stay under the search line's hairline and scroll there, Arrow Down bringing the last one whole into view.
     @Test("Cmd+K's actions stay under the search line and Arrow Down scrolls the last one into view",

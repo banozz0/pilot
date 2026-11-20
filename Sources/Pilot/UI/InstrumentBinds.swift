@@ -7,8 +7,8 @@ import SwiftUI
 /// piece (Sven's Q36) on its panel with the modules under it (each picks what the board lights) and how to see the
 /// overlay; and the picked key's inspector: what it does, its route, today's presses, where else it shows, its clash,
 /// Change key, Unbind and Reset, the tab's free keys and the key on every tab; then Swap keys and what the overlay shows
-/// (pages round 4), under the board in its column while the inspector stands beside it (pages round 5). The binds as a table are List's; Cleaning is on More. Every act is BindsKeyboardPage's own (`Acts`), as Toybox's page uses them, so picking, binding, clearing,
-/// presets and the list behave as in Toybox. Over 1100 pt the inspector stands beside the board while the board there
+/// (pages round 4), under the board in its column while the inspector stands beside it (pages round 5). The binds as a table are List's; Cleaning is on More. Every act is BindsKeyboardPage's own (`Acts`), so picking, binding, clearing,
+/// presets and the list go through that page. Over 1100 pt the inspector stands beside the board while the board there
 /// holds every name whole, else under a board across the page, in two columns while it is 600 pt wide. The page
 /// scrolls; nothing in it scrolls on its own.
 struct InstrumentBindsPage: View {

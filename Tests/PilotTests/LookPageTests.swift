@@ -75,14 +75,14 @@ struct LookPageTests {
         #expect(picks == 1)
     }
 
-    @Test("The page draws the picked theme, the style and the Glass switch")
+    @Test("The page draws the picked theme and the Glass switch")
     func pageDrawsChoices() throws {
-        func page(more: Bool = false, _ change: (Look) -> Void = { _ in }) throws -> some View {
+        func page(_ change: (Look) -> Void = { _ in }) throws -> some View {
             let (look, _) = look()
             change(look)
             // Its own wallpaper store and no screens: each page read this Mac's wallpapers on its own, off the main actor,
             // so under the full run one page could have its rows when another had not yet (2026-10-11).
-            return LookPage(look: look, wallpaper: WallpaperSettings(defaults: UserDefaults(suiteName: testSuite())!), screens: [], more: more)
+            return LookPage(look: look, wallpaper: WallpaperSettings(defaults: UserDefaults(suiteName: testSuite())!), screens: [])
                 .frame(width: 1000, height: CGFloat(height)).clipped().pilotTheme(look: look)
         }
         // Tall enough that the Glass switch shows under the style picker (story 137), the theme cards and their window
@@ -90,8 +90,7 @@ struct LookPageTests {
         let height = 1600
         // One render in one main-actor turn, so every page sees the same moment and no other suite runs between; a gap
         // between pages, as a page drew some of its neighbour's edge without one.
-        let pages = [try page(), try page(), try page { $0.pick("garnet") }, try page { $0.style = .toybox }, try page { $0.glass = true },
-                     try page(more: true), try page(more: true) { $0.style = .toybox }]
+        let pages = [try page(), try page(), try page { $0.pick("garnet") }, try page { $0.glass = true }]
         let gap = 200
         let view = VStack(spacing: CGFloat(gap)) { ForEach(pages.indices, id: \.self) { pages[$0] } }
         let rep = try #require(snapshot(drawing: view, scale: 1))
@@ -104,12 +103,9 @@ struct LookPageTests {
             return (0..<height * row / 4).count { a[$0] != b[$0] }
         }
         #expect(differing(1) < 500, "the same Look draws differently")
-        for (i, change) in ["theme", "style", "Glass switch"].enumerated() {
+        for (i, change) in ["theme", "Glass switch"].enumerated() {
             #expect(differing(i + 2) > 500, "the \(change) draws nothing new")
         }
-        // The style's picker is on More (simplify-pages T20): More against More. The Hyper+Space menu's left for Launcher's
-        // More (Sven's notes on build 19).
-        #expect(differing(6, from: 5) > 500, "the style on More draws nothing new")
     }
 
     /// Opt-in: Vision finds the words to click on the main actor and, on a loaded Mac, stalls it for minutes (e5rt

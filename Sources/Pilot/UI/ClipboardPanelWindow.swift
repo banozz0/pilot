@@ -756,7 +756,6 @@ extension PanelModel.Prompt {
 }
 
 struct ClipboardPanelView: View {
-    @Environment(\.style) private var style
     @Bindable var model: PanelModel
     /// Settings › Clipboard's Copy only swaps what Return and Cmd+C do, so the hint swaps too.
     let returnCopies: Bool
@@ -765,17 +764,12 @@ struct ClipboardPanelView: View {
     @FocusState private var searchFocused: Bool
     @FocusState private var editorFocused: Bool
 
-    /// The clipboard panel (design round 4, card agent-bo-95422895): Instrument and Toybox draw their own
-    /// (InstrumentClipboardPanel, ToyClipboardPanel) on the same model, keys and words.
+    /// The clipboard panel (design round 4, card agent-bo-95422895): Instrument draws its own
+    /// (InstrumentClipboardPanel) on the model, keys and words.
     var body: some View {
-        Group {
-            switch style.kind {
-            case .instrument: InstrumentClipboardPanel(panel: self, pointer: pointer, searchFocused: $searchFocused, editorFocused: $editorFocused)
-            case .toybox: ToyClipboardPanel(panel: self, pointer: pointer, searchFocused: $searchFocused, editorFocused: $editorFocused)
-            }
-        }
-        .tracksPointer(pointer)
-        .onAppear { searchFocused = true }
+        InstrumentClipboardPanel(panel: self, pointer: pointer, searchFocused: $searchFocused, editorFocused: $editorFocused)
+            .tracksPointer(pointer)
+            .onAppear { searchFocused = true }
     }
 
     /// The tag the delete confirm is asking about.
@@ -911,17 +905,14 @@ struct ClipTabs: View {
         var tab: PanelTab, span: ClosedRange<CGFloat>?, width: CGFloat, content: CGFloat
     }
 
-    /// Toybox's strip: the chips in a panel block, the pick an inverted ink pill (ToySegments), a tag behind its candy dot;
-    /// Instrument's: InstrumentSegments' sunk track, the pick raised on a hairline ring, the tags in words alone.
-    private var toybox: Bool { style.kind == .toybox }
-
+    /// Instrument's strip: InstrumentSegments' sunk track, the pick raised on a hairline ring, the tags in words alone.
     var body: some View {
         let firstTag = tabs.first { if case .tag = $0 { true } else { false } }
         ScrollView(.horizontal) {
             HStack(spacing: 2) {
                 ForEach(tabs, id: \.self) { tab in
                     if tab == firstTag {
-                        style.color(toybox ? \.outline : \.line2).frame(width: toybox ? 2 : 1, height: toybox ? 18 : 14)
+                        style.color(\.line2).frame(width: 1, height: 14)
                             .padding(.horizontal, 6).accessibilityHidden(true)
                     }
                     // Plain, as Segments' tabs are: the pick moving is the press's answer.
@@ -935,15 +926,8 @@ struct ClipTabs: View {
                         } action: { spans[tab] = $0 }
                 }
             }
-            .padding(toybox ? 3 : 2)
-            .padding(toybox ? EdgeInsets(top: 2, leading: 2, bottom: 4, trailing: 2) : EdgeInsets())
-            .background {
-                if toybox {
-                    Toy.block(style, fill: style.color(\.panel), radius: style.radii.control, edge: style.depth.control.edge)
-                } else {
-                    Color.clear.instrumentWell()
-                }
-            }
+            .padding(2)
+            .background { Color.clear.instrumentWell() }
             .animation(reduceMotion ? nil : Kit.change, value: picked)
             .padding(.horizontal, 16)
             .coordinateSpace(.named(Self.space))
@@ -998,21 +982,7 @@ struct ClipTabs: View {
     /// One tab: a tag's dot and #name, or a kind's name, at the picked weight underneath so it keeps its width as the
     /// pick moves past; clickable across its padding.
     @ViewBuilder private func label(_ tab: PanelTab, on: Bool) -> some View {
-        if toybox { toyboxLabel(tab, on: on) } else { instrumentLabel(tab, on: on) }
-    }
-
-    /// Toybox's tab: Nunito 800 in the second ink, the pick's on the inverted ink pill; a tag behind its dot.
-    private func toyboxLabel(_ tab: PanelTab, on: Bool) -> some View {
-        HStack(spacing: 5) {
-            if case .tag(let tag) = tab { ToyDot(color: Theme.tag(tag.colour), size: 8) }
-            Text(tab.label).foregroundStyle(style.color(on ? \.onInverse : \.text2))
-        }
-        .font(Toy.nunito(800, 13.5)).lineLimit(1).fixedSize()
-        .padding(.horizontal, 13).frame(height: 30)
-        .background {
-            if on { RoundedRectangle(cornerRadius: 9, style: .continuous).fill(style.color(\.inverse)).matchedGeometryEffect(id: "pick", in: pick) }
-        }
-        .contentShape(.rect)
+        instrumentLabel(tab, on: on)
     }
 
     /// Instrument's tab: the words in the caption face, the pick's strong in the text colour on a raised cap; at the
@@ -1054,29 +1024,7 @@ struct EmptyTab: View {
     var newSnippet: (() -> Void)?
 
     var body: some View {
-        switch style.kind {
-        case .instrument: instrument
-        case .toybox: toybox
-        }
-    }
-
-    /// Toybox's: the kind's glyph on its candy tile (a tag's # on the sun's soft fill), the line in Fredoka, the hint under.
-    private var toybox: some View {
-        VStack(spacing: 6) {
-            let tag = if case .tag = tab { true } else { false }
-            ToyTile(symbol: symbol, color: tag ? style.color(\.accentSoft) : Toy.moduleSoft(kindModule, style), size: 40, letter: tag ? "#" : nil)
-                .padding(.bottom, 6).accessibilityHidden(true)
-            Text(line).font(Toy.fredoka(17)).foregroundStyle(style.color(\.text))
-            if let hint { Text(hint).font(Toy.nunito(700, 13)).foregroundStyle(style.color(\.text3)) }
-        }
-        .multilineTextAlignment(.center).lineLimit(3)
-        .padding(24).frame(maxWidth: .infinity, maxHeight: .infinity)
-        .padding(.bottom, 24)
-    }
-
-    /// A kind tab's candy colour, its copies' (Toy.module(of:)); All and Pinned the Pilot module's.
-    private var kindModule: Int {
-        if case .kind(let kind) = tab, let clip = ClipKind(rawValue: kind.rawValue) { Toy.module(of: clip) } else { 5 }
+        instrument
     }
 
     private var button: (() -> Void)? { typed.isEmpty ? newSnippet : nil }
@@ -1143,7 +1091,6 @@ struct EmptyTab: View {
 /// An image's text still being read (Sven, build 31): under its picture in the preview, and under the list while a search
 /// cannot find it by its words yet. Each style's quiet caption, with the text-reading glyph.
 struct ReadingText: View {
-    @Environment(\.style) private var style
     @Environment(\.ink) private var ink
     let line: String
     static let preview = "Reading the text in this image…"
@@ -1155,10 +1102,7 @@ struct ReadingText: View {
 
     var body: some View {
         let label = Label(line, systemImage: "text.viewfinder").lineLimit(1).foregroundStyle(ink.muted)
-        switch style.kind {
-        case .instrument: label.styleText(\.caption)
-        case .toybox: label.font(Toy.nunito(700, 13))
-        }
+        label.styleText(\.caption)
     }
 }
 

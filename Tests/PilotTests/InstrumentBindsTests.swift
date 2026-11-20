@@ -7,7 +7,7 @@ import Testing
 
 /// Binds in Instrument (card agent-bo-95423181, mockup A binds.html): every name whole on its key at every page width
 /// from the least window to past the widest, the 75 % board while it holds them; an app's key its icon alone; the shared
-/// core helpers Toybox's board draws with too. The table went with simplify-pages T14 (List shows the binds).
+/// core helpers. The table went with simplify-pages T14 (List shows the binds).
 @MainActor
 @Suite("Instrument Binds")
 struct InstrumentBindsTests {

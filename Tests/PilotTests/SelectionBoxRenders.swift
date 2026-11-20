@@ -7,8 +7,8 @@ import Testing
 @testable import Pilot
 
 /// Offscreen renders of selected text (Sven Q213 to Q220): the selection pill, the chat bubble before its first message,
-/// with its "…" rewrites, a chat, a rewrite with Replace, a failure, and Voice › Read aloud's voice list, in Instrument and
-/// Toybox on Tokyo Night and Toybox's theme. Fake runners answer. Opt-in like the other renders, in a moved home:
+/// with its "…" rewrites, a chat, a rewrite with Replace, a failure, and Voice › Read aloud's voice list, in Instrument on
+/// Tokyo Night. Fake runners answer. Opt-in like the other renders, in a moved home:
 /// `CFFIXED_USER_HOME=/tmp/pilot-render-home PILOT_RENDER_DIR=/tmp/pilot-renders swift test --filter SelectionBoxRenders`
 extension SharedLook {
 @MainActor
@@ -76,7 +76,7 @@ struct SelectionBoxRenders {
         let kokoro = KokoroModel(base: kokoroBase)
         for style in PilotStyle.allCases {
             look.style = style
-            for theme in ["tokyo-night", "toybox"] {
+            for theme in ["tokyo-night"] {
                 look.themeID = theme
                 let pill = SelectionPillView().padding(24).styled(.hud, look: look).pilotTheme(look: look)
                 try write(pill, to: dir.appendingPathComponent("\(style.rawValue)-\(theme)-1-pill.png"))
@@ -106,7 +106,7 @@ struct SelectionBoxRenders {
 private struct VoiceGround<Content: View>: View {
     @Environment(\.ink) private var ink
     @ViewBuilder var content: Content
-    var body: some View { content.styleLayout().background(ink.background) }
+    var body: some View { content.background(ink.background) }
 }
 }
 #endif

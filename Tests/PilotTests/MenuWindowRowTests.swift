@@ -24,8 +24,8 @@ struct MenuWindowRowTests {
         return nav
     }
 
-    @Test("A window row that is not the current one draws its workspace, in Toybox and Instrument",
-          arguments: [PilotStyle.toybox, .instrument])
+    @Test("A window row that is not the current one draws its workspace, in Instrument",
+          arguments: [PilotStyle.instrument])
     func workspaceShown(_ style: PilotStyle) throws {
         let (look, _) = LookPageTests().look()
         DisplayFaces.directory = LookThemeTests.fonts

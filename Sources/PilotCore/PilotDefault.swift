@@ -15,7 +15,6 @@ public enum PilotDefault {
         "apps.clipboardOptionV": Key("v", .alt, hyper: false),
         "apps.emoji": Key("e"),
         "apps.files": Key("f"),
-        "apps.generatePassword": Key("p", .shift),
         "apps.launcher": Key("space"),
         "apps.lazygit": Key("l", .shift),
         "apps.open:com.madda.ghostex.host": Key("g"),

@@ -277,7 +277,7 @@ final class ThumbnailPanel: NSPanel {
         isReleasedWhenClosed = false
         hidesOnDeactivate = false
         collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary]
-        // Look's Glass behind the card, as the HUD's and the AI chat's (solid in Toybox, or when transparency is off).
+        // Look's Glass behind the card, as the HUD's and the AI chat's (solid when transparency is off).
         let look = Look.shared, material = look.material(on: .hud)
         let host = NSHostingView(rootView: ThumbnailView(model: model, glass: material == .glass).styled(.hud).pilotTheme())
         host.frame = CGRect(origin: .zero, size: size)

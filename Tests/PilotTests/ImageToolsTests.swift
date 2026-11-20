@@ -140,7 +140,7 @@ struct ImageToolsTests {
 
 #if DEBUG
 extension SharedLook {
-/// Finder's panel, Instrument and Toybox, dark and light, offscreen. Opt-in, in a moved
+/// Finder's panel, Instrument, dark and light, offscreen. Opt-in, in a moved
 /// home: `CFFIXED_USER_HOME=/tmp/pilot-render-home PILOT_RENDER_DIR=/tmp/pilot-renders swift test --filter ImageToolsRenders`
 @MainActor
 @Suite("Image tools renders")

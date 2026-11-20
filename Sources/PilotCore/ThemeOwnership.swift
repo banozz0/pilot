@@ -367,7 +367,7 @@ public enum ThemeNativePalette: Codable, Equatable, Sendable {
     }
     public func compatible(with style: String) -> Bool {
         switch self {
-        case .stock(let id): return !["toybox", "toybox-night"].contains(id) || style == "toybox"
+        case .stock: return true
         case .pack(let pack): return pack.compatible(with: style)
         }
     }

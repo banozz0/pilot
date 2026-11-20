@@ -24,7 +24,7 @@ struct HelpersBlock: View {
         KitBlock(title: "Command-line tools", symbol: "shippingbox", note: Self.note) {
             Text(count).font(ink.mono(11.5))
         } content: {
-            CardGrid(minimum: ink.style.kind == .toybox ? 330 : 280, spacing: 8, stretch: true) {
+            CardGrid(minimum: 280, spacing: 8, stretch: true) {
                 ForEach(Helper.all) { card($0) }
             }
             .padding(.vertical, 10)

@@ -10,7 +10,7 @@ import SwiftUI
 /// one's is Get, what you get, its commands and what it will touch, nothing installed before Get. The catalogue is read
 /// from GitHub only while the page shows (kept ten minutes); while it is read three quiet rows stand in, and when it is
 /// out of reach one line says so with Try again, the installed rows untouched. A link or a stopped run lands on one row:
-/// it is picked, scrolled to and wears the focus border a moment. Drawn in Instrument or Toybox from the Ink (ADR 0008).
+/// it is picked, scrolled to and wears the focus border a moment. Drawn in Instrument from the Ink (ADR 0008).
 struct ExtensionsPageView: View {
     @Environment(\.ink) private var ink
     /// The app window shows: the folder is read again as it does, and the catalogue read (kept ten minutes).
@@ -531,7 +531,7 @@ private struct CatalogueDetail: View {
 // MARK: - A titled panel
 
 /// A panel with its title on its border (pilot-1-1 T5's drawings): Instrument's hairline broken where its mono title
-/// sits, Toybox's card with its title inside. The Extensions list's detail and an extension's page draw it.
+/// sits. The Extensions list's detail and an extension's page draw it.
 struct TitledPanel<Content: View>: View {
     @Environment(\.ink) private var ink
     /// Nil for an untitled panel, whose edge runs whole.
@@ -544,26 +544,22 @@ struct TitledPanel<Content: View>: View {
     static var gap: CGFloat { 6 }
 
     var body: some View {
-        if ink.isInstrument {
-            content
-                .padding(.horizontal, 16).padding(.top, 18).padding(.bottom, 14)
-                .frame(maxWidth: .infinity, alignment: .topLeading)
-                .overlay {
-                    GapBorder(radius: ink.blockRadius, from: Self.inset - Self.gap, to: title == nil ? 0 : Self.inset + titleWidth + Self.gap)
-                        .stroke(ink.line, lineWidth: 1)
+        content
+            .padding(.horizontal, 16).padding(.top, 18).padding(.bottom, 14)
+            .frame(maxWidth: .infinity, alignment: .topLeading)
+            .overlay {
+                GapBorder(radius: ink.blockRadius, from: Self.inset - Self.gap, to: title == nil ? 0 : Self.inset + titleWidth + Self.gap)
+                    .stroke(ink.line, lineWidth: 1)
+            }
+            .overlay(alignment: .topLeading) {
+                if let title {
+                    InstrumentEyebrow(text: title)
+                        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { titleWidth = $0 }
+                        .alignmentGuide(.top) { $0[VerticalAlignment.center] }
+                        .padding(.leading, Self.inset)
                 }
-                .overlay(alignment: .topLeading) {
-                    if let title {
-                        InstrumentEyebrow(text: title)
-                            .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { titleWidth = $0 }
-                            .alignmentGuide(.top) { $0[VerticalAlignment.center] }
-                            .padding(.leading, Self.inset)
-                    }
-                }
-                .padding(.top, 6)
-        } else {
-            ToyBlock(title: title, trailing: { EmptyView() }, content: { content })
-        }
+            }
+            .padding(.top, 6)
     }
 }
 
@@ -636,15 +632,7 @@ struct EmojiTile: View {
     let size: CGFloat
 
     var body: some View {
-        if ink.isInstrument {
-            glyph.instrumentTile(size)
-        } else {
-            // Toybox's keycap: the emoji on the raised fill in the ink outline, a solid edge under it.
-            glyph.frame(width: size - 4, height: size - 6)
-                .padding(EdgeInsets(top: 2, leading: 2, bottom: 4, trailing: 2))
-                .background(Toy.block(ink.style, fill: ink.style.color(\.raised), radius: size * 0.3, edge: 4))
-                .accessibilityHidden(true)
-        }
+        glyph.instrumentTile(size)
     }
 
     private var glyph: some View {

@@ -306,7 +306,6 @@ struct TopBarPillItem: View {
         .buttonStyle(.kitPress)
         .accessibilityLabel("Pill, \(pill.page.title)")
         .frame(maxHeight: .infinity)
-        .toyIsland(.pill)
         .onAppear { lights.register(anchor, for: .pill); pill.hold() }
         .onDisappear { lights.unregister(anchor, for: .pill); pill.release() }
         .background { ScreenAnchor(box: anchor) }

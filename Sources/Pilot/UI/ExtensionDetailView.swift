@@ -4,8 +4,8 @@ import SwiftUI
 /// An extension's detail in the menu's panel, in place of the list (card agent-bo-95423245, ADR 0008's `extensionDetail`
 /// surface), after Raycast's detail: its markdown, its facts in a quiet column beside it, each label over its value. Each
 /// side scrolls on its own and every word can be selected; Return and Cmd+K are its row's, which the panel runs. A live
-/// picker is always the wide panel, so the facts always fit beside the words. Instrument and Toybox draw their own
-/// (InstrumentExtensionDetail, ToyExtensionDetail). A detail with blocks (pilot-1-1 T9, Q603) draws them in place of its
+/// picker is always the wide panel, so the facts always fit beside the words. Instrument draws its own
+/// (InstrumentExtensionDetail). A detail with blocks (pilot-1-1 T9, Q603) draws them in place of its
 /// markdown, as a page draws them, at the menu's width; a click on one's action goes to `act`.
 struct ExtensionDetailView: View, Equatable {
     let detail: Extension.Detail
@@ -24,7 +24,7 @@ struct ExtensionDetailView: View, Equatable {
     }
 }
 
-/// The detail in the style styled(.extensionDetail) gives it: Instrument's or Toybox's own.
+/// The detail in the style styled(.extensionDetail) gives it: Instrument's own.
 private struct DetailBody: View {
     @Environment(\.style) private var style
     let detail: Extension.Detail
@@ -35,10 +35,8 @@ private struct DetailBody: View {
         let drawn = detail.blocks, blocks = drawn.isEmpty ? DetailBlock.split(detail.markdown) : [], facts = detail.metadata
         if blocks.isEmpty, drawn.isEmpty, facts.isEmpty {
             nothing
-        } else if style.kind == .instrument {
-            InstrumentExtensionDetail(blocks: blocks, facts: facts, drawn: drawn, act: act)
         } else {
-            ToyExtensionDetail(blocks: blocks, facts: facts, drawn: drawn, act: act)
+            InstrumentExtensionDetail(blocks: blocks, facts: facts, drawn: drawn, act: act)
         }
     }
 
@@ -48,8 +46,8 @@ private struct DetailBody: View {
     }
 }
 
-/// A detail's own blocks (pilot-1-1 T9) as a page draws them, at the menu's width, in the words' inset; Instrument's and
-/// Toybox's detail both draw it in place of the words.
+/// A detail's own blocks (pilot-1-1 T9) as a page draws them, at the menu's width, in the words' inset; Instrument's
+/// detail draws it in place of the words.
 struct ExtensionDetailBlocks: View {
     let blocks: [Extension.Block]
     let act: (Extension.Item.Action) -> Void

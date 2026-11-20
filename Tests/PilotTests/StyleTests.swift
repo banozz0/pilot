@@ -6,24 +6,23 @@ import SwiftUI
 import Testing
 @testable import Pilot
 
-/// The style seam (story 137, ADR 0008, card agent-bo-95423180): the picked style and its dark or light are saved and
-/// switch a hosted surface at once; a styled surface reads the picked style's tokens and draws Instrument and Toybox
-/// apart; the five bundled faces load at their weights. Drawn offscreen on a Look of its own.
+/// The style seam (story 137, ADR 0008, card agent-bo-95423180): a fresh install and a saved Current are Instrument; a
+/// styled surface reads the style's tokens and draws dark and light apart; the five bundled faces load at their weights.
+/// Drawn offscreen on a Look of its own.
 extension SharedLook {
 @MainActor
 @Suite("Style seam")
 struct StyleTests {
-    @Test("The style is saved as it changes and read back; a fresh install is Instrument, and a saved Current reads as Instrument")
+    @Test("A fresh install is Instrument, and a saved Current or Toybox reads as Instrument with the pick dropped")
     func saved() {
         let defaults = LookTests.defaults()
         let look = Look(inputSources: SetupKeepAwakeTests.FakeSources(), defaults: defaults)
         #expect(look.style == .instrument)
-        look.style = .toybox
-        let again = Look(inputSources: SetupKeepAwakeTests.FakeSources(), defaults: defaults)
-        #expect(again.style == .toybox)
-        defaults.set("current", forKey: "look.style")
-        #expect(Look(inputSources: SetupKeepAwakeTests.FakeSources(), defaults: defaults).style == .instrument)
-        #expect(defaults.string(forKey: "look.style") == "instrument", "a saved Current was not saved back as Instrument")
+        for old in ["current", "toybox"] {
+            defaults.set(old, forKey: "look.style")
+            #expect(Look(inputSources: SetupKeepAwakeTests.FakeSources(), defaults: defaults).style == .instrument)
+            #expect(defaults.string(forKey: "look.style") == nil, "a saved \(old) was not dropped")
+        }
     }
 
     /// What a probe surface read from the style environment.
@@ -120,40 +119,20 @@ struct StyleTests {
         }
     }
 
-    @Test("A styled surface draws differently in each style and in dark and light")
+    @Test("A styled surface draws differently in dark and light")
     func drawn() throws {
         let (look, _) = LookPageTests().look()
         DisplayFaces.directory = LookThemeTests.fonts
         func pick(_ style: PilotStyle) { look.style = style }
         try hosting(Probe().styled(.page(.home), look: look), look: look) { draw in
             pick(.instrument); let instrument = try draw()
-            pick(.toybox); let toybox = try draw()
-            #expect(instrument != toybox, "a style drew another's pixels")
             // Instrument is dark or light with its theme (its colours are the theme's): Paper's draws light.
             pick(.instrument); look.themeID = "porcelain"; #expect(try draw() != instrument && look.style == .instrument && look.theme.id == "porcelain" && !look.theme.dark, "Instrument on Paper drew Nightwatch")
             look.themeID = PilotTheme.defaultID
-            // Toybox is dark or light with the theme (Sven, 2026-10-08): a light theme lightens it.
-            pick(.toybox)
-            look.themeID = "folio"; #expect(try draw() != toybox, "Toybox in a light theme drew the dark one")
-            look.themeID = PilotTheme.defaultID
         }
     }
 
-    @Test("Switching the style redraws a hosted surface at once, without a relaunch")
-    func live() throws {
-        let (look, _) = LookPageTests().look()
-        look.style = .instrument
-        try hosting(Probe().styled(.page(.home), look: look), look: look) { draw in
-            let before = try draw()
-            look.style = .toybox
-            #expect(try draw() != before, "the hosted surface kept Instrument after the pick")
-            look.style = .instrument
-            let back = try draw()
-            #expect(back == before, "back on Instrument, the surface did not draw as before; draws in \(same(before, back, "live", width: 200, height: 160) ?? "-")")
-        }
-    }
-
-    @Test("Every page draws, and draws Instrument and Toybox apart")
+    @Test("Every page draws")
     func pages() throws {
         let (look, _) = LookPageTests().look()
         let pages: [(AppPage, AnyView)] = [
@@ -167,8 +146,6 @@ struct StyleTests {
             look.style = .instrument
             let instrument = try settled(view.styled(.page(page), look: look), look: look, "\(page)-instrument")
             #expect(Set(instrument).count > 16, "\(page) drew a blank page")
-            look.style = .toybox
-            #expect(try settled(view.styled(.page(page), look: look), look: look, "\(page)-toybox") != instrument, "\(page) did not draw Toybox")
         }
     }
 
@@ -180,54 +157,32 @@ struct StyleTests {
         HomePage { _ in }.environment(engine).environment(\.homeSources, try fakes())
     }
 
-    @Test("Home draws Instrument, dark and light, and Toybox apart from it")
+    @Test("Home draws Instrument, dark and light")
     func home() throws {
         let (look, _) = LookPageTests().look()
         DisplayFaces.directory = LookThemeTests.fonts
         let page = try homePage(Engine()), home = StyleSurface.page(.home)
         look.style = .instrument
         let dark = try pixels(page.styled(home, look: look), look: look)
-        look.style = .toybox
-        #expect(try pixels(page.styled(home, look: look), look: look) != dark, "Toybox drew Instrument's Home")
         look.style = .instrument
         look.themeID = "porcelain"
         defer { look.themeID = PilotTheme.defaultID }
         #expect(try pixels(page.styled(home, look: look), look: look) != dark, "Instrument on a light theme drew dark")
     }
 
-    @Test("Binds draws Instrument, dark and light, and Toybox apart from it; Instrument's Binds owns its bar (card agent-bo-95423181)")
+    @Test("Binds draws Instrument, dark and light; Instrument's Binds owns its bar (card agent-bo-95423181)")
     func binds() throws {
         let (look, _) = LookPageTests().look()
         DisplayFaces.directory = LookThemeTests.fonts
         let page = BindsKeyboardPage(search: "") { _ in }.environment(Engine()), binds = StyleSurface.page(.binds)
         look.style = .instrument
         let dark = try settled(page.styled(binds, look: look), look: look)
-        look.style = .toybox
-        #expect(try settled(page.styled(binds, look: look), look: look) != dark, "Toybox drew Instrument's Binds")
         look.style = .instrument
         look.themeID = "porcelain"
         #expect(try settled(page.styled(binds, look: look), look: look) != dark, "Instrument on a light theme drew dark")
         look.themeID = PilotTheme.defaultID
         #expect(InstrumentFrame.pageOwnsBar(.binds))
         #expect(!InstrumentFrame.pageOwnsBar(.home), "every other page keeps the frame's bar")
-    }
-
-    @Test("The window's frame draws the picked style: Instrument and Toybox apart")
-    func frame() throws {
-        let look = Look.shared
-        let saved = look.style
-        defer { look.style = saved }
-        DisplayFaces.directory = LookThemeTests.fonts
-        let engine = Engine()
-        let model = AppWindowModel(defaults: try #require(UserDefaults(suiteName: testSuite())))
-        model.go(AppPlace(.home))
-        let sources = try fakes()
-        var drawn: [PilotStyle: Data] = [:]
-        for style in PilotStyle.allCases {
-            look.style = style
-            drawn[style] = try settled(AppWindowView(model: model).environment(engine).environment(\.homeSources, sources), look: look)
-        }
-        #expect(drawn[.instrument] != drawn[.toybox], "Toybox drew Instrument's frame")
     }
 
     /// Two draws of the Defaults page differed: a test process starts on overlay scroll bars and moves to legacy ones, which
@@ -264,14 +219,12 @@ struct StyleTests {
         return MenuModel(nav: nav)
     }
 
-    @Test("The menu draws Instrument, dark and light, and Toybox apart from it (card agent-bo-95423181)")
+    @Test("The menu draws Instrument, dark and light (card agent-bo-95423181)")
     func menu() throws {
         let (look, _) = LookPageTests().look()
         DisplayFaces.directory = LookThemeTests.fonts
         look.style = .instrument
         let dark = try pixels(MenuView(model: menuModel()).styled(.menu, look: look), look: look)
-        look.style = .toybox
-        #expect(try pixels(MenuView(model: menuModel()).styled(.menu, look: look), look: look) != dark, "Toybox drew Instrument's menu")
         look.style = .instrument
         look.themeID = "porcelain"
         #expect(try pixels(MenuView(model: menuModel()).styled(.menu, look: look), look: look) != dark, "Instrument on a light theme drew dark")
@@ -333,7 +286,7 @@ struct StyleTests {
         let model = MenuModel(nav: MenuNavigator(entries: [], branch: .clean))
         #expect(model.scan != nil)
         model.waitHeight = 296
-        #expect(model.instrumentSize == CGSize(width: MenuPanelSize.width, height: MenuPanelSize.classicChrome + 296))
+        #expect(model.instrumentSize == CGSize(width: MenuPanelSize.width, height: MenuPanelSize.lineChrome + 296))
     }
 
     @Test("The styles' five faces load from their bundled files at each role's weight, their OFL licence beside them")
@@ -349,16 +302,6 @@ struct StyleTests {
         #expect(wght(DisplayFaces.font(StyleTokens.geist(600), size: 13)) == 600)
         // At the file's default instance, 400, CoreText reports no variation.
         #expect((wght(DisplayFaces.font(StyleTokens.geist(400), size: 13)) ?? 400) == 400)
-    }
-
-    @Test("The Look page's style picker shows the pick")
-    func picker() throws {
-        let (look, _) = LookPageTests().look()
-        look.style = .toybox
-        let toybox = try pixels(LookPage(look: look, more: true).styled(.page(.look), look: look), look: look)
-        look.style = .instrument
-        let instrument = try pixels(LookPage(look: look, more: true).styled(.page(.look), look: look), look: look)
-        #expect(instrument != toybox, "the picker did not show Instrument picked")
     }
 }
 }

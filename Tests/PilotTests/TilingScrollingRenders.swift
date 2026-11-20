@@ -7,7 +7,7 @@ import Testing
 @testable import Pilot
 
 /// Workspaces › Tiling without its Scrolling block (spec scrolling-layout T8, Sven's Q43: hidden, its keys still decode),
-/// opt-in like the other renders: the tab in Instrument and Toybox under Tokyo Night, once with the defaults and once with a
+/// opt-in like the other renders: the tab in Instrument under Tokyo Night, once with the defaults and once with a
 /// changed scrolling block saved (widths 1/4, 1/2 and full, new 1/2, a 12 pt sliver, Instant), which loads and shows no
 /// row. Nothing reaches an engine.
 /// `CFFIXED_USER_HOME=<fresh dir> PILOT_RENDER_DIR=<fresh dir> swift test --filter TilingScrollingRenders`

@@ -222,7 +222,7 @@ struct SettingsSchemaPart2Tests {
         "layerKey", "quickTapEscape", "launchAtLogin", "overlayMode", "overlayPicks", "overlay.delay",
         "windows.dragModifier", "windows.swipeWorkspaces", "displays.brightnessKeys", "notes.folder", "update.selfUpdatingCasks",
         "translate.home", "translate.other",
-        "look.style", "look.theme", "look.glass", "look.transparency", "look.glassBlur", "look.windowBorder", "look.windowBorderWidth",
+        "look.theme", "look.glass", "look.transparency", "look.glassBlur", "look.windowBorder", "look.windowBorderWidth",
         "look.windowBorderColour", "look.defocusStrength", "look.defocusDim", "look.defocusShake", "look.defocusShakeSwings",
         "look.defocusShakeWithin", "look.appsShowAs", "look.strength", "look.material",
         "look.cursor", "look.cursorDrawn", "look.cursorShape", "look.cursorSize", "look.cursorColours", "look.cursorFill", "look.cursorOutline", "look.cursorEffectColour", "look.cursorApplied", "look.cursorTrail", "look.cursorRing", "look.cursorRipple",

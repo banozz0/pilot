@@ -64,8 +64,6 @@ struct AnswerCardRenders {
         let states = try Dictionary(uniqueKeysWithValues: Self.states())
         let hex = try #require(states["B6-colour"])
         #expect(hex.answerCard(hex.nav.rows[0], at: 0) != nil && hex.answerCard(hex.nav.rows[1], at: 1) == nil)
-        hex.layout = .classic
-        #expect(hex.answerCard(hex.nav.rows[0], at: 0) != nil, "Classic draws the card too (T8)")
     }
 
     @Test("Each card is the selection Return copies, the Ask row under it (none under tr's, T40), and fits unscrolled")
@@ -121,7 +119,6 @@ struct AnswerCardRenders {
         let built = try LineMenuRenders.built()
         func model(_ nav: MenuNavigator) -> MenuModel {
             let m = MenuModel(nav: nav)
-            m.layout = .line
             return m
         }
         func root(_ query: String) -> MenuNavigator {

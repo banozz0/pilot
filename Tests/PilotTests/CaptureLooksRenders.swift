@@ -8,7 +8,7 @@ import Testing
 /// Capture looks and output (T27; editors round 2, C1, C2, C8, C9, C11) in the real capture editor with its backdrop
 /// panel: a look applied and set for every capture, auto balance, a backdrop sized for Instagram, the whole panel tall
 /// with Add a capture's recent captures, and each of Pilot's looks, a place size and a before-and-after as exported;
-/// Instrument (Tokyo Night, Folio) and Toybox (toybox-night, toybox). Opt-in like the other renders, in a moved home:
+/// Instrument (Tokyo Night, Folio). Opt-in like the other renders, in a moved home:
 /// `CFFIXED_USER_HOME=/tmp/pilot-render-home PILOT_RENDER_DIR=/tmp/pilot-renders swift test --filter CaptureLooksRenders`
 extension SharedLook {
 @MainActor
@@ -16,7 +16,7 @@ extension SharedLook {
 struct CaptureLooksRenders {
     nonisolated static let env = ProcessInfo.processInfo.environment
 
-    @Test("Looks, balance, sizes by place and Add a capture render in Instrument and Toybox, dark and light",
+    @Test("Looks, balance, sizes by place and Add a capture render in Instrument, dark and light",
           .enabled(if: env["PILOT_RENDER_DIR"] != nil && env["CFFIXED_USER_HOME"] != nil))
     func render() throws {
         let home = try #require(Self.env["CFFIXED_USER_HOME"])

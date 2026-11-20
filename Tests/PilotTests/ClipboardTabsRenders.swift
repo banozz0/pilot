@@ -143,7 +143,7 @@ struct ClipboardTabsRenders {
         let store = try Self.sampleStore(at: db)
         let pilot = try #require(try store.tags().first { $0.name == "pilot" })
         var shots: [(String, NSBitmapImageRep)] = []
-        for (name, style) in [("instrument", PilotStyle.instrument), ("toybox", .toybox)] {
+        for (name, style) in [("instrument", PilotStyle.instrument)] {
             look.style = style
             let image = PanelModel(store: store)
             image.tab = .kind(.image)
@@ -212,7 +212,7 @@ struct ClipboardTabsRenders {
         ]
         for (i, item) in items.enumerated() { try store.add(item, at: now.addingTimeInterval(Double(-60 * (items.count - i)))) }
         var shots: [(String, NSBitmapImageRep)] = []
-        for (name, style) in [("instrument", PilotStyle.instrument), ("toybox", .toybox)] {
+        for (name, style) in [("instrument", PilotStyle.instrument)] {
             look.style = style
             let model = PanelModel(store: store)
             // Cmd+Return on rows 3, 2, 1, 5 then 4: image, text, image, text, the invoice.

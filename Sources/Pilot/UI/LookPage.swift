@@ -2,14 +2,14 @@ import AppKit
 import PilotCore
 import SwiftUI
 
-/// Look (design round 4, card agent-bo-95422896): the style, the ten themes as Sven's theme cards, each drawn in its own
+/// Look (design round 4, card agent-bo-95422896): the ten themes as Sven's theme cards, each drawn in its own
 /// colours and display face over a small window in that theme; Glass with its Transparency and Blur; the wallpaper. The focused
 /// window's border and Defocus are Tiling's Focused window block (page map, Sven 2026-10-17). Every
 /// setting has an ⓘ saying what it does (Sven, 2026-10-09). A column of cards under the page's title; nothing folds
 /// (card agent-bo-95423004). A pick restyles the window at once and Ghostty with it. The front holds the preview, Glass
 /// with its Transparency and Blur (pages round 5), the wallpaper's Previous and Next, and Theme, then the cursor and the
-/// wallpaper's folders (pages round 4, Sven's Q99); the style and this window's layout are on More (simplify-pages T20,
-/// T28). The Hyper+Space menu's layout and how apps show went to Launcher's More (Sven's notes on build 19).
+/// wallpaper's folders (pages round 4, Sven's Q99). Look has no More: this window's layout went with the panel
+/// (pilot-ui-redesign T3) and the style in the feature trim. The Hyper+Space menu's layout and how apps show went to Launcher's More (Sven's notes on build 19).
 struct LookPage: View {
     @Environment(\.ink) private var ink
     let look: Look
@@ -29,13 +29,10 @@ struct LookPage: View {
     let section: AppSection?
     let focus: WallpaperBlock.Focus?
     let landed: () -> Void
-    /// The More tab shows, not the front; a block a link or the search asked for comes from the window (blockLanding).
-    let more: Bool
 
     init(look: Look = .shared, wallpaper: WallpaperSettings = .shared, cursors: CursorSets? = nil, effects: CursorEffects? = nil,
-         material: LookMaterialStores? = nil, screens: [WallpaperScreen]? = nil, more: Bool = false, section: AppSection? = nil,
+         material: LookMaterialStores? = nil, screens: [WallpaperScreen]? = nil, section: AppSection? = nil,
          focus: WallpaperBlock.Focus? = nil, landed: @escaping () -> Void = {}) {
-        self.more = more
         self.look = look
         self.wallpaper = wallpaper
         self.cursors = cursors ?? .of(look)
@@ -48,7 +45,7 @@ struct LookPage: View {
     }
 
     var body: some View {
-        if more { moreTab } else { front }
+        front
     }
 
     private var front: some View {
@@ -66,7 +63,6 @@ struct LookPage: View {
 
     /// What each setting does, the ⓘ's words: one or two plain lines.
     enum Info {
-        static let style = "How Pilot is drawn: Instrument or Toybox. The theme still picks every colour."
         static let theme = "Click a theme to try it on Pilot; nothing else changes, and it goes when you leave Look. Apply theme keeps it and sends it to the apps Pilot finds on your Mac at once and then shows what changed; Restore default undoes it."
         static let material = "Glass, Solid or Clear for everything at once: the top bar and its dropdowns, the dock, this window, the panels and the desktop widgets. Glass puts this window, the panels and widgets on regular glass (Blur Full), Clear on clear glass (Blur Light), still readable; the bar's dropdowns stay glass. Custom shows once you change one of them on its own."
         static let glass = "Liquid Glass, the top bar's, behind Pilot's window, the Hyper+Space menu, clipboard history, quick notes and the desktop widgets. Off, they are solid. The top bar's dropdowns and drops follow its own Background."
@@ -82,12 +78,6 @@ struct LookPage: View {
         return instrument && width >= CGFloat(rows) * 150 + CGFloat(rows - 1) * gap ? rows : 4
     }
 
-    /// More's index (simplify-pages T20): a block's rows, a heading not counted. A row added to or moved off a block changes
-    /// its count here.
-    static let entries = [
-        MoreEntry(id: .lookStyle, symbol: "paintbrush", controls: 1),
-    ]
-
     // MARK: The page
 
     /// The front: the preview beside Glass with its Transparency and Blur and the wallpaper's Previous, Next and On its own,
@@ -99,7 +89,7 @@ struct LookPage: View {
             VStack(alignment: .leading, spacing: 0) {
                 // The preview takes the row's height, level with Glass and Wallpaper beside it (InstrumentPair's trick).
                 HStack(alignment: .top, spacing: 14) {
-                    LookPreview(look: look).padding(.top, ink.isInstrument ? ink.style.density.padding : Toy.blockGap)
+                    LookPreview(look: look).padding(.top, ink.style.density.padding)
                         .frame(maxWidth: .infinity, minHeight: 180, maxHeight: .infinity)
                     VStack(spacing: 0) {
                         // Glass with its Transparency and Blur under the switch, greyed while Glass is off (pages round 5,
@@ -158,24 +148,6 @@ struct LookPage: View {
             .padding(.horizontal, ink.pageInset).padding(.top, ink.pageTop(6)).padding(.bottom, 30)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
-    }
-
-    /// More: the style, a place a link or the search lands on.
-    private var moreTab: some View {
-        @Bindable var look = look
-        return KitMore(entries: Self.entries) {
-            headed(.lookStyle, Info.style) { StylePicker(look: look).padding(14).blockSurface() }
-            errorLine.padding(.top, 12)
-        }
-    }
-
-    /// A block under its place's title and ⓘ, on More or the front.
-    private func headed(_ place: AppSection, _ info: String, @ViewBuilder _ card: () -> some View) -> some View {
-        VStack(alignment: .leading, spacing: 0) {
-            CalmHeading(title: place.title) { InfoMark(text: info) }
-            card()
-        }
-        .moreBlock(place)
     }
 
     /// One of the Glass rows, split from the one above by a hairline.
@@ -488,81 +460,6 @@ extension EnvironmentValues {
     @Entry var lookPreviewStill: NSImage? = nil
 }
 
-// MARK: - Style cards
-
-/// The style picker (story 137, ADR 0008): Instrument and Toybox as two cards, each drawn in its own style's tokens in the
-/// window's theme, the picked one with the window's 2 pt accent border. Dark or light is the theme's (Sven, 2026-10-09:
-/// no switch).
-struct StylePicker: View {
-    let look: Look
-
-    var body: some View {
-        HStack(alignment: .top, spacing: 8) {
-            ForEach(PilotStyle.allCases, id: \.self) { style in
-                StyleCard(tokens: .of(style, theme: look.theme), picked: look.style == style) {
-                    look.style = style
-                }
-            }
-        }
-        .fixedSize(horizontal: false, vertical: true)
-    }
-}
-
-/// One style's card, drawn in that style: its name and line on its panel, a Hyper key and a plain key in its key caps,
-/// on its canvas.
-private struct StyleCard: View {
-    @Environment(\.ink) private var ink
-    let tokens: StyleTokens
-    let picked: Bool
-    let pick: () -> Void
-
-    var body: some View {
-        let kind = tokens.kind
-        Button(action: pick) {
-            VStack(alignment: .leading, spacing: 8) {
-                name
-                // Narrow (a sidebar beside it at 760), the keys go onto two lines, so no word breaks (760 once broke Spac/e).
-                Text(kind.tagline).styleText(\.caption).foregroundStyle(tokens.color(\.text2)).fixedSize(horizontal: false, vertical: true)
-                ViewThatFits(in: .horizontal) {
-                    HStack(spacing: 5) { keys }
-                    VStack(alignment: .leading, spacing: 5) { keys }
-                }
-            }
-            .padding(12)
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-            .styleSurface(\.card)
-            .padding(10)
-            .background(tokens.color(\.canvas), in: .rect(cornerRadius: ink.blockRadius))
-            .overlay {
-                // Toybox: the ink outline, the picked one a 3 pt sun.
-                RoundedRectangle(cornerRadius: ink.blockRadius)
-                    .strokeBorder(picked ? ink.accent : ink.edge, lineWidth: picked ? ink.pickedStroke : ink.stroke)
-            }
-            .contentShape(.rect)
-        }
-        .buttonStyle(.kitPress)
-        .animation(Kit.change, value: picked)
-        .style(tokens)
-        .accessibilityLabel(kind.title)
-        .accessibilityAddTraits(picked ? .isSelected : [])
-    }
-
-    private var name: some View {
-        Text(tokens.kind.title).styleText(\.title).foregroundStyle(tokens.color(\.text)).fixedSize()
-    }
-
-    @ViewBuilder private var keys: some View {
-        key("Hyper", fill: \.hyper, ink: \.onHyper)
-        key("Space", fill: \.key, ink: \.text)
-    }
-
-    private func key(_ text: String, fill: KeyPath<StyleColors, Paint>, ink: KeyPath<StyleColors, Paint>) -> some View {
-        Text(text).styleText(\.key).foregroundStyle(tokens.color(ink)).fixedSize()
-            .padding(.horizontal, 7).frame(minHeight: 20)
-            .styleSurface(\.key, fill: fill, radius: \.chip)
-    }
-}
-
 // MARK: - Theme cards
 
 /// The twelve theme cards, four across; Return picks the focused one and the arrows move between them.
@@ -714,10 +611,8 @@ struct ThemeCard: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             .background(Color(hex: ground), in: shape)
             .overlay {
-                // Toybox: the ink outline and solid edge (toyEdge), the picked one ringed in the sun inside it.
                 if picked { shape.inset(by: ink.stroke).strokeBorder(ink.accent, lineWidth: ink.pickedStroke) }
             }
-            .toyEdge(radius: ink.radius(12) + 2)
             .overlay { if focused && !picked { shape.inset(by: -3).strokeBorder(ink.accent.opacity(0.6), lineWidth: 1.5) } }
             .contentShape(shape)
         }

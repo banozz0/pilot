@@ -7,8 +7,8 @@ import Testing
 @testable import Pilot
 
 /// Lock keyboard for cleaning (Part 04): one display's lock screen through KeyboardLockController.makePanel at 1440 by
-/// 900, Esc up and Esc held 1.5 s, and Binds › Keyboard's Cleaning block at 760 pt, in Instrument and Toybox, dark and
-/// light. Solid: offscreen glass draws flat grey, so the glass is Sven's QA. Never locks the keyboard: the panel is drawn,
+/// 900, Esc up and Esc held 1.5 s, and Binds › Keyboard's Cleaning block at 760 pt, in Instrument on Nightwatch and
+/// Tokyo Night. Solid: offscreen glass draws flat grey, so the glass is Sven's QA. Never locks the keyboard: the panel is drawn,
 /// never shown, and no tap is made. Opt-in like the other renders, in a moved home:
 /// `CFFIXED_USER_HOME=<fresh dir> PILOT_RENDER_DIR=<fresh dir> swift test --filter KeyboardLockRenders`
 extension SharedLook {
@@ -17,10 +17,10 @@ extension SharedLook {
 struct KeyboardLockRenders {
     nonisolated static let env = ProcessInfo.processInfo.environment
 
-    @Test("The lock screen and the Cleaning block render in Instrument and Toybox, dark and light",
+    @Test("The lock screen and the Cleaning block render in Instrument",
           .enabled(if: env["PILOT_RENDER_DIR"] != nil && env["CFFIXED_USER_HOME"] != nil))
     func render() throws {
-        let engine = try ToyboxBindsRenders().engine()
+        let engine = try InstrumentBindsRenders().engine()
         let out = URL(fileURLWithPath: try #require(Self.env["PILOT_RENDER_DIR"])).appendingPathComponent("keyboard-lock")
         try FileManager.default.createDirectory(at: out, withIntermediateDirectories: true)
         let look = Look.shared
@@ -28,7 +28,7 @@ struct KeyboardLockRenders {
         look.glass = false
         defer { (look.style, look.themeID, look.glass) = saved }
         let since = Date(timeIntervalSinceReferenceDate: 783_000_000), now = since.addingTimeInterval(12)
-        for (style, themes) in [(PilotStyle.instrument, ["nightwatch", "tokyo-night"]), (.toybox, ["toybox"])] {
+        for (style, themes) in [(PilotStyle.instrument, ["nightwatch", "tokyo-night"])] {
             look.style = style
             for theme in themes {
                 look.themeID = theme

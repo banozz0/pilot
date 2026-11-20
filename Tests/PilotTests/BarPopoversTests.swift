@@ -202,7 +202,7 @@ struct BarPopoversTests {
         #expect(fake.applied.map(\.permanently) == [false])
     }
 
-    @Test("The Sound, Keyboard and Displays popovers render in Instrument and Toybox",
+    @Test("The Sound, Keyboard and Displays popovers render in Instrument",
           .enabled(if: env["PILOT_RENDER_DIR"] != nil && env["CFFIXED_USER_HOME"] != nil))
     func render() async throws {
         let dir = try ClockRenders.dir("bar-popovers")
@@ -222,7 +222,7 @@ struct BarPopoversTests {
         let (_, waiting, _) = await Self.displays()
         waiting.start()
         waiting.pick(SetupDisplaysTests.wideLow, for: 1)
-        for (style, theme) in [(PilotStyle.instrument, "nightwatch"), (.toybox, "toybox")] {
+        for (style, theme) in [(PilotStyle.instrument, "nightwatch")] {
             look.style = style
             look.themeID = theme
             let tokens = StyleTokens.of(style, theme: look.theme)

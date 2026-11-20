@@ -2,8 +2,8 @@ import AppKit
 import Observation
 import PilotCore
 
-/// The tall Pilot menu's saved arrangement (spec desktop-controls T4): block order, hidden and pinned, Instrument only;
-/// Toybox keeps today's Dropdown. Its own store, as WallpaperSettings is, so `pilot set dropdown.*` works without an
+/// The tall Pilot menu's saved arrangement (spec desktop-controls T4): block order, hidden and pinned, Instrument only.
+/// Its own store, as WallpaperSettings is, so `pilot set dropdown.*` works without an
 /// engine. Nothing saved, or a saved value that no longer decodes (a block renamed or gone), is the first arrangement: the
 /// one Pilot menu for a new install, the tall menu for one from before (spec pilot-ui-redesign T20, Open question 6: a
 /// saved layout is kept as it is).

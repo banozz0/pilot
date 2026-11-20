@@ -7,7 +7,7 @@ import Testing
 @testable import Pilot
 
 /// Layouts round 1 (Sven's Q234): the top bar's workspaces item, the workspace its screen shows drawing its layout's
-/// glyph in place of its number, for every layout (and none, which keeps its number), in Instrument and Toybox, dark
+/// glyph in place of its number, for every layout (and none, which keeps its number), in Instrument, dark
 /// and light, numbers and icons styles; then the second display, whose bar draws the glyph on the workspace it shows
 /// while the other screen has the focus. The real view (TopBarWorkspacesView) on fakes; and Scrolling's strip pictures
 /// in Settings (WorkspaceScrollingBlock). In a moved home:
@@ -18,7 +18,7 @@ extension SharedLook {
 struct LayoutGlyphRenders {
     nonisolated static let env = ProcessInfo.processInfo.environment
 
-    @Test("The shown workspace's layout glyph in the top bar, each layout, both styles, dark and light",
+    @Test("The shown workspace's layout glyph in the top bar, each layout, dark and light",
           .enabled(if: env["PILOT_RENDER_DIR"] != nil && env["CFFIXED_USER_HOME"] != nil))
     func render() throws {
         let dir = try ClockRenders.dir("layout-glyph")
@@ -40,7 +40,7 @@ struct LayoutGlyphRenders {
         let rows: [(String, LayoutPreset?)] = LayoutPreset.cycle.map { ($0.label, $0) } + [(LayoutPreset.rows.label, .rows), ("No layout", nil)]
         for style in PilotStyle.allCases {
             look.style = style
-            for (mode, theme) in style == .toybox ? [("dark", "toybox-night"), ("light", "toybox")] : [("dark", "garnet"), ("light", "porcelain")] {
+            for (mode, theme) in [("dark", "garnet"), ("light", "porcelain")] {
                 look.themeID = theme
                 let tokens = StyleTokens.of(style, theme: look.theme)
                 let item = { (preset: LayoutPreset?, bar: BarStyle, screen: String) in
@@ -69,7 +69,7 @@ struct LayoutGlyphRenders {
 
     /// Scrolling's three pictures in Settings (Sven, 2026-11-14), in place of Never, On overflow and Always: the block as
     /// the Workspaces page shows it (Two on screen picked, the default), then each picture picked in turn.
-    @Test("Scrolling's strip pictures, each picked, both styles, dark and light",
+    @Test("Scrolling's strip pictures, each picked, dark and light",
           .enabled(if: env["PILOT_RENDER_DIR"] != nil && env["CFFIXED_USER_HOME"] != nil))
     func scrollingPictures() throws {
         let dir = try ClockRenders.dir("scrolling-look")
@@ -86,7 +86,7 @@ struct LayoutGlyphRenders {
         let block = PilotBlockStore(tiler: EngineObservers().tiler, defaults: defaults)
         for style in PilotStyle.allCases {
             look.style = style
-            for (mode, theme) in style == .toybox ? [("dark", "toybox-night"), ("light", "toybox")] : [("dark", "garnet"), ("light", "porcelain")] {
+            for (mode, theme) in [("dark", "garnet"), ("light", "porcelain")] {
                 look.themeID = theme
                 try writeRender(VStack(alignment: .leading, spacing: 14) {
                     WorkspaceScrollingBlock(block: block, given: [])

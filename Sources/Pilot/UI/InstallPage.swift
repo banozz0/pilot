@@ -75,7 +75,7 @@ struct CataloguePage: View {
             } content: {
                 if let trouble = group.trouble { FinePrint(text: trouble.line(group.source)).padding(.vertical, 6) }
                 if !group.results.isEmpty {
-                    CardGrid(minimum: ink.style.kind == .toybox ? 290 : 230, spacing: 8, stretch: true) {
+                    CardGrid(minimum: 230, spacing: 8, stretch: true) {
                         ForEach(group.results) { card($0) }
                     }
                     .padding(.vertical, 10)

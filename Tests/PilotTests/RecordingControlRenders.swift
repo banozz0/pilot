@@ -7,7 +7,7 @@ import Testing
 @testable import Pilot
 
 /// The recording's control (story 192, Q162) offscreen: counting down, recording and paused as the top bar draws it,
-/// and the capsule that stands in with the bar off, in Instrument and Toybox. Opt-in like the other renders:
+/// and the capsule that stands in with the bar off, in Instrument. Opt-in like the other renders:
 /// `CFFIXED_USER_HOME=/tmp/pilot-render-home PILOT_RENDER_DIR=/tmp/pilot-renders swift test --filter RecordingControlRenders`
 extension SharedLook {
 @MainActor
@@ -33,7 +33,7 @@ struct RecordingControlRenders {
         let recorder = Recorder()
         let scrolling = ScrollCapture(area: CGRect(x: 0, y: 0, width: 40, height: 60), display: 1, scale: 1) { _, _ in }
         let auto = ScrollCapture(area: CGRect(x: 0, y: 0, width: 40, height: 60), display: 1, scale: 1, auto: true) { _, _ in }
-        for (style, theme) in [(PilotStyle.instrument, "tokyo-night"), (.toybox, "toybox")] {
+        for (style, theme) in [(PilotStyle.instrument, "tokyo-night")] {
             look.style = style
             look.themeID = theme
             for (name, phase, elapsed) in [("1-counting", Recorder.Phase.counting(3), 0.0), ("2-recording", .recording, 42.4), ("3-paused", .paused, 725.0)] {

@@ -545,7 +545,6 @@ struct WorkspaceCard: View {
         return tiles(draft, in: screen.size).firstIndex { $0.offsetBy(dx: screen.minX, dy: screen.minY).contains(point) }
     }
 
-    private var toybox: Bool { ink.style.kind == .toybox }
     /// A display's width over its height, and the widest a card grows when few workspaces share the row.
     static let screenShape: CGFloat = 16 / 10
     static let widest: CGFloat = 150
@@ -562,17 +561,17 @@ struct WorkspaceCard: View {
                 // A screen's shape, so each layout's drawing reads (Sven, 2026-11-11, after 2276: 34 pt tall squashed it).
                 screen.aspectRatio(WorkspaceCard.screenShape, contentMode: .fit)
                 HStack(spacing: 4) {
-                    Text(name).font(ink.ui(12, .semibold)).foregroundStyle(picked && toybox ? ink.onAccent : ink.text)
+                    Text(name).font(ink.ui(12, .semibold)).foregroundStyle(ink.text)
                     if onScreen { Circle().fill(ink.green).frame(width: 5, height: 5).accessibilityHidden(true) }
                 }
             }
             .padding(6)
             .frame(maxWidth: Self.widest)
-            .background(picked && toybox ? ink.accent : picked && !ink.isInstrument ? ink.selected : hovered ? ink.text.opacity(0.04) : .clear,
+            .background(picked && !ink.isInstrument ? ink.selected : hovered ? ink.text.opacity(0.04) : .clear,
                         in: .rect(cornerRadius: radius - ink.style.depth.card.outline))
             .blockSurface()
-            // Toybox fills its pick with the sun; the others wear their focus (Instrument's the signal's ring).
-            .focusBorder(on: picked && !toybox, radius: radius)
+            // The pick wears its focus (Instrument's the signal's ring).
+            .focusBorder(on: picked, radius: radius)
             // A drop here moves the app in: the card lit in the accent while one would.
             .overlay { if lit { DropRing(radius: radius) } }
             .contentShape(.rect)

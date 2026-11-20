@@ -22,7 +22,7 @@ struct LineMenuRenders {
     func sizes() async throws {
         let states = try Dictionary(uniqueKeysWithValues: Self.states())
         let root = try #require(states["L1-root"])
-        #expect(root.atRoot && root.layout == .line)
+        #expect(root.atRoot)
         #expect(root.instrumentSize.width == MenuPanelSize.lineRootWidth)
         #expect(root.instrumentSize.height <= MenuPanelSize.classicTallest)
         // Classic's root at Line's 36 pt rows: the branches under their rule heading, no recents (Sven 2026-10-20).
@@ -37,7 +37,6 @@ struct LineMenuRenders {
         #expect(small.instrumentSize.height == smallRoom && smallRoom < all && smallRoom < 800 - 33, "\(small.instrumentSize.height)")
         // Typing shrinks it back to the search's rows.
         let typed = MenuModel(nav: { var nav = roomy.nav; nav.query = "qr"; return nav }())
-        typed.layout = .line
         typed.room = roomy.room
         #expect(!typed.atRoot && typed.instrumentSize.height < all, "\(typed.instrumentSize.height)")
         for (name, model) in states where !model.atRoot {
@@ -59,10 +58,11 @@ struct LineMenuRenders {
         let activity = try #require(states["L27-activity"])
         #expect(activity.nav.rows.map(\.section) == ["Apps", "Apps", "Apps", "Background", "Background", "Background"])
         #expect(activity.nav.rows.first?.title == "Google Chrome" && activity.headings.count == 2)
-        // T42: "generate password" finds Password generator too, a typo away, beside Generate a password; cb's row alone
+        // T42: "generate password" finds Password generator, a typo away; Generate a password, with no default key since
+        // the trim (Q263), is listed only once added on Abilities. cb's row alone
         // searching the words, chat's question alone, kill's words searching Activity.
         let bw = try #require(states["L31-bw-generate-password"]).nav.rows.map(\.title)
-        #expect(bw.contains("Generate a password") && bw.contains("Password generator"), "\(bw)")
+        #expect(!bw.contains("Generate a password") && bw.contains("Password generator"), "\(bw)")
         let cb = try #require(states["L33-cb-invoice"]).nav.rows
         #expect(cb.count == 1 && cb[0].target == .action("apps.clipboard") && cb[0].subtitle == "“invoice”", "\(cb.map(\.title))")
         #expect(try #require(states["L34-chat-whats-up"]).nav.rows.map(\.target) == [.ask("what's up")])
@@ -97,7 +97,7 @@ struct LineMenuRenders {
         #expect(line.type.row == tokens.type.row && line.type.caption == tokens.type.caption)
     }
 
-    @Test("Line renders in Tokyo Night and Porcelain, frames L1–L35, and Stats' screen in Toybox", .enabled(if: env["PILOT_RENDER_DIR"] != nil && env["CFFIXED_USER_HOME"] != nil))
+    @Test("Line renders in Tokyo Night and Porcelain, frames L1–L35", .enabled(if: env["PILOT_RENDER_DIR"] != nil && env["CFFIXED_USER_HOME"] != nil))
     func render() async throws {
         let home = try #require(Self.env["CFFIXED_USER_HOME"])
         try #require(NSHomeDirectory() == home, "the home directory did not move; refusing to touch Sven's data")
@@ -134,8 +134,8 @@ struct LineMenuRenders {
     static func render(_ model: MenuModel, _ name: String, in dir: URL, wait: Double) async throws {
         let panel = PilotMenu.makePanel(model)
         defer { panel.close() }
-        // At the size the panel takes in the style drawn, as PilotMenu sizes it.
-        PilotMenu.fit(panel, face: Look.shared.style == .instrument ? model.instrumentSize : model.toyboxSize)
+        // At the size the panel takes, as PilotMenu sizes it.
+        PilotMenu.fit(panel, face: model.instrumentSize)
         let content = try #require(panel.contentView)
         try await Task.sleep(for: .seconds(wait))
         // The menu is typed into, so its caret sits after the text; a field that took the keyboard selected it all.
@@ -171,7 +171,6 @@ struct LineMenuRenders {
         let day = Date(timeIntervalSince1970: 1_791_028_800), home = NSHomeDirectory()
         func model(_ nav: MenuNavigator) -> MenuModel {
             let m = MenuModel(nav: nav)
-            m.layout = .line
             m.windows = windows
             m.ownKey = "Hyper+Space"
             m.waiting = MenuModel.waiting(updates: 3, clean: "2.1 GB")

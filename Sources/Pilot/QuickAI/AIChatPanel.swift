@@ -387,7 +387,7 @@ final class AIChatPanel {
     /// The notch's corner: the style's pop corner.
     static func radius(_ look: Look) -> CGFloat { CGFloat(look.chromeTokens(.barDrop).radii.pop) }
 
-    /// `host` on the bar dropdowns' glass (Look.barGlass: the top bar's Background; solid in Toybox), clear as they are (Look.glassTint only at Blur
+    /// `host` on the bar dropdowns' glass (Look.barGlass: the top bar's Background), clear as they are (Look.glassTint only at Blur
     /// Off, Q356). The glass rounds every corner and reaches a radius above the panel, so its top corners fall
     /// outside the window and the notch stays square at the top with no mask.
     static func backdrop(_ host: NSView, look: Look) -> MaterialBackdrop {

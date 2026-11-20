@@ -51,7 +51,7 @@ enum FilePreviewWindow {
         let host = NSHostingView(rootView: view.styled(.hud, look: look).pilotTheme(look: look))
         host.frame = CGRect(origin: .zero, size: size)
         let p = KeyPanel(contentRect: CGRect(origin: .zero, size: size), styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
-        // Look's Glass behind it, as behind the video editor and the HUD (solid in Toybox, or with Glass off); no shadow.
+        // Look's Glass behind it, as behind the video editor and the HUD (solid with Glass off); no shadow.
         let backdrop = MaterialBackdrop(content: host, cornerRadius: tokens.radii.pop)
         backdrop.show(look.material(on: .hud), tint: look.glassTint(tokens.color(\.panel)))
         p.contentView = backdrop

@@ -14,20 +14,10 @@ import SwiftUI
 final class Look {
     static let shared = Look()
 
-    /// Instrument or Toybox (story 137, ADR 0008): a fresh install starts in Instrument. Current and the Tiling Rice layout
-    /// were removed 2026-10-11 (parked on parked/current-style-tiling-rice): a saved Current loads as Instrument, and Calm is
-    /// the one layout.
-    var style: PilotStyle {
-        didSet {
-            guard oldValue != style else { return }
-            var memory = defaults.data(forKey: "look.paletteMemory").flatMap { try? JSONDecoder().decode(ThemeStyleMemory.self, from: $0) } ?? .init()
-            let chosen = (try? memory.select(from: oldValue.rawValue, to: style.rawValue, current: nativeAppearance.palette)) ?? .stock(PilotTheme.defaultID)
-            defaults.set(try? ThemeDigest.encoded(memory), forKey: "look.paletteMemory")
-            defaults.set(style.rawValue, forKey: Key.style)
-            setNativePalette(chosen)
-            resolve()
-        }
-    }
+    /// Instrument, Pilot's one style (story 137, ADR 0008). Current and the Tiling Rice layout were removed 2026-10-11
+    /// (parked on parked/current-style-tiling-rice), Toybox in the feature trim (2026-11-19): a saved Current or Toybox
+    /// loads as Instrument, and Calm is the one layout.
+    var style: PilotStyle
     /// The designed theme picked last (Lagoon by default); `pick` is how the Look page sets it.
     var themeID: String {
         didSet {
@@ -126,12 +116,12 @@ final class Look {
     /// Glass while it is on, Solid whenever macOS asks for less transparency, and at Transparency 0 %: the panels', and
     /// the app window's unless its style keeps it solid (windowMaterial).
     var effectiveMaterial: WindowMaterial { material(glass: glass) }
-    /// The app window's own: Toybox's stays solid whatever the material (Sven, 2026-10-08), the rest take effectiveMaterial.
+    /// The app window's own, as effectiveMaterial.
     var windowMaterial: WindowMaterial { material(on: .window) }
-    /// `surface`'s material where it follows Glass in its own style (the app window, the AI chat): solid in Toybox. The
-    /// bar's dropdowns and drops follow the top bar's Background instead (barGlass, W77).
+    /// `surface`'s material where it follows Glass (the app window, the AI chat). The bar's dropdowns and drops follow the
+    /// top bar's Background instead (barGlass, W77).
     func material(on surface: StyleSurface) -> WindowMaterial {
-        style == .toybox ? .solid : material(glass: surface == .barPopovers || surface == .barDrop ? barGlass : glass)
+        material(glass: surface == .barPopovers || surface == .barDrop ? barGlass : glass)
     }
     private func material(glass: Bool) -> WindowMaterial { glass && !reduceTransparency && transparency > 0 ? .glass : .solid }
     /// The glass's tint: `ground` at the Transparency's strength, or at `alpha` percent.
@@ -212,11 +202,10 @@ final class Look {
         self.ghostty = ghostty
         self.defaults = defaults
         keyboard = KeyboardLayouts(system: inputSources)
-        // A saved Current is saved again as Instrument, and the removed layout and window layout picks dropped; every
-        // other pref stands.
-        let savedStyle = defaults.string(forKey: Key.style), style = PilotStyle(saved: savedStyle)
-        self.style = style
-        if let savedStyle, savedStyle != style.rawValue { defaults.set(style.rawValue, forKey: Key.style) }
+        // Instrument is the one style: a saved style pick (Current, Toybox or Instrument) and the removed layout and window
+        // layout picks are dropped; every other pref stands.
+        style = .instrument
+        defaults.removeObject(forKey: Key.style)
         defaults.removeObject(forKey: Key.layout)
         defaults.removeObject(forKey: Key.windowLayout)
         let saved = defaults.string(forKey: Key.theme)
@@ -263,7 +252,6 @@ final class Look {
                 switch palette { case .stock(let id): themeID = id; case .pack(let value): pack = value }
             } else { pack = try? ThemeCoordinator.persistedPack() }
         }
-        if !ThemeNativePalette.stock(themeID).compatible(with: style.rawValue) { themeID = PilotTheme.defaultID }
         resolve()
         colors = ThemeColors(theme)
         // A theme retired in round 15 starts as its successor, saved, and Ghostty follows as on a pick unless Pilot's look
@@ -289,7 +277,6 @@ final class Look {
     /// Picks a designed theme, even the one picked already: the theme follows, and Ghostty takes its Omarchy palette
     /// (pick 8); the wallpaper stays.
     func pick(_ id: String) {
-        guard ThemeNativePalette.stock(id).compatible(with: style.rawValue) else { lastError = "This palette requires Toybox"; return }
         if given == nil, !ThemeCoordinator.legacyAllowed() {
             lastError = "Restore the active theme pack before choosing a legacy colour theme"
             return

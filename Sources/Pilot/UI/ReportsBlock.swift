@@ -20,17 +20,15 @@ struct ReportsBlock: View {
     /// The run opened: the one picked, else the newest.
     static func shown(_ records: [RunRecord]?, picked: String?) -> RunRecord? { records?.first { $0.id == picked } ?? records?.first }
 
-    /// Two of the page's children in Toybox, so the page spaces them as any blocks; the runs, first, are where a link or
-    /// Open report lands.
+    /// The runs, first, are where a link or Open report lands.
     var body: some View {
         if records != nil {
             let shown = Self.shown(records, picked: picked)
-            if ink.isInstrument, let shown {
+            if let shown {
                 InstrumentPair(level: false) { runs(shown) } right: { detail(shown) }.id(AppSection.reports)
             } else {
                 // Held at the page's width, so the runs sit under Update and Clean, never beside it (PageFlow).
                 runs(shown).pageWide().id(AppSection.reports)
-                if let shown { detail(shown).pageWide() }
             }
         }
     }

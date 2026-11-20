@@ -23,13 +23,7 @@ struct NotesFormatBar: View {
     /// The bar's groups, in order: the heading, the inline formats, the line formats and the link.
     static let groups: [[MarkdownFormat]] = [[.heading], [.bold, .italic, .code], [.bullets, .checklist, .link]]
 
-    var body: some View {
-        switch style.kind {
-        case .instrument: bar
-        // Toybox keeps its own bar (UI/Toybox/ToyNotes.swift) until Styles is removed (feature-trim).
-        case .toybox: toybox
-        }
-    }
+    var body: some View { bar }
 
     private var bar: some View {
         let lit = Self.lit(handle.view)

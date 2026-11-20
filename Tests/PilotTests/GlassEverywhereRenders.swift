@@ -125,7 +125,7 @@ struct GlassEverywhereRenders {
         look.themeID = Self.env["PILOT_THEME"] ?? "void"
         look.transparency = Int(Self.env["PILOT_TRANSPARENCY"] ?? "100") ?? 100
 
-        let engine = try ToyboxBindsRenders().engine()
+        let engine = try InstrumentBindsRenders().engine()
         let db = FileManager.default.temporaryDirectory.appending(path: "pilot-render-glass-\(UUID().uuidString).sqlite")
         defer { for s in ["", "-wal", "-shm"] { try? FileManager.default.removeItem(atPath: db.path + s) } }
         let clips = try ClipboardTabsRenders.sampleStore(at: db)

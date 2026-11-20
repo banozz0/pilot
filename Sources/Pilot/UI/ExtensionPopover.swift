@@ -204,7 +204,7 @@ extension View {
     /// glass, neither are the system ones"). Untinted, as the dock's and the bar's (TopBarColour.tintsGlass): the theme's
     /// ground laid into the glass at Transparency's ground strength stained it a flat olive slab over a dark window (Sven
     /// on build 2564: "stats are looking better but still not liquid glass"); the tint stays only at Blur Off, where it is
-    /// the face. Its fills see-through as the menu's; solid on a Solid bar, at Transparency 0 or in Toybox. Applied
+    /// the face. Its fills see-through as the menu's; solid on a Solid bar or at Transparency 0. Applied
     /// outside its KitPopover, which draws the glass; once is enough, so one nested in another does nothing more.
     func extensionGlass(_ look: Look = .shared) -> some View { modifier(ExtensionGlass(look: look)) }
 }

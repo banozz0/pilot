@@ -199,7 +199,6 @@ struct OGCardRenders {
         let day = Date(timeIntervalSince1970: 1_791_028_800), home = NSHomeDirectory()
         func model(_ nav: MenuNavigator) -> MenuModel {
             let m = MenuModel(nav: nav)
-            m.layout = .line
             m.windows = windows
             m.ownKey = "Hyper+Space"
             m.waiting = MenuModel.waiting(updates: 3, clean: "2.1 GB")

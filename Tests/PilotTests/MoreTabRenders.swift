@@ -10,7 +10,7 @@ import Testing
 /// in view marked, as Interior.dev's scroll spy; a More of one block shows the block alone. Drawn on Pilot's own page,
 /// whose More holds the most (26 controls), and on Captures, whose More is Recording's one block. The window's rail is
 /// the real one, drawn by AppWindowView at the page; the page column beside it is built from Kit's parts with fixed
-/// values (no permission or file is read). Instrument and Toybox, a dark and a light theme each, at the window's first
+/// values (no permission or file is read). Instrument, a dark and a light theme, at the window's first
 /// size. The design T7 builds from, not the build. Opt-in, in a moved home:
 /// `CFFIXED_USER_HOME=<fresh dir> PILOT_RENDER_DIR=<fresh dir> swift test --filter MoreTabRenders`
 extension SharedLook {
@@ -19,7 +19,7 @@ extension SharedLook {
 struct MoreTabRenders {
     nonisolated static let env = ProcessInfo.processInfo.environment
 
-    @Test("The More tab, with its index and as one block, in Instrument and Toybox, light and dark", .enabled(if: env["PILOT_RENDER_DIR"] != nil && env["CFFIXED_USER_HOME"] != nil))
+    @Test("The More tab, with its index and as one block, in Instrument, light and dark", .enabled(if: env["PILOT_RENDER_DIR"] != nil && env["CFFIXED_USER_HOME"] != nil))
     func render() throws {
         let home = try #require(Self.env["CFFIXED_USER_HOME"])
         try #require(NSHomeDirectory() == home, "the home directory did not move; refusing to start an engine on Sven's data")
@@ -39,7 +39,6 @@ struct MoreTabRenders {
         defer { (look.themeID, look.style) = saved }
         let looks: [(name: String, style: PilotStyle, themes: [(String, String)])] = [
             ("instrument", .instrument, [("dark", "tokyo-night"), ("light", "porcelain")]),
-            ("toybox", .toybox, [("dark", "toybox-night"), ("light", "toybox")]),
         ]
         for (name, style, themes) in looks {
             for (scheme, theme) in themes {
@@ -48,12 +47,12 @@ struct MoreTabRenders {
                 AppWindowController.applyLook(look, to: window)
                 window.setContentSize(AppWindowController.size)
                 for more in MorePage.all {
-                    // The rail as the frame draws it at the page: 72 + 1 in Instrument, 76 + 2 in Toybox.
+                    // The rail as the frame draws it at the page: 72 + 1.
                     model.go(AppPlace(more.page))
                     RunLoop.main.run(until: Date().addingTimeInterval(0.7))
                     frame.layoutSubtreeIfNeeded()
                     let chrome = try #require(snapshot(frame, scale: 2))
-                    let rail: CGFloat = style == .toybox ? 78 : 73
+                    let rail: CGFloat = 73
                     let size = frame.bounds.size
                     let cg = try #require(chrome.cgImage?.cropping(to: CGRect(x: 0, y: 0, width: Int(rail) * 2, height: Int(size.height) * 2)))
                     let railImage = NSImage(cgImage: cg, size: NSSize(width: rail, height: size.height))
@@ -192,11 +191,11 @@ private struct MoreColumn: View {
 private struct MoreGround: View {
     @Environment(\.style) private var style
     var body: some View {
-        if style.kind == .toybox { style.color(\.canvas) } else { Theme.windowFill(style.color(\.canvas)) }
+        Theme.windowFill(style.color(\.canvas))
     }
 }
 
-/// The page's bar as InstrumentToolbar and ToyPageHeader draw a page with parts: its title, then its parts, More picked.
+/// The page's bar as InstrumentToolbar draws a page with parts: its title, then its parts, More picked.
 private struct MoreBar: View {
     @Environment(\.style) private var style
     let title: String
@@ -205,25 +204,16 @@ private struct MoreBar: View {
     var body: some View {
         let options = parts.enumerated().map { (value: $0.offset, title: $0.element) }
         let more = Binding.constant(parts.count - 1)
-        if style.kind == .toybox {
-            HStack(alignment: .center, spacing: 16) {
-                PageTitle(text: title).lineLimit(1).fixedSize()
-                ToySegments(selection: more, options: options, label: "\(title) parts")
-                Spacer(minLength: 0)
-            }
-            .padding(.horizontal, Toy.gutter).padding(.top, 24).padding(.bottom, 14)
-        } else {
-            VStack(spacing: 0) {
-                InstrumentPageBar(title: title) {
-                    HStack(spacing: 10) {
-                        InstrumentSegments(options: options, selection: more).fixedSize()
-                        Text(RailLayout.partsHint).styleText(\.key).foregroundStyle(style.color(\.text3)).fixedSize()
-                    }
-                    .padding(.leading, 8)
-                    Spacer(minLength: 8)
+        VStack(spacing: 0) {
+            InstrumentPageBar(title: title) {
+                HStack(spacing: 10) {
+                    InstrumentSegments(options: options, selection: more).fixedSize()
+                    Text(RailLayout.partsHint).styleText(\.key).foregroundStyle(style.color(\.text3)).fixedSize()
                 }
-                InstrumentRule()
+                .padding(.leading, 8)
+                Spacer(minLength: 8)
             }
+            InstrumentRule()
         }
     }
 }
@@ -299,32 +289,28 @@ private struct MoreIndex: View {
     let picked: String
 
     var body: some View {
-        let toy = style.kind == .toybox
-        VStack(alignment: .leading, spacing: toy ? 4 : 2) {
+        VStack(alignment: .leading, spacing: 2) {
             Text("On More").styleText(\.caption).foregroundStyle(style.color(\.text3)).padding(.horizontal, 10).padding(.bottom, 6)
             ForEach(sections) { section in
                 let on = section.id == picked
                 HStack(spacing: 8) {
-                    if !toy { Image(systemName: section.symbol).font(style.font(\.icon)).frame(width: 18) }
-                    Text(section.title).font(toy ? style.toyNunito(800, 13.5) : nil).styleText(on ? \.strong : \.body)
+                    Image(systemName: section.symbol).font(style.font(\.icon)).frame(width: 18)
+                    Text(section.title).styleText(on ? \.strong : \.body)
                     Spacer(minLength: 4)
-                    Text("\(section.controls)").font(ink.mono(11)).foregroundStyle(on && toy ? style.color(\.onInverse) : style.color(\.text3))
+                    Text("\(section.controls)").font(ink.mono(11)).foregroundStyle(style.color(\.text3))
                 }
-                .foregroundStyle(on ? (toy ? style.color(\.onInverse) : style.color(\.text)) : style.color(\.text2))
-                .padding(.horizontal, 10).frame(height: style.points(toy ? 34 : 30))
+                .foregroundStyle(on ? style.color(\.text) : style.color(\.text2))
+                .padding(.horizontal, 10).frame(height: style.points(30))
                 .background {
-                    if on {
-                        if toy { RoundedRectangle(cornerRadius: 9, style: .continuous).fill(style.color(\.inverse)) }
-                        else { Color.clear.instrumentRaised(true, fill: \.panel, radius: style.radii.control) }
-                    }
+                    if on { Color.clear.instrumentRaised(true, fill: \.panel, radius: style.radii.control) }
                 }
                 .accessibilityElement(children: .combine)
                 .accessibilityAddTraits(on ? .isSelected : [])
             }
         }
         .frame(width: 184, alignment: .leading)
-        .padding(.leading, toy ? Toy.gutter - 6 : style.density.page - 6)
-        .padding(.top, toy ? Toy.blockGap + 6 : style.density.padding + 12)
+        .padding(.leading, style.density.page - 6)
+        .padding(.top, style.density.padding + 12)
         .accessibilityElement(children: .contain).accessibilityLabel("On More")
     }
 }

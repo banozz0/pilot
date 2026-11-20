@@ -54,7 +54,6 @@ struct DisplayNicknameEditor: View {
 /// A bar item's parts in SwiftUI, for the top bar and the renders (card agent-bo-95422911); the macOS menu bar draws the
 /// same parts as a template picture (StatusItemImage). Labels in the muted colour, values in mono, graphs as 1.2 pt lines.
 struct BarPartsView: View {
-    @Environment(\.style) private var style
     let items: [[BarPart]]
     var capsule = false
     /// The focused app's icon, for an app part.
@@ -64,10 +63,7 @@ struct BarPartsView: View {
     var focus: InstrumentBarFocus?
 
     var body: some View {
-        switch style.kind {
-        case .toybox: ToyBarParts(items: items, appIcon: appIcon)
-        case .instrument: InstrumentBarParts(items: items, appIcon: appIcon, windowTitle: windowTitle, focus: focus)
-        }
+        InstrumentBarParts(items: items, appIcon: appIcon, windowTitle: windowTitle, focus: focus)
     }
 }
 
@@ -150,7 +146,7 @@ struct TopBarSlotView: View {
         if case .nothing = shows {
             EmptyView()
         } else if inBar, entry?.kind != .spacer, entry?.kind != .divider {
-            item(shows).frame(maxHeight: .infinity).toyIsland(slot.kind)
+            item(shows).frame(maxHeight: .infinity)
         } else {
             item(shows)
         }
@@ -816,7 +812,7 @@ struct ClockPopover: View {
     private var hours: TopBarClockFormat { store.settings.clock.hoursAndMinutes }
 
     private func rule(_ ink: BarInk) -> some View {
-        ink.rule.frame(height: ink.toybox ? 2 : 1).padding(.horizontal, -PopoverMetrics.inset)
+        ink.rule.frame(height: 1).padding(.horizontal, -PopoverMetrics.inset)
     }
 
     /// Today's month and day large and centred, a click back to today; under it the time, the week and the second zone.
@@ -827,7 +823,7 @@ struct ClockPopover: View {
                 HStack(alignment: .firstTextBaseline, spacing: 10) {
                     Image(systemName: "calendar").font(.system(size: 22, weight: .semibold)).foregroundStyle(ink.accent)
                     Text(ClockMonth.heroDate(now, timeZone: here, locale: .autoupdatingCurrent))
-                        .font(ink.toybox ? ToyFace.fredoka(34) : ink.readout(32, weight: .bold)).foregroundStyle(ink.text)
+                        .font(ink.readout(32, weight: .bold)).foregroundStyle(ink.text)
                 }
                 .contentShape(Rectangle())
             }
@@ -853,7 +849,7 @@ struct ClockPopover: View {
             GeometryReader { box in
                 ZStack(alignment: .leading) {
                     Capsule().fill(ink.selected)
-                    Capsule().fill(ink.toybox ? ink.accentFill : ink.text2).frame(width: box.size.width * done)
+                    Capsule().fill(ink.text2).frame(width: box.size.width * done)
                 }
             }
             .frame(height: 6)
@@ -921,7 +917,7 @@ struct ClockPopover: View {
                 }
             }
         }
-        .shadow(color: .black.opacity(ink.toybox ? 0 : 0.25), radius: 10, y: 4)
+        .shadow(color: .black.opacity(0.25), radius: 10, y: 4)
         .contentShape(Rectangle()).onTapGesture {}
         return ZStack(alignment: .topLeading) {
             Color.clear.contentShape(Rectangle()).onTapGesture { picked = nil }
@@ -986,7 +982,7 @@ struct ClockPopover: View {
     /// Open Calendar on the left, the second zone's picker on the right.
     private func footer(_ now: Date, ink: BarInk) -> some View {
         HStack {
-            if ink.toybox || ink.instrument { Button("Open Calendar", action: openCalendar).barButton() } else { AccentLink(title: "Open Calendar", action: openCalendar) }
+            if ink.instrument { Button("Open Calendar", action: openCalendar).barButton() } else { AccentLink(title: "Open Calendar", action: openCalendar) }
             Spacer()
             // The bars' native menu at the pointer: a SwiftUI Menu in the popover's non-activating panel may not open,
             // as the extension row's ⋯ did not (Sven on build 20).
@@ -1020,8 +1016,7 @@ struct ClockPopover: View {
                 Image(systemName: symbol).font(.system(size: 11, weight: .bold)).foregroundStyle(ink.text2)
                     .frame(width: 26, height: 22).contentShape(Rectangle())
                     .background {
-                        if ink.toybox { Toy.block(style, fill: style.color(\.sunken), radius: 7, edge: 2) }
-                        else { RoundedRectangle(cornerRadius: 6, style: .continuous).fill(ink.selected) }
+                        RoundedRectangle(cornerRadius: 6, style: .continuous).fill(ink.selected)
                     }
             }
             .buttonStyle(.plain).help(label).accessibilityLabel(label)
@@ -1090,7 +1085,7 @@ struct ClockPopover: View {
                     if event.holiday {
                         Text(event.title).font(ink.words).fontWeight(.semibold).foregroundStyle(ink.holiday).lineLimit(1).truncationMode(.tail)
                             .padding(.horizontal, 7).padding(.vertical, 2)
-                            .background(ink.holiday.opacity(0.15), in: .rect(cornerRadius: ink.toybox ? 7 : 5, style: .continuous))
+                            .background(ink.holiday.opacity(0.15), in: .rect(cornerRadius: 5, style: .continuous))
                     } else {
                         Capsule().fill(colour(ink)).frame(width: ink.instrument ? 2 : 3, height: 16)
                         Text(event.title).fontWeight(.semibold).lineLimit(1).truncationMode(.tail)
@@ -1103,12 +1098,12 @@ struct ClockPopover: View {
         }
 
         private func colour(_ ink: BarInk) -> Color {
-            guard let c = event.colour else { return ink.toybox ? ink.accentFill : ink.instrument ? style.color(\.line3) : Theme.yellow }
+            guard let c = event.colour else { return ink.instrument ? style.color(\.line3) : Theme.yellow }
             return Color(c)
         }
     }
 
-    /// A day: its number in mono, dim outside the month, today outlined in the accent (never filled, Toybox too), a dot
+    /// A day: its number in mono, dim outside the month, today outlined in the accent (never filled), a dot
     /// under a day with events; a holiday's number red over a short red line instead. A click picks it (its card); the
     /// pointer over it, or its card open, fills it.
     private struct DayCell: View {
@@ -1128,7 +1123,7 @@ struct ClockPopover: View {
         }
 
         private func number(_ ink: BarInk) -> some View {
-            let cell = RoundedRectangle(cornerRadius: ink.toybox ? 8 : 5, style: .continuous)
+            let cell = RoundedRectangle(cornerRadius: 5, style: .continuous)
             return Text("\(day.number)").font(ink.readout(13, weight: day.isToday ? .bold : .medium))
                 .foregroundStyle(day.isToday ? ink.accent : !day.inMonth ? ink.muted.opacity(0.5) : day.isHoliday ? ink.holiday : ink.text)
                 .frame(maxWidth: .infinity).frame(height: 30)
@@ -1140,14 +1135,14 @@ struct ClockPopover: View {
                 .contentShape(Rectangle())
                 .overlay {
                     if day.isToday {
-                        cell.strokeBorder(ink.accentFill, lineWidth: ink.toybox ? 2 : 1.5).padding(.horizontal, 4)
+                        cell.strokeBorder(ink.accentFill, lineWidth: 1.5).padding(.horizontal, 4)
                     }
                 }
                 .overlay(alignment: .bottom) {
                     if day.isHoliday {
                         Capsule().fill(ink.holiday.opacity(day.inMonth ? 1 : 0.5)).frame(width: 14, height: 2).padding(.bottom, 2)
                     } else if day.hasEvents {
-                        Circle().fill(ink.toybox ? Toy.module(3, style) : ink.instrument ? (day.isToday ? ink.accent : ink.muted) : Theme.yellow)
+                        Circle().fill(ink.instrument ? (day.isToday ? ink.accent : ink.muted) : Theme.yellow)
                             .frame(width: 4, height: 4).padding(.bottom, 2)
                     }
                 }
@@ -1215,13 +1210,13 @@ struct TimerPopover: View {
         let ink = BarInk(style: style)
         VStack(spacing: 8) {
             ZStack {
-                TimerRing(left: timer.left ?? 0, lineWidth: ink.toybox ? 9 : ink.instrument ? 4 : 7,
-                          track: ink.toybox ? style.color(\.sunken) : ink.instrument ? style.color(\.line2) : nil,
-                          tint: ink.toybox ? Toy.module(3, style) : ink.instrument ? style.color(\.accent) : nil).frame(width: 96, height: 96)
+                TimerRing(left: timer.left ?? 0, lineWidth: ink.instrument ? 4 : 7,
+                          track: ink.instrument ? style.color(\.line2) : nil,
+                          tint: ink.instrument ? style.color(\.accent) : nil).frame(width: 96, height: 96)
                 if ink.instrument {
                     Text(timer.countdown ?? "–").font(ink.readout(20, weight: .medium)).monospacedDigit()
                 } else {
-                    Text(timer.countdown ?? "–").font(ink.toybox ? ToyFace.fredoka(24) : Theme.mono(20, weight: .semibold))
+                    Text(timer.countdown ?? "–").font(Theme.mono(20, weight: .semibold))
                 }
             }
             .padding(.top, 4)

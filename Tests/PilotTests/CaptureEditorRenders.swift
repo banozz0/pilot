@@ -11,7 +11,7 @@ import Testing
 /// The capture editor in C, Two modes (Sven, Q238; capture editor round 1; editors-round-2's 21 parity rows): the real
 /// CaptureEditorView over the designer's made-up billing page, in every state Sven leaves it in, Mark up and Frame, plus
 /// the smallest window in each mode and the two popovers' panels (a popover is a window of its own, which a snapshot never
-/// draws), in Instrument (Tokyo Night, Folio) and Toybox (toybox-night, toybox). The window keeps one size whatever the
+/// draws), in Instrument (Tokyo Night, Folio). The window keeps one size whatever the
 /// state in each mode.
 /// Opt-in like the other renders, in a moved home:
 /// `CFFIXED_USER_HOME=/tmp/pilot-render-home PILOT_RENDER_DIR=/tmp/pilot-renders swift test --filter CaptureEditorRenders`
@@ -23,7 +23,6 @@ struct CaptureEditorRenders {
 
     static let passes: [(style: PilotStyle, theme: String, tag: String)] = [
         (.instrument, "tokyo-night", "instrument-dark"), (.instrument, "folio", "instrument-light"),
-        (.toybox, "toybox-night", "toybox-dark"), (.toybox, "toybox", "toybox-light"),
     ]
 
     /// The editor's states, each a model set up as Sven would leave it.
@@ -146,7 +145,7 @@ struct CaptureEditorRenders {
                 ("13-history", history), ("14-frame", panel), ("15-image-size", sized)]
     }
 
-    @Test("The editor renders in Instrument and Toybox, dark and light, every state, at one size",
+    @Test("The editor renders in Instrument, dark and light, every state, at one size",
           .enabled(if: env["PILOT_RENDER_DIR"] != nil && env["CFFIXED_USER_HOME"] != nil))
     func render() throws {
         try Self.rendering { look, out in try Self.renderStates(look: look, out: out) }
@@ -219,7 +218,7 @@ struct CaptureEditorRenders {
     /// Uncrop and backdrop marks (P77, round 2's capture-2 and capture-3): the billing page cut from a desktop of other
     /// windows, that desktop read back as its screen. Crop pulled past two edges mid-drag, the uncrop kept, a title on
     /// the backdrop over a capture mark, and the same grown by an uncrop with the title staying put.
-    @Test("Uncrop and backdrop marks render in Instrument and Toybox, dark and light",
+    @Test("Uncrop and backdrop marks render in Instrument, dark and light",
           .enabled(if: env["PILOT_RENDER_DIR"] != nil && env["CFFIXED_USER_HOME"] != nil))
     func renderUncrop() throws {
         try Self.rendering { look, out in try Self.renderUncrop(look: look, out: out) }

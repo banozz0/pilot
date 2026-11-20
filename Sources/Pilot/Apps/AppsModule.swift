@@ -404,7 +404,7 @@ enum AppsModule {
     private static let icons: NSCache<NSString, Kept> = bounded(), namedIcons: NSCache<NSString, Kept> = bounded()
     private static let menuIcons: NSCache<NSString, NSImage> = bounded()
     private static var launches: NSObjectProtocol?
-    /// The largest side a list draws an app icon at, in pixels: 36 pt at 2x (Toybox's menu rows draw 34 pt).
+    /// The largest side a list draws an app icon at, in pixels: 36 pt at 2x.
     static let iconPixels = 72
     /// `icon` drawn once into one bitmap `iconPixels` square, about 20 KB, in place of the icon's every size.
     static func small(_ icon: NSImage) -> NSImage {

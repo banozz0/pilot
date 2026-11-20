@@ -18,7 +18,7 @@ public enum Dropdown {
         case rows = "commands", developer, footer
     }
 
-    /// Today's compact blocks in order, as Toybox draws them: the developer rows, before the footer, only while Option is
+    /// Today's compact blocks in order: the developer rows, before the footer, only while Option is
     /// held. Now draws only while something runs (a recording, a focus timer, a download), and reads that itself, so a
     /// countdown redraws only it. The optional blocks are the tall menu's alone.
     public static func blocks(option: Bool) -> [Block] {

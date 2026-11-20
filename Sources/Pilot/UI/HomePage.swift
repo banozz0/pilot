@@ -2,7 +2,7 @@ import AppKit
 import PilotCore
 import SwiftUI
 
-/// Home (pilot-ui-redesign T6, Sven's Q1 on Open question 3): the panel's first page, InstrumentHome in every style. Its
+/// Home (pilot-ui-redesign T6, Sven's Q1 on Open question 3): the panel's first page, InstrumentHome. Its
 /// old board of blocks and its edit mode are gone with the spec; Pilot is the whole app, so Home has no Pilot switch of
 /// its own, only the four the Pilot menu has too.
 struct HomePage: View {
@@ -104,7 +104,7 @@ enum HomeFix {
     }
 }
 
-/// The line beside the Hyper switch, as Toybox's greeting says it.
+/// The line beside the Hyper switch.
 @MainActor
 enum HomeGreeting {
     /// "Good evening.": Home's greeting by the hour of `date` (shot 7c-home).

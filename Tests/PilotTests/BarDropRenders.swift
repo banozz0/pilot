@@ -7,7 +7,7 @@ import Testing
 @testable import Pilot
 
 /// The bar drops' chrome on a whole screen (spec Bar drops T8, the C frames, design cards 6, 10, 11): the terminal alone,
-/// centred under the bar, and both side by side, Terminal left, in Instrument and Toybox, dark and light, on a 1080 pt
+/// centred under the bar, and both side by side, Terminal left, in Instrument, dark and light, on a 1080 pt
 /// portrait and a 3440 pt ultrawide, each drop on its BarDropPlacement frame under the real top bar strip with its item
 /// lit. Over a stand-in desktop with one window behind the drops, so the hairline's hold over a window shows. The
 /// terminal is the drop's real chrome round a stand-in shell (Shell: a canned session in the drop's mono face; Ghostty's
@@ -23,9 +23,23 @@ struct BarDropRenders {
     static let screens: [(name: String, size: CGSize)] = [("1080", CGSize(width: 1080, height: 1920)), ("3440", CGSize(width: 3440, height: 1440))]
     static let looks: [(name: String, style: PilotStyle, theme: String)] = [
         ("instrument-dark", .instrument, "tokyo-night"), ("instrument-light", .instrument, "porcelain"),
-        ("toybox-dark", .toybox, "toybox-night"), ("toybox-light", .toybox, "toybox"),
     ]
     static let strip: CGFloat = 32
+
+    /// The mockup's bar: Pilot, the workspaces and the app in front on the left, the timer in the centre, the readings'
+    /// group, sound, the layout, Wi-Fi, the battery and the clock on the right.
+    static func sides() -> [TopBarSide: [BarSlot]] {
+        var s = BarSettings.defaults
+        func item(_ kind: BarKind, _ style: BarStyle) -> BarSlot {
+            s.set(kind, style: style)
+            return .item(s.entry(kind))
+        }
+        let readings = [BarKind.cpu, .memory, .network].map { kind in s.set(kind, style: .text); return s.entry(kind) }
+        return [.left: [item(.pilot, .iconNumber), item(.workspaces, .numbers), item(.focusedApp, .iconName)],
+                .centre: [item(.timer, .countdown), item(.terminal, .iconName), item(.askAI, .iconName)],
+                .right: [.group(readings), item(.volume, .icon), item(.keyboardLayout, .code), item(.wifi, .icon), item(.battery, .iconPercent),
+                         item(.clock, .dateTime)]]
+    }
 
     /// The C frames' session, as runs of (words, colour): a prompt, a test run, Claude Code at work.
     enum Tint { case plain, path, dim, good, mark }
@@ -80,7 +94,7 @@ struct BarDropRenders {
         }
     }
 
-    @Test("One drop and both, Instrument and Toybox, dark and light, at 1080 and 3440 pt",
+    @Test("One drop and both, Instrument, dark and light, at 1080 and 3440 pt",
           .enabled(if: env["PILOT_RENDER_DIR"] != nil && env["CFFIXED_USER_HOME"] != nil))
     func render() async throws {
         let dir = try ClockRenders.dir("bar-drops")

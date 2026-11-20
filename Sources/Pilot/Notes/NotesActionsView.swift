@@ -11,10 +11,7 @@ struct NotesActionsView: View {
 
     var body: some View {
         if let menu = model.actions {
-            switch style.kind {
-            case .instrument: instrument(menu)
-            case .toybox: toybox(menu)
-            }
+            instrument(menu)
         }
     }
 
@@ -85,33 +82,6 @@ struct NotesActionsView: View {
         }
         .frame(width: 290)
         .styleSurface(\.pop, fill: \.panel, radius: \.card)
-    }
-
-    // MARK: Toybox
-
-    private func toybox(_ menu: NoteActions) -> some View {
-        KitPopover(width: 290, inset: 0, arrow: false) {
-            search(menu, face: style.toyNunito(700, 13.5), caret: style.color(\.accentText))
-                .padding(.horizontal, 14).frame(height: 40, alignment: .leading)
-            ToyRule()
-            fitted {
-                rows(menu, rule: { style.color(\.line2).frame(height: 2).padding(.horizontal, 8).padding(.vertical, 4) }) { action, on in
-                    let ink = on ? style.color(\.onAccent) : action.danger ? style.color(\.problem) : style.color(\.text)
-                    HStack(spacing: 10) {
-                        Image(systemName: action.symbol).font(.system(size: 13, weight: .bold)).frame(width: 20)
-                            .foregroundStyle(on || action.danger ? ink : style.color(\.text2)).accessibilityHidden(true)
-                        Text(action.title).font(style.toyNunito(800, 13.5)).foregroundStyle(ink).lineLimit(1)
-                        Spacer(minLength: 8)
-                        if on { ToyMenuCap(label: "↵", onSun: true, height: 24) } else if let key = action.key { NotesCaps(key: key) }
-                    }
-                    .padding(.horizontal, 10)
-                    .padding(EdgeInsets(top: 2, leading: 2, bottom: 4, trailing: 2))
-                    .frame(maxWidth: .infinity, minHeight: 40, alignment: .leading)
-                    .background { if on { Toy.block(style, fill: style.color(\.accent), radius: 12, edge: 4) } }
-                }
-                .padding(.horizontal, 8).padding(.top, 6).padding(.bottom, 8)
-            }
-        }
     }
 }
 

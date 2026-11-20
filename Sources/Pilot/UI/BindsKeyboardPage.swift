@@ -4,11 +4,10 @@ import SwiftUI
 
 /// Binds as a keyboard (design round 4, card agent-bo-95422894): the sublayer tabs with Plain last, the keyboard with
 /// each key coloured by what its bind does, the clicked key's inspector (rebind, clear, or bind a free key); Show as list
-/// opens the full list (search, filters, Reset per bind). Toybox and Instrument draw their own page and list on this
-/// page's state, keys and dialogs (ADR 0008; `Acts`).
+/// opens the full list (search, filters, Reset per bind). Instrument draws its own page and list on this page's state,
+/// keys and dialogs (ADR 0008; `Acts`).
 struct BindsKeyboardPage: View {
     @Environment(Engine.self) private var engine
-    @Environment(\.style) private var style
     /// The window's search: a search lists, the keyboard waits.
     let search: String
     /// Plain combos asked for by a link or the window's search.
@@ -41,7 +40,6 @@ struct BindsKeyboardPage: View {
 
     var body: some View {
         // The tab's binds once a pass: each key's actions, names and pictures (card agent-bo-95423023).
-        let toybox = style.kind == .toybox
         let listed = asList || !search.trimmingCharacters(in: .whitespaces).isEmpty
         let binds = HomeBinds(engine: engine, layer: layer, pictures: !listed)
         let bound = binds.bound
@@ -49,14 +47,10 @@ struct BindsKeyboardPage: View {
         let only: BindsPage.Tab? = layer == .plain && asList ? .plain : nil, back = search.isEmpty ? { asList = false } : nil
         // A link or the search to Swap keys or Overlay scrolls under the board to it.
         KitLanding { Group {
-            if listed && toybox {
-                ToyBindsList(only: only, seed: search, back: back)
-            } else if listed {
+            if listed {
                 InstrumentBindsList(only: only, seed: search, back: back)
             } else {
-                boardKeys(Group {
-                    if toybox { toy(binds, key: key) } else { instrument(binds, key: key) }
-                }, bound: bound, key: key)
+                boardKeys(instrument(binds, key: key), bound: bound, key: key)
             }
         } }
         .onChange(of: startOnPlain) { if startOnPlain { layer = .plain } }
@@ -77,7 +71,7 @@ struct BindsKeyboardPage: View {
         store.trigger(for: action).flatMap(PlainComboShadow.warning)
     }
 
-    /// A bind's keys after Hyper's, as Toybox's and Instrument's big caps show them: the tab's modifiers and the key as `board`
+    /// A bind's keys after Hyper's, as Instrument's big caps show them: the tab's modifiers and the key as `board`
     /// prints it; a plain combo's own modifiers and the key.
     static func capParts(_ key: Int64, action: String?, layer: BindsKeyboard.Layer, store: BindStore, board: BindsKeyboard.Board) -> [String] {
         let name = board.caption(key)
@@ -96,8 +90,8 @@ struct BindsKeyboardPage: View {
         return board.spots.compactMap(\.code).first { bound[$0] != nil } ?? KeyNames.code(for: "B")
     }
 
-    /// What Toybox's and Instrument's pages' buttons do: this page's state and dialogs, so picking, binding, clearing,
-    /// presets and the list behave alike in both.
+    /// What Instrument's page's buttons do: this page's state and dialogs, so picking, binding, clearing, presets and the
+    /// list go through this page.
     struct Acts {
         let pick: (Int64) -> Void
         /// Shows a tab with a key picked on it.
@@ -115,11 +109,6 @@ struct BindsKeyboardPage: View {
         Acts(pick: { picked = (layer, $0); boardFocused = true }, show: { layer = $0; picked = ($0, $1); boardFocused = true },
              edit: { editing = $0 }, clear: clear, reset: reset, switchTo: { switchingTo = $0 }, resetAll: { confirmingResetAll = true },
              showList: { asList = true }, go: go)
-    }
-
-    /// Toybox (card agent-bo-95423182): its own page on this page's state, dialogs and keys.
-    private func toy(_ binds: HomeBinds, key: Int64?) -> some View {
-        ToyBindsPage(binds: binds, key: key, layer: $layer, boards: board, refusal: refusal, acts: acts, below: Self.below)
     }
 
     /// Instrument (card agent-bo-95423181): its own page on this page's state, dialogs and keys.

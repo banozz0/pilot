@@ -12,7 +12,7 @@ extension SharedLook {
 /// wallpaper behind it by macOS's measured curve (BarTone). Liquid Glass draws nothing offscreen, so the renders lay
 /// the wallpaper under the bar (and Glass's tint) by hand, as TopBarLookTests.overWallpaper does. With PILOT_RENDER_DIR
 /// and CFFIXED_USER_HOME set, Sven's bar and a row of readings at their levels are written before and after over a busy
-/// pink and light wallpaper (PILOT_RENDER_WALLPAPER's picture, else a made one), Glass and Clear, Instrument and Toybox:
+/// pink and light wallpaper (PILOT_RENDER_WALLPAPER's picture, else a made one), Glass and Clear, Instrument:
 /// `CFFIXED_USER_HOME=/tmp/pilot-render-home-ink PILOT_RENDER_DIR=/tmp/pilot-renders-ink swift test --filter WallpaperInkTests`
 @MainActor
 @Suite("Wallpaper ink", .serialized)
@@ -26,11 +26,11 @@ struct WallpaperInkTests {
         return WallpaperStrip.Grid(width: 720, height: 15, rgb: Array((0..<720 * 15).map { _ in c }.joined()))
     }
 
-    @Test("Instrument on Glass and Clear keeps the theme's ink at full strength and tones only light wallpaper behind it; Toybox (opaque islands) and Solid are as before")
+    @Test("Instrument on Glass and Clear keeps the theme's ink at full strength and tones only light wallpaper behind it; Solid is as before")
     func tonesForWallpaper() async throws {
         // Sven's theme as tokens, never previewed: Look's theme is shared with suites running beside this one.
         let look = Look.shared, void = try #require(PilotTheme.named("void"))
-        let instrument = StyleTokens.of(.instrument, theme: void), toybox = StyleTokens.of(.toybox, theme: void)
+        let instrument = StyleTokens.of(.instrument, theme: void)
         for background in [TopBarBackground.glass, .clear] {
             for (name, rgb) in Self.wallpapers {
                 let (inked, made) = TopBarColour.ink(.theme, style: instrument, background: background, wallpaper: Self.strip(rgb), look: look)
@@ -38,7 +38,6 @@ struct WallpaperInkTests {
                 #expect(inked.inked && inked.dark && inked.colors.text2.alpha == 1, "\(background) \(name)")
                 // Black is left as it is; white and Sven's teal are toned down, as macOS tones them.
                 if background == .clear { #expect(tone.alpha.allSatisfy { $0 == 0 } == (name == "black"), "\(name): masked \(tone.alpha[0])") }
-                #expect(TopBarColour.tone(Self.strip(rgb), background: background, colour: .theme, style: toybox, look: look) == nil)
 
                 let (store, sources, timer) = try StripStyleTests.svensBar()
                 (store.background, store.colour) = (background, .theme)
@@ -53,7 +52,7 @@ struct WallpaperInkTests {
         #expect(TopBarColour.tone(Self.strip(0xF4F4F4), background: .solid, colour: .theme, style: instrument, look: look) == nil)
     }
 
-    @Test("Renders: the user's bar and readings at their levels over a busy pink and light wallpaper, before and after, Glass and Clear, Instrument and Toybox",
+    @Test("Renders: the user's bar and readings at their levels over a busy pink and light wallpaper, before and after, Glass and Clear, Instrument",
           .enabled(if: env["PILOT_RENDER_DIR"] != nil && env["CFFIXED_USER_HOME"] != nil))
     func renders() async throws {
         let dir = try ClockRenders.dir("wallpaper-ink")
@@ -64,7 +63,7 @@ struct WallpaperInkTests {
         let grid = try #require(WallpaperStrip.grid(picture, screen: screen, strip: strip))
         let image = try #require(NSImage(contentsOf: picture))
         let shown = WallpaperStrip.rect(image: image.size, screen: screen, placement: .init())
-        for kind in [PilotStyle.instrument, .toybox] {
+        for kind in [PilotStyle.instrument] {
             let style = StyleTokens.of(kind, theme: void)
             for background in [TopBarBackground.glass, .clear] {
                 var rows: [NSBitmapImageRep] = []

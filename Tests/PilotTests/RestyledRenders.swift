@@ -127,9 +127,9 @@ struct RestyledRenders {
     }
 
     /// Open with with All kinds folded out (Sven 2026-11-12, "open with isnt well aligned"): the page alone beside the
-    /// window's sidebar at the first window width (1000) and a wide one (1440), in Instrument and Toybox, on fake defaults
+    /// window's sidebar at the first window width (1000) and a wide one (1440), in Instrument, on fake defaults
     /// that pick QuickTime Player for video, the longest app name the cards show. Output: `open-with/<style>-<width>.png`.
-    @Test("Open with renders with All kinds open in Instrument and Toybox", .enabled(if: env["PILOT_RENDER_DIR"] != nil && env["CFFIXED_USER_HOME"] != nil))
+    @Test("Open with renders with All kinds open in Instrument", .enabled(if: env["PILOT_RENDER_DIR"] != nil && env["CFFIXED_USER_HOME"] != nil))
     func renderOpenWith() throws {
         let home = try #require(Self.env["CFFIXED_USER_HOME"])
         try #require(NSHomeDirectory() == home, "the home directory did not move; refusing to touch Sven's files")
@@ -146,7 +146,7 @@ struct RestyledRenders {
         let saved = (look.themeID, look.style)
         defer { (look.themeID, look.style) = saved }
         look.themeID = "nightwatch"
-        for style in [PilotStyle.instrument, .toybox] {
+        for style in [PilotStyle.instrument] {
             look.style = style
             for width in [1000, 1440] {
                 let page = OpenWithPage(allKinds: true, kinds: DefaultAppsModel(system: RenderDefaultApps(), forget: { _ in }), editor: editor)

@@ -6,8 +6,8 @@ import SwiftUI
 import Testing
 @testable import Pilot
 
-/// The extension timer's popover and an extension's alert (Pomodoro as an extension, 2026-10-10) in Instrument and
-/// Toybox: the popover with a focus timer 6 min 18 s in, held, and with none; the alert with two buttons and with OK
+/// The extension timer's popover and an extension's alert (Pomodoro as an extension, 2026-10-10) in Instrument:
+/// the popover with a focus timer 6 min 18 s in, held, and with none; the alert with two buttons and with OK
 /// alone, through HUD.makePanel as ExtensionAlert.show builds it. Opt-in like the other renders, in a moved home:
 /// `CFFIXED_USER_HOME=/tmp/pilot-render-home PILOT_RENDER_DIR=/tmp/pilot-renders swift test --filter ExtensionTimerRenders`
 extension SharedLook {
@@ -40,7 +40,7 @@ struct ExtensionTimerRenders {
         held.start(ExtensionTimerTests.focus(paused: true, seconds: 754), owner: ExtensionTimerTests.owner)
         defer { running.stop(); held.stop() }
 
-        for (style, theme) in [(PilotStyle.instrument, "nightwatch"), (.toybox, "toybox")] {
+        for (style, theme) in [(PilotStyle.instrument, "nightwatch")] {
             look.style = style
             look.themeID = theme
             let tokens = StyleTokens.of(style, theme: look.theme)

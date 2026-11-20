@@ -149,10 +149,7 @@ struct BarTooltipView: View {
     let text: String
 
     var body: some View {
-        switch style.kind {
-        case .toybox: ToyBarTooltip(text: text).padding(Self.shadowRoom)
-        case .instrument: InstrumentBarTooltip(text: text).padding(Self.shadowRoom)
-        }
+        InstrumentBarTooltip(text: text).padding(Self.shadowRoom)
     }
 
 }

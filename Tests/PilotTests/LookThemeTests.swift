@@ -40,12 +40,11 @@ struct LookThemeTests {
     func persisted() {
         let bench = Bench()
         let look = bench.look
-        look.style = .toybox
         look.themeID = "dracula"
         look.glass = true
         look.transparency = 55
         let next = bench.again()
-        #expect(next.style == .toybox && next.themeID == "dracula" && next.theme.id == "dracula")
+        #expect(next.themeID == "dracula" && next.theme.id == "dracula")
         #expect(next.glass && next.transparency == 55 && next.effectiveMaterial == .glass)
         // Transparency stays between 0 and 100.
         look.transparency = -12
@@ -89,19 +88,17 @@ struct LookThemeTests {
         #expect(!fresh.look.glass && fresh.defaults.object(forKey: "look.glass") == nil)
     }
 
-    @Test("Views reading the theme, the material and the style redraw when one changes, without a relaunch")
+    @Test("Views reading the theme and the material redraw when one changes, without a relaunch")
     func observed() {
         let bench = Bench()
         let look = bench.look
         final class Flag: @unchecked Sendable { var raised = false }
-        let theme = Flag(), material = Flag(), style = Flag()
+        let theme = Flag(), material = Flag()
         withObservationTracking { _ = look.theme } onChange: { theme.raised = true }
         withObservationTracking { _ = look.layers } onChange: { material.raised = true }
-        withObservationTracking { _ = look.style } onChange: { style.raised = true }
         look.themeID = "folio"
         look.transparency = 60
-        look.style = .toybox
-        #expect(theme.raised && material.raised && style.raised)
+        #expect(theme.raised && material.raised)
         #expect(look.colors.ground == ThemeColors(PilotTheme.named("folio")!).ground && !look.theme.dark)
     }
 
@@ -215,16 +212,12 @@ struct LookThemeTests {
         AppWindowController.applyLook(look, to: window)
         let glass = try #require(host.effect as? NSGlassEffectView)
         #expect(glass.tintColor?.alphaComponent ?? 0 > 0.3)
-        // Instrument takes the material and Transparency too (round 15); Toybox's window stays opaque whatever they are.
+        // Instrument takes the material and Transparency too (round 15).
         look.transparency = 100
         look.style = .instrument
         AppWindowController.applyLook(look, to: window)
         #expect(!window.isOpaque && host.effect is NSGlassEffectView && look.layers.card < 1)
         #expect(abs(((host.effect as? NSGlassEffectView)?.tintColor?.alphaComponent ?? 0) - look.layers.ground) < 0.01)
-        look.style = .toybox
-        AppWindowController.applyLook(look, to: window)
-        #expect(window.isOpaque && host.effect == nil && look.layers.card == 1)
-        look.style = .instrument
         // Transparency 0 % is solid.
         look.transparency = 0
         AppWindowController.applyLook(look, to: window)

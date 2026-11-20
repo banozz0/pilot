@@ -7,7 +7,7 @@ import SwiftUI
 /// tiles, the workspaces, then Open Pilot and Quit Pilot; an install from before keeps its tall menu (status, workspaces,
 /// the switches it shows, what is running, the rows with their keys and, while Option is held, the developer rows and
 /// the recent presses). A problem always leads, Status hidden or not. Hung by BarPanel under Pilot's item from either bar;
-/// past the room under it (`barPopoverRoom`) the face scrolls what is not pinned. Toybox keeps ToyDropdown.
+/// past the room under it (`barPopoverRoom`) the face scrolls what is not pinned.
 struct InstrumentDropdown: View {
     @Environment(Engine.self) private var engine
     let switches: QuickSwitches

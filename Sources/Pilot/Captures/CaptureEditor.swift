@@ -108,7 +108,7 @@ enum CaptureEditor {
                                      }, glass: glass)
         let host = NSHostingView(rootView: view.styled(.hud, look: look).pilotTheme(look: look))
         host.frame = CGRect(origin: .zero, size: size)
-        // Look's Glass behind the editor, as behind the video editor and the HUD (solid in Toybox, or with Glass off); the
+        // Look's Glass behind the editor, as behind the video editor and the HUD (solid with Glass off); the
         // pills stand on it.
         let backdrop = MaterialBackdrop(content: host, cornerRadius: tokens.radii.pop)
         backdrop.show(look.material(on: .hud), tint: look.glassTint(tokens.color(\.panel)))
@@ -454,8 +454,7 @@ struct CaptureEditorView: View {
         }
         .clipShape(shape)
         .overlay {
-            if style.kind == .toybox { shape.strokeBorder(style.color(\.outline), lineWidth: 2) }
-            else if !glass { shape.strokeBorder(style.color(\.line2)) }
+            if !glass { shape.strokeBorder(style.color(\.line2)) }
         }
         // More's Add a capture lists History's newest captures.
         .onAppear { if add != nil { BackdropLibrary.shared.load() } }

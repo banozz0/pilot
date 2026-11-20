@@ -473,7 +473,7 @@ struct InstrumentMark: View {
     }
 }
 
-/// The mark's one geometry, drawn by InstrumentMark, Toybox's PilotMark and the macOS menu bar's picture.
+/// The mark's one geometry, drawn by InstrumentMark and the macOS menu bar's picture.
 enum PilotMarkShape {
     /// What `BarKind.symbol` names for Pilot: no SF Symbol has it, so a tile or chip given it draws the mark.
     static let symbol = "pilot.mark"

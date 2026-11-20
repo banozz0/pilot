@@ -124,19 +124,18 @@ private struct ShelfItemLabel: View {
     }
 }
 
-/// A joined group's window count: Instrument's soft signal chip, Toybox's sun pill.
+/// A joined group's window count: Instrument's soft signal chip.
 private struct ShelfCount: View {
     @Environment(\.style) private var style
     let count: Int
 
     var body: some View {
-        let toy = style.kind == .toybox
-        let shape = RoundedRectangle(cornerRadius: toy ? 9 : style.radii.chip, style: .continuous)
+        let shape = RoundedRectangle(cornerRadius: style.radii.chip, style: .continuous)
         Text("\(count)").font(style.font(\.mono, size: 10.5)).monospacedDigit()
-            .foregroundStyle(style.color(toy ? \.onAccent : \.accentText))
+            .foregroundStyle(style.color(\.accentText))
             .padding(.horizontal, 5).frame(minWidth: 18, minHeight: 17)
             // The soft fill over the theme's panel, so the wallpaper never shows through the digit.
-            .background { ZStack { shape.fill(style.color(\.panel)); shape.fill(style.color(toy ? \.accent : \.accentSoft)) } }
+            .background { ZStack { shape.fill(style.color(\.panel)); shape.fill(style.color(\.accentSoft)) } }
     }
 }
 
@@ -156,7 +155,6 @@ private struct ShelfLabelInk: ViewModifier {
         } else {
             content.padding(.horizontal, 7).padding(.vertical, 3)
                 .background(style.color(\.panel).opacity(0.94), in: Capsule())
-                .overlay { if style.depth.card.outline > 0 { Capsule().strokeBorder(style.color(\.outline), lineWidth: 1.5) } }
         }
     }
 }
@@ -244,8 +242,7 @@ struct ShelfGroup<Label: View>: View {
 }
 
 /// One window's face: its picture, rounding as the window does, or its app's icon and title on the style's panel; in the
-/// style's depth (Instrument's pure hairline and a soft shadow, Toybox's ink outline and solid bottom edge), the signal's
-/// ring while the pointer is on it.
+/// style's depth (Instrument's pure hairline and a soft shadow), the signal's ring while the pointer is on it.
 private struct ShelfFace: View {
     @Environment(\.style) private var style
     let window: AeroWindow
@@ -265,8 +262,6 @@ private struct ShelfFace: View {
         let image = pictures.image(of: window.id)
         let radius = Self.radius(pictures, window.id, width: size.width, style: style)
         let shape = RoundedRectangle(cornerRadius: radius, style: .continuous)
-        let depth = style.depth.card
-        let toy = depth.outline > 0
         Group {
             if let image {
                 Image(decorative: image, scale: 1).resizable().interpolation(.high).antialiased(true).aspectRatio(contentMode: .fill)
@@ -285,48 +280,26 @@ private struct ShelfFace: View {
         .clipShape(shape)
         .overlay { if dim > 0 { shape.fill(.black.opacity(dim)) } }
         // Instrument: a picture's outline in pure white or black at a tenth (Krehel), never a tinted line on its edge.
-        .overlay { if !toy { shape.strokeBorder(style.dark ? Color.white.opacity(0.14) : Color.black.opacity(0.12), lineWidth: 1) } }
-        .overlay { if lit && !toy { shape.strokeBorder(style.color(\.accent), lineWidth: 2) } }
+        .overlay { shape.strokeBorder(style.dark ? Color.white.opacity(0.14) : Color.black.opacity(0.12), lineWidth: 1) }
+        .overlay { if lit { shape.strokeBorder(style.color(\.accent), lineWidth: 2) } }
         .background {
-            if toy {
-                // The ink outline round the face and its solid edge below (the mock's two box-shadows), the sun's while lit.
-                let o = depth.outline + (lit ? 0.25 : 0)
-                let ring = RoundedRectangle(cornerRadius: radius + o, style: .continuous)
-                ZStack {
-                    ring.fill(style.color(lit ? \.accentEdge : \.outline)).padding(-o).offset(y: depth.edge)
-                    ring.fill(style.color(lit ? \.accent : \.outline)).padding(-o)
-                }
-            } else {
-                // A soft lift off the wallpaper and a tight contact line under it, on the shape, so a live frame never
-                // recomputes it.
-                shape.fill(.black)
-                    .shadow(color: .black.opacity(0.5), radius: 12, y: 8)
-                    .shadow(color: .black.opacity(0.35), radius: 1.5, y: 1)
-            }
+            // A soft lift off the wallpaper and a tight contact line under it, on the shape, so a live frame never
+            // recomputes it.
+            shape.fill(.black)
+                .shadow(color: .black.opacity(0.5), radius: 12, y: 8)
+                .shadow(color: .black.opacity(0.35), radius: 1.5, y: 1)
         }
     }
 }
 
-/// The front app's icon on the card's corner: a soft shadow in Instrument; Toybox's ink outline and edge round its
-/// squircle (an icon's artwork is 824 of its 1,024 points, so the ring sits inside the frame).
+/// The front app's icon on the card's corner: a soft shadow in Instrument.
 private struct ShelfIcon: View {
     @Environment(\.style) private var style
     let window: AeroWindow
     static let size: CGFloat = 40
 
     var body: some View {
-        let depth = style.depth.card
-        let art = Self.size * 824 / 1024, inset = (Self.size - art) / 2, o = depth.outline
-        let ring = RoundedRectangle(cornerRadius: art * 0.225 + o, style: .continuous)
         AppIcon(name: window.appName, bundle: window.bundleId, size: Self.size)
-            .background {
-                if o > 0 {
-                    ZStack {
-                        ring.fill(style.color(\.outline)).padding(inset - o).offset(y: depth.edge - 1)
-                        ring.fill(style.color(\.outline)).padding(inset - o)
-                    }
-                }
-            }
-            .shadow(color: .black.opacity(o > 0 ? 0 : 0.35), radius: 3, y: 1)
+            .shadow(color: .black.opacity(0.35), radius: 3, y: 1)
     }
 }

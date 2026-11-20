@@ -29,8 +29,7 @@ struct MenuBarRenders {
     }
 
     /// Whether the page's right gutter, the last 6 to 14 points under the window's bar, is one colour: nothing on the page
-    /// runs past its padding to the window's edge. From 100 down, under every style's frame (Toybox's page panel starts
-    /// at 80).
+    /// runs past its padding to the window's edge. From 100 down, under the frame.
     static func gutterClear(_ rep: NSBitmapImageRep) -> Bool {
         let scale = rep.pixelsWide / Int(rep.size.width), width = Int(rep.size.width)
         let ground = rep.colorAt(x: (width - 10) * scale, y: 100 * scale)
@@ -40,17 +39,17 @@ struct MenuBarRenders {
     }
 
     /// Where the page starts in a window `width` wide: right of the frame's rail and, but under 900 pt, the area's page
-    /// list (RailLayout), each with its rule (Instrument 1 pt, Toybox 2), so the page's checks leave the frame's own words
+    /// list (RailLayout), each with its rule (1 pt), so the page's checks leave the frame's own words
     /// to the frame's renders.
     /// The window's height: the whole Menu bar page fits (it outgrew 2600 at 1440 before the Pilot menu left it, Q182).
     static let height: CGFloat = 5000
 
     static func pageLeft(_ style: PilotStyle, width: CGFloat) -> CGFloat {
-        let (rail, rule): (CGFloat, CGFloat) = style == .instrument ? (72, 1) : (76, 2)
+        let (rail, rule): (CGFloat, CGFloat) = (72, 1)
         return rail + rule + (RailLayout.narrow(width) ? 0 : RailLayout.listWidth(width) + rule)
     }
 
-    @Test("Menu bar shows every line whole at 1440, 1000 and 760 in every style", .enabled(if: env["PILOT_RENDER_DIR"] != nil && env["CFFIXED_USER_HOME"] != nil))
+    @Test("Menu bar shows every line whole at 1440, 1000 and 760, dark and light", .enabled(if: env["PILOT_RENDER_DIR"] != nil && env["CFFIXED_USER_HOME"] != nil))
     func render() throws {
         let home = try #require(Self.env["CFFIXED_USER_HOME"])
         try #require(NSHomeDirectory() == home, "the home directory did not move; refusing to start an engine on Sven's data")
@@ -73,9 +72,8 @@ struct MenuBarRenders {
         let picked = Look.shared.style
         defer { Look.shared.themeID = PilotTheme.defaultID; Look.shared.style = picked }
         model.go(AppPlace(.menuBar))
-        // Every style (ADR 0008), each in its own window frame; Instrument light too, since its Menu bar page is restyled
-        // (card agent-bo-95423181).
-        for (style, dark) in [(PilotStyle.instrument, true), (.instrument, false), (.toybox, false)] {
+        // Instrument in its window frame; light too, since its Menu bar page is restyled (card agent-bo-95423181).
+        for (style, dark) in [(PilotStyle.instrument, true), (.instrument, false)] {
             Look.shared.style = style
             for width in [1440, 1000, 760] {
                 window.setContentSize(NSSize(width: CGFloat(width), height: Self.height))

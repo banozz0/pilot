@@ -226,10 +226,9 @@ enum HUD {
     /// false: no drawn shadow either, as the menu has none (the tip, Sven 2026-10-09).
     static func makePanel(_ content: some View, surface: StyleSurface = .hud, look: Look = .shared, shadow: Bool = true,
                           ownFace: Bool = false) -> KeyPanel {
-        // The style's pop face in its shadow's margins (PopSurface: Toybox's outline and edge need none), but Toybox's menu,
-        // which draws its own pop block (ToyMenuFrame), and a menu that says it draws its own (`ownFace`: Line, whose face
-        // morphs inside its window, LineMorph).
-        let own = (look.style == .toybox || ownFace) && surface == .menu
+        // The style's pop face in its shadow's margins (PopSurface), but a menu that says it draws its own (`ownFace`: Line,
+        // whose face morphs inside its window, LineMorph).
+        let own = ownFace && surface == .menu
         let restyled = own ? nil : look.chromeTokens(surface)
         // The menu draws no shadow in any style (B5, Sven 2026-10-09), nor does a face on Glass (Q356).
         let shadowed = shadow && surface != .menu && !look.glassFace(surface)
@@ -289,10 +288,7 @@ struct TipView: View {
     }
 
     var body: some View {
-        switch style.kind {
-        case .instrument: InstrumentTip(model: model)
-        case .toybox: ToyTip(model: model)
-        }
+        InstrumentTip(model: model)
     }
 
 }

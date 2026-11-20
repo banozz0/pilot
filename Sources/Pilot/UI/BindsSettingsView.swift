@@ -25,8 +25,7 @@ enum BindsList {
         return (tabs, sections)
     }
 
-    /// The keys' column of a list row whose keys name their layer, so every row's words line up (Instrument's and
-    /// Toybox's lists).
+    /// The keys' column of a list row whose keys name their layer, so every row's words line up (Instrument's list).
     static let keyColumn: CGFloat = 150
 }
 
@@ -281,14 +280,9 @@ struct BindEditor: View {
     /// Keys and something to run.
     var ready: Bool { key != nil && target != nil }
 
-    /// Instrument and Toybox draw their own sheets (InstrumentBindEditor, ToyBindEditor) on the same state and actions.
+    /// Instrument draws its own sheet (InstrumentBindEditor) on this state and actions.
     var body: some View {
-        Group {
-            switch style.kind {
-            case .instrument: instrument
-            case .toybox: toybox
-            }
-        }
+        instrument
             .onAppear {
                 inOverlay = action.map(engine.settings.overlayPicks.contains) ?? false
                 apps = AppsModule.installedApps()

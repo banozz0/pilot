@@ -167,8 +167,6 @@ extension ControlVerbs {
                 case "fixture-folder" where words.count == 2:
                     let adopted = try owner.fixtureFolder(words[1] == "off" ? nil : words[1])
                     return .object(["adopted": .bool(adopted), "wallpaperOwned": try themeJSON(owner.wallpaperClaims())])
-                case "fixture-style" where words.count == 2:
-                    return try owner.fixtureStyle(words[1])
                 case "fixture-colour" where words.count == 2:
                     return try owner.fixtureColour(words[1])
                 case "fixture-draft" where words.count > 1:

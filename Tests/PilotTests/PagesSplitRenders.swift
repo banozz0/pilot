@@ -7,7 +7,7 @@ import Testing
 @testable import Pilot
 
 /// The pages split (Sven, 2026-11-15): the window at the pages it moved, at 1000 and 760 by 660, and the rail at the least
-/// size, 760 by 520, with the Developer pages switch on, in Instrument and Toybox and the Toolbar tabs layout; run on main
+/// size, 760 by 520, with the Developer pages switch on, in Instrument and the Toolbar tabs layout; run on main
 /// for the before and on the branch for the after. Seeded as WindowPagesRenders is.
 /// `CFFIXED_USER_HOME=<fresh dir> PILOT_RENDER_DIR=<fresh dir> swift test --filter PagesSplitRenders`
 extension SharedLook {
@@ -64,11 +64,6 @@ struct PagesSplitRenders {
         // The panel's shell (pilot-ui-redesign T3) at its one size.
         try shoot("panel-instrument-780x560", AppPlace(.home), NSSize(width: 780, height: 560))
         try shoot("panel-workspaces-780x560", AppPlace(.workspaces), NSSize(width: 780, height: 560))
-        look.style = .toybox
-        look.themeID = "tokyo-night"
-        AppWindowController.applyLook(look, to: window)
-        try shoot("rail-toybox-760x520", AppPlace(.home), NSSize(width: 760, height: 520))
-        try shoot("toybox-workspaces-1000", AppPlace(.workspaces), NSSize(width: 1000, height: 660))
     }
 }
 }

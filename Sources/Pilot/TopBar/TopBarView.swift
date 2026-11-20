@@ -163,7 +163,6 @@ struct TopBarDropItem: View {
                 .accessibilityLabel(entry.kind.title)
                 .accessibilityAddTraits(lit ? .isSelected : [])
                 .frame(maxHeight: .infinity)
-                .toyIsland(entry.kind)
                 .onAppear { lights.register(anchor, for: drop) }
                 .onDisappear { lights.unregister(anchor, for: drop) }
         }
@@ -187,9 +186,9 @@ struct TopBarDropItem: View {
         .background(ScreenAnchor(box: anchor, rightClick: showMenu))
     }
 
-    /// Instrument's small mono caps, as the C frames draw them; Toybox's own face.
+    /// Instrument's small mono caps, as the C frames draw them.
     private var font: Font {
-        style.kind == .toybox ? ToyBar.font.weight(.bold) : Theme.mono(10, weight: .semibold)
+        Theme.mono(10, weight: .semibold)
     }
 
     private func showMenu() {
@@ -249,12 +248,12 @@ struct TopBarStrip<Slot: View>: View {
     @ViewBuilder let slot: (BarSlot) -> Slot
 
     var body: some View {
-        // Toybox's islands (ToyBar) stand on its canvas, apart, with no hairline or rule. Instrument's (InstrumentBar) draws
-        // a hairline between the bar's groups, its caption face and the rule along its foot.
+        // Instrument's (InstrumentBar) draws a hairline between the bar's groups, its caption face and the rule along its
+        // foot.
         let islands = configuration?.preset.islands == true
-        let toybox = style.kind == .toybox, instrument = style.kind == .instrument
-        // Pills: each slot its own pill (BarPill), the sides' grounds left out; Toybox's slots are pills already.
-        let pills = configuration?.preset == .pills, pilled = pills && !toybox
+        let instrument = style.kind == .instrument
+        // Pills: each slot its own pill (BarPill), the sides' grounds left out.
+        let pills = configuration?.preset == .pills, pilled = pills
         let rules = instrument ? sides.mapValues(InstrumentBar.hairlines(before:)) : [:]
         let placed = live?.layoutValue(key: TopBarRow.Side.self, value: liveSide).layoutValue(key: TopBarRow.Folds.self, value: true)
         // On the left it follows the mark: placed first only where there is none.
@@ -263,7 +262,7 @@ struct TopBarStrip<Slot: View>: View {
         let (inked, tone): (StyleTokens, TopBarColour.Toned?) = if let look {
             TopBarColour.ink(colour, style: style, background: background, wallpaper: wallpaper, look: look)
         } else { (TopBarColour.tokens(colour, style: style, background: background), nil) }
-        TopBarRow(spacing: configuration?.spacing ?? (toybox ? ToyBar.spacing : InstrumentBar.spacing), gap: 12, islands: islands ? configuration?.row : nil, packed: preview) {
+        TopBarRow(spacing: configuration?.spacing ?? InstrumentBar.spacing, gap: 12, islands: islands ? configuration?.row : nil, packed: preview) {
             if islands, let configuration {
                 ForEach(TopBarSide.allCases, id: \.self) { side in
                     GeometryReader { proxy in
@@ -319,9 +318,9 @@ struct TopBarStrip<Slot: View>: View {
         .environment(\.barItemColours, itemColours)
         .environment(\.barGround, tone.map { ($0.tone.ground, inked.dark) })
         .inked(inked)
-        .font(toybox ? ToyBar.font : style.font(\.caption))
+        .font(style.font(\.caption))
         // Attached islands keep their flares' room at the row's ends, inside the bar's window.
-        .padding(.horizontal, islands ? configuration.map(BarIslandShape.flare) ?? 0 : configuration?.padding ?? 6).padding(.vertical, islands || toybox ? 0 : 3)
+        .padding(.horizontal, islands ? configuration.map(BarIslandShape.flare) ?? 0 : configuration?.padding ?? 6).padding(.vertical, islands ? 0 : 3)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .coordinateSpace(.named(BarFrames.space))
         .background {
@@ -518,9 +517,8 @@ enum TopBarColour {
     }
 
     /// The tokens the bar's slots draw in on `colour`: the style's own on the theme's colour; on a picked one, inked for it.
-    /// Toybox's islands carry their own grounds, so its ink stays whatever the bar's colour.
     static func tokens(_ colour: ColourChoice, style: StyleTokens) -> StyleTokens {
-        colour == .theme || style.kind == .toybox ? style : style.inked(on: ground(colour, style: style))
+        colour == .theme ? style : style.inked(on: ground(colour, style: style))
     }
 
     /// The same for a bar on `background`: a Clear bar shows no colour, so its text is the style's own.
@@ -549,12 +547,11 @@ enum TopBarColour {
     /// sees it through its tint at Look's Transparency, Clear as it is. Where the glass carries no tint (tintsGlass) it
     /// sees it through clear glass, which lifts it (BarTone.glassVeil), toned down to the macOS Dock's lift on a dark
     /// desktop and by the menu bar's curve on a bright one (Liquid Glass round 3, Sven 2026-11-15). The dock's strip
-    /// (DockBacking) is toned the same way. Nil on Solid, in Toybox (every slot is an opaque island in its own ink,
-    /// ToyIsland) and while the strip is not read, which leaves the bar as before. Made once per strip, side and tint,
-    /// never per draw.
+    /// (DockBacking) is toned the same way. Nil on Solid and while the strip is not read, which leaves the bar as before.
+    /// Made once per strip, side and tint, never per draw.
     static func tone(_ strip: WallpaperStrip.Grid?, background: TopBarBackground, colour: ColourChoice, style: StyleTokens,
                      look: Look) -> Toned? {
-        guard background != .solid, style.kind != .toybox, let strip else { return nil }
+        guard background != .solid, let strip else { return nil }
         let untinted = background == .glass && !tintsGlass(colour) && barBlur(look) != .off
         let tint = background == .glass && !untinted ? Contrast.rgb(ground(colour, style: style)) : nil, share = Double(tintAlpha(look)) / 100
         // A light theme's ink turns white over a dark wallpaper (BarTone.prefersWhite, Q288); a dark theme's stays white.
@@ -976,7 +973,7 @@ struct TopBarWorkspacesView: View {
             ? InstrumentBar.displays(items, here: tiler.perMonitor.first { $0.monitorName == screen }?.monitorId,
                                      shown: tiler.perMonitor, monitors: tiler.workspaceMonitors)
             : (items, nil)
-        HStack(spacing: instrument ? InstrumentBar.chipGap : !inTopBar || tokens.kind == .toybox ? 4 : 0) {
+        HStack(spacing: instrument ? InstrumentBar.chipGap : !inTopBar ? 4 : 0) {
             ForEach(Array(ordered.enumerated()), id: \.element.name) { index, item in
                 let workspace = occupied[item.name] ?? OccupiedWorkspace(name: item.name, apps: [])
                 let app = style == .withApp ? workspace.apps.first : nil
@@ -988,10 +985,6 @@ struct TopBarWorkspacesView: View {
                 let button = Button { current ? cycleLayout(item.name) : tiler.go(item.name, from: "topbar") } label: {
                     if !inTopBar {
                         boxed(name, item, app: app)
-                    } else if tokens.kind == .toybox {
-                        ToyWorkspaceChip(label: glyph == nil ? BarParts.workspaceLabel(item.name, app: app) : app, current: current,
-                                         focused: item.isFocused, workspace: style == .icons ? workspace : nil, glyph: glyph)
-                            .barTarget("Workspace \(item.name)", inset: 0)
                     } else if tokens.kind == .instrument {
                         InstrumentWorkspaceChip(label: glyph == nil ? BarParts.workspaceLabel(item.name, app: app) : app, current: current,
                                                 focused: item.isFocused, occupied: occupied[item.name] != nil,
@@ -1233,14 +1226,9 @@ struct TopBarAppMenus: View {
         }
     }
 
-    /// The bar's face (Toybox's Nunito, Instrument's Geist with the app's own menu strong); the macOS menu bar never shows
-    /// this item.
+    /// The bar's face (Instrument's Geist with the app's own menu strong); the macOS menu bar never shows this item.
     private func font(_ index: Int) -> Font {
-        switch style.kind {
-        case .instrument: style.font(index == 0 ? \.barStrong : \.caption)
-        case .toybox:
-            ToyBar.font.weight(index == 0 ? .bold : .medium)
-        }
+        style.font(index == 0 ? \.barStrong : \.caption)
     }
 }
 

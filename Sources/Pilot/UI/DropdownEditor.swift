@@ -5,7 +5,7 @@ import SwiftUI
 /// blocks in order, each with up and down arrows, a drag onto another row to move it there, a pin that keeps it above the
 /// scroll, and a switch that shows it; Reset brings the first arrangement back. Status hidden still leads while a problem
 /// waits. Under the blocks, a switch for each quick switch the Switches block can show (spec pilot-ui-redesign T20, Open
-/// question 6: what a new install hides is turned back on here). Instrument only: Toybox keeps today's menu.
+/// question 6: what a new install hides is turned back on here).
 /// The Pilot menu page (Sven, 2026-11-12, Q182: "the menubar page is now too crowded"): the menu under Pilot's icon,
 /// its blocks and its Extensions card, beside Menu bar in Desktop.
 struct PilotMenuPage: View {

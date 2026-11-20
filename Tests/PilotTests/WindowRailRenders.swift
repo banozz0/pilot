@@ -21,7 +21,7 @@ struct WindowRailRenders {
 
     @Test("The panel's tab bar fits its tabs named, and Home, Tools › Captures and More render at 780 by 560", .enabled(if: env["PILOT_RENDER_DIR"] != nil && env["CFFIXED_USER_HOME"] != nil))
     func render() throws {
-        let engine = try ToyboxBindsRenders().engine()
+        let engine = try InstrumentBindsRenders().engine()
         let dir = URL(fileURLWithPath: try #require(Self.env["PILOT_RENDER_DIR"])).appendingPathComponent("panel")
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         let look = Look.shared

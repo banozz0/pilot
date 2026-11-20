@@ -1211,26 +1211,6 @@ final class ThemeCoordinator {
         }
     }
 
-    /// Private recording host drives the exact native compatible-style memory, never Look.shared/settings/desktop.
-    func fixtureStyle(_ next: String) throws -> JSONValue {
-        guard let fixtureRoot, let native, !busy, PilotStyle(rawValue: next) != nil else { throw ThemeFailure("explicit native fixture/style required") }
-        let file = try state("style-choices")
-        var memory = try file.bytes.map { try JSONDecoder().decode(ThemeStyleMemory.self, from: $0) } ?? .init()
-        let current = try native.read()
-        let chosen = try memory.select(from: style(), to: next, current: current.palette)
-        let control = try ThemeFiles.read(root: fixtureRoot, path: "control.json")
-        guard let bytes = control.bytes else { throw ThemeFailure("missing fixture controls") }
-        var values = try JSONDecoder().decode([String: String].self, from: bytes); values["style"] = next
-        _ = try ThemeFiles.write(ThemeDigest.encoded(values), over: control)
-        var next = current; next.palette = chosen
-        try native.write(next)
-        _ = try ThemeFiles.write(ThemeDigest.encoded(memory), over: file)
-        return try describeStyle(chosen)
-    }
-    private func describeStyle(_ chosen: ThemeNativePalette) throws -> JSONValue {
-        try JSONDecoder().decode(JSONValue.self, from: ThemeDigest.encoded(chosen))
-    }
-
     /// Exercises the native picker's actual resolver and segment selection without constructing a view or live Look.
     func fixtureColour(_ raw: String) throws -> JSONValue {
         guard fixtureRoot != nil, wallpaper != nil, let choice = ColourChoice(rawValue: raw) else { throw ThemeFailure("explicit recording fixture colour required") }

@@ -9,7 +9,7 @@ import SwiftUI
 extension MenuModel {
     /// The open branch's chips in Line's line, Emoji's and Translate's, with the grid and the panes under them; none in a
     /// picker, another layout (which lists their rows as before) or anywhere else.
-    var hasLineChips: Bool { layout == .line && !nav.isList && (nav.branch == .emoji || nav.branch == .translate) }
+    var hasLineChips: Bool { !nav.isList && (nav.branch == .emoji || nav.branch == .translate) }
 
     /// The search's words where a branch says what to type.
     var branchPrompt: String? {

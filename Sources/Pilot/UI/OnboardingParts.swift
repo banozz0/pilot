@@ -1,9 +1,9 @@
 import PilotCore
 import SwiftUI
 
-// Onboarding 1.1's parts both looks draw (T54, variant C): the step rail, Set up's fork, Pick by hand's list, the run's
+// Onboarding 1.1's parts (T54, variant C): the step rail, Set up's fork, Pick by hand's list, the run's
 // groups with their Undo, and Try it's optional panel. Every colour, face, button and switch comes from the style, so
-// Toybox and Instrument each draw them in their own look.
+// Instrument draws them in its own look.
 
 /// The step rail over every screen: numbered nodes joined by a line that fills as each step finishes. A done node shows
 /// a tick, the current one the accent, the rest stay hairline.

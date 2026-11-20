@@ -41,7 +41,7 @@ struct BarTrayRenders {
         defer { (look.style, look.themeID, look.glass, store.background, store.colour) = saved }
         (look.themeID, look.glass, store.background) = ("tokyo-night", false, .solid)
 
-        // The page in Instrument at 1000 and 760; the strip mid-drag in both styles.
+        // The page in Instrument at 1000 and 760; the strip mid-drag in Instrument.
         look.style = .instrument
         for width in [1000, 760] {
             for placement in BarPlacement.allCases where width == 1000 || placement == .topBar {
@@ -81,7 +81,7 @@ struct BarTrayRenders {
             .frame(width: 1000, height: 820).background(Theme.background).pilotTheme()
         _ = try ClockRenders.write(apart, size: NSSize(width: 1000, height: 820), settle: 0.8, to: dir.appendingPathComponent("page-topBar-extensions-1000.png"))
         store.settings = kept
-        for style in [PilotStyle.instrument, .toybox] {
+        for style in [PilotStyle.instrument] {
             look.style = style
             try drag(style, store: store, engine: engine, to: dir)
             try remove(style, store: store, engine: engine, to: dir)

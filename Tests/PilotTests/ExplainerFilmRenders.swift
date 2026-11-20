@@ -199,7 +199,6 @@ struct ExplainerFilmRenders {
         let day = Date(timeIntervalSince1970: 1_791_028_800)
         func line(_ nav: MenuNavigator) -> MenuModel {
             let m = MenuModel(nav: nav)
-            m.layout = .line
             m.ownKey = "Hyper+Space"
             return m
         }
@@ -642,7 +641,6 @@ struct ExplainerFilmRenders {
     /// The Line menu over `nav`, as Hyper + right-click and the pickers it opens show it.
     static func line(_ nav: MenuNavigator) -> MenuModel {
         let m = MenuModel(nav: nav)
-        m.layout = .line
         m.ownKey = "Hyper+Space"
         return m
     }
@@ -1148,7 +1146,7 @@ struct ExplainerFilmRenders {
                             .pilotTheme(look: look).padding(28), to: dir.appendingPathComponent("ring.png"))
 
         // Binds' editor on U: its kinds, then Ghostty picked, as BindEditorRenders' a1 and a3.
-        let binds = try ToyboxBindsRenders().engine()
+        let binds = try InstrumentBindsRenders().engine()
         binds.settings.overlayMode = .pick
         func finder(picked: String? = nil) -> BindFinder {
             let finder = BindFinder(query: "", scope: nil, picked: picked, ai: nil)
@@ -1333,7 +1331,7 @@ private final class FilmDefaultApps: DefaultAppsSystem {
 private struct FilmGround<Content: View>: View {
     @Environment(\.ink) private var ink
     @ViewBuilder var content: Content
-    var body: some View { content.styleLayout().background(ink.background) }
+    var body: some View { content.background(ink.background) }
 }
 }
 #endif

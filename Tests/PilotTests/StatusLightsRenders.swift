@@ -8,7 +8,7 @@ import Testing
 
 /// The Status lights item offscreen, only its dots (Q205): quiet (the Menu bar page's unlit dots; the top bar shows
 /// nothing), one lit, one waiting, privacy hot, several at once, as a slice of the top bar, and the popover over the
-/// several, in Instrument and Toybox. Opt-in like the other renders:
+/// several, in Instrument. Opt-in like the other renders:
 /// `CFFIXED_USER_HOME=/tmp/pilot-render-home PILOT_RENDER_DIR=/tmp/pilot-renders swift test --filter StatusLightsRenders`
 extension SharedLook {
 @MainActor
@@ -65,7 +65,7 @@ struct StatusLightsRenders {
         lights.push(id: "build", state: .working, title: "swift build --product Pilot", family: .job, detail: "Compiling", session: "S1:P:G")
         lights.push(id: "test", state: .error, title: "swift test --filter Binds", family: .job, detail: "exit 1", session: nil)
 
-        for (style, theme) in [(PilotStyle.instrument, "tokyo-night"), (.toybox, "toybox")] {
+        for (style, theme) in [(PilotStyle.instrument, "tokyo-night")] {
             look.style = style
             look.themeID = theme
             let canvas = Color(look.chromeTokens(.topBar).colors.canvas)

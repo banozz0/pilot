@@ -7,7 +7,7 @@ import Testing
 
 extension SharedLook {
 /// Offscreen renders of System › Mouse's pointer speed (Sven, Q440 to Q442) and the tip its cycle key raises, on a fake
-/// pointer, so nothing reads or moves the Mac's. Instrument on Nightwatch (a tip's surface is its HUD panel, which Toybox draws apart). Opt-in like the other renders:
+/// pointer, so nothing reads or moves the Mac's. Instrument on Nightwatch. Opt-in like the other renders:
 /// `CFFIXED_USER_HOME=/tmp/pilot-render-home PILOT_RENDER_DIR=/tmp/pilot-renders swift test --filter PointerSpeedRenders`
 @MainActor
 @Suite("Pointer speed renders")

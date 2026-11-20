@@ -19,7 +19,7 @@ struct InstrumentFrameRenders {
 
     @Test("Unrestyled pages render in Instrument's frame dark and light", .enabled(if: env["PILOT_RENDER_DIR"] != nil && env["CFFIXED_USER_HOME"] != nil))
     func render() throws {
-        let engine = try ToyboxBindsRenders().engine()
+        let engine = try BindEditorRenders.engine()
         let dir = URL(fileURLWithPath: try #require(Self.env["PILOT_RENDER_DIR"])).appendingPathComponent("frame")
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         let model = AppWindowModel(defaults: UserDefaults(suiteName: "pilot.renders.instrument.frame")!)

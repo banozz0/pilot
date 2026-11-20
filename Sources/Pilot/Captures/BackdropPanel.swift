@@ -6,7 +6,7 @@ import SwiftUI
 // The backdrop panel (P70, after Snapzy's background sidebar, BSD-3): the capture editor's left-hand column, a view of
 // its own that takes a backdrop and hands changes back, so the video editor (P71) mounts the same panel over its own
 // model. Instrument's language: eyebrow capitals over hairline-ruled groups, square tiles on a hairline ring, the picked
-// one ringed in the text colour (the signal keeps its one meaning), mono numbers, no shadows; Toybox's ink outlines.
+// one ringed in the text colour (the signal keeps its one meaning), mono numbers, no shadows.
 
 /// What the panel offers beside the backdrop itself: the saved presets (a capture's backdrops, a video's whole looks),
 /// the wallpapers of Look › Wallpaper with small pictures of them, and whether the panel shows. Pictures are read small (96 pixels) off the main thread while an editor
@@ -276,7 +276,7 @@ struct BackdropPanel: View {
                 .menuStyle(.button).buttonStyle(.plain).menuIndicator(.hidden)
                 .help("Apply a saved look (backdrop, shape, motion blur, pointer) or backdrop, save this look, or open videos in it")
                 Button { library.saveVideoPreset(video.look) } label: {
-                    Image(systemName: "plus").font(.system(size: 11, weight: style.kind == .toybox ? .bold : .medium)).foregroundStyle(style.color(\.text2))
+                    Image(systemName: "plus").font(.system(size: 11, weight: .medium)).foregroundStyle(style.color(\.text2))
                         .frame(width: 26).panelChipFace(style)
                 }
                 .buttonStyle(.plain).help("Save this look: backdrop, shape, motion blur and pointer").accessibilityLabel("Save this look")
@@ -339,7 +339,7 @@ struct BackdropPanel: View {
                     .contextMenu { lookActions(look, every: every, saved: saved) }
                 }
                 lookTile("Save", lit: false, help: "Save this backdrop as a look") {
-                    Image(systemName: "plus").font(.system(size: 12, weight: style.kind == .toybox ? .bold : .medium)).foregroundStyle(style.color(\.text2))
+                    Image(systemName: "plus").font(.system(size: 12, weight: .medium)).foregroundStyle(style.color(\.text2))
                 } run: { library.savePreset(base) }
                 .disabled(backdrop == nil).opacity(backdrop == nil ? 0.4 : 1)
             }
@@ -593,7 +593,7 @@ struct BackdropPanel: View {
     /// A small glyph toggle beside an eyebrow: Ratio's wide and tall, Add a capture's beside and under.
     private func iconToggle(symbol: String, lit: Bool, help: String, label: String, run: @escaping () -> Void) -> some View {
         Button(action: run) {
-            Image(systemName: symbol).font(.system(size: 10, weight: style.kind == .toybox ? .bold : .regular))
+            Image(systemName: symbol).font(.system(size: 10, weight: .regular))
                 .foregroundStyle(style.color(lit ? \.text : \.text3)).frame(width: 22, height: 18)
                 .background { if lit { RoundedRectangle(cornerRadius: style.radii.chip, style: .continuous).fill(style.color(\.raised)) } }
                 .overlay { if lit { RoundedRectangle(cornerRadius: style.radii.chip, style: .continuous).strokeBorder(style.color(\.line2)) } }
@@ -695,7 +695,7 @@ struct PanelTile<Content: View>: View {
     @ViewBuilder let content: () -> Content
 
     var body: some View {
-        let toy = style.kind == .toybox, r: CGFloat = toy ? 7 : 5
+        let r: CGFloat = 5
         let shape = RoundedRectangle(cornerRadius: r, style: .continuous)
         Group {
             if let height { Color.clear.frame(maxWidth: .infinity).frame(height: height) }
@@ -704,9 +704,9 @@ struct PanelTile<Content: View>: View {
             .overlay { content() }
             .background(style.color(\.raised))
             .clipShape(shape)
-            .overlay { shape.strokeBorder(toy ? style.color(\.outline) : Color(hex: style.dark ? 0xFFFFFF : 0x000000, opacity: 0.12), lineWidth: toy ? 2 : 1) }
+            .overlay { shape.strokeBorder(Color(hex: style.dark ? 0xFFFFFF : 0x000000, opacity: 0.12), lineWidth: 1) }
             .padding(2)
-            .overlay { if lit { RoundedRectangle(cornerRadius: r + 2, style: .continuous).strokeBorder(style.color(\.text), lineWidth: toy ? 2.5 : 1.5) } }
+            .overlay { if lit { RoundedRectangle(cornerRadius: r + 2, style: .continuous).strokeBorder(style.color(\.text), lineWidth: 1.5) } }
             .contentShape(.rect)
     }
 }
@@ -723,7 +723,7 @@ struct PanelChip: View {
     var body: some View {
         Button(action: run) {
             Text(title)
-                .font(mono ? Font(DisplayFaces.font(style.kind == .toybox ? StyleTokens.jetBrainsMono(600) : StyleTokens.geistMono(500), size: 10.5)) : nil)
+                .font(mono ? Font(DisplayFaces.font(StyleTokens.geistMono(500), size: 10.5)) : nil)
                 .styleText(\.small)
                 .foregroundStyle(style.color(lit ? \.text : \.text2)).lineLimit(1).fixedSize()
                 .padding(.horizontal, full ? 0 : 10).frame(maxWidth: full ? .infinity : nil)
@@ -735,14 +735,13 @@ struct PanelChip: View {
 }
 
 extension View {
-    /// The panel's chip face: 24 high on the raised fill in a hairline (Toybox's ink outline); lit, ringed in the text
+    /// The panel's chip face: 24 high on the raised fill in a hairline; lit, ringed in the text
     /// colour, as a picked tile is.
     func panelChipFace(_ style: StyleTokens, lit: Bool = false) -> some View {
-        let toy = style.kind == .toybox
         let shape = RoundedRectangle(cornerRadius: style.radii.control, style: .continuous)
-        return frame(height: toy ? 28 : 24)
+        return frame(height: 24)
             .background { shape.fill(style.color(\.raised)) }
-            .overlay { shape.strokeBorder(lit ? style.color(\.text) : style.color(toy ? \.outline : \.line2), lineWidth: lit ? 1.5 : (toy ? 2 : 1)) }
+            .overlay { shape.strokeBorder(lit ? style.color(\.text) : style.color(\.line2), lineWidth: lit ? 1.5 : 1) }
     }
 }
 
@@ -758,19 +757,17 @@ struct PanelSlider: View {
     let set: (CGFloat, _ done: Bool) -> Void
 
     var body: some View {
-        let toy = style.kind == .toybox
         HStack(spacing: 10) {
             Text(label).styleText(\.small).foregroundStyle(style.color(\.text2)).frame(width: 52, alignment: .leading).lineLimit(1)
             GeometryReader { geo in
-                let width = geo.size.width, knob: CGFloat = toy ? 16 : 12
+                let width = geo.size.width, knob: CGFloat = 12
                 let fraction = (min(range.upperBound, max(range.lowerBound, value)) - range.lowerBound) / (range.upperBound - range.lowerBound)
                 ZStack(alignment: .leading) {
-                    Capsule().fill(style.color(toy ? \.sunken : \.line2)).frame(height: toy ? 8 : 4)
-                        .overlay { if toy { Capsule().strokeBorder(style.color(\.outline), lineWidth: 2) } }
-                    Capsule().fill(style.color(toy ? \.accent : \.text2)).frame(width: (width - knob) * fraction + knob / 2, height: toy ? 8 : 4)
+                    Capsule().fill(style.color(\.line2)).frame(height: 4)
+                    Capsule().fill(style.color(\.text2)).frame(width: (width - knob) * fraction + knob / 2, height: 4)
                     Circle().fill(style.color(\.knob))
-                        .overlay { Circle().strokeBorder(style.color(toy ? \.outline : \.line2), lineWidth: toy ? 2 : 1) }
-                        .shadow(color: .black.opacity(toy ? 0 : 0.25), radius: 1, y: 0.5)
+                        .overlay { Circle().strokeBorder(style.color(\.line2), lineWidth: 1) }
+                        .shadow(color: .black.opacity(0.25), radius: 1, y: 0.5)
                         .frame(width: knob, height: knob)
                         .offset(x: (width - knob) * fraction)
                 }
@@ -782,7 +779,7 @@ struct PanelSlider: View {
             }
             .frame(height: 20)
             Text(verbatim: "\(Int(value.rounded()))")
-                .font(Font(DisplayFaces.font(toy ? StyleTokens.jetBrainsMono(600) : StyleTokens.geistMono(500), size: 11)))
+                .font(Font(DisplayFaces.font(StyleTokens.geistMono(500), size: 11)))
                 .monospacedDigit().foregroundStyle(style.color(\.text)).frame(width: 26, alignment: .trailing)
         }
         .accessibilityElement()

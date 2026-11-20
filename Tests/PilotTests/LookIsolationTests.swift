@@ -4,7 +4,7 @@ import Testing
 @testable import Pilot
 
 /// Card agent-bo-95423261: tests set the Style and layout on Look.shared and on Looks built without a store, which saved
-/// them into the test runner's shared defaults (look.style left as Toybox, the layout as Calm), and the next run's
+/// them into the test runner's shared defaults (look.style left as another style, the layout as Calm), and the next run's
 /// menu-scroll tests read them back and failed. A Look in a test run saves to a throwaway suite instead.
 @MainActor
 @Suite("Look isolation")
@@ -16,7 +16,6 @@ struct LookIsolationTests {
         let shared = UserDefaults.standard
         let before = Self.keys.map { shared.object(forKey: $0) as? NSObject }
         let look = Look(inputSources: SetupKeepAwakeTests.FakeSources())
-        look.style = look.style == .toybox ? .instrument : .toybox
         look.glass.toggle()
         let after = Self.keys.map { shared.object(forKey: $0) as? NSObject }
         // Only a leak is undone, so a red run doesn't leave the runner's defaults changed either.

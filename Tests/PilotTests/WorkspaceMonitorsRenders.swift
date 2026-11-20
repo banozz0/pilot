@@ -6,7 +6,7 @@ import SwiftUI
 import Testing
 @testable import Pilot
 
-/// The Monitor picks on Workspaces (N7; on Tiling until Sven's Q207 page map), opt-in like the other renders: the tab in Instrument and Toybox under
+/// The Monitor picks on Workspaces (N7; on Tiling until Sven's Q207 page map), opt-in like the other renders: the tab in Instrument under
 /// Tokyo Night, with Sven's three displays: 1 and 2 on Main, 3 and 4 on the LG, which is
 /// drawn once plugged in and once unplugged (its picks then say "unplugged"), 5 to 9 on Any. Nothing reaches an engine.
 /// `CFFIXED_USER_HOME=<fresh dir> PILOT_RENDER_DIR=<fresh dir> swift test --filter WorkspaceMonitorsRenders`
@@ -57,7 +57,7 @@ struct WorkspaceMonitorsRenders {
 struct MonitorsGround<Content: View>: View {
     @Environment(\.ink) private var ink
     @ViewBuilder var content: Content
-    var body: some View { content.styleLayout().background(ink.background) }
+    var body: some View { content.background(ink.background) }
 }
 }
 #endif

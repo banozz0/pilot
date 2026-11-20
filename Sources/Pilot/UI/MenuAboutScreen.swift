@@ -116,15 +116,11 @@ struct MenuAboutScreen: View {
     }
 }
 
-/// A card's surface in the style the menu draws: Instrument's raised ring; Toybox's card.
+/// A card's surface in the style the menu draws: Instrument's raised ring.
 struct MenuStatsCardFace: ViewModifier {
     @Environment(\.style) private var style
 
     func body(content: Content) -> some View {
-        if style.kind == .toybox {
-            content.styleSurface(\.card, fill: \.panel, shadows: false)
-        } else {
-            content.instrumentRaised(true, radius: 10)
-        }
+        content.instrumentRaised(true, radius: 10)
     }
 }

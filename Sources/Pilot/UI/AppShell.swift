@@ -35,18 +35,13 @@ struct AppWindowView: View {
     }
 }
 
-/// The picked style's frame around the page: Instrument's is the panel's tab bar and page list (pilot-ui-redesign T3);
-/// Toybox keeps its rail until the feature trim takes the style away.
+/// The frame around the page: the panel's tab bar and page list (pilot-ui-redesign T3).
 private struct WindowLayout: View {
-    @Environment(\.style) private var style
     @Bindable var model: AppWindowModel
     let more: PanelMore
 
     var body: some View {
-        switch style.kind {
-        case .toybox: ToyFrame(model: model) { PageView(model: model) }
-        case .instrument: InstrumentFrame(model: model, more: more)
-        }
+        InstrumentFrame(model: model, more: more)
     }
 }
 
@@ -78,7 +73,7 @@ struct PageView: View {
     @Bindable var model: AppWindowModel
 
     var body: some View {
-        page.styleLayout().styled(.page(model.page))
+        page.styled(.page(model.page))
             // A block a link or the search asked for, on More (simplify-pages T7) or a front (Sven, 2026-11-11, after 2276):
             // KitMore or KitLanding lands there, then clears it.
             .environment(\.blockLanding, BlockLanding(place: model.blockFocus) { model.blockFocus = nil })
@@ -127,7 +122,7 @@ struct PageView: View {
         case .dock: DockPage(more: section == .dockMore)
         case .pilotMenu: PilotMenuPage()
         case .look where section == .themeCatalogue: ThemeCataloguePage()
-        case .look: LookPage(more: section == .lookMore, section: section == .wallpaper ? section : nil, focus: model.wallpaperFocus) { model.sections[.look] = nil }
+        case .look: LookPage(section: section == .wallpaper ? section : nil, focus: model.wallpaperFocus) { model.sections[.look] = nil }
         case .widgets: WidgetsPage()
         case .system: SetupPage(onScreen: model.onScreen, section: $model.setupSection)
         // Reports is on Update & Clean's More since the feature trim (2026-11-19): Open report goes there.

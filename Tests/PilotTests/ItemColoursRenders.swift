@@ -10,7 +10,7 @@ extension SharedLook {
 /// Item colours (Sven, Q251): CPU at 100 % red, memory at 75 % amber, the disk calm, the battery at 8 % red, Pilot's
 /// clock in the theme's colour, Claude's glyph orange and a coloured app's item in its own colour beside a grey one; each
 /// row switch on, then off, on Solid, Glass (a stand-in wallpaper under the glass's tint; Liquid Glass draws nothing
-/// offscreen) and Clear, in Instrument and Toybox. Opt-in like the other renders, in a moved home:
+/// offscreen) and Clear, in Instrument. Opt-in like the other renders, in a moved home:
 /// `CFFIXED_USER_HOME=/tmp/pilot-render-home-colours PILOT_RENDER_DIR=/tmp/pilot-renders-colours swift test --filter ItemColoursRenders`
 @MainActor
 @Suite("Item colours renders")
@@ -51,7 +51,7 @@ struct ItemColoursRenders {
         testApp()
         let theme = try #require(PilotTheme.named("void"))
         let pictures = Self.pictures()
-        for kind in [PilotStyle.instrument, .toybox] {
+        for kind in [PilotStyle.instrument] {
             let style = StyleTokens.of(kind, theme: theme)
             let rows = VStack(alignment: .leading, spacing: 10) {
                 ForEach(TopBarBackground.allCases, id: \.self) { background in

@@ -145,7 +145,7 @@ private struct MoreBlockTag: ViewModifier {
 }
 
 /// The index: "On More", then each block's name and control count, the one in view marked as the style marks a pick:
-/// Instrument's glyph and raised surface, Toybox's selected-tab fill and no glyphs. 184 pt wide, level with the blocks.
+/// Instrument's glyph and raised surface. 184 pt wide, level with the blocks.
 private struct MoreIndex: View {
     @Environment(\.style) private var style
     @Environment(\.ink) private var ink
@@ -154,25 +154,21 @@ private struct MoreIndex: View {
     let pick: (AppSection) -> Void
 
     var body: some View {
-        let toy = style.kind == .toybox
-        VStack(alignment: .leading, spacing: toy ? 4 : 2) {
+        VStack(alignment: .leading, spacing: 2) {
             Text("On More").styleText(\.caption).foregroundStyle(style.color(\.text3)).padding(.horizontal, 10).padding(.bottom, 6)
             ForEach(entries) { entry in
                 let on = entry.id == picked
                 Button { pick(entry.id) } label: {
                     HStack(spacing: 8) {
-                        if !toy { Image(systemName: entry.symbol).font(style.font(\.icon)).frame(width: 18) }
-                        Text(entry.title).font(toy ? style.toyNunito(800, 13.5) : nil).styleText(on ? \.strong : \.body).lineLimit(1)
+                        Image(systemName: entry.symbol).font(style.font(\.icon)).frame(width: 18)
+                        Text(entry.title).styleText(on ? \.strong : \.body).lineLimit(1)
                         Spacer(minLength: 4)
-                        Text("\(entry.controls)").font(ink.mono(11)).foregroundStyle(on && toy ? style.color(\.onInverse) : style.color(\.text3))
+                        Text("\(entry.controls)").font(ink.mono(11)).foregroundStyle(style.color(\.text3))
                     }
-                    .foregroundStyle(on ? (toy ? style.color(\.onInverse) : style.color(\.text)) : style.color(\.text2))
-                    .padding(.horizontal, 10).frame(height: style.points(toy ? 34 : 30))
+                    .foregroundStyle(on ? style.color(\.text) : style.color(\.text2))
+                    .padding(.horizontal, 10).frame(height: style.points(30))
                     .background {
-                        if on {
-                            if toy { RoundedRectangle(cornerRadius: 9, style: .continuous).fill(style.color(\.inverse)) }
-                            else { Color.clear.instrumentRaised(true, fill: \.panel, radius: style.radii.control) }
-                        }
+                        if on { Color.clear.instrumentRaised(true, fill: \.panel, radius: style.radii.control) }
                     }
                     .contentShape(.rect)
                 }
@@ -182,8 +178,8 @@ private struct MoreIndex: View {
             }
         }
         .frame(width: 184, alignment: .leading)
-        .padding(.leading, toy ? Toy.gutter - 6 : style.density.page - 6)
-        .padding(.top, toy ? Toy.blockGap + 6 : style.density.padding + 12)
+        .padding(.leading, style.density.page - 6)
+        .padding(.top, style.density.padding + 12)
         .accessibilityElement(children: .contain).accessibilityLabel("On More")
     }
 }

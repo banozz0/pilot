@@ -164,8 +164,6 @@ def run(seam_only=False, fixes_only=False):
         for pack, preset in zip(f.packs, ['floatingStrip','threeIslands']):
             pack['barPreset'] = preset; f.save_pack(pack)
         # A theme changes the bar layout it carries; Restore default puts the person's back (Sven Q108).
-        f.call('theme','fixture-style','toybox'); assert f.geometry() == geometry
-        f.call('theme','fixture-style','instrument'); assert f.geometry() == geometry
         f.apply('a')
         assert f.geometry()['preset'] == 'floatingStrip' and f.personal() == personal
         f.apply('b'); assert f.geometry()['preset'] == 'threeIslands' and f.personal() == personal

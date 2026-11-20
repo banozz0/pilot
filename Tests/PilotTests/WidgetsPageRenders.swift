@@ -104,7 +104,7 @@ struct WidgetsPageRenders {
     /// The desktop map (Sven, 2026-11-15, Q252 B), from a store laid out like Sven's desktop on the grid, one widget on
     /// Home, one of his own and one locked: Instrument with Glass on, Dracula and Porcelain, at the page's width in the
     /// window's first size (716) and its least (688, the list folded away), Weather picked; Home's switch; then Add, which
-    /// must land on free cells clear of the rest, written to `widgets-map/add.txt`. Toybox once.
+    /// must land on free cells clear of the rest, written to `widgets-map/add.txt`.
     /// `CFFIXED_USER_HOME=<tmp> PILOT_RENDER_DIR=<tmp> PILOT_RESOURCES=Packaging swift test --filter WidgetsPageRenders/map`
     @Test("The desktop map, light and dark, at 1000 and 760, Home, and Add on free cells",
           .enabled(if: env["PILOT_RENDER_DIR"] != nil && env["CFFIXED_USER_HOME"] != nil))
@@ -172,9 +172,6 @@ struct WidgetsPageRenders {
         look.themeID = "dracula"
         let previews = try await Self.previews(model, store: store, look: look)
         try shoot("map-dark-added", width: 716, selected: added, previews: previews)
-        look.style = .toybox
-        look.themeID = "tokyo-night"
-        try shoot("map-toybox-1000", width: 716, selected: weather.id, previews: try await Self.previews(model, store: store, look: look))
     }
 
     /// Each widget's preview in the theme of the moment, with fixed data.

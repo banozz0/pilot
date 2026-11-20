@@ -202,7 +202,7 @@ struct DisplayNicknameUITests {
         #expect(DisplayConnectionVerbTests.path((await app.screenRows())[0], "label") == .string("Same"))
     }
 
-    @Test("System, wallpaper and HUD labels observe long names and reset in both styles", .pilotFocus, arguments: ["instrument", "toybox"])
+    @Test("System, wallpaper and HUD labels observe long names and reset", .pilotFocus, arguments: ["instrument"])
     func nativeSurfaces(_ style: String) throws {
         let rig = DisplayNicknameTests.Rig(defaults: .pilot())
         rig.displays.start()

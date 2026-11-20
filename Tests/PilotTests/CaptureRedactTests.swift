@@ -111,7 +111,7 @@ struct CaptureRedactTests {
         #expect(reads >= 2, "a failed read is not kept")
     }
 
-    @Test("The editor with auto-redact's covers and a Text only blur renders in Instrument and Toybox",
+    @Test("The editor with auto-redact's covers and a Text only blur renders in Instrument",
           .enabled(if: CaptureEditorRenders.env["PILOT_RENDER_DIR"] != nil && CaptureEditorRenders.env["CFFIXED_USER_HOME"] != nil))
     func render() async throws {
         let home = try #require(CaptureEditorRenders.env["CFFIXED_USER_HOME"])
@@ -128,7 +128,7 @@ struct CaptureRedactTests {
         try FileManager.default.createDirectory(at: out, withIntermediateDirectories: true)
 
         let capture = try #require(CaptureFixture.image())
-        for pass in [CaptureEditorRenders.passes[0], CaptureEditorRenders.passes[3]] {
+        for pass in [CaptureEditorRenders.passes[0]] {
             look.style = pass.style
             look.themeID = pass.theme
             let tokens = StyleTokens.of(look.style, theme: look.theme)

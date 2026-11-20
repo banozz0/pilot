@@ -281,7 +281,7 @@ struct SetupPage: View {
                     .toggleStyle(.pilotSwitch)
             }
             BlockRow {
-                // Beside its label, or under it in a narrow column (Toybox's chunkier segments, simplify-pages T17).
+                // Beside its label, or under it in a narrow column (simplify-pages T17).
                 let label = HStack(spacing: 6) { Text("For"); InfoMark(text: "How long Keep awake stays on before the Mac may sleep again.") }
                 let pick = Segments(selection: Binding(get: { awake.length }, set: { awake.select($0) }),
                                     options: KeepAwake.Length.allCases.map { ($0, $0.title) }, label: "Keep awake for")

@@ -24,7 +24,7 @@ public struct ThemePack: Codable, Equatable, Sendable {
         self.variants = variants; self.styles = styles; self.wallpapers = wallpapers; self.adapters = adapters
     }
     public func compatible(with style: String) -> Bool {
-        (styles.isEmpty || styles.contains(style)) && (!["toybox", "toybox-night"].contains(id) || style == "toybox")
+        styles.isEmpty || styles.contains(style)
     }
 
     public static func decode(_ bytes: Data) throws -> Self {

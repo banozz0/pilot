@@ -138,8 +138,7 @@ struct LookRenders {
 
     /// Defocus's Blur and Dim rows (Sven, 2026-10-16), on Tiling's Focused window block since the page map (Sven
     /// 2026-10-17) and on Tiling's More since pilot-ui-redesign T16: as they come, dim only, and both off, where the hint says there is nothing to do; then Reduce
-    /// transparency on, where the badge and Defocus each say so on a line of their own; at the window's least width, in
-    /// each style.
+    /// transparency on, where the badge and Defocus each say so on a line of their own; at the window's least width.
     @Test("Tiling's Focused window block renders its Defocus rows and badge", .enabled(if: env["PILOT_RENDER_DIR"] != nil && env["CFFIXED_USER_HOME"] != nil))
     func renderDefocus() throws {
         let (look, dir) = try Self.setUp()
@@ -160,9 +159,6 @@ struct LookRenders {
         look.setAccessibility(reduceTransparency: true, increaseContrast: false)
         try shot("reduce-transparency")
         look.setAccessibility(reduceTransparency: false, increaseContrast: false)
-        look.style = .toybox
-        try shot("toybox")
-        look.style = .instrument
         Self.resetShared()
     }
 
@@ -179,54 +175,10 @@ struct LookRenders {
         Self.resetShared()
     }
 
-    /// The style picker (story 137, card agent-bo-95423180) at the top of the page: each style picked, in a dark theme and a
-    /// light one (dark or light is the theme's).
-    @Test("The Look page's style picker renders in every style", .enabled(if: env["PILOT_RENDER_DIR"] != nil && env["CFFIXED_USER_HOME"] != nil))
-    func renderStyles() throws {
-        let (look, dir) = try Self.setUp()
-        for id in ["tokyo-night", "folio"] {
-            look.themeID = id
-            for style in PilotStyle.allCases {
-                look.style = style
-                try Self.shot(look, more: true, to: dir.appendingPathComponent("look-style-\(style.rawValue)-\(id).png"), width: 1000, height: 420)
-            }
-        }
-        look.style = .instrument
-        Self.resetShared()
-    }
-
-    /// The style picker at every width the page gets (Instrument's sidebar in the 780 pt panel; Toybox's rail at 682),
-    /// each style picked: Vision reads every card's name and both keys whole, none broken mid-word as a
-    /// page 552 wide once broke Instrum/ent and Spac/e. With PILOT_RENDER_OCR=1 too, as Vision stalls on a loaded Mac.
-    @Test("The Look page's style picker shows every word whole at every page width", .enabled(if: env["PILOT_RENDER_DIR"] != nil && env["CFFIXED_USER_HOME"] != nil && env["PILOT_RENDER_OCR"] != nil))
-    func styleWords() throws {
-        let (look, dir) = try Self.setUp()
-        look.themeID = "tokyo-night"
-        Self.mirror(look, spot: nil)
-        for style in PilotStyle.allCases {
-            look.style = style
-            for width in [Self.page(AppWindowController.size.width), 682] {
-                let name = "look-style-words-\(style.rawValue)-\(Int(width))"
-                let rep = try rendered(LookPage(look: look, more: true).styled(.page(.look), look: look).frame(width: width, height: 480, alignment: .top)
-                                        .pilotTheme(look: look).background(Theme.background), wait: 0.8)
-                try #require(rep.representation(using: .png, properties: [:])).write(to: dir.appendingPathComponent("\(name).png"))
-                let read = try recognisedText(in: rep).map(\.text).joined(separator: " ").lowercased()
-                let tokens = read.split { !$0.isLetter }.map(String.init)
-                let words = PilotStyle.allCases.map { $0.title.lowercased() } + ["hyper", "space"]
-                // A word broken over two lines reads as its stub ("instrum", "spac"); a missing one, not at all.
-                let stubs = tokens.filter { token in token.count >= 3 && words.contains { $0.count > token.count && $0.hasPrefix(token) } }
-                let missing = words.filter { !tokens.contains($0) }
-                #expect(stubs.isEmpty && missing.isEmpty, "\(name): broken \(stubs), missing \(missing) in \(read)")
-            }
-        }
-        look.style = .instrument
-        Self.resetShared()
-    }
-
     /// Look in the whole window at its first size, 1000 by 660 (simplify-pages T20, T28): the front, Glass off and on over
-    /// Tokyo Night's wallpaper, and More, in Instrument and Toybox, a dark theme and a light one. The shared look in a moved home,
+    /// Tokyo Night's wallpaper, in Instrument, a dark theme and a light one (Look has no More since the feature trim). The shared look in a moved home,
     /// so Theme draws its packs' section; nothing reaches Ghostty or the apps.
-    @Test("Look's front and More at 1000 by 660", .enabled(if: env["PILOT_RENDER_DIR"] != nil && env["CFFIXED_USER_HOME"] != nil))
+    @Test("Look's front at 1000 by 660", .enabled(if: env["PILOT_RENDER_DIR"] != nil && env["CFFIXED_USER_HOME"] != nil))
     func renderWindow() throws {
         let (_, dir) = try Self.setUp()
         let engine = try SharedLook.HomeRenders.engine()
@@ -247,7 +199,7 @@ struct LookRenders {
             frame.layoutSubtreeIfNeeded()
             try #require(snapshot(frame, scale: 2)?.representation(using: .png, properties: [:])).write(to: dir.appendingPathComponent("\(name).png"))
         }
-        for (style, themes) in [(PilotStyle.instrument, ["tokyo-night", "porcelain"]), (.toybox, ["toybox-night", "toybox"])] {
+        for (style, themes) in [(PilotStyle.instrument, ["tokyo-night", "porcelain"])] {
             for theme in themes {
                 look.style = style; look.themeID = theme
                 AppWindowController.applyLook(look, to: window)
@@ -255,7 +207,6 @@ struct LookRenders {
                 let name = "window-\(Int(AppWindowController.size.height))-\(style.rawValue)-\(theme)"
                 look.glass = false
                 try shot(AppPlace(.look), "\(name)-front")
-                try shot(AppPlace(.lookMore), "\(name)-more")
                 // The whole front, past the window's foot: the preview follows Glass (T28).
                 for glass in [false, true] {
                     look.glass = glass
@@ -269,7 +220,7 @@ struct LookRenders {
     }
 
     /// Look's preview, the desk in the theme (round 3 note 3, Sven's pick A of the look-preview-design round and its
-    /// tweak): the whole window at 1000 by 660 in Tokyo Night and in Toybox's night, then the preview alone at the size that
+    /// tweak): the whole window at 1000 by 660 in Tokyo Night, then the preview alone at the size that
     /// window gives it (354 by 257, measured in the round) in four of the line-up of 18's new packs, and once at 978 by 344
     /// (Sven's wider window on build 2300). Each pack's own manifest and wide wallpaper.
     /// `CFFIXED_USER_HOME=<tmp> PILOT_RENDER_DIR=<tmp> swift test --filter "LookRenders/renderPreview"`
@@ -298,8 +249,8 @@ struct LookRenders {
             .environment(\.lookPreviewStill, tokyo)))
         defer { window.close() }
         let frame = try #require(window.contentView?.superview)
-        for (style, id) in [(PilotStyle.instrument, "tokyo-night"), (.toybox, "toybox-night")] {
-            if style == .instrument { try wear(shared, id, dark: true) } else { shared.packChanged(nil); shared.style = style; shared.themeID = id }
+        for id in ["tokyo-night"] {
+            try wear(shared, id, dark: true)
             shared.glass = false
             AppWindowController.applyLook(shared, to: window)
             window.setContentSize(AppWindowController.size)
@@ -347,9 +298,9 @@ struct LookRenders {
     }
 
     /// The page for `look`, `width` wide, written to `url`.
-    static func shot(_ look: Look, spot: [Double]? = nil, more: Bool = false, to url: URL, width: CGFloat, height: CGFloat) throws {
+    static func shot(_ look: Look, spot: [Double]? = nil, to url: URL, width: CGFloat, height: CGFloat) throws {
         mirror(look, spot: spot)
-        try writeRender(LookPage(look: look, more: more).styled(.page(.look), look: look).frame(width: width, height: height, alignment: .top)
+        try writeRender(LookPage(look: look).styled(.page(.look), look: look).frame(width: width, height: height, alignment: .top)
                             .pilotTheme(look: look).background(Theme.background),
                         to: url, wait: 0.8)
     }

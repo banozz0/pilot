@@ -7,7 +7,7 @@ import Testing
 @testable import Pilot
 
 /// The HUDs (tip, window rescue, an extension's alert) and the notes panel in Instrument (card
-/// agent-bo-95423181, ADR 0008): each draws Instrument, not Toybox's pixels, dark and light; through HUD.makePanel each is
+/// agent-bo-95423181, ADR 0008): each draws Instrument, dark and light; through HUD.makePanel each is
 /// opaque on the style's pop face, its own shadow in margins round it. The tip refits and the notes panel keeps its size and place round the face, not the window.
 extension SharedLook {
 @MainActor
@@ -68,7 +68,7 @@ struct InstrumentPanelsTests {
         Case(name: "overlay", surface: .overlay) { AnyView(OverlayView(title: "Hyper", rows: overlayRows)) },
     ]
 
-    @Test("Onboarding draws Instrument, not Toybox's pixels, dark and light",
+    @Test("Onboarding draws Instrument, dark and light",
           arguments: [OnboardingModel.Step.welcome, .tryIt])
     func onboarding(_ step: OnboardingModel.Step) throws {
         let (look, _) = LookPageTests().look()
@@ -79,11 +79,8 @@ struct InstrumentPanelsTests {
             model.step = step
             return try StyleTests().pixels(OnboardingView(model: model, look: look).environment(engine), look: look)
         }
-        look.style = .toybox
-        let toybox = try draw()
         look.style = .instrument
         let dark = try draw()
-        #expect(dark != toybox, "\(step): Instrument drew Toybox's")
         // Instrument is dark or light as its theme is: Paper's draws light.
         look.themeID = "porcelain"
         #expect(try draw() != dark, "\(step): Instrument light drew dark")
@@ -128,24 +125,21 @@ struct InstrumentPanelsTests {
         },
     ]
 
-    @Test("Each panel draws Instrument, not Toybox's pixels, dark and light", arguments: cases)
+    @Test("Each panel draws Instrument, dark and light", arguments: cases)
     func drawn(_ c: Case) throws { try check(c) }
 
-    @Test("The top bar's parts, tooltip, popovers and dropdown, and Binds' bind editor, draw Instrument, not Toybox's pixels, dark and light",
+    @Test("The top bar's parts, tooltip, popovers and dropdown, and Binds' bind editor, draw Instrument, dark and light",
           arguments: barCases)
     func bar(_ c: Case) throws { try check(c) }
 
-    /// `c` drawn Instrument dark (not Toybox's) and light (not dark).
+    /// `c` drawn Instrument dark, then light (not dark).
     func check(_ c: Case) throws {
         let (look, _) = LookPageTests().look()
         DisplayFaces.directory = LookThemeTests.fonts
         let style = StyleTests()
         func draw() throws -> Data { try style.pixels(c.view().styled(c.surface, look: look), look: look) }
-        look.style = .toybox
-        let toybox = try draw()
         look.style = .instrument
         let dark = try draw()
-        #expect(dark != toybox, "\(c.name): Instrument drew Toybox's")
         // Instrument is dark or light as its theme is: Paper's draws light.
         look.themeID = "porcelain"
         #expect(try draw() != dark, "\(c.name): Instrument light drew dark")

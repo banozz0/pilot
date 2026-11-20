@@ -108,31 +108,6 @@ struct KitTests {
             #expect(explained, "\(sample.title) fills \(colour) (\(n) of \(total)), no role of \(id)'s")
         }
     }
-
-    @Test("A chip says its colour: green and red chips differ, a plain one is neither")
-    func chipColours() async throws {
-        Look.shared.preview(PilotTheme.defaultID)
-        // Toybox's chips carry a colour; Instrument's have none (one signal colour).
-        let toybox = StyleTokens.of(.toybox, theme: Look.shared.theme)
-        let draw = { (chip: Chip) in Self.pixels(try #require(try await snapshot(rendering: chip.padding(4).style(toybox)))) }
-        let green = try await draw(Chip(text: "running", color: Theme.green)), red = try await draw(Chip(text: "running", color: Theme.red))
-        let plain = try await draw(Chip(text: "running"))
-        #expect(Self.differ(green, red) && Self.differ(green, plain) && Self.differ(red, plain))
-    }
-
-    @Test("The nine focus borders draw nine ways in Toybox (Instrument's focus is its ring alone)")
-    func focusBorders() async throws {
-        var drawn: [[UInt32]] = []
-        let toybox = StyleTokens.of(.toybox, theme: Look.shared.theme)
-        for border in FocusBorder.allCases {
-            let view = RoundedRectangle(cornerRadius: 8).fill(Color(hex: 0x1F2335)).frame(width: 120, height: 60)
-                .focusBorder(border, on: true, radius: 8).padding(12).background(Color(hex: 0x1A1B26)).style(toybox)
-            drawn.append(Self.pixels(try #require(try await snapshot(rendering: view))))
-        }
-        for i in drawn.indices { for j in drawn.indices where j > i {
-            #expect(Self.differ(drawn[i], drawn[j]), "\(FocusBorder.allCases[i]) and \(FocusBorder.allCases[j]) look the same")
-        } }
-    }
 }
 }
 #endif
