@@ -279,6 +279,8 @@ final class WidgetDesk: ScreenPausing {
     func placementChanged(_ id: String) {
         placements = store.placements()
         restart(id)
+        // Its last data was for its old settings (another city): its page waits for its feed instead.
+        lastData[id] = nil
         resync()
     }
 
