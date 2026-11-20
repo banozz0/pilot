@@ -323,7 +323,10 @@ enum Installer {
         guard (names + [real]).allSatisfy({ $0.wholeMatch(of: npmName) != nil && $0.count <= 214 }),
               version.wholeMatch(of: #/[0-9A-Za-z.+-]+/#) != nil, version.count <= 64 else { throw Refused("\(cut(key)) is not an npm package name and version") }
         let expected = registry + real + "/-/" + (real.split(separator: "/").last.map(String.init) ?? real) + "-" + version + ".tgz"
-        guard let resolved = entry["resolved"] as? String, resolved == expected else {
+        // An entry with no `resolved` (an older npm left it out: Pomodoro's node-fetch, T28) is fetched from the registry by
+        // its name and version; its sha512 below still decides, so one with neither is refused.
+        let resolved = entry["resolved"] as? String ?? expected
+        guard resolved == expected else {
             throw Refused("\(cut(key)) does not come from its own place on \(registry) (\(cut(entry["resolved"] as? String ?? "no resolved URL")))")
         }
         guard let integrity = entry["integrity"] as? String, sha512(integrity) != nil else {
