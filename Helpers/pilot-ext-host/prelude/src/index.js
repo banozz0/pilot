@@ -17,6 +17,7 @@ import { modules as node } from "./node.js";
 import { gapsAt, record } from "./gaps.js";
 import { modules as more } from "./buffer.js";
 import { sqlite } from "./sqlite.js";
+import { consentClosed, consentFor } from "./automation.js";
 
 const native = globalThis.__native;
 let view = null;
@@ -58,6 +59,7 @@ globalThis.__pilotStart = (factory, message) => {
     message.launchType = mode === "menu-bar" && message.surface === "bar" ? "background" : "userInitiated";
     if (mode === "no-view") native.noView();
     if (message.launchType === "background") native.menuBar();
+    consentFor(message, mode);
     const module = { exports: {} };
     factory(module, module.exports, requirer(makeAPI(message, mode)));
     const command = module.exports?.default ?? module.exports;
@@ -83,6 +85,7 @@ globalThis.__pilotQuery = (text, seq) => { view ? view.search(text, seq) : fail(
 globalThis.__pilotInvoke = (handler, seq, value) => { view ? view.invoke(handler, seq, value) : fail(new Error("no view is open"), seq); };
 
 globalThis.__pilotClose = () => {
+  try { consentClosed(); } catch (error) { console.error(error); }
   try { view?.close(); } catch (error) { console.error(error); }
   view = null;
 };

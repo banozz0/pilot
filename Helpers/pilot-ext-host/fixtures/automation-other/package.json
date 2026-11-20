@@ -1,0 +1,10 @@
+{
+  "$schema": "https://www.raycast.com/schemas/extension.json",
+  "name": "automation-other",
+  "title": "Other Tool",
+  "description": "A second fixture for pilot-ext-host's AppleScript consent (T9): it runs osascript too, and is asked on its own.",
+  "author": "banozz",
+  "license": "MIT",
+  "categories": ["Developer Tools"],
+  "commands": [{ "name": "index", "title": "Notes too", "description": "At mount, execFile with -e naming Notes.", "mode": "view" }]
+}
