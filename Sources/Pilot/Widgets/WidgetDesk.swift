@@ -594,6 +594,14 @@ final class WidgetDesk: ScreenPausing {
             case .markets(let name):
                 // The symbols Edit widget picked, priced by the Markets extension every 60 s while it shows (WidgetMarkets).
                 await WidgetMarkets.feed(model, values: values, symbols: name, placement: id) { self?.lastAnswers[id] = (.now, "markets", $0) }
+            case .barItem(let name):
+                let item = values[name]?.string?.trimmingCharacters(in: .whitespaces) ?? ""
+                guard !item.isEmpty else {
+                    model.message = "Nothing picked yet: right-click it › Edit widget and name a top bar item, as pilot list bar-extensions lists it."
+                    self?.idle.insert(id)
+                    return
+                }
+                await Self.follow(barItem: item, model: model, placement: id) { self?.lastAnswers[id] = (.now, "bar item", $0) }
             case .none:
                 if page == nil {
                     model.message = widget.actionsField == nil && widget.menuField == nil ? widget.description
@@ -601,6 +609,41 @@ final class WidgetDesk: ScreenPausing {
                 }
                 self?.idle.insert(id)
             }
+        }
+    }
+
+    /// The Extension widget's feed (T14): a top bar item as ExtensionBar last answered it, drawn again whenever that
+    /// changes. It starts no host of its own: while it shows it holds the item in the bar's one loop (and the loop
+    /// itself), so one tick, 60 s at the most often, feeds the bar item, its dock face and every placement of it; its
+    /// hide releases both.
+    private static func follow(barItem item: String, model: WidgetTileModel, placement id: String, bar: ExtensionBar = .shared,
+                               answered: (String?) -> Void) async {
+        let readings = Engine.shared?.barSources.readings, holder = "widget \(id)"
+        readings?.hold(.extensions)
+        bar.hold([item], for: holder)
+        defer {
+            bar.hold([], for: holder)
+            readings?.release(.extensions)
+        }
+        let (changes, changed) = AsyncStream<Void>.makeStream(bufferingPolicy: .bufferingNewest(1))
+        changed.yield()
+        var last: (found: ExtensionBar.Item?, listed: Bool)?
+        for await _ in changes {
+            withObservationTracking { _ = (bar.items, bar.listed) } onChange: { changed.yield() }
+            // Another item's answer changed: nothing of this one's to draw again.
+            let found = bar.items.first { $0.id == item }
+            if let last, last.found == found, last.listed == bar.listed { continue }
+            last = (found, bar.listed)
+            if let found { model.title = found.title }
+            model.blocks = found?.answer.map(Widget.barItemBlocks) ?? []
+            // Gone once the bar has read the folder; a problem its last ask had (a timeout, a setting it needs).
+            let problem: String? = switch found {
+            case nil: bar.listed ? "No installed extension's top bar item is \(item): pilot list bar-extensions lists them" : nil
+            case let found?: found.answer == nil ? found.problem : nil
+            }
+            let settled = problem != nil || found?.answer != nil
+            model.message = problem ?? (!settled ? "Asking it…" : model.blocks.isEmpty ? "It shows nothing now" : nil)
+            if settled { answered(problem) }
         }
     }
 
