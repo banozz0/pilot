@@ -174,7 +174,8 @@ final class NotesModel {
             // From the list it asks about the highlighted note, which opens so the question shows it.
             if listFocused, let id = selectedNote?.id, id != current { open(id) }
             askTrash()
-        case .actions: actions == nil ? openActions() : (actions = nil)
+        // A press that just closed them (on the head's Actions) leaves them closed.
+        case .actions: actions == nil && !NotesPopoverWatch.closingPress ? openActions() : (actions = nil)
         case .closeActions: actions = nil
         case .stepActions(let by): stepActions(by)
         case .runAction: runAction()

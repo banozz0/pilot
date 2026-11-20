@@ -100,8 +100,55 @@ struct NotesPanelRenders {
                 let rep = try #require(snapshot(content, scale: 2))
                 try #require(rep.representation(using: .png, properties: [:]))
                     .write(to: dir.appendingPathComponent("\(style.rawValue)-\(theme)-\(state).png"))
+                if state == "5-actions", theme == "tokyo-night" { try Self.actionsClose(model, panel: panel, content: content) }
             }
         }
+    }
+
+    /// Cmd+K's actions close as a popover does (Sven, 2026-11-20): a press on them keeps them; a press elsewhere in the
+    /// note, its window losing the keyboard, Pilot giving way and another app in front each close them; Escape still
+    /// does. The press is handed to the watch as Pilot's local monitor hands it, never posted to the screen.
+    static func actionsClose(_ model: NotesModel, panel: NSWindow, content: NSView) throws {
+        func watches(_ view: NSView) -> [NotesPopoverWatch.Watch] {
+            (view as? NotesPopoverWatch.Watch).map { [$0] } ?? view.subviews.flatMap(watches)
+        }
+        func settle() { RunLoop.main.run(until: Date().addingTimeInterval(0.2)) }
+        func watch() throws -> NotesPopoverWatch.Watch { try #require(watches(content).first, "no watch behind Cmd+K's actions") }
+        func press(_ point: NSPoint) -> NSEvent {
+            NSEvent.mouseEvent(with: .leftMouseDown, location: point, modifierFlags: [], timestamp: 0, windowNumber: panel.windowNumber,
+                               context: nil, eventNumber: 0, clickCount: 1, pressure: 1)!
+        }
+        func reopen() throws {
+            model.perform(.actions)
+            settle()
+            try #require(model.actions != nil, "Cmd+K did not open the actions")
+        }
+        try #require(model.actions != nil)
+        let w = try watch()
+        w.pressed(press(w.convert(NSPoint(x: w.bounds.midX, y: w.bounds.midY), to: nil)))
+        try #require(model.actions != nil, "a press on the actions closed them")
+        w.pressed(press(NSPoint(x: 40, y: 40)))
+        try #require(model.actions == nil, "a press outside the actions left them open")
+        // Its release handed on, the head's Actions (or Cmd+K) opens them again.
+        NotesPopoverWatch.released()
+        settle()
+        try reopen()
+        let posts: [(NotificationCenter, Notification.Name, Any?)] = [
+            (.default, NSWindow.didResignKeyNotification, panel),
+            (.default, NSApplication.didResignActiveNotification, NSApp),
+            (NSWorkspace.shared.notificationCenter, NSWorkspace.didActivateApplicationNotification, nil),
+        ]
+        for (center, name, object) in posts {
+            _ = try watch()
+            let finder = NSRunningApplication.runningApplications(withBundleIdentifier: "com.apple.finder").first
+            center.post(name: name, object: object, userInfo: name == NSWorkspace.didActivateApplicationNotification ? [NSWorkspace.applicationUserInfoKey: finder as Any] : nil)
+            try #require(model.actions == nil, "\(name.rawValue) left the actions open")
+            try reopen()
+        }
+        let escape = try #require(NotesKey.pressed(53, [], "\u{1b}", model: model, responder: nil))
+        try #require(escape == .closeActions)
+        model.perform(escape)
+        try #require(model.actions == nil, "Escape left the actions open")
     }
 
     /// The note round 2 drew notes in (shots 6c-*): a ticked checklist under Pack, a heading with nothing under it yet.
