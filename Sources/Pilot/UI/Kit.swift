@@ -294,9 +294,151 @@ struct BlockRow<Content: View>: View {
     @ViewBuilder var content: Content
 
     var body: some View {
-        HStack(spacing: 10) { content }
+        BlockRowLayout { content }
             .frame(maxWidth: .infinity, minHeight: style.points(40), alignment: .leading)
             .overlay(alignment: .top) { if !first { InstrumentRule() } }
+    }
+}
+
+/// A block row's parts side by side, as an HStack, while every part that gives way (a label, a field) keeps `least` points
+/// or its one-line width; narrower, each such part takes a line of its own and the parts that keep their size (a
+/// segmented picker, a switch, a button) go on the line under it at the trailing edge, wrapping when even that line is
+/// short. A plain HStack hands the label what the fixed parts leave, and its words break inside ("Sh / ow / in" beside
+/// Notifications' Show in picker in a 780 pt window).
+struct BlockRowLayout: Layout {
+    var spacing: CGFloat = 10
+    /// Room for a label's longest word: a truncating one-line detail (Widgets' rows) keeps its row.
+    var least: CGFloat = 120
+    private let lineSpacing: CGFloat = 6, inset: CGFloat = 6
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        guard let width = proposal.width, width.isFinite, !fits(width, subviews) else {
+            let sizes = row(proposal.width, subviews)
+            return CGSize(width: sizes.reduce(0) { $0 + $1.width } + spacing * CGFloat(max(0, sizes.count - 1)), height: sizes.map(\.height).max() ?? 0)
+        }
+        return CGSize(width: width, height: lines(width, subviews).height)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        guard !fits(bounds.width, subviews) else {
+            var x = bounds.minX
+            for (i, size) in row(bounds.width, subviews).enumerated() {
+                subviews[i].place(at: CGPoint(x: x, y: bounds.midY - size.height / 2), proposal: ProposedViewSize(size))
+                x += size.width + spacing
+            }
+            return
+        }
+        for (i, frame) in lines(bounds.width, subviews).frames.enumerated() {
+            subviews[i].place(at: CGPoint(x: bounds.minX + frame.minX, y: bounds.minY + frame.minY), proposal: ProposedViewSize(frame.size))
+        }
+    }
+
+    /// The parts side by side, shared as an HStack shares its width: higher layout priorities first, holding back what the
+    /// lower ones need at least; within one, the part that gives least first, each offered an even share of what is left.
+    /// Each is measured at its own height for its width, never the row's: a Spacer in a Layout grows both ways, and would
+    /// make the row take a tile's spare height.
+    private func row(_ width: CGFloat?, _ subviews: Subviews) -> [CGSize] {
+        guard let total = width, total.isFinite else {
+            return subviews.map { $0.sizeThatFits(ProposedViewSize(width: nil, height: nil)) }
+        }
+        let small = subviews.map { $0.sizeThatFits(ProposedViewSize(width: 0, height: nil)).width }
+        let large = subviews.map { min(1e6, $0.sizeThatFits(ProposedViewSize(width: .infinity, height: nil)).width) }
+        var sizes = [CGSize](repeating: .zero, count: subviews.count)
+        var left = total - spacing * CGFloat(max(0, subviews.count - 1))
+        for priority in Set(subviews.map(\.priority)).sorted(by: >) {
+            let group = subviews.indices.filter { subviews[$0].priority == priority }
+                .sorted { large[$0] - small[$0] < large[$1] - small[$1] }
+            var room = left - subviews.indices.filter { subviews[$0].priority < priority }.reduce(0) { $0 + small[$1] }
+            for (n, i) in group.enumerated() {
+                sizes[i] = subviews[i].sizeThatFits(ProposedViewSize(width: max(0, room / CGFloat(group.count - n)), height: nil))
+                room -= sizes[i].width
+            }
+            left -= group.reduce(0) { $0 + sizes[$1].width }
+        }
+        return sizes
+    }
+
+    /// Whether the parts fit side by side in `width`: one part always does. A label that wraps needs `least` or its
+    /// one-line width; one that truncates, only what it shrinks to.
+    private func fits(_ width: CGFloat, _ subviews: Subviews) -> Bool {
+        guard subviews.count > 1 else { return true }
+        var fixed: CGFloat = 0, need: CGFloat = 0
+        for view in subviews {
+            let ideal = view.sizeThatFits(.unspecified), small = view.sizeThatFits(ProposedViewSize(width: 0, height: nil))
+            if small.width >= ideal.width - 0.5 {
+                fixed += ideal.width
+            } else if small.height > ideal.height + 0.5 {
+                need += min(ideal.width, least)
+            } else {
+                fixed += small.width   // it truncates, as a one-line title is meant to
+            }
+        }
+        return width - fixed - spacing * CGFloat(subviews.count - 1) >= need
+    }
+
+    /// A Spacer: hardly any width of its own, all it is offered. Stacked, it takes none.
+    private static func isSpacer(_ view: LayoutSubview, ideal: CGSize) -> Bool {
+        ideal.width <= 10 && view.sizeThatFits(ProposedViewSize(width: .infinity, height: nil)).width > 10
+    }
+
+    /// A part that gives way, narrower when offered nothing than at its ideal: a label that wraps, a title that
+    /// truncates. A segmented picker or a switch keeps its size.
+    private static func givesWay(_ view: LayoutSubview, ideal: CGSize) -> Bool {
+        view.sizeThatFits(ProposedViewSize(width: 0, height: nil)).width < ideal.width - 0.5
+    }
+
+    /// The parts stacked: each that gives way on a line of the whole width, with the fixed parts right after it (its ⓘ)
+    /// when they fit; the other fixed ones on lines of their own at the trailing edge; a Spacer nowhere.
+    private func lines(_ width: CGFloat, _ subviews: Subviews) -> (frames: [CGRect], height: CGFloat) {
+        var frames = [CGRect](repeating: .zero, count: subviews.count)
+        var y = inset, run: [(index: Int, size: CGSize)] = []
+        func flush() {
+            guard !run.isEmpty else { return }
+            var start = 0
+            while start < run.count {
+                var end = start, used: CGFloat = 0
+                while end < run.count, end == start || used + spacing + run[end].size.width <= width {
+                    used += (end == start ? 0 : spacing) + run[end].size.width
+                    end += 1
+                }
+                let height = run[start..<end].map(\.size.height).max() ?? 0
+                var x = max(0, width - used)
+                for part in run[start..<end] {
+                    frames[part.index] = CGRect(x: x, y: y + (height - part.size.height) / 2, width: part.size.width, height: part.size.height)
+                    x += part.size.width + spacing
+                }
+                y += height + lineSpacing
+                start = end
+            }
+            run = []
+        }
+        let ideals = subviews.map { $0.sizeThatFits(.unspecified) }
+        func label(_ k: Int) -> Bool { Self.givesWay(subviews[k], ideal: ideals[k]) }
+        func spacer(_ k: Int) -> Bool { Self.isSpacer(subviews[k], ideal: ideals[k]) }
+        var i = 0
+        while i < subviews.count {
+            guard !spacer(i) else { i += 1; continue }
+            guard label(i) else { run.append((i, ideals[i])); i += 1; continue }
+            flush()
+            // The fixed parts right after a label, up to a Spacer (its ⓘ), stay beside it while it keeps its room.
+            var end = i + 1, beside: CGFloat = 0
+            while end < subviews.count, !label(end), !spacer(end) { beside += spacing + ideals[end].width; end += 1 }
+            if width - beside < min(ideals[i].width, least) { (end, beside) = (i + 1, 0) }
+            let size = subviews[i].sizeThatFits(ProposedViewSize(width: width - beside, height: nil))
+            frames[i] = CGRect(x: 0, y: y, width: size.width, height: size.height)
+            var x = size.width, height = size.height
+            for k in i + 1..<end {
+                // On the label's first line.
+                let line = min(size.height, ideals[i].height)
+                frames[k] = CGRect(x: x + spacing, y: y + max(0, (line - ideals[k].height) / 2), width: ideals[k].width, height: ideals[k].height)
+                x += spacing + ideals[k].width
+                height = max(height, frames[k].maxY - y)
+            }
+            y += height + lineSpacing
+            i = end
+        }
+        flush()
+        return (frames, y - lineSpacing + inset)
     }
 }
 
