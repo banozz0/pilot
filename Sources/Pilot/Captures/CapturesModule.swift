@@ -18,8 +18,9 @@ enum CapturesModule {
         capture(&registry, "ocr", "Capture text", Key("x"), .ocr)
         capture(&registry, "activeWindow", "Capture a window", Key("s", .shift), .window)
         capture(&registry, "screenRecording", "Screen recording", Key("a", .shift), .record)
-        // The capture box (pilot-ui-redesign T23, changed by Sven 2026-11-20): Area to start, any mode from its bar; no key.
-        add(&registry, "tool", "Capture tool", nil) { DispatchQueue.main.async { PilotCapture.shared.run(.area, box: CaptureBox()) } }
+        // The capture box (pilot-ui-redesign T23, changed by Sven 2026-11-20): Area to start, any mode from its bar; on
+        // Hyper+Ctrl+S, beside the S capture keys (Sven, Q283).
+        add(&registry, "tool", "Capture tool", Key("s", .ctrl)) { DispatchQueue.main.async { PilotCapture.shared.run(.area, box: CaptureBox()) } }
         add(&registry, "editLast", "Edit the last capture", Key("e", .alt)) { DispatchQueue.main.async { editLast() } }
         add(&registry, "pinLast", "Pin the last capture", nil) { DispatchQueue.main.async { pinLast() } }
         // P71: pick a recording and open it in the video editor (the Captures menu's Edit video…).
