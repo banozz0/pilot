@@ -489,8 +489,10 @@ final class NotesPanel {
     /// Saves, then hides; the model stays, so the next show lands on the same note. The panel itself goes, as the menu's
     /// and the clipboard's do, so the next show is built in the Look of that moment (the style, the theme, the glass).
     func hide() {
-        // Hiding orders the panel out, never closes it, so its willClose never ends a sketch: Done here, before the save.
-        SketchBoard.shared.done()
+        // Hiding orders the panel out, never closes it, so its willClose never ends a sketch: Done here, before the save,
+        // for a sketch in the panel only; one on the Notes page stays open there.
+        let board = SketchBoard.shared
+        if let panel, board.view?.window === panel { board.done() }
         model?.flush()
         if let keyMonitor { NSEvent.removeMonitor(keyMonitor) }
         keyMonitor = nil
@@ -577,6 +579,8 @@ final class NotesPanel {
     /// Points the notes at `new`, first moving every note there when `move` (task N1); the panel and the Notes page
     /// then read the new folder.
     func changeFolder(to new: URL, move: Bool) throws {
+        // A sketch open ends in its note in the old folder, saved there before anything moves (spec-end review 2).
+        SketchBoard.shared.done()
         model?.flush()
         let moved = move ? try NotesFolder.move(from: folder, to: new) : NotesFolder.Moved()
         Engine.shared?.settings.notesFolder = NotesFolder.setting(new)
@@ -587,6 +591,8 @@ final class NotesPanel {
     /// the Notes page starts a new one.
     func currentModel() -> NotesModel {
         if let model, model.store.folder == folder { return model }
+        // The old model's sketch ends in its own note before that model is saved and let go.
+        SketchBoard.shared.done()
         model?.flush()
         welcomeOnce()
         let model = NotesModel(store: NoteStore(folder: folder))

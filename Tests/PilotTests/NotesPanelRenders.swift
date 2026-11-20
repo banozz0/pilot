@@ -299,17 +299,56 @@ struct NotesPanelRenders {
                     let onDisk = try store.load()
                     try #require(onDisk.filter { !drawn($0.text).isEmpty }.map(\.id) == [first], "the sketch is not in the note it was drawn in alone")
                     try #require(Sketch.count(in: model.text) == 0, "the sketch reached the note opened after")
-                    // The panel hiding mid-sketch: hide orders it out, never closes it, so no willClose comes; its own Done
-                    // ends the sketch into the note shown before anything is saved.
+                    // The quick notes panel hiding while a sketch is open in another window (the Notes page's; here this
+                    // render's, which is not the panel): that sketch stays open (spec-end review 2). One in the panel
+                    // itself ends there, before the panel's save (hide's Done, for the panel's window only).
                     RunLoop.main.run(until: Date().addingTimeInterval(0.3))
                     try #require(editor.string == model.text, "the editor does not show the note opened")
                     board.open(on: editor)
                     board.sketch.strokes = Self.route
                     NotesPanel.shared.hide()
-                    try #require(!board.isOpen, "hiding the panel left the canvas open")
+                    try #require(board.isOpen, "hiding the panel ended a sketch drawn outside it")
+                    board.done()
                     model.flush()
                     let hidden = try String(contentsOf: folder.appending(path: model.current), encoding: .utf8)
-                    try #require(drawn(hidden).count == 1, "hiding the panel lost the sketch")
+                    try #require(drawn(hidden).count == 1, "the sketch was lost")
+                    // The notes folder changed mid-sketch, as the Notes page's folder line and `pilot set notes.folder` do
+                    // (spec-end review 2), through the panel's own shared model and an Engine that never launches, which
+                    // holds the setting: the sketch ends in its note in the old folder, and the new folder gets none of it.
+                    // Then the model swapped for the new folder mid-sketch (the next show, the page's reload): the old
+                    // model's sketch ends in its own note first.
+                    let engine = Engine()
+                    let old = folder.appending(path: "old", directoryHint: .isDirectory), moved = folder.appending(path: "new", directoryHint: .isDirectory)
+                    for dir in [old, moved] { try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true) }
+                    engine.settings.notesFolder = old.path
+                    defer { engine.settings.notesFolder = nil }
+                    let noteA = "folder-note-100030.md"
+                    try Data("# Folder note\nDrawn before the folder changes.\n".utf8).write(to: old.appending(path: noteA))
+                    let shared = NotesPanel.shared.currentModel()
+                    try #require(shared.store.folder.path == NotesFolder.folder(old.path).path, "the panel's model is not on the old folder")
+                    shared.reload()
+                    shared.open(noteA)
+                    let sharedPanel = HUD.makePanel(NotesPanelView(model: shared).frame(width: NotesPanel.defaultSize.width, height: NotesPanel.defaultSize.height),
+                                                    surface: .notes)
+                    defer { sharedPanel.close() }
+                    RunLoop.main.run(until: Date().addingTimeInterval(0.6))
+                    let sharedContent = try #require(sharedPanel.contentView)
+                    let sharedEditor = try #require(NotesMarkdownRenders.editors(in: sharedContent).first { $0.isEditable })
+                    sharedPanel.makeFirstResponder(sharedEditor)
+                    RunLoop.main.run(until: Date().addingTimeInterval(0.3))
+                    let inOld = { Sketch.count(in: try String(contentsOf: old.appending(path: noteA), encoding: .utf8)) }
+                    let inNew = { try NoteStore(folder: moved).load().map { Sketch.count(in: $0.text) }.reduce(0, +) }
+                    board.open(on: sharedEditor)
+                    try #require(board.isOpen, "the canvas did not open on the panel's model")
+                    board.sketch.strokes = Self.route
+                    try NotesPanel.shared.changeFolder(to: moved, move: false)
+                    try #require(!board.isOpen, "changing the folder left the canvas open")
+                    try #require(try inOld() == 1 && inNew() == 0, "the sketch is not in its note in the old folder alone")
+                    board.open(on: sharedEditor)
+                    board.sketch.strokes = Self.route
+                    let next = NotesPanel.shared.currentModel()
+                    try #require(next !== shared && !board.isOpen, "the model swapped with the canvas still open")
+                    try #require(try inOld() == 2 && inNew() == 0, "the swap lost the sketch or moved it to the new folder")
                 }
             }
         }
