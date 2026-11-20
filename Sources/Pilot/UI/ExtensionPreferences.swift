@@ -268,13 +268,13 @@ private struct PathPreference: View {
     }
 }
 
-private extension View {
+extension View {
     /// A control drawn as the kit's field (pilotField's fill, edge and corner) at the field's height, 32; edged while a
     /// required preference has no value.
     func fieldFace(missing: Bool) -> some View { modifier(FieldFace(missing: missing)) }
 }
 
-private struct FieldFace: ViewModifier {
+struct FieldFace: ViewModifier {
     @Environment(\.ink) private var ink
     let missing: Bool
 

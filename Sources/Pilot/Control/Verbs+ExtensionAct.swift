@@ -1,5 +1,6 @@
 import Foundation
 import PilotCore
+import Synchronization
 
 /// `pilot ext act <id> <action>` (P30): one of an extension page's block actions, pressed as on its page: a button, a
 /// row's click or its inline and ⋯ actions, a link, a move of a row (⌥↑ ⌥↓), an input box's Return (--input, --alt for
@@ -7,7 +8,7 @@ import PilotCore
 /// the action and asks the page again; the answer is what it did and the blocks after. Its command runs as the page's
 /// do, the HUD left out (its line comes back instead); an open, copy, paste, Pilot action, timer or alert is answered,
 /// never performed, as `ext run` answers them. A Raycast-format extension (ADR 0017) has no page: `ext act` presses a
-/// callback of one of its view's rows instead (actView, T2).
+/// callback of one of its view's rows instead (actView, T2), and fills and submits a Form (fill, T10).
 extension ControlVerbs {
     /// One action a page offers: its name as `ext act` takes it ("Refresh", "Milk/Remove"), the action, and the input box
     /// it belongs to (nil for any other block), with whether it is that box's Option+Return, and whether it is a row's or a
@@ -128,6 +129,7 @@ extension ControlVerbs {
     }
 
     /// `ext act <id> <row> [--command <name>]` or `ext act <id> --handler <id>` (T2): a Raycast-format view's row callback,
+    /// or on a Form `ext act <id> [<action>] --type <field>=<text> --submit [<json values>]` (T10, fill below),
     /// pressed in a host started for it and kept open until the answer after the press, then closed. The first Allow
     /// reads the view; the press asks its own. Its answer: the rows before the press and after it. `--then <row>` (T8)
     /// presses again in the same host, in the view the first press left (a pushed one), `escape` going back a view; the
@@ -137,15 +139,16 @@ extension ControlVerbs {
         guard let command = (named.map(ext.view) ?? ext.commands.first { $0.mode != .noView }), command.runtime == .raycast else {
             throw ControlError(.badValue, "\(ext.title) has no view \(named ?? "") to press in; pilot ext show \(ext.id) lists its commands")
         }
-        let handler = args.value("handler")
-        let word: String
-        if let handler { word = handler } else { word = try args.word(2, "row, by its title as pilot ext run \(command.actionID) shows it (or row/action), or --handler <id>") }
-        let reading = ["to find \(ControlGate.Ask.visible(word)) in it; the press asks again"]
+        let handler = args.value("handler"), filling = args.has("submit") || args.value("type") != nil
+        // A fill names an action only to press one other than its form's SubmitForm.
+        let word: String? = if let handler { handler } else if filling { args.positional.count > 2 ? args.positional[2] : nil }
+            else { try args.word(2, "row, by its title as pilot ext run \(command.actionID) shows it (or row/action), or --handler <id>") }
+        let reading = ["to find \(word.map(ControlGate.Ask.visible) ?? "its form") in it; the press asks again"]
         return try await tools.readBack(ext, command, reading, peer: peer) { () throws(ControlError) in
             let inputs = try await tools.inputs(ext)
             let session = ExtensionSession(command, context: nil, inputs: inputs, folder: ext.folder)
             let answer: Result<JSONValue, ControlError>
-            do throws(ControlError) { answer = .success(try await Self.press(word, handler: handler, then: args.value("then"), in: session, command, ext, tools, peer: peer)) }
+            do throws(ControlError) { answer = .success(try await Self.press(word, handler: handler, then: args.value("then"), fill: filling ? args : nil, in: session, command, ext, tools, peer: peer)) }
             catch { answer = .failure(error) }
             session.close()
             await session.ended()
@@ -154,14 +157,16 @@ extension ControlVerbs {
     }
 
     /// Opens the view in `session`, finds the callback (a row's first, row/action, or the handler named), asks Allow for
-    /// the press and presses it.
-    private static func press(_ word: String, handler: String?, then: String?, in session: ExtensionSession, _ command: Extension.Command, _ ext: Extension,
-                              _ tools: ExtensionTools, peer: ControlPeer?) async throws(ControlError) -> JSONValue {
+    /// the press and presses it; with `fill`'s arguments, fills its form (fill).
+    private static func press(_ word: String?, handler: String?, then: String?, fill: ControlArguments?, in session: ExtensionSession,
+                              _ command: Extension.Command, _ ext: Extension, _ tools: ExtensionTools, peer: ControlPeer?) async throws(ControlError) -> JSONValue {
         func shown(_ outcome: ListOutcome) throws(ControlError) -> (items: [Extension.Item], json: [String: JSONValue]) {
+            let json = try Self.outcome(outcome, command, ext, tools)
             switch outcome {
-            case .items(let items): return (items, ["items": .array(items.map(Self.item))])
-            case .detail(let detail): return (ExtensionList.items(detail, of: command), ["detail": Self.detail(detail)])
-            case .error(let why): throw tools.failed(command, why, in: ext)
+            case .items(let items): return (items, json)
+            case .detail(let detail): return (ExtensionList.items(detail, of: command), json)
+            case .form(let form): return ([Extension.Item(title: command.title, actions: form.actions)], json)
+            case .error: return ([], json)
             }
         }
         /// A press by its handler id, or the callback a row's name finds in `items`.
@@ -172,9 +177,15 @@ extension ControlVerbs {
             try Self.target(word, in: Self.targets([.list(title: nil, items: items)]).filter { $0.action.handler != nil }, page: command.actionID)
         }
         _ = try shown(await session.ask(""))
-        let before = try shown(await session.settled()?.outcome ?? .error("sent no list"))
-        let target = if let handler { pressing(handler, path: "handler \(handler)") } else { try find(word, in: before.items) }
-        let id = target.action.handler ?? word
+        let first = await session.settled()?.outcome ?? .error("sent no list")
+        let before = try shown(first)
+        if let fill {
+            guard let form = first.form else { throw ControlError(.badValue, "--type and --submit fill a form; \(command.actionID) shows none") }
+            let named = try word.map { name throws(ControlError) in try find(name, in: before.items).action }
+            return try await Self.fill(form, pressing: named, fill, before: before.json, in: session, command, ext, tools, peer: peer)
+        }
+        let target = if let handler { pressing(handler, path: "handler \(handler)") } else { try find(word ?? "", in: before.items) }
+        let id = target.action.handler ?? word ?? ""
         let label = target.bare ? " (\(ControlGate.Ask.visible(target.action.label)))" : ""
         let escape = then?.lowercased() == "escape"
         let second = then.map { ", then \(escape ? "Escape (back a view)" : ControlGate.Ask.visible($0)), runs their callbacks" } ?? ", runs its callback"
@@ -195,6 +206,137 @@ extension ControlVerbs {
             answer.merge(after.json) { $1 }
             if session.newest?.loading == true { answer["loading"] = .bool(true) }
             return .object(answer)
+        }
+    }
+
+    /// How long a fill waits after its last edit for echoes still coming (a controlled field's that comes later).
+    static let echoQuiet: Duration = .milliseconds(300)
+
+    /// Fills the open Form and submits it (T10): `--type <field>=<text>` types the text one change per character, sent
+    /// without waiting between them as keystrokes come, then leaves the field; `--submit [<json>]` sets each field the
+    /// object names (text, true or false, a date as yyyy-mm-dd or ISO 8601, a list of paths), leaving each, then presses
+    /// the SubmitForm (or the action named). One Allow names all of it. The answer: the form before, what each line the
+    /// host sent while typing showed and any stale echo it ignored, the form filled, and the view after the submit, which
+    /// is still the form with `submitted: false` while a field shows an error (Raycast does not submit then).
+    private static func fill(_ form: Extension.Form, pressing named: Extension.Item.Action?, _ args: ControlArguments, before: [String: JSONValue],
+                             in session: ExtensionSession, _ command: Extension.Command, _ ext: Extension, _ tools: ExtensionTools,
+                             peer: ControlPeer?) async throws(ControlError) -> JSONValue {
+        func editable(_ id: String) throws(ControlError) -> Extension.Form.Field {
+            guard let field = form.field(id), field.change != nil else {
+                let ids = form.fields.compactMap(\.id).joined(separator: ", ")
+                throw ControlError(.badValue, "\(ControlGate.Ask.visible(ext.title))'s form has no field \(ControlGate.Ask.visible(id)); it has \(ids.isEmpty ? "none" : ControlGate.Ask.visible(ids))")
+            }
+            return field
+        }
+        // --type <field>=<text>: a text field's, text area's or password's.
+        var typing: (field: Extension.Form.Field, text: String)?
+        if let typed = args.value("type") {
+            guard let equals = typed.firstIndex(of: "=") else { throw ControlError(.badRequest, "--type is <field>=<text>") }
+            let field = try editable(String(typed[..<equals]))
+            guard [.text, .password, .textarea].contains(field.kind) else { throw ControlError(.badValue, "--type types into a text field; \(field.id ?? "") is a \(field.kind.rawValue)") }
+            typing = (field, String(typed[typed.index(after: equals)...]))
+        }
+        // --submit's values, each held to its field's kind.
+        var sets: [(field: Extension.Form.Field, value: JSONValue)] = []
+        if let given = args.value("submit"), !given.isEmpty {
+            guard case .object(let values)? = try? JSONDecoder().decode(JSONValue.self, from: Data(given.utf8)) else {
+                throw ControlError(.badRequest, "--submit takes the fields' values as a JSON object, {\"<id>\": <value>, …}")
+            }
+            for (id, value) in values.sorted(by: { $0.key < $1.key }) {
+                let field = try editable(id)
+                sets.append((field, try Self.formValue(value, for: field)))
+            }
+        }
+        let submits = args.has("submit")
+        let action = submits ? named ?? form.submit : nil
+        if submits, action?.handler == nil { throw ControlError(.badValue, "\(ControlGate.Ask.visible(ext.title))'s form has no action to submit it") }
+        let name = { (field: Extension.Form.Field) in ControlGate.Ask.visible(field.title ?? field.id ?? "a field") }
+        var parts: [String] = []
+        if let typing { parts.append("types \(typing.text.count) characters into \(name(typing.field))") }
+        if !sets.isEmpty { parts.append("sets \(sets.map { name($0.field) }.joined(separator: ", "))") }
+        if let action { parts.append("presses \(ControlGate.Ask.visible(action.label))") }
+        let ask = ControlGate.Ask("Fill the form on \(ControlGate.Ask.visible(ext.title))", parts.joined(separator: ", then ") + ", runs their callbacks in pilot-ext-host")
+        return try await tools.gate.allow(ask, peer: peer) { () throws(ControlError) in
+            var answer: [String: JSONValue] = ["command": .string(command.actionID), "before": .object(before)]
+            if let typing, let id = typing.field.id, let handler = typing.field.change {
+                // Every line the host sends while typing, as the field shows it and as the host said it when that was stale.
+                let seen = Mutex<[JSONValue]>([])
+                session.watch {
+                    guard let view = session.newest, case .form(let now) = view.outcome else { return }
+                    var line: [String: JSONValue] = ["shows": now.field(id)?.value ?? .null]
+                    if let said = view.stale[id] { line["ignored"] = said }
+                    seen.withLock { $0.append(.object(line)) }
+                }
+                let keys = typing.text.indices.map { JSONValue.string(String(typing.text[...$0])) }
+                _ = await session.edit(id, handler: handler, values: keys)
+                if let blur = typing.field.blur { _ = await session.invoke(blur) }
+                try? await Task.sleep(for: Self.echoQuiet)
+                session.watch { }
+                answer["typed"] = .object(["field": .string(id), "sent": .number(Double(keys.count)), "lines": .array(seen.withLock { $0 }),
+                                           "shows": session.newest?.outcome.form?.field(id)?.value ?? .null])
+            }
+            for (field, value) in sets {
+                guard let id = field.id, let handler = field.change else { continue }
+                _ = await session.edit(id, handler: handler, values: [value])
+                if let blur = field.blur { _ = await session.invoke(blur) }
+            }
+            if !sets.isEmpty { try? await Task.sleep(for: Self.echoQuiet) }
+            guard let filled = session.newest?.outcome else { throw ControlError(.badValue, "\(command.actionID) stopped while filling") }
+            answer["filled"] = .object(try Self.outcome(filled, command, ext, tools))
+            if let action, let handler = action.handler {
+                let after = await session.invoke(handler)
+                answer["pressed"] = .string(action.label)
+                answer["after"] = .object(try Self.outcome(after, command, ext, tools))
+                if case .form(let still) = after, let shown = still.fields.first(where: { $0.error != nil }) {
+                    answer["submitted"] = .bool(false)
+                    answer["blocked"] = .string("\(shown.title ?? shown.id ?? "a field") shows an error: \(shown.error ?? "")")
+                } else {
+                    answer["submitted"] = .bool(true)
+                }
+            }
+            log.notice("ext act: \(ext.id, privacy: .public) filled a form, from the pilot command")
+            return .object(answer)
+        }
+    }
+
+    /// A Raycast view as `ext act` shows it: its rows, its detail or its form; its error is thrown.
+    private static func outcome(_ outcome: ListOutcome, _ command: Extension.Command, _ ext: Extension, _ tools: ExtensionTools) throws(ControlError) -> [String: JSONValue] {
+        switch outcome {
+        case .items(let items): return ["items": .array(items.map(Self.item))]
+        case .detail(let detail): return ["detail": Self.detail(detail)]
+        case .form(let form): return ["form": Self.form(form)]
+        case .error(let why): throw tools.failed(command, why, in: ext)
+        }
+    }
+
+    /// `value` as `field` takes it on the wire: text, true or false, a dropdown's option by its value, a date at local
+    /// midnight (yyyy-mm-dd) or as ISO 8601 (null clears it), a file pick's paths.
+    static func formValue(_ value: JSONValue, for field: Extension.Form.Field) throws(ControlError) -> JSONValue {
+        let name = ControlGate.Ask.visible(field.id ?? "")
+        switch (field.kind, value) {
+        case (.text, .string), (.password, .string), (.textarea, .string), (.checkbox, .bool): return value
+        case (.dropdown, .string(let pick)):
+            guard field.options?.contains(where: { $0.value == pick }) == true else {
+                throw ControlError(.badValue, "\(name) has no option \(ControlGate.Ask.visible(pick)); it offers \(ControlGate.Ask.visible((field.options ?? []).map(\.value).joined(separator: ", ")))")
+            }
+            return value
+        case (.date, .null): return value
+        case (.date, .string(let text)):
+            guard let date = Extension.Form.date(text) else {
+                throw ControlError(.badValue, "\(name) takes a date as yyyy-mm-dd or ISO 8601, not \(ControlGate.Ask.visible(text))")
+            }
+            return .string(Extension.Form.wireDate(date))
+        case (.file, .array(let paths)) where paths.allSatisfy({ $0.string != nil }): return value
+        default: throw ControlError(.badValue, "\(name) is a \(field.kind.rawValue) field: \(Self.expected(field.kind))")
+        }
+    }
+
+    private static func expected(_ kind: Extension.Form.Field.Kind) -> String {
+        switch kind {
+        case .checkbox: "true or false"
+        case .date: "a date as yyyy-mm-dd or ISO 8601, or null"
+        case .file: "a list of paths"
+        default: "text"
         }
     }
 
@@ -272,6 +414,7 @@ extension ControlVerbs {
             switch await ExtensionRun.list(command, query: "", context: context, inputs: inputs) {
             case .items(let items): out["items"] = .array(items.map(Self.item))
             case .detail(let detail): out["detail"] = Self.detail(detail)
+            case .form(let form): out["form"] = Self.form(form)
             case .error(let why): throw tools.failed(command, why, in: ext)
             }
             return out

@@ -11,7 +11,9 @@ import PilotCore
 /// An `Action.Push` (T8) opens a view of the menu's own over this one, filled by the same host: its first ask is the
 /// push, it draws the host's answers while it is on top, and its Escape sends the host back to the view under it
 /// (`navigation.pop.<depth>`) and hands the answers back to that view. A push or pop a callback makes itself redraws the
-/// view on top in place; the next Escape still lands on the view under it.
+/// view on top in place; the next Escape still lands on the view under it. A Form (T10) opens in a key panel of its own
+/// (ExtensionFormPanel), which takes the host over: the menu gives way, and its views leave the host running as they
+/// close, the panel ending it.
 @MainActor
 final class ExtensionListSession: MenuSource {
     /// How long typing must pause before the program is asked again: a run per keystroke would mostly be killed unread.
@@ -143,6 +145,11 @@ final class ExtensionListSession: MenuSource {
             if ext.shownSurface != nil { row.extensionPage = ext.id }
             rows = [row]
             dropped = detail.dropped
+        case .form:
+            items = []
+            if let session, !ExtensionFormPanel.owns(session) { ExtensionFormPanel.show(session, ext: ext, command: command) }
+            rows = [MenuEntry(title: "\(ext.title) opened its form in a window of its own", target: .action("\(command.actionID)#form"), isAnswer: true,
+                              icon: .command(emoji: command.icon))]
         case .error(let reason):
             items = []
             rows = [ExtensionList.error(reason, of: command, in: ext.title)]
@@ -163,6 +170,7 @@ final class ExtensionListSession: MenuSource {
     /// The view closed: its run stops, a session's process with it.
     func close() {
         task?.cancel()
+        if let session, ExtensionFormPanel.owns(session) { return }
         end()
     }
 

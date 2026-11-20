@@ -293,6 +293,59 @@ extension Extension {
 }
 
 extension Extension {
+    /// A Raycast Form (ADR 0017, T10), as pilot-ext-host sends it: its fields in order, each edit pressed back as its
+    /// `change` handler with the new value, and its actions (SubmitForm's handler ends in `.submit`). Pilot draws it with
+    /// its own controls (ExtensionForm.swift); a kind Pilot does not know is skipped.
+    public struct Form: Equatable, Sendable, Decodable {
+        public struct Field: Equatable, Sendable, Decodable {
+            public enum Kind: String, Sendable, Decodable { case text, password, textarea, checkbox, dropdown, date, file, description, separator }
+            public struct Option: Equatable, Sendable, Decodable { public let value: String, title: String, section: String? }
+
+            public let kind: Kind
+            /// Its id in the submitted values, and the handlers an edit and leaving it press; nil for a description or separator.
+            public let id: String?, change: String?, blur: String?
+            public let title: String?, placeholder: String?, error: String?, info: String?
+            /// What it shows: text, true or false, a date as ISO 8601 text or null, a file pick's paths.
+            public var value: JSONValue?
+            /// A checkbox's label, a description's text, a dropdown's options, a date's time and bounds, a file pick's kinds.
+            public let label: String?, text: String?, options: [Option]?, time: Bool?, min: String?, max: String?
+            public let multiple: Bool?, files: Bool?, folders: Bool?, hidden: Bool?, autoFocus: Bool?
+
+            /// A text field's, text area's or password's text, or a dropdown's pick.
+            public var string: String { value?.string ?? "" }
+        }
+
+        public var fields: [Field]
+        public let actions: [Item.Action]
+        /// How many of its actions were of a type Pilot does not know, and so dropped.
+        public let dropped: Int
+
+        /// The action Command+Return presses: its SubmitForm, else its first.
+        public var submit: Item.Action? { actions.first { $0.handler?.hasSuffix(".submit") == true } ?? actions.first }
+
+        /// The field `id` names.
+        public func field(_ id: String) -> Field? { fields.first { $0.id == id } }
+
+        /// A date on the wire: ISO 8601 with milliseconds, as JavaScript's toISOString writes it.
+        public static func wireDate(_ date: Date) -> String { date.formatted(iso) }
+        /// The date a wire value names; `yyyy-mm-dd` too (`day`), read at local midnight, as Raycast's Date type is a whole day.
+        public static func date(_ text: String) -> Date? {
+            (try? iso.parse(text)) ?? (try? Date.ISO8601FormatStyle().parse(text)) ?? (try? day.parse(text))
+        }
+        private static let iso = Date.ISO8601FormatStyle(includingFractionalSeconds: true)
+        private static let day = Date.ISO8601FormatStyle(timeZone: .current).year().month().day().dateSeparator(.dash)
+
+        private enum CodingKeys: String, CodingKey { case fields, actions }
+
+        public init(from decoder: any Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            fields = (try c.decodeIfPresent([Lenient<Field>].self, forKey: .fields) ?? []).compactMap(\.value)
+            (actions, dropped) = try Item.Action.decode(c, .actions)
+        }
+    }
+}
+
+extension Extension {
     /// A `timer` action (Pomodoro as an extension, 2026-10-10): Pilot's one countdown, shown with `title` in the Timer bar
     /// item, the dropdown's Now block and Home's Timer block. `seconds` from 1 to a day; 0 stops the timer if it is this
     /// extension's. Paused, it shows the time held and neither counts nor ends. At zero Pilot runs `end` as the extension's
@@ -347,8 +400,13 @@ extension Extension {
     static func sound(_ name: String?) -> String? { name.flatMap { sounds.contains($0) ? $0 : nil } }
 }
 
-/// A list or detail command's answer: its items, its detail, or why there is nothing (cards agent-bo-95423243, 245).
-public enum ListOutcome: Equatable, Sendable { case items([Extension.Item]), detail(Extension.Detail), error(String) }
+/// A list, detail or form command's answer: its items, its detail, its Raycast Form (T10), or why there is nothing (cards agent-bo-95423243, 245).
+public enum ListOutcome: Equatable, Sendable {
+    case items([Extension.Item]), detail(Extension.Detail), form(Extension.Form), error(String)
+
+    /// The Raycast Form this is, if it is one (T10).
+    public var form: Extension.Form? { if case .form(let form) = self { form } else { nil } }
+}
 
 extension ExtensionRun {
     /// A list's program must answer within this, or the error row shows and it is stopped.
@@ -414,6 +472,7 @@ extension ExtensionRun {
         case "error": return .answer(.error("says: \(answer.text ?? "it failed")"), meta)
         case "list": return .answer(.items(answer.items ?? []), meta)
         case "detail": return .answer((try? decoder.decode(Extension.Detail.self, from: data)).map(ListOutcome.detail) ?? .error(unreadable), meta)
+        case "form": return .answer((try? decoder.decode(Extension.Form.self, from: data)).map(ListOutcome.form) ?? .error(unreadable), meta)
         default: return .skip
         }
     }

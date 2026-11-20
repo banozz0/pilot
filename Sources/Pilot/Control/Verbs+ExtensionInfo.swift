@@ -70,6 +70,7 @@ extension ControlVerbs {
                 switch await ExtensionRun.list(command, query: query ?? "", inputs: inputs) {
                 case .items(let items): answer["items"] = .array(items.map(Self.item))
                 case .detail(let detail): answer["detail"] = Self.detail(detail)
+                case .form(let form): answer["form"] = Self.form(form)
                 case .error(let why): throw tools.failed(command, why, in: ext)
                 }
             }
@@ -134,6 +135,21 @@ extension ControlVerbs {
     static func detail(_ detail: Extension.Detail) -> JSONValue {
         .object(["markdown": .string(detail.markdown), "actions": .array(detail.actions.map(action)),
                  "metadata": .array(detail.metadata.map { .object(["label": .string($0.label), "text": .string($0.text)]) })])
+    }
+
+    /// A Raycast Form (T10): each field as Pilot draws it, its value and error, and the form's actions.
+    static func form(_ form: Extension.Form) -> JSONValue {
+        func field(_ f: Extension.Form.Field) -> JSONValue {
+            var o: [String: JSONValue] = ["kind": .string(f.kind.rawValue)]
+            for (key, word) in [("id", f.id), ("title", f.title), ("placeholder", f.placeholder), ("error", f.error), ("info", f.info),
+                                ("label", f.label), ("text", f.text), ("change", f.change), ("blur", f.blur)] { o[key] = word.map(JSONValue.string) }
+            if f.kind != .description, f.kind != .separator { o["value"] = f.value ?? .null }
+            // "Levels/High = high": its section, title and value.
+            if let options = f.options { o["options"] = .array(options.map { .string(($0.section.map { "\($0)/" } ?? "") + "\($0.title) = \($0.value)") }) }
+            if f.kind == .date { o["time"] = .bool(f.time ?? true) }
+            return .object(o)
+        }
+        return .object(["fields": .array(form.fields.map(field)), "actions": .array(form.actions.map(action))])
     }
 
     static func stat(_ stat: Extension.Block.Stat) -> JSONValue {
