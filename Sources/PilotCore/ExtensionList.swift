@@ -529,8 +529,14 @@ public enum ExtensionList {
         }
     }
 
-    /// A row's icon: its own emoji, else its own symbol (T5), else the command's emoji over a terminal.
+    /// A row's icon: its own emoji, else its own picture (T28), else its own symbol (T5), else the command's emoji over a
+    /// terminal.
     static func icon(of item: Extension.Item, in command: Extension.Command) -> MenuIcon {
+        if item.icon == nil, let image = item.image {
+            var icon = MenuIcon.command(emoji: command.icon)
+            icon.image = image
+            return icon
+        }
         if item.icon == nil, let symbol = item.symbol { return .glyph(symbol, .neutral) }
         return .command(emoji: item.icon ?? command.icon)
     }

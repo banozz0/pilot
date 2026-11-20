@@ -11,7 +11,7 @@ import Testing
 /// In Instrument, a catalogue entry and an installed one picked, plus the list while the catalogue is read and
 /// when it could not be. Then Raycast's store (raycast-extensions T24): the page's Raycast Store, Hyper+Space's Raycast
 /// Store, and the root search typed "raycast", with the first rows "raycast", "store" and "install" rank printed. Then
-/// T26: a Raycast list's List.EmptyView in the menu's empty look (menu-t26-empty).
+/// T26: a Raycast list's List.EmptyView in the menu's empty look (menu-t26-empty); T28: a Raycast row's own picture (menu-t28-pictures).
 /// T25: the page's All (an installed Raycast extension with its icon, then the store; Pilot's own set aside), its search
 /// over both, Pilot's own (old), and the root search typed "process", the Raycast command read as Extension beside the
 /// store's hit, their first rows printed.
@@ -140,6 +140,13 @@ struct ExtensionCatalogueRenders {
                                     title: "Speedtest", live: true)
         emptied.emptyView = speedtestFailed
         try InstrumentMenuRenders.render(MenuView(model: MenuModel(nav: emptied)), "menu-t26-empty", in: out)
+        // T28: a Raycast row's own picture in Hyper+Space, in its glyph's place (Weather's forecast rows wear one each).
+        let picture = try Data(contentsOf: raycast.folder.appending(path: "assets/icon.png"))
+        let forecast = [Extension.Item(title: "20 °C", subtitle: "Clear", actions: [], image: picture),
+                        Extension.Item(title: "Saturday", subtitle: "14 °C to 19 °C", actions: [], image: picture),
+                        Extension.Item(title: "Sunday", subtitle: "A symbol, no picture", actions: [], symbol: "cloud.sun")]
+        let pictured = MenuNavigator(list: ExtensionList.entries(forecast, of: raycast.commands[0]), title: "Weather", live: true)
+        try InstrumentMenuRenders.render(MenuView(model: MenuModel(nav: pictured)), "menu-t28-pictures", in: out)
     }
 
     /// Kill Process as a store install leaves it (T25): Raycast's package.json, its icon in assets/, its built command.

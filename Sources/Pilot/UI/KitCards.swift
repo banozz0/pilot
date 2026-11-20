@@ -18,9 +18,10 @@ extension TileColour {
 extension MenuIcon {
     /// The app's own icon: at its path once that bundle is on disk, else by its bundle id once installed; a script's
     /// emoji drawn as one (card agent-bo-95423029); else a catalogue entry's shipped picture (C5), one of Your designs
-    /// (P55) or a search result's picture once it arrives (N9); nil for a glyph.
+    /// (P55) or a search result's picture once it arrives (N9); a Raycast row's own picture (T28); nil for a glyph.
     @MainActor func appImage(exists: (String) -> Bool = FileManager.default.fileExists(atPath:)) -> NSImage? {
         if let appPath, exists(appPath) { return AppsModule.icon(file: appPath) }
+        if let image, let made = Self.picture(image) { return made }
         if let emoji { return Self.image(emoji) }
         if let installed = bundle.flatMap(AppsModule.icon(bundle:)) { return installed }
         if let bundled, let image = CatalogueIcons.image(bundled) { return image }
@@ -38,6 +39,18 @@ extension MenuIcon {
     }
 
     @MainActor private static var fileIcons: [String: NSImage] = [:]
+
+    /// A row's picture bytes as an icon, made once per picture and kept small; the kept ones go when past `mostPictures`.
+    @MainActor private static func picture(_ data: Data) -> NSImage? {
+        if let kept = pictures[data] { return kept }
+        guard let image = NSImage(data: data), image.size.width > 0 else { return nil }
+        if pictures.count >= mostPictures { pictures.removeAll() }
+        pictures[data] = AppsModule.small(image)
+        return pictures[data]
+    }
+
+    @MainActor private static var pictures: [Data: NSImage] = [:]
+    private static let mostPictures = 200
 
     /// An emoji as a square image, drawn at whatever size the row gives it.
     private static func image(_ emoji: String) -> NSImage {
