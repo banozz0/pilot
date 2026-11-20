@@ -62,7 +62,7 @@ final class ClipboardHistory: ScreenPausing {
         settings = ClipboardSettings(defaults: defaults)
     }
 
-    /// `recording` off (a new install's clipboard, SessionSwitch.clipboard) opens the store but watches nothing.
+    /// `recording` off (the Clipboard switch, SessionSwitch.clipboard) opens the store but watches nothing.
     func start(recording: Bool = true) {
         guard store == nil else { return }
         do {

@@ -109,11 +109,12 @@ final class TilingSwitch: QuickSwitchable {
 /// A quick switch. Without `saved` it is on at every launch, never saved, so it is never forgotten off for good: the
 /// Hyper key (card agent-bo-95422986; off, the layer key and chord Hyper do what macOS says, plain combos still run).
 /// With `saved` it keeps its state across launches under that key, `standard` until first flipped: the Clipboard
-/// (card agent-bo-95422912; off, nothing copied is kept and nothing opens the history, 2026-11-20; a new install's starts off, Sven's pick
-/// 2026-11-19; Off lasts, Open question 5 of spec pilot-ui-redesign) and the launcher (`launcher.on`, T4).
+/// (card agent-bo-95422912; off, nothing copied is kept and nothing opens the history, 2026-11-20; on for every install,
+/// new ones too, Sven's Q293 of 2026-11-21; Off lasts, Open question 5 of spec pilot-ui-redesign) and the launcher
+/// (`launcher.on`, T4).
 @Observable @MainActor
 final class SessionSwitch: QuickSwitchable {
-    static let clipboard = SessionSwitch(saved: "clipboard.recording", standard: Install.startsOn) { ClipboardHistory.shared.setRecording($0) }
+    static let clipboard = SessionSwitch(saved: "clipboard.recording", standard: true) { ClipboardHistory.shared.setRecording($0) }
     /// The launcher: off, its key (Hyper+Space) opens nothing and a tip names the switch (Engine's tap.onRun).
     /// With Key binds off too, the tap stops (Engine.bindSwitchesChanged).
     static let launcher = SessionSwitch(saved: "launcher.on", standard: true) { on in

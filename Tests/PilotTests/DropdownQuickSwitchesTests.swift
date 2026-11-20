@@ -41,15 +41,15 @@ struct DropdownQuickSwitchesTests {
         switches[.clipboard].toggle()
         #expect(recorded == [false, true] && clipboard.isOn)
         // A saved switch keeps its state across launches: the clipboard's Off lasts (Open question 5), as the
-        // launcher's does; a fresh switch on the same defaults reads what the last one left.
+        // launcher's does; a fresh switch on the same defaults reads what the last one left. Unsaved, it starts on
+        // (Q293), and a saved Off still wins over that.
         let defaults = try #require(UserDefaults(suiteName: "DropdownQuickSwitchesTests.\(UUID().uuidString)"))
-        let paused = SessionSwitch(saved: "clipboard.recording", standard: false, defaults: defaults) { _ in }
-        #expect(!paused.isOn)
-        paused.toggle()
-        paused.toggle()
-        #expect(!SessionSwitch(saved: "clipboard.recording", standard: false, defaults: defaults) { _ in }.isOn)
-        paused.toggle()
-        #expect(SessionSwitch(saved: "clipboard.recording", standard: false, defaults: defaults) { _ in }.isOn)
+        let saved = SessionSwitch(saved: "clipboard.recording", standard: true, defaults: defaults) { _ in }
+        #expect(saved.isOn)
+        saved.toggle()
+        #expect(!SessionSwitch(saved: "clipboard.recording", standard: true, defaults: defaults) { _ in }.isOn)
+        saved.toggle()
+        #expect(SessionSwitch(saved: "clipboard.recording", standard: true, defaults: defaults) { _ in }.isOn)
         switches[.keepAwake].toggle()
         #expect(keepAwake.isOn && power.held.count == 1)
         switches[.keepAwake].toggle()
