@@ -167,7 +167,7 @@ final class ThemeCatalogueModel {
             let result = try await ThemeCoordinator.production().press(id)
             look.endTrial()
             await readInstalled()
-            return themeOutcomeText(result)
+            return themeOutcomeText(result, steps: true)
         } catch { return failed(id, String(describing: error)) }
     }
 

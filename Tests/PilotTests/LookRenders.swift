@@ -37,23 +37,23 @@ struct LookRenders {
             Self.resetShared(); return
         }
         if Self.env["PILOT_THEME_SECTION_RENDER"] == "1" {
-            // Apply theme and Restore default on the heading's line (Q69); Apply's result one line, each change behind
-            // Details (build 2276).
-            let result: JSONValue = .object(["status": .string("applied"),
-                "changed": .array(["Pilot", "wallpaper", "Ghostty", "Zed", "Obsidian vault notes", "VS Code"].map(JSONValue.string)),
-                "changes": .array(["Pilot: colours, cursor colours", "Wallpaper collection: 2 images", "Ghostty", "Zed", "Obsidian vault notes", "VS Code"].map(JSONValue.string)),
-                "next": .array([.string("Reload Obsidian to see it.")])])
-            for id in ["tokyo-night", "porcelain"] {
+            // Apply theme and Restore default on the heading's line (Q69); Apply's result one short line, the apps and
+            // steps behind its fold, folded and opened (build 2962).
+            let apps = ["Pilot", "wallpaper", "Ghostty", "Zed", "Obsidian vault notes", "btop", "Neovim", "fish", "Vesktop", "VS Code",
+                        "Cursor", "lazygit", "Ghostex"]
+            let result: JSONValue = .object(["status": .string("applied"), "changed": .array(apps.map(JSONValue.string)),
+                "changes": .array((["Pilot: colours, cursor colours", "Wallpaper collection: 2 images"] + apps.dropFirst(2)).map(JSONValue.string)),
+                "next": .array((["Reload Obsidian to see it."] + [ThemeAppKind.neovim, .fish, .vesktop, .lazygit].compactMap(\.followUp)).map(JSONValue.string))])
+            for (id, open) in [("tokyo-night", false), ("tokyo-night", true), ("porcelain", false)] {
                 look.style = .instrument; look.themeID = id; Self.mirror(look, spot: nil)
                 let themes = PilotTheme.designed.filter { ThemeNativePalette.stock($0.id).compatible(with: look.style.rawValue) }
                 try writeRender(ThemeSection(themes: themes, picked: "tokyo-night", columns: 4, applied: true, canApply: true, running: false,
                                              pick: { _ in }, apply: {}, restore: {}) {
-                        Text(themeOutcomeText(result))
-                        DisclosureGroup("Details") { Text(themeOutcomeDetails(result)).font(.caption) }
+                        ThemeOutcome(line: themeOutcomeText(result), details: themeOutcomeDetails(result), open: .constant(open))
                     } more: { EmptyView() }
                     .padding(20).frame(width: 980, height: 1260, alignment: .topLeading)
                     .styled(.page(.look), look: look).pilotTheme(look: look).background(Theme.background),
-                    to: dir.appendingPathComponent("theme-section-\(id).png"), wait: 0.8)
+                    to: dir.appendingPathComponent("theme-section-\(id)\(open ? "-open" : "").png"), wait: 0.8)
             }
             Self.resetShared(); return
         }
