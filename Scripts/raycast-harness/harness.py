@@ -111,7 +111,8 @@ def worded(args):
             return flag + "=" + (value if value.isdigit() or PLACEHOLDER.fullmatch(value) else masked(value))
         return w if (i == 0 and w.isalnum()) or w.startswith("-") or w.isdigit() or w in SAFE or PLACEHOLDER.fullmatch(w) else masked(w)
     def line(a):
-        return " ".join(word(j, x) for j, x in enumerate(re.findall(r"<[^<>]*>|[^ ]+", a)))
+        # A placeholder stays whole inside a word, so `--json=<2 chars>` is one word on every pass (T7 review 4).
+        return " ".join(word(j, x) for j, x in enumerate(re.findall(r"(?:<(?:\d+ chars|cut|host \d+ chars)>|[^ ])+", a)))
     return [line(a) if " " in a and not PLACEHOLDER.fullmatch(a) else word(i, a) for i, a in enumerate(args)]
 
 
@@ -205,7 +206,8 @@ def command_line(argv):
 
 
 def scrubbed(text, argv):
-    """`text` with every value command_line() masks replaced by its mask wherever it appears (T7 review 3): an `ext act`
+    """`text`, already shaped, with every value command_line() masks replaced by its mask wherever it appears (T7
+    reviews 3 and 4: after shown(), so a row that happens to be a bare JSON token never breaks the parse): an `ext act`
     error names the row it was given ("no action <row> on …"), a JSON answer the same row with its quotes escaped. A
     pressed `row/action` is replaced whole and by its row alone; the longest go first."""
     values = set()
@@ -230,9 +232,9 @@ def run(argv, env=None, timeout=120):
         code, out, err = "timeout", (late.stdout or b"").decode() if isinstance(late.stdout, bytes) else (late.stdout or ""), ""
     took = time.monotonic() - started
     if out:
-        say(shown(scrubbed(out.rstrip("\n"), argv)))
+        say(scrubbed(shown(out.rstrip("\n")), argv))
     if err:
-        say("# stderr:\n" + shown(scrubbed(err.rstrip("\n"), argv)))
+        say("# stderr:\n" + scrubbed(shown(err.rstrip("\n")), argv))
     say("# exit %s, %.2f s" % (code, took))
     return code, out, took
 
@@ -611,6 +613,13 @@ def phase_probe(ns):
     shutil.rmtree(work, ignore_errors=True)
     # Review 3: a value an `ext act` command names never reaches the log whole, even when the program's own output
     # repeats it, as an ext act error does with its row. /bin/echo stands in for that error, so nothing runs.
+    # Review 4: a --flag=value (Brew's info --json=v2 --installed) shaped twice is shaped the same, as a record and as a line.
+    record = {"kind": "exec", "file": "/opt/homebrew/bin/brew", "args": ["info", "--json=v2", "--installed"], "argv": ["-c", "brew info --json=v2 --installed"]}
+    once = json.dumps(shaped(record), sort_keys=True)
+    twice = json.dumps(shaped(json.loads(once)), sort_keys=True)
+    say("# redaction probe, a --flag=value shaped once:  " + once)
+    say("# redaction probe, the same shaped again:      " + twice)
+    say("# redaction probe: %s" % ("the same" if once == twice else "DIFFERENT"))
     say("# masking probe: an output that repeats the pressed row, the --then and the --query (echo stands in for ext act):")
     run(["/bin/echo", "no action", "ext", "act", "measure-probe", "T7 probe row", "--then", "T7 probe then", "--query", "T7 probe query", "on", "its page"])
 
