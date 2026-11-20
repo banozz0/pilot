@@ -283,6 +283,33 @@ struct NotesPanelRenders {
                     let kept = try #require(model.text.components(separatedBy: "\n").last { $0.hasPrefix("![Sketch](attachments/sketch-") && $0 != link })
                     let keptPath = String(kept.dropFirst("![Sketch](".count).dropLast())
                     try #require(try Sketch.load(from: folder.appending(path: keptPath)).strokes.count == Self.route.count)
+                    // Another note opened mid-sketch (spec-end review 1, blocker 1): the sketch ends in the note it was
+                    // drawn in and is saved in that note's file; the note opened after gets none of it.
+                    let other = "packing-list-100012.md"
+                    try Data("# Packing list\nSocks.\n".utf8).write(to: folder.appending(path: other))
+                    model.reload()
+                    let first = model.current
+                    board.open(on: editor)
+                    board.sketch.strokes = Self.route
+                    model.open(other)
+                    try #require(!board.isOpen && model.current == other, "opening another note left the canvas open")
+                    func drawn(_ text: String) -> [String] {
+                        text.components(separatedBy: "\n").filter { $0.hasPrefix("![Sketch](attachments/sketch-") && $0 != link && $0 != kept }
+                    }
+                    let onDisk = try store.load()
+                    try #require(onDisk.filter { !drawn($0.text).isEmpty }.map(\.id) == [first], "the sketch is not in the note it was drawn in alone")
+                    try #require(Sketch.count(in: model.text) == 0, "the sketch reached the note opened after")
+                    // The panel hiding mid-sketch: hide orders it out, never closes it, so no willClose comes; its own Done
+                    // ends the sketch into the note shown before anything is saved.
+                    RunLoop.main.run(until: Date().addingTimeInterval(0.3))
+                    try #require(editor.string == model.text, "the editor does not show the note opened")
+                    board.open(on: editor)
+                    board.sketch.strokes = Self.route
+                    NotesPanel.shared.hide()
+                    try #require(!board.isOpen, "hiding the panel left the canvas open")
+                    model.flush()
+                    let hidden = try String(contentsOf: folder.appending(path: model.current), encoding: .utf8)
+                    try #require(drawn(hidden).count == 1, "hiding the panel lost the sketch")
                 }
             }
         }

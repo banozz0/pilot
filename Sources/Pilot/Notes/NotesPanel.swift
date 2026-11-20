@@ -111,7 +111,10 @@ final class NotesModel {
         }
     }
 
+    /// Another note ends an open sketch first, while the editor still shows this one, so its link lands here and is
+    /// saved with it (spec-end review 1, blocker 1); the same note again (a reload) keeps the canvas open.
     func open(_ id: String) {
+        if id != current { SketchBoard.shared.done() }
         flush()
         guard let note = notes.first(where: { $0.id == id }) else { return }
         current = id
@@ -128,6 +131,7 @@ final class NotesModel {
 
     /// Escape in the note: the list takes the keyboard on the open note, unfiltered.
     func focusList() {
+        SketchBoard.shared.done()
         flush()
         confirmingTrash = false
         listFocused = true
@@ -284,6 +288,7 @@ final class NotesModel {
     /// 2026-10-15), which Cmd+Backspace in its editor does too.
     func askTrash() {
         guard note?.isScratch == false else { return }
+        SketchBoard.shared.done()
         if isEmptyNote { trash(current) } else { confirmingTrash = true }
     }
 
@@ -301,6 +306,8 @@ final class NotesModel {
     /// Trash's work, throwing for the pilot command (CLI W12).
     func moveToTrash(_ id: String) throws {
         guard id != NoteStore.scratch else { return }
+        // Before the open note's text is dropped, so a sketch never brings a trashed note back through the next save.
+        SketchBoard.shared.done()
         defer { confirmingTrash = false }
         if id == current {
             pendingSave?.cancel()
@@ -332,6 +339,7 @@ final class NotesModel {
     /// The pilot command's write (CLI W12): what is typed is saved first, then `text` replaces the note's on disk, the
     /// open one followed when a new first line renames it. Answers the id it is saved under.
     func write(_ id: String, text: String) throws -> String {
+        SketchBoard.shared.done()
         flush()
         let saved = try store.save(id, text: text)
         if id == current { current = saved }
@@ -481,6 +489,8 @@ final class NotesPanel {
     /// Saves, then hides; the model stays, so the next show lands on the same note. The panel itself goes, as the menu's
     /// and the clipboard's do, so the next show is built in the Look of that moment (the style, the theme, the glass).
     func hide() {
+        // Hiding orders the panel out, never closes it, so its willClose never ends a sketch: Done here, before the save.
+        SketchBoard.shared.done()
         model?.flush()
         if let keyMonitor { NSEvent.removeMonitor(keyMonitor) }
         keyMonitor = nil
