@@ -148,15 +148,19 @@ export const stdinApps = (script, js) => targets(String(script), { js });
 
 // MARK: Answers
 
-/** The first of `apps` refused, and the ones not answered yet. A `*` Allow stands only while nothing is refused. */
+/** The first of `apps` refused, the ones not answered yet, and whether the call must wait anyway. A `*` Allow stands
+ *  only while nothing is refused and no other question is open, since that question may yet be refused: until it is
+ *  answered, such a call waits. */
 function standing(apps) {
   const answers = saved.read();
   let refused = apps.find((a) => answers[a.key]?.allowed === false);
-  if (!refused && apps.some((a) => a.key === unread.key)) {
+  const wide = apps.some((a) => a.key === unread.key);
+  if (!refused && wide) {
     const kept = Object.entries(answers).find(([, v]) => v?.allowed === false);
     if (kept) refused = { key: kept[0], label: clean(kept[1].app ?? kept[0], 60), widened: true };
   }
-  return { refused, open: apps.filter((a) => typeof answers[a.key]?.allowed !== "boolean") };
+  const open = apps.filter((a) => typeof answers[a.key]?.allowed !== "boolean");
+  return { refused, open, wait: wide && queue.some((q) => q.app.key !== unread.key) };
 }
 
 function refusedError(a) {
@@ -173,10 +177,10 @@ export function consent(apps, go) {
   const settle = (error) => queueMicrotask(() => go(error));
   const now = standing(apps);
   if (now.refused) { settle(refusedError(now.refused)); return () => {}; }
-  if (!now.open.length) { settle(null); return () => {}; }
+  if (!now.open.length && !now.wait) { settle(null); return () => {}; }
   const waiter = { apps, go: settle };
   waiters.add(waiter);
-  ask(now.open, false);
+  if (now.open.length) ask(now.open, false);
   return () => { waiters.delete(waiter); prune(); };
 }
 
@@ -185,9 +189,9 @@ export function consent(apps, go) {
 export function consentNow(apps) {
   const now = standing(apps);
   if (now.refused) return refusedError(now.refused);
-  if (!now.open.length) return null;
-  ask(now.open, true);
-  return asking(now.open[0]);
+  if (!now.open.length && !now.wait) return null;
+  if (now.open.length) ask(now.open, true);
+  return asking(now.open[0] ?? queue[0].app);
 }
 
 function ask(apps, sync) {
@@ -236,9 +240,14 @@ export function answer(serial, allowed) {
   queue.shift();
   for (const waiter of [...waiters]) {
     const now = standing(waiter.apps);
-    if (now.refused) { waiters.delete(waiter); waiter.go(refusedError(now.refused)); } else if (!now.open.length) { waiters.delete(waiter); waiter.go(null); }
+    if (now.refused) { waiters.delete(waiter); waiter.go(refusedError(now.refused)); } else if (!now.open.length && !now.wait) { waiters.delete(waiter); waiter.go(null); }
   }
   prune();
+  // Dropping apps may end the last open question a `*` call waits on.
+  for (const waiter of [...waiters]) {
+    const now = standing(waiter.apps);
+    if (!now.refused && !now.open.length && !now.wait) { waiters.delete(waiter); waiter.go(null); }
+  }
   changed();
 }
 
