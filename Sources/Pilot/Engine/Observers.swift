@@ -47,7 +47,7 @@ final class EngineObservers {
     /// The focused window's title, frame and AX element as one app reports them; tests pass a fake.
     @ObservationIgnored var readFocusedWindow: @MainActor (pid_t) -> FocusedWindowRead? = { EngineObservers.drawnFocusedWindow($0) }
     /// The last read's window server number: the tiler's writes to other windows are not re-read.
-    @ObservationIgnored private var focusedWindowID: CGWindowID?
+    @ObservationIgnored private(set) var focusedWindowID: CGWindowID?
     /// The last read's window and its AX element: a move or resize of that element reads its frame alone.
     @ObservationIgnored private var focusedWindow: WindowBorder.Window?
     @ObservationIgnored private var focusedElement: AXUIElement?
@@ -160,6 +160,12 @@ final class EngineObservers {
     /// no list to skip (card agent-bo-95423302).
     static func clickThrough(_ windows: [NSWindow] = NSApp.windows) -> Set<CGWindowID> {
         Set(windows.compactMap { $0.ignoresMouseEvents ? CGWindowID(exactly: $0.windowNumber) : nil })
+    }
+
+    /// Another app with no Dock icon (an agent's cursor, a screen overlay): its whole-screen window takes no pointer in
+    /// practice. Never Pilot's own, which clickThrough tells.
+    static func isOverlayApp(_ pid: pid_t) -> Bool {
+        pid != getpid() && NSRunningApplication(processIdentifier: pid).map { $0.activationPolicy != .regular } ?? false
     }
 
     /// Every on-screen window, front to back, with its layer and alpha; windows() keeps the normal ones, the Alt+drag tap

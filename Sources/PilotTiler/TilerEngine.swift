@@ -107,6 +107,20 @@ public struct InProcessTiler: TilerRunning {
         }
     }
 
+    /// Focus follows mouse (FocusFollowsMouse): the window the pointer rests on takes focus in AeroSpace's light
+    /// focusFollowsMouse session, which lays nothing out and schedules no complete refresh; its end hands focus to macOS
+    /// (nativeFocus: raised, its app brought forward), as a click does. False for a window the tiler does not know or
+    /// cannot focus (a popup, one on no workspace, one parked in a corner with its hidden workspace), or while the engine
+    /// is off.
+    @discardableResult
+    public func focusFollowingMouse(_ windowId: Int) async throws -> Bool {
+        guard let allowed = RunSessionGuard.isServerEnabled, let id = UInt32(exactly: windowId) else { return false }
+        return try await runLightSession(.focusFollowsMouse, allowed) {
+            guard let window = Window.get(byId: id), !window.isHiddenInCorner else { return false }
+            return try window.focusWindow()
+        }
+    }
+
     /// Builds `workspace` as `preset` now, the focused window first, then the rest as the tree reads.
     public func arrange(_ workspace: String, as preset: LayoutPreset) async throws {
         guard isRunning else { throw TilerNotRunning() }
