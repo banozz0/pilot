@@ -128,6 +128,7 @@ extension ControlVerbs {
         out["description"] = empty.description.map(JSONValue.string)
         out["symbol"] = empty.symbol.map(JSONValue.string)
         out["icon"] = empty.icon.map(JSONValue.string)
+        if !empty.actions.isEmpty { out["actions"] = .array(empty.actions.map(Self.action)) }
         return .object(out)
     }
 

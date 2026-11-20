@@ -131,10 +131,14 @@ struct ExtensionCatalogueRenders {
             print("T25 ROOT \(word): " + root.rows.prefix(8).enumerated().map { "\($0.offset + 1). \($0.element.shownTitle) [\($0.element.kindWord ?? "-")\($0.element.subtitle.map { " · \($0)" } ?? "")]" }.joined(separator: " | "))
             if word != "pomodoro" { try InstrumentMenuRenders.render(MenuView(model: MenuModel(nav: root)), "menu-root-t25-\(word)", in: out) }
         }
-        // T26: a Raycast list with no rows shows its List.EmptyView (Speedtest's failure view: Icon.LevelMeter, the error).
-        var emptied = MenuNavigator(list: [], title: "Speedtest", live: true)
-        emptied.emptyView = Extension.Empty(title: "Could not install speedtest cli", description: "Check your connection, then press Restart.",
-                                            symbol: "gauge.with.dots.needle.67percent")
+        // T26: a Raycast list with no rows shows its List.EmptyView (Speedtest's failure view: Icon.LevelMeter, the error);
+        // T28: with its actions, Return's named under it and its one row kept behind the look.
+        let speedtestFailed = Extension.Empty(title: "Could not install speedtest cli", description: "Check your connection, then press Restart.",
+                                     symbol: "gauge.with.dots.needle.67percent",
+                                     actions: [.init(kind: .invoke(handler: "1.onAction"), title: "Restart"), .init(kind: .invoke(handler: "2.onAction"), title: "Copy Error")])
+        var emptied = MenuNavigator(list: speedtestFailed.item.map { ExtensionList.entries([$0], of: raycast.commands[0]) } ?? [],
+                                    title: "Speedtest", live: true)
+        emptied.emptyView = speedtestFailed
         try InstrumentMenuRenders.render(MenuView(model: MenuModel(nav: emptied)), "menu-t26-empty", in: out)
     }
 

@@ -60,7 +60,8 @@ List.Item = withParts("List.Item");
 List.Item.Detail = host("List.Item.Detail");
 List.Item.Detail.Metadata = metadata("List.Item.Detail");
 List.Section = host("List.Section");
-List.EmptyView = host("List.EmptyView");
+// Its `actions` are mounted under it (T28), so the empty view offers them: Speedtest's Restart.
+List.EmptyView = withParts("List.EmptyView");
 List.Dropdown = lacking("List.Dropdown");
 List.Dropdown.Item = () => null;
 List.Dropdown.Section = () => null;

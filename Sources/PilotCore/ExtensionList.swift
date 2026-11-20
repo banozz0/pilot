@@ -402,23 +402,31 @@ extension Extension {
 
 extension Extension {
     /// A Raycast List.EmptyView (T26): what a list with no rows shows in their place, centred. Its title, description
-    /// and icon, an SF Symbol name or an emoji as a row's are.
+    /// and icon, an SF Symbol name or an emoji as a row's are, and its ActionPanel's actions (T28), Return's the first.
     public struct Empty: Equatable, Sendable, Decodable {
         public let title: String, description: String?, symbol: String?, icon: String?
+        public let actions: [Item.Action]
 
-        public init(title: String, description: String? = nil, symbol: String? = nil, icon: String? = nil) {
-            self.title = title; self.description = description; self.symbol = symbol; self.icon = icon
+        public init(title: String, description: String? = nil, symbol: String? = nil, icon: String? = nil, actions: [Item.Action] = []) {
+            self.title = title; self.description = description; self.symbol = symbol; self.icon = icon; self.actions = actions
         }
 
-        private enum CodingKeys: String, CodingKey { case title, description, symbol, icon }
+        private enum CodingKeys: String, CodingKey { case title, description, symbol, icon, actions }
 
-        /// Read as a row's icon is: an emoji alone, a symbol name only when it is one.
+        /// Read as a row's icon is: an emoji alone, a symbol name only when it is one; its actions as a row's.
         public init(from decoder: any Decoder) throws {
             let c = try decoder.container(keyedBy: CodingKeys.self)
             title = (try? c.decode(String.self, forKey: .title)) ?? ""
             description = (try? c.decode(String.self, forKey: .description)).flatMap { $0.isEmpty ? nil : $0 }
             symbol = (try? c.decode(String.self, forKey: .symbol)).flatMap(Item.symbolName)
             icon = (try? c.decode(String.self, forKey: .icon)).flatMap { ScriptCommand.isEmoji($0) ? $0 : nil }
+            actions = (try? Item.Action.decode(c, .actions))?.0 ?? []
+        }
+
+        /// The one row its actions are pressed on while it shows (the menu's Return and Cmd+K, `pilot ext act`); nil when
+        /// it offers none.
+        public var item: Item? {
+            actions.isEmpty ? nil : Item(title: title, subtitle: description, icon: icon, actions: actions, symbol: symbol)
         }
     }
 }

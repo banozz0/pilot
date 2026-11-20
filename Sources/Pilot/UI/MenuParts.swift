@@ -56,6 +56,10 @@ struct MenuBody: View {
                 TranslatePanes(model: model).overlay(alignment: .bottomTrailing) { rowActions }
             } else if nav.rows.isEmpty {
                 empty
+            } else if nav.emptyView?.item != nil {
+                // A Raycast empty view's actions ride its one row, kept behind the look (T28): Return and Cmd+K press them,
+                // and the foot names Return's.
+                empty.overlay(alignment: .bottomTrailing) { rowActions }
             } else if model.hasLineChips, nav.branch == .emoji {
                 EmojiGridView(model: model, pointer: pointer).overlay(alignment: .bottomTrailing) { rowActions }
             } else {
@@ -138,7 +142,7 @@ struct MenuBody: View {
 
     /// Nothing to list: the first sentence as the line, the rest under it, centred in the list's room under a glyph
     /// that says why (a spinner while a list is read). A Raycast list's empty view (T26) fills the same look with its own
-    /// title, description and icon.
+    /// title, description and icon; when it offers actions (T28) the foot names Return's, as a row's.
     @ViewBuilder private var empty: some View {
         if let view = nav.emptyView { extensionEmpty(view) } else { emptyLine }
     }

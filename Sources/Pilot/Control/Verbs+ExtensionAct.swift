@@ -165,7 +165,7 @@ extension ControlVerbs {
             let json = try Self.outcome(outcome, command, ext, tools)
             switch outcome {
             case .items(let items): return (items, json)
-            case .empty: return ([], json)
+            case .empty(let empty): return (empty.item.map { [$0] } ?? [], json)
             case .detail(let detail): return (ExtensionList.items(detail, of: command), json)
             case .form(let form): return ([Extension.Item(title: command.title, actions: form.actions)], json)
             case .error: return ([], json)

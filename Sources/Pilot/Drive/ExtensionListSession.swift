@@ -153,9 +153,11 @@ final class ExtensionListSession: MenuSource {
             if let session, !ExtensionFormPanel.owns(session) { ExtensionFormPanel.show(session, ext: ext, command: command) }
             rows = [MenuEntry(title: "\(ext.title) opened its form in a window of its own", target: .action("\(command.actionID)#form"), isAnswer: true,
                               icon: .command(emoji: command.icon))]
-        case .empty:
-            items = []
-            rows = []
+        case .empty(let empty):
+            // Its actions ride one row the panel keeps behind the empty look (MenuParts), so Return and Cmd+K press them
+            // as a row's (T28).
+            items = empty.item.map { [$0] } ?? []
+            rows = ExtensionList.entries(items, of: command)
         case .error(let reason):
             items = []
             rows = [ExtensionList.error(reason, of: command, in: ext.title)]

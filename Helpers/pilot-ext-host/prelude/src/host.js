@@ -275,13 +275,16 @@ function answer(container, handlers, query, message) {
   }
   const list = { type: "list", items: rows(root.children, undefined, handlers, []) };
   if (root.props.isLoading === true) list.isLoading = true;
-  // Raycast shows a List.EmptyView only while the list has no rows (T26): its title, description and icon.
+  // Raycast shows a List.EmptyView only while the list has no rows (T26): its title, description and icon, and its
+  // ActionPanel's actions (T28: Speedtest's failure view offers Restart).
   const none = list.items.length === 0 && emptyView(root.children);
   if (none) {
     const empty = { title: words(none.props.title) ?? "" };
     const description = words(none.props.description);
     if (description) empty.description = description;
     Object.assign(empty, picture(none.props.icon));
+    const offered = actions(none.children, handlers);
+    if (offered.length) empty.actions = offered;
     if (empty.title || empty.description) list.empty = empty;
   }
   return list;
