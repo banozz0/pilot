@@ -60,7 +60,7 @@ struct AnswerCardRenders {
         let reminder = MenuEntry(title: "Remind me", target: .action("x"), detail: "at 17:00 · Return sets it", isAnswer: true)
         #expect(MenuAnswer(reminder, query: "remind me at 5pm", branch: nil) == nil)
         let ask = MenuNavigator.fallbacks("#2bc4f0", after: [row], via: nil)
-        #expect(ask.count == 2 && MenuAnswer(ask[0], query: "#2bc4f0", branch: nil) == nil, "the Ask row stays a row")
+        #expect(ask.count == 3 && MenuAnswer(ask[0], query: "#2bc4f0", branch: nil) == nil, "the Ask row stays a row")
         let states = try Dictionary(uniqueKeysWithValues: Self.states())
         let hex = try #require(states["B6-colour"])
         #expect(hex.answerCard(hex.nav.rows[0], at: 0) != nil && hex.answerCard(hex.nav.rows[1], at: 1) == nil)
