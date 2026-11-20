@@ -249,8 +249,11 @@ struct NotesPanelRenders {
                 let rep = try #require(snapshot(content, scale: 2))
                 try #require(rep.representation(using: .png, properties: [:])).write(to: dir.appendingPathComponent("T29-\(theme)-\(state).png"))
                 if state == "draw" {
-                    // Done: the sketch saved in attachments/, linked on the line under Route, and read back stroke for stroke.
-                    board.done()
+                    // Escape is Done (T30): the panel's key monitor saves the sketch and holds the key, the list left alone;
+                    // the sketch saved in attachments/, linked on the line under Route, and read back stroke for stroke.
+                    try #require(NotesKey.pressed(53, [], "\u{1b}", model: model, responder: panel.firstResponder) == .held,
+                                 "Escape while sketching was not held")
+                    try #require(!board.isOpen && !model.listFocused, "Escape while sketching left the canvas or opened the list")
                     let saved = try #require(model.text.components(separatedBy: "\n").first { $0.hasPrefix("![Sketch](attachments/sketch-") })
                     try #require(model.text.hasPrefix(head + saved + "\n"), "the link is not on the line under Route")
                     let path = String(saved.dropFirst("![Sketch](".count).dropLast())

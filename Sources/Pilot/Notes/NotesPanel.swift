@@ -785,6 +785,11 @@ extension NotesKey {
     /// list leaves first, so Return, ↑↓ and ⌘⌫ are the editor's and never answer for the list.
     @MainActor static func pressed(_ code: UInt16, _ flags: NSEvent.ModifierFlags, _ key: String?, model: NotesModel,
                                    responder: NSResponder?) -> NotesKey? {
+        // Escape while a sketch is drawn is Done, and the note keeps the keyboard (UI redesign T30, from T29).
+        if code == 53, SketchBoard.shared.isOpen, model.actions == nil {
+            SketchBoard.shared.done()
+            return .held
+        }
         if responder is NotesTextView, model.listFocused { model.leaveList() }
         return NotesKey(code: code, flags: flags, key: key, list: model.listFocused, confirming: model.confirmingTrash,
                         actions: model.actions != nil, empty: code == 51 && model.isEmptyNote)
