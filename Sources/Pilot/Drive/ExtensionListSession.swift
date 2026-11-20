@@ -47,7 +47,8 @@ final class ExtensionListSession: MenuSource {
     let inputs: ExtensionRun.Inputs
 
     /// `run` and `end` stand in for the program in a test; `pause` waits out the typing pause, which a test releases by hand.
-    init(_ ext: Extension, _ command: Extension.Command, inputs: ExtensionRun.Inputs, context: JSONValue? = nil,
+    /// `input`: the words typed after a Raycast command's keyword at the root, its first argument (T11).
+    init(_ ext: Extension, _ command: Extension.Command, inputs: ExtensionRun.Inputs, context: JSONValue? = nil, input: String? = nil,
          run: ((Extension.Command, String) async -> ListOutcome)? = nil, end: (() -> Void)? = nil,
          pause: @escaping () async -> Void = { try? await Task.sleep(for: ExtensionListSession.pause) }) {
         self.ext = ext; self.command = command; self.inputs = inputs; self.context = context; self.pause = pause; depth = 1
@@ -56,7 +57,7 @@ final class ExtensionListSession: MenuSource {
             self.run = run
             self.end = end ?? {}
         } else if command.session || command.runtime == .raycast {
-            let session = ExtensionSession(command, context: context, inputs: inputs, folder: ext.folder)
+            let session = ExtensionSession(command, context: context, inputs: inputs, folder: ext.folder, input: input)
             if command.runtime == .raycast { raycast = session }
             self.run = { await session.ask($1) }
             self.end = session.close

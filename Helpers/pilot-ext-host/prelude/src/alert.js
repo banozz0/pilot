@@ -47,11 +47,14 @@ export function alertAnswer(handlers, query) {
   return { type: "list", items: [row("confirm", o.primaryAction, "Confirm"), row("dismiss", o.dismissAction, "Cancel")] };
 }
 
-/** The callback a press `word` names while an alert is up: its choice, Escape the dismiss, a stale alert id nothing;
- *  undefined while no alert is up, so the view's own handlers answer. */
+/** Whether an alert is up now: then only its rows and Escape are pressed (alertPress). */
+export const alertUp = () => queue.length > 0;
+
+/** The callback a press `word` names while an alert is up: its choice, Escape the dismiss; null for anything else, so
+ *  a press meant for the view under it or an earlier alert is stale. */
 export function alertPress(word) {
   const alert = queue[0];
-  if (!alert) return undefined;
+  if (!alert) return null;
   if (/^navigation\.pop(?:\.\d+)?$/.test(word)) return () => choose(alert, false);
   const named = /^alert\.(\d+)\.(confirm|dismiss)$/.exec(word);
   if (named && Number(named[1]) === alert.n) return () => choose(alert, named[2] === "confirm");

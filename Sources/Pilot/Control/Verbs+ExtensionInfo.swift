@@ -67,7 +67,10 @@ extension ControlVerbs {
                 case .failed(let why): throw tools.failed(command, why)
                 }
             } else {
-                switch await ExtensionRun.list(command, query: query ?? "", inputs: inputs) {
+                // A Raycast command's input is its first argument (T11).
+                let ran = if command.runtime == .raycast, let input { await ExtensionRun.list(command, query: query ?? "", input: input, inputs: inputs) }
+                    else { await ExtensionRun.list(command, query: query ?? "", inputs: inputs) }
+                switch ran {
                 case .items(let items): answer["items"] = .array(items.map(Self.item))
                 case .detail(let detail): answer["detail"] = Self.detail(detail)
                 case .form(let form): answer["form"] = Self.form(form)

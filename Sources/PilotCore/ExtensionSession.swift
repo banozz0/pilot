@@ -18,12 +18,16 @@ import Synchronization
 /// echo that comes later. So while a field has edits the host has not agreed with, a value it sends that equals the
 /// one before them or an older edit is a stale echo, and the newest edit is shown instead; the newest edit once every
 /// edit is acked is agreement; any other value is the extension's own change, which wins.
+///
+/// A Raycast host may ask while its view is open (T11): an `ask` line (`AI.ask`, `getSelectedText`) is no answer; it is
+/// answered through ExtensionAI on the host's stdin, and no request waits on it. The run message carries the
+/// command's `input`, its first argument.
 public final class ExtensionSession: Sendable {
     /// How long a closing program has between its close message and its stop.
     public static let closeGrace: Duration = .milliseconds(500)
     private static let log = Logger(subsystem: "dev.banozz.pilot", category: "extensions")
 
-    private let command: Extension.Command, context: JSONValue?, inputs: ExtensionRun.Inputs, timeout: Duration
+    private let command: Extension.Command, context: JSONValue?, inputs: ExtensionRun.Inputs, timeout: Duration, input: String?
     /// The child's environment, and Pilot's own, which says where the extension host is (ExtensionRun.host).
     private let environment: [String: String], pilot: [String: String]
     /// The extension's folder, where a Raycast-format command's host runs.
@@ -60,9 +64,9 @@ public final class ExtensionSession: Sendable {
     private let state = Mutex(State())
     private var raycast: Bool { command.runtime == .raycast }
 
-    public init(_ command: Extension.Command, context: JSONValue?, inputs: ExtensionRun.Inputs, folder: URL? = nil,
+    public init(_ command: Extension.Command, context: JSONValue?, inputs: ExtensionRun.Inputs, folder: URL? = nil, input: String? = nil,
                 environment: [String: String] = ProcessInfo.processInfo.environment, timeout: Duration = ExtensionRun.listTimeout) {
-        self.command = command; self.context = context; self.inputs = inputs; self.timeout = timeout; self.folder = folder
+        self.command = command; self.context = context; self.inputs = inputs; self.timeout = timeout; self.folder = folder; self.input = input
         self.pilot = environment
         self.environment = ExtensionRun.environment(for: command, from: environment)
     }
@@ -79,7 +83,7 @@ public final class ExtensionSession: Sendable {
     /// Asks for what `query` shows: the first ask starts the program. Concurrent, so the launch is never on the main actor.
     @concurrent public func ask(_ query: String) async -> ListOutcome {
         await request(starts: true) { first, id in
-            if first { return ExtensionRun.message(command, query: query, context: context, inputs: inputs) }
+            if first { return ExtensionRun.message(command, query: query, context: context, input: input, inputs: inputs) }
             return ExtensionRun.line(["type": .string("query"), "text": .string(query)].merging(raycast ? ["seq": .number(Double(id))] : [:]) { $1 })
         }
     }
@@ -217,6 +221,7 @@ public final class ExtensionSession: Sendable {
     /// outside the message format, such as a debug print, is logged and answers nothing, so it never shifts the answers.
     /// A Raycast-format command's answers what it acks (or, the first, the run), else is unsolicited.
     private func received(_ line: String) {
+        if raycast, let (number, ask) = ExtensionAI.hostAsk(line) { return answer(number, ask) }
         let outcome: ListOutcome, meta: ExtensionRun.Meta
         switch ExtensionRun.reply(line) {
         case .answer(let answer, let fields): (outcome, meta) = (answer, fields)
@@ -244,6 +249,18 @@ public final class ExtensionSession: Sendable {
             return s.watcher
         }
         watcher?()
+    }
+
+    /// Answers the host's ask `number` off this thread, on its stdin, unless the session stopped meanwhile (T11).
+    private func answer(_ number: Int, _ ask: ExtensionAI.HostAsk) {
+        let id = command.id.extension
+        Task.detached { [weak self] in
+            let answer = await ExtensionAI.answer(number, ask, of: id)
+            self?.state.withLock { s in
+                guard s.stopped == nil else { return }
+                s.child?.send(answer)
+            }
+        }
     }
 
     /// A form's line with each field's stale echo replaced by its newest edit (the rule above), and what each said; the

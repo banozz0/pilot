@@ -3,7 +3,10 @@
 // loading until the answer: each "data" piece, then the whole answer, or the error, on its own row.
 const { useEffect, useState } = require("react");
 const { jsx } = require("react/jsx-runtime");
-const { AI, List, environment } = require("@raycast/api");
+const { AI, Action, ActionPanel, List, environment } = require("@raycast/api");
+
+// Each row has a do-nothing action, so `pilot ext act` can open the view and read what it shows.
+const again = jsx(ActionPanel, { children: jsx(Action, { title: "Again", onAction: () => {} }) });
 
 function Command() {
   const [state, setState] = useState({ loading: true, rows: [] });
@@ -17,7 +20,7 @@ function Command() {
       (error) => setState({ loading: false, rows: ["canAccess(AI): true", `Error: ${error.message}`] }),
     );
   }, []);
-  return jsx(List, { isLoading: state.loading, children: state.rows.map((title) => jsx(List.Item, { title }, title)) });
+  return jsx(List, { isLoading: state.loading, children: state.rows.map((title) => jsx(List.Item, { title, actions: again }, title)) });
 }
 
 module.exports = { default: Command };

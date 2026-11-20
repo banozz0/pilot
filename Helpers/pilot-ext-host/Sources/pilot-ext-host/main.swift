@@ -23,7 +23,7 @@ import JavaScriptCore
 func put(_ line: String, to handle: FileHandle) { handle.write(Data((line + "\n").utf8)) }
 
 @MainActor final class Host {
-    static let drain: TimeInterval = 0.15, closeDeadline: TimeInterval = 0.4
+    static let drain: TimeInterval = 0.15, closeDeadline: TimeInterval = 0.4, answerGrace: TimeInterval = 0.5
     /// A run's deadline from its start: a view's, or a no-view command's once the prelude says it is one.
     var runDeadline: TimeInterval = 1.7
 
@@ -34,8 +34,11 @@ func put(_ line: String, to handle: FileHandle) { handle.write(Data((line + "\n"
     private var started = false, inputOpen = true, closing = false
     /// Work that keeps a run alive past its input's end: fetches in flight and children not unref'd (Native.swift).
     var pending = 0
-    /// Asks waiting for Pilot's answer (T11), counted in `pending` too: while any waits, the run deadline waits.
-    private var asking = 0
+    /// Asks waiting for Pilot's answer (T11), counted in `pending` too: a run deadline that passes while any waits
+    /// (`late`) ends the run only once the last is answered, after a grace for what the answer draws.
+    private var asking = 0, late = false
+    /// A one-shot run whose stdin Pilot keeps for answers (T11): it ends as one whose input ended, stdin still open.
+    private var once = false
     var children: [Int: Child] = [:]
     private let born = Date()
 
@@ -72,6 +75,10 @@ func put(_ line: String, to handle: FileHandle) { handle.write(Data((line + "\n"
         let hold: @convention(block) (Int) -> Void = { [unowned self] delta in
             asking += delta
             pending += delta
+            if asking == 0, late {
+                late = false
+                deadline(Host.answerGrace, held: true)
+            }
             settle()
         }
         native.setObject(hold, forKeyedSubscript: "hold" as NSString)
@@ -110,18 +117,17 @@ func put(_ line: String, to handle: FileHandle) { handle.write(Data((line + "\n"
     }
 
     func inputEnded() {
-        let wasOpen = inputOpen
         inputOpen = false
         guard started else { return finish() }
         // Asks still waiting can no longer be answered (T11): they fail, and later ones fail at once.
         call("__pilotInputEnded", [])
-        if wasOpen { runDeadlineFromStart() }
+        if !once { runDeadlineFromStart() }
         settle()
     }
 
     /// A one-shot run Pilot answers asks in (T11): it ends as one whose input ended at once, its stdin kept for answers.
     private func runsOnce() {
-        inputOpen = false
+        once = true
         runDeadlineFromStart()
         settle()
     }
@@ -154,7 +160,7 @@ func put(_ line: String, to handle: FileHandle) { handle.write(Data((line + "\n"
 
     /// Once input has ended or a close came and nothing is pending, exits after the drain unless work began meanwhile.
     func settle() {
-        guard closing || !inputOpen, timers.isEmpty, pending == 0 else { return }
+        guard closing || !inputOpen || once, timers.isEmpty, pending == 0 else { return }
         DispatchQueue.main.asyncAfter(deadline: .now() + Host.drain) { [weak self] in
             MainActor.assumeIsolated {
                 guard let self, self.timers.isEmpty, self.pending == 0 else { return }
@@ -163,12 +169,12 @@ func put(_ line: String, to handle: FileHandle) { handle.write(Data((line + "\n"
         }
     }
 
-    /// Exits after `seconds`; `held`, a run deadline, waits on while an ask is unanswered (T11), a close's never.
+    /// Exits after `seconds`; `held`, a run deadline, waits while an ask is unanswered (T11, `late`), a close's never.
     private func deadline(_ seconds: TimeInterval, held: Bool = false) {
         DispatchQueue.main.asyncAfter(deadline: .now() + seconds) { [weak self] in
             MainActor.assumeIsolated {
                 guard let self else { return }
-                if held, self.asking > 0 { return self.deadline(0.25, held: true) }
+                if held, self.asking > 0 { return self.late = true }
                 self.finish()
             }
         }

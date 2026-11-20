@@ -22,7 +22,7 @@ import { ConcurrentRoot, DefaultEventPriority, DiscreteEventPriority, NoEventPri
 import { Navigation, effects } from "./raycast.js";
 import { symbols } from "./icons.js";
 import { formAnswer, formPress } from "./form.js";
-import { alertAnswer, alertPress, setRedraw } from "./alert.js";
+import { alertAnswer, alertPress, alertUp, setRedraw } from "./alert.js";
 
 const native = globalThis.__native;
 
@@ -365,8 +365,7 @@ export function render(component, message) {
     invoke(id, seq, value) {
       request(seq, () => {
         const word = String(id), node = handlers.get(word), back = /^navigation\.pop(?:\.(\d+))?$/.exec(word);
-        const alerting = alertPress(word);
-        const callback = alerting !== undefined ? alerting : back ? () => popTo(back[1] === undefined ? stack.length - 1 : Number(back[1]))
+        const callback = alertUp() ? alertPress(word) : back ? () => popTo(back[1] === undefined ? stack.length - 1 : Number(back[1]))
           : formPress(word, node, value, top(container))
             ?? (node?.type === "Action.Push" ? () => { navigation.push(node.props.target, node.props.onPop); return node.props.onPush?.(); }
               : node?.props?.[word.split(".").pop()]);

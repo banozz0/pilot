@@ -4,8 +4,10 @@ import Foundation
 /// JavaScript, `<name>.js` beside the manifest or in `dist/`, as Raycast's build writes it. Read as an Extension whose
 /// commands run in pilot-ext-host (ExtensionRun.launch). T1 reads the id (`name`), title, description and the `view`
 /// commands, each a list Pilot ranks, asked once per open; T3 the `no-view` commands, run as ADR 0010's are, and the
-/// preferences, the extension's and each command's in one list, mapped onto Pilot's kinds (`preferences`). `menu-bar`
-/// commands (T12), arguments (T11) and the `"pilot"` key (T13) come later; until then those commands are skipped.
+/// preferences, the extension's and each command's in one list, mapped onto Pilot's kinds (`preferences`). T11: a
+/// command with `arguments` answers at Hyper+Space's root by its keyword, its name lowercased ("todo buy milk" fills its
+/// first argument, as ADR 0010's keyword does; the host fills it from the run's input). `menu-bar` commands (T12) come
+/// later; until then they are skipped.
 public enum RaycastManifest {
     public static let name = "package.json"
 
@@ -16,7 +18,12 @@ public enum RaycastManifest {
     }
 
     struct Manifest: Decodable {
-        struct Command: Decodable { let name: String, title: String, mode: String, preferences: [Preference]? }
+        struct Command: Decodable {
+            let name: String, title: String, mode: String, preferences: [Preference]?
+            /// Lenient: only whether it lists any argument is read here; the host reads the rest.
+            let arguments: JSONValue?
+            var takesArguments: Bool { if case .array(let list)? = arguments { !list.isEmpty } else { false } }
+        }
         /// A Raycast preference (developers.raycast.com, Manifest): its type one of Raycast's seven.
         struct Preference: Decodable {
             let name: String, type: String, title: String?, label: String?, description: String?, required: Bool?
@@ -89,7 +96,8 @@ extension Extension {
             }
             guard let bundle = RaycastManifest.bundle(c.name, in: folder) else { throw Problem.missingProgram(command: c.name, run: "\(c.name).js") }
             return Command(id: CommandID(extension: manifest.name, command: c.name), title: c.title, icon: nil, mode: mode, filter: .pilot,
-                           session: false, program: bundle, hidden: false, keyword: nil, runtime: .raycast)
+                           session: false, program: bundle, hidden: false,
+                           keyword: c.takesArguments ? Self.keyword(.string(c.name)) : nil, runtime: .raycast)
         }
         guard !commands.isEmpty else { throw Problem.noCommands }
         id = manifest.name
