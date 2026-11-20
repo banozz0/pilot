@@ -347,7 +347,7 @@ extension Extension {
 
 extension Extension {
     /// A `timer` action (Pomodoro as an extension, 2026-10-10): Pilot's one countdown, shown with `title` in the Timer bar
-    /// item, the dropdown's Now block and Home's Timer block. `seconds` from 1 to a day; 0 stops the timer if it is this
+    /// item, the pill's Activity view and Home's Timer block. `seconds` from 1 to a day; 0 stops the timer if it is this
     /// extension's. Paused, it shows the time held and neither counts nor ends. At zero Pilot runs `end` as the extension's
     /// action (none: a HUD says the title is done); `actions`, at most four, are its buttons.
     public struct TimerSpec: Equatable, Sendable {

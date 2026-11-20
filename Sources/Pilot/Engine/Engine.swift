@@ -41,8 +41,9 @@ final class PilotSettings {
         defaults.set(more, forKey: Self.morePagesKey)
         morePages = more
         swipeWorkspaces = defaults.bool(forKey: "windows.swipeWorkspaces")
-        // On for every install, new or from before it (Sven, 2026-11-20).
-        focusFollowsMouse = defaults.object(forKey: Self.focusFollowsMouseKey) as? Bool ?? true
+        // Off unless switched on, for every install, new or from before it (Sven, 2026-11-20, after combined-5: only the
+        // focused window gets the border). Only the switch saves it, so a saved value is the user's own and stays.
+        focusFollowsMouse = defaults.object(forKey: Self.focusFollowsMouseKey) as? Bool ?? false
         brightnessKeys = defaults.object(forKey: "displays.brightnessKeys") as? Bool ?? Install.startsOn
         translatePair = TranslatePair(defaults: defaults)
         // Notes written in Application Support before Pilot's own folder moved to Documents (task N1) stay where they are.

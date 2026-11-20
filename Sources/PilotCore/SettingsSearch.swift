@@ -170,7 +170,7 @@ public struct SettingsGroup: Sendable {
     public let settings: [SettingKey]
 
     /// The tab path it is listed under: "Windows › Tiling".
-    public func path(developer: Bool) -> String { AppPlace(page).tabPath(developer: developer) }
+    public func path(count: Int = AppArea.tabCount, developer: Bool) -> String { AppPlace(page).tabPath(count: count, developer: developer) }
 }
 
 extension SettingsSearch {

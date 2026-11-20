@@ -372,12 +372,12 @@ struct SearchHits {
             }
             rows += found.parts.map { Hit(id: "part:" + $0.rawValue, title: $0.title, value: .none, target: .place(AppPlace(page, $0))) }
             if rows.isEmpty { rows = [Hit(id: "page:" + page.rawValue, title: page.title, value: .none, target: .place(AppPlace(page)))] }
-            groups.append(Group(id: page.rawValue, title: found.path(developer: developer), rows: rows))
+            groups.append(Group(id: page.rawValue, title: found.path(count: PanelTabs.count, developer: developer), rows: rows))
         }
         let sections = BindsPage.sections(store: engine.binds.store, actions: engine.bindActions, search: trimmed)
         let bound = sections.flatMap(\.rows).filter { $0.key != nil }
         if !bound.isEmpty {
-            groups.append(Group(id: "binds", title: AppPlace(.binds).tabPath(developer: developer),
+            groups.append(Group(id: "binds", title: AppPlace(.binds).tabPath(count: PanelTabs.count, developer: developer),
                                 rows: bound.prefix(Self.binds).map { Hit(id: "bind:" + $0.id, title: $0.label, value: $0.key.map(Value.keys) ?? .none, target: .bind($0.id)) }))
         }
         let panes = SettingsSearch.panes(trimmed)

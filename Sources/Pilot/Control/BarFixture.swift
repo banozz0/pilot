@@ -107,8 +107,8 @@ struct BarFixture: Decodable {
                 if values["crash"] == stage { fflush(stdout); _exit(86) }
                 if values["fail"] == stage { throw ThemeFailure("injected \(stage)") }
             }, fixtureRoot: config.root)
-        let pill = PillLayoutStore(defaults: defaults), dropdown = DropdownLayoutStore(defaults: defaults)
-        let schema = SettingsSchema(); schema.registerBarAppearance(store); schema.registerPill(pill); schema.registerStatsBar(store); schema.registerDropdown(dropdown)
+        let pill = PillLayoutStore(defaults: defaults)
+        let schema = SettingsSchema(); schema.registerBarAppearance(store); schema.registerPill(pill); schema.registerStatsBar(store)
         let verbs = ControlVerbs(); verbs.registerCore(); verbs.registerSettings(schema)
         verbs.registerBar({ store }, reach: .init(topBar: { nil }, extensions: { [.init(id: "fixture", title: "Fixture", icon: "square", hasPage: false)] }, nudge: {}, lacking: { [] }, lacksScreenRecording: { false }, openEditor: { false }, exactToggled: {}, gate: { gate }))
         verbs.registerThemes { owner }
@@ -132,10 +132,10 @@ struct BarFixture: Decodable {
         })
         // One round of the extensions' bar items as a surface holds them (spec desktop-controls T7, step 7): the fixture
         // root's `extensions` folder, none placed on a bar; `pill` holds the pill's asked ids (only while its Extensions view
-        // shows), `menu` the Pilot menu's while open (only while its Extensions card shows), `closed` nothing. Recorded runs,
-        // no Keychain. Answers which ran and what the surface lists.
-        verbs.register(ControlVerb("bar-fixture-extensions", help: "One extension round as the pill, the open Pilot menu or nothing holds them", flags: []) { call throws(ControlError) in
-            let surface = try call.arguments().word(0, "pill, menu or closed")
+        // shows), `closed` nothing (the Pilot menu's Extensions card went 2026-11-20). Recorded runs, no Keychain. Answers
+        // which ran and what the surface lists.
+        verbs.register(ControlVerb("bar-fixture-extensions", help: "One extension round as the pill or nothing holds them", flags: []) { call throws(ControlError) in
+            let surface = try call.arguments().word(0, "pill or closed")
             let ran = Mutex<[String]>([])
             let bar = ExtensionBar(folder: URL(fileURLWithPath: config.root).appending(path: "extensions"),
                                    storage: ExtensionStorage(data: URL(fileURLWithPath: config.state).appending(path: "extension-data"),
@@ -148,14 +148,11 @@ struct BarFixture: Decodable {
             bar.shows = { _, _ in false }
             switch surface {
             case "pill": bar.hold(Set(pill.layout.asked), for: "pill")
-            case "menu": bar.hold(Set(dropdown.layout.asked), for: "dropdown")
             case "closed": break
-            default: throw ControlError(.badValue, "pill, menu or closed, not \(surface)")
+            default: throw ControlError(.badValue, "pill or closed, not \(surface)")
             }
             await bar.round()
-            let listed: [String] = surface == "pill"
-                ? PillDrop.extensions(pill.layout.extensions, bar: bar).map { "\($0.name) \($0.value)" }
-                : DropdownBlocks.extensions(dropdown.layout.asked, bar: bar).map { "\($0.title) \($0.text)" }
+            let listed: [String] = surface == "pill" ? PillDrop.extensions(pill.layout.extensions, bar: bar).map { "\($0.name) \($0.value)" } : []
             return .object(["view": .string(pill.layout.current.rawValue), "asked": .array(ran.withLock { $0 }.map(JSONValue.string)),
                             "extensions": .array(listed.map(JSONValue.string))])
         })

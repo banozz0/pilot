@@ -30,7 +30,7 @@ struct SettingsSchemaTests {
         let ai: AISettings
         /// Each flip a session switch hands on.
         @MainActor final class Flips { var log: [Bool] = [] }
-        /// Home's Hyper switch and the dropdown's Clipboard switch.
+        /// Home's Hyper switch and the Pilot menu's Clipboard switch.
         let hyperFlips = Flips(), recordingFlips = Flips()
         let hyper: SessionSwitch, recording: SessionSwitch
         let schema = SettingsSchema()
@@ -87,9 +87,6 @@ struct SettingsSchemaTests {
         "ai.model.anthropicAPI": "claude-opus-5-5", "ai.model.openAI": "gpt-5",
         "ai.model.ollama": "qwen3", "ai.model.openAICompatible": "my-model",
         "ai.baseURL.ollama": "http://localhost:1234", "ai.baseURL.openAICompatible": "https://example.test/v1",
-        "dropdown.order": "commands,status,workspaces,switches,extensions,running,sound,connections,display,media,stats",
-        "dropdown.extensions": "weather,todo",
-        "dropdown.hidden": "none", "dropdown.pinned": "status,commands", "dropdown.switches": "launcher,tiling",
         "pill.views": "controls,music,extensions,activity", "pill.hidden": "activity", "pill.extensions": "weather,todo",
         "bar.clock": "EEE HH:mm", "keySwaps": "escape:tab,leftControl:f19", "fonts.ui": "Helvetica", "fonts.mono": "Menlo",
     ]
@@ -341,7 +338,7 @@ struct SettingsSchemaTests {
         guard case .object(let index) = rig.verbs.schemaIndex, case .array(let listed)? = index["verbs"],
               let entry = listed.first(where: { if case .object(let o) = $0 { o["name"] == .string("settings") } else { false } }),
               case .object(let part) = entry else { Issue.record("no settings entry"); return }
-        #expect(part["part"] == .object(["pages": .array(["ai", "binds", "clipboard", "files", "general", "home", "install", "look", "menu", "pilotMenu", "system", "tiling"].map(JSONValue.string))]))
+        #expect(part["part"] == .object(["pages": .array(["ai", "binds", "clipboard", "files", "general", "home", "install", "look", "menu", "system", "tiling"].map(JSONValue.string))]))
         #expect(await rig.ask("get", "look.glass", "--page", "look").error?.code == .unknownFlag)
         #expect(await rig.ask("set", "look.glass", "on", "--force").error?.code == .unknownFlag && !rig.look.glass)
     }

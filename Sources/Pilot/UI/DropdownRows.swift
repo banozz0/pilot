@@ -2,18 +2,13 @@ import AppKit
 import PilotCore
 import SwiftUI
 
-/// What each of the dropdown's rows (Dropdown.Row) says and does, read by both styles' dropdowns so they draw one list.
+/// What each of the Pilot menu's rows (Dropdown.Row) says and does.
 extension Engine {
     /// The footer's line: Check for updates only in a bundle with a feed or a commit to compare (PilotUpdates.canCheck).
     var dropdownFooter: [Dropdown.Row] { Dropdown.footer(canUpdate: PilotUpdates.shared.canCheck) }
 
-    /// The row's key: its ⌘ key, or its action's bind as the dropdown signs it; Dictate the dictation key while one is
-    /// picked ("right ⌃", Voice › Dictation key); nil when it has none.
-    func dropdownKey(_ row: Dropdown.Row) -> String? {
-        if let command = row.command { return "⌘" + String(command).uppercased() }
-        if row == .dictate, let sign = settings.dictationKey.sign { return sign }
-        return row.actionID.flatMap(keyLabel)
-    }
+    /// The row's key: its ⌘ key; nil when it has none.
+    func dropdownKey(_ row: Dropdown.Row) -> String? { row.command.map { "⌘" + String($0).uppercased() } }
 
     /// An action's bind as the dropdown signs it ("⇪ T"); nil without one.
     func keyLabel(_ action: String) -> String? { Dropdown.keyLabel(binds.store.trigger(for: action), layerKeys: settings.layerKeys) }
@@ -30,11 +25,6 @@ extension Engine {
         if row != .updates || PilotUpdates.shared.route == .sparkle { BarPanel.shared.close() }
         switch row {
         case .settings: AppWindowController.shared.open()
-        case .menu: PilotMenu.shared.toggle()
-        case .clipboard, .aiChat, .quickNotes, .dictate, .captureArea, .screenRecording: row.actionID.flatMap { action($0) }?.run()
-        // The keys map is Binds' keyboard; its A4 picture is Save map there.
-        case .keysMap: AppWindowController.shared.open(AppPlace(.binds))
-        case .extensions: AppWindowController.shared.open(AppPlace(.extensions))
         case .updates: PilotUpdates.shared.check()
         case .quit: NSApp.terminate(nil)
         case .printObservers: printObservers()
@@ -43,8 +33,8 @@ extension Engine {
     }
 }
 
-/// What runs now, the dropdown's Now block (spec pilot-1-1 T29): a recording, the focus timer, Extras downloading. Read
-/// in the block itself, so its clock, countdown and share redraw only it.
+/// What runs now (spec pilot-1-1 T29), the pill's Activity view since the Pilot menu's Now block went (2026-11-20): a
+/// recording, the focus timer, Extras downloading.
 @MainActor
 enum DropdownNow {
     enum Item { case recording, timer(String), download(title: String, share: Double) }

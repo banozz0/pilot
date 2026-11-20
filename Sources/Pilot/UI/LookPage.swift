@@ -247,10 +247,7 @@ private struct ThemePackControls: View {
                                          isFavourite: { WallpaperSettings.shared.themeFavourites.contains($0) },
                                          favourite: { WallpaperSettings.shared.toggleThemeFavourite($0) })) {
             if let plan { preview(plan) }
-            if !outcome.isEmpty { Text(outcome).foregroundStyle(ink.text2).textSelection(.enabled) }
-            if !outcomeDetails.isEmpty {
-                KitFold(title: "Details") { Text(outcomeDetails).font(.caption).foregroundStyle(ink.text2).textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading) }
-            }
+            ThemeOutcome(line: outcome, details: outcomeDetails)
             if draft != nil {
                 ThemePackEditor(session: editor,
                     save: { save(review: false) }, review: { save(review: true) }, cancel: { draft = nil })
@@ -692,19 +689,43 @@ private struct ThemeWindow: View {
     private static func ink(_ index: Int, _ t: PilotTheme) -> UInt32 { [t.text3, t.text2, t.text, t.second, t.third][index] }
 }
 
-/// Text shared with the external lifecycle proof; keeps recovery visible without a second engine or view. One summary
-/// line and what to do next; each change is behind Details (Sven, build 2276).
-func themeOutcomeText(_ result: JSONValue) -> String {
+/// Apply's result under the theme cards: the short line, then the apps and steps in a fold, folded until opened.
+struct ThemeOutcome: View {
+    let line: String
+    let details: String
+    var open: Binding<Bool>? = nil
+    @Environment(\.ink) private var ink
+
+    var body: some View {
+        if !line.isEmpty { Text(line).foregroundStyle(ink.text2).textSelection(.enabled) }
+        if !details.isEmpty {
+            KitFold(title: "Apps and steps", open: open) {
+                Text(details).font(.caption).foregroundStyle(ink.text2).textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+    }
+}
+
+/// Text shared with the external lifecycle proof; keeps recovery visible without a second engine or view. One short
+/// line, how many apps and how many need a step; which apps and each step are behind the fold, with each change
+/// (Sven, build 2962: "this should be inside a toggle"; the line and Details were build 2276's). `steps` puts the steps
+/// under the line, where there is no fold: Look › Catalogue's HUD line.
+func themeOutcomeText(_ result: JSONValue, steps withSteps: Bool = false) -> String {
     guard case .object(let values) = result else { return "" }
     func strings(_ value: JSONValue?) -> [String] {
         guard case .array(let rows) = value else { return [] }
         return rows.compactMap(\.string)
     }
-    let changed = strings(values["changed"]).joined(separator: ", ")
+    let changed = strings(values["changed"]).count, steps = strings(values["next"]).count
+    func count(_ done: String) -> String {
+        var line = changed == 0 ? done : "\(done) to \(changed) \(changed == 1 ? "app" : "apps")"
+        if steps > 0 { line += " · \(steps) \(steps == 1 ? "needs" : "need") a step" }
+        return line + "."
+    }
     var lines: [String] = []
     switch values["status"]?.string {
-    case "applied": lines.append(changed.isEmpty ? "Theme applied." : "Theme applied: \(changed).")
-    case "restored": lines.append(changed.isEmpty ? "Default appearance restored." : "Default appearance restored: \(changed).")
+    case "applied": lines.append(count("Theme applied"))
+    case "restored": lines.append(count("Default appearance restored"))
     case "unchanged": lines.append("Nothing needed changing.")
     case "failed":
         var state: String?
@@ -713,18 +734,23 @@ func themeOutcomeText(_ result: JSONValue) -> String {
                                                   : "The theme was not applied. Everything went back as it was.")
     default: break
     }
-    return (lines + strings(values["next"])).joined(separator: "\n")
+    // A failure has no fold of steps to hide them in.
+    let folded = !withSteps && ["applied", "restored"].contains(values["status"]?.string)
+    return (folded ? lines : lines + strings(values["next"])).joined(separator: "\n")
 }
 
-/// The long form, behind Details: each change and what was kept, why something failed, custom reloads, and each file's
-/// recovery.
+/// The long form, behind the fold: the apps and each step to take, then each change and what was kept, why something
+/// failed, custom reloads, and each file's recovery.
 func themeOutcomeDetails(_ result: JSONValue) -> String {
     guard case .object(let values) = result else { return "" }
     func strings(_ value: JSONValue?) -> [String] {
         guard case .array(let rows) = value else { return [] }
         return rows.compactMap(\.string)
     }
-    var lines = ["applied", "restored"].contains(values["status"]?.string) ? strings(values["changes"]).map { "Changed: \($0)" } + strings(values["kept"]) : []
+    let done = ["applied", "restored"].contains(values["status"]?.string), changed = strings(values["changed"])
+    var lines = done && !changed.isEmpty ? ["Apps: \(changed.joined(separator: ", "))."] : []
+    if done { lines += strings(values["next"]) }
+    lines += done ? strings(values["changes"]).map { "Changed: \($0)" } + strings(values["kept"]) : []
     lines += ["error", "warning"].compactMap { values[$0]?.string }
     if case .array(let reloads) = values["reloads"] {
         for case .object(let reload) in reloads {

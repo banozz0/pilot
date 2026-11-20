@@ -9,7 +9,8 @@ import Testing
 /// The panel's shell (pilot-ui-redesign T3, round 2's shots 7c-home, 7c-tools, 7c-more): Home, Tools › Captures, and More's
 /// card open over an area it holds, at the window's first-open size in Instrument, Tokyo Night and Porcelain. First it measures
 /// the tabs at its narrowest (`minSize`): `AppArea.tabCount` of `tabOrder` fit the bar with every name on one line, the More tab carrying its widest
-/// name, and one more would not. The suite keeps the rail's name so the suite list stays stable. Seeded as Home's renders
+/// name, and one more would not. Then Home at 780, 1296 and 3440 pt: the bar's own count follows the width (ADR 0018,
+/// 2026-11-20), `tabCount` at the narrowest and every area, no More, at full width. The suite keeps the rail's name so the suite list stays stable. Seeded as Home's renders
 /// are, in a moved home.
 /// `CFFIXED_USER_HOME=<fresh dir> PILOT_RENDER_DIR=<fresh dir> swift test --filter WindowRailRenders`
 extension SharedLook {
@@ -49,8 +50,9 @@ struct WindowRailRenders {
         defer { window.close() }
         let frame = try #require(window.contentView?.superview)
         window.setContentSize(AppWindowController.size)
-        func shot(_ file: String, _ place: AppPlace, moreOpen: Bool = false) throws {
+        func shot(_ file: String, _ place: AppPlace, moreOpen: Bool = false, width: CGFloat = AppWindowController.size.width) throws {
             more.open = false
+            window.setContentSize(NSSize(width: width, height: AppWindowController.size.height))
             model.go(place)
             RunLoop.main.run(until: Date().addingTimeInterval(0.6))
             more.open = moreOpen
@@ -59,14 +61,19 @@ struct WindowRailRenders {
             let rep = try #require(snapshot(frame, scale: 2))
             try #require(rep.representation(using: .png, properties: [:])).write(to: dir.appendingPathComponent("\(file).png"))
         }
-        // More open over an area it holds, so the More tab carries that area's name.
+        // More open over an area it holds at the narrowest, so the More tab carries that area's name.
         let held = try #require(AppArea.tabs(developer: false).more.first)
+        let all = AppArea.tabs(count: .max, developer: false).tabs.count
         for (name, theme) in Self.looks {
             look.themeID = theme
             AppWindowController.applyLook(look, to: window)
-            try shot("\(name)-home", AppPlace(.home))
+            for (width, tabs) in [(AppWindowController.minSize.width, AppArea.tabCount), (AppWindowController.size.width, nil), (3440, all)] {
+                try shot("\(name)-home-\(Int(width))", AppPlace(.home), width: width)
+                print("panel tabs at \(Int(width)) pt: \(PanelTabs.count) of \(all)")
+                if let tabs { #expect(PanelTabs.count == tabs, "\(Int(width)) pt: \(PanelTabs.count) tabs") }
+            }
             try shot("\(name)-tools-captures", AppPlace(.captures))
-            try shot("\(name)-more-open", AppPlace(held.pages[0]), moreOpen: true)
+            try shot("\(name)-more-open", AppPlace(held.pages[0]), moreOpen: true, width: AppWindowController.minSize.width)
         }
     }
 }

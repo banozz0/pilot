@@ -2,18 +2,9 @@ import AppKit
 import PilotCore
 import SwiftUI
 
-/// What the tall Dropdown panel shows (spec desktop-controls T2, T3, T4), as plain values: no engine, no live source. T3
-/// fills it from today's Dropdown blocks, T4 adds the optional ones and the saved order; nil or empty hides a block.
+/// What the Pilot menu shows (spec desktop-controls T2, T3; one fixed menu since 2026-11-20), as plain values: no
+/// engine, no live source; empty hides a part. Running, Sound and Display are the pill's too.
 struct DropdownPanelValues {
-    /// The blocks in the order they draw; empty draws `defaultOrder`. A block left out is hidden, but Status always
-    /// leads, the developer rows follow the commands while Option is held, and the footer always closes.
-    var order: [Dropdown.Block] = []
-    /// Blocks held above the scroll, in `order`'s order: once the panel meets `barPopoverRoom`, the rest scroll under them.
-    var pinned: Set<Dropdown.Block> = []
-
-    /// Today's order, the optional blocks before the commands, as T4's `Dropdown.Layout.arrangeable` lists them.
-    static let defaultOrder: [Dropdown.Block] = [.status, .workspaces, .quickSwitches, .extensions, .now, .sound, .connections, .display,
-                                                 .media, .stats, .rows, .developer]
 
     struct Problem: Hashable {
         var title: String
@@ -59,37 +50,7 @@ struct DropdownPanelValues {
     }
 
     struct Sound: Hashable { var device: String; var level: Double; var muted = false }
-    struct Connections: Hashable {
-        var wifiOn: Bool
-        /// 0 to 3 bars. Never the network's name: that needs Location, which Pilot never asks (WiFiPopover).
-        var wifiBars: Int
-        var bluetoothOn: Bool
-        var bluetoothDetail: String
-    }
     struct Display: Hashable { var name: String; var level: Double }
-    /// One extension's bar item in the Extensions card: its emoji, title, a line under it (or why it has nothing), and
-    /// the bar's text.
-    struct Extension: Hashable {
-        var emoji: String
-        var title: String
-        var text: String
-        var detail: String?
-        var problem: String?
-    }
-    struct Media: Hashable {
-        var title: String
-        var artist: String
-        var art: NSImage?
-        var playing: Bool
-    }
-    struct Stats: Hashable {
-        var cpu: Int
-        var memoryUsed: Double
-        var memoryTotal: Double
-        var battery: Int?
-        var charging = false
-    }
-
     var pilotOn = true
     var hyperOn = true
     /// The Launcher switch: with Key binds off, Hyper+Space still works while it is on (spec pilot-ui-redesign T20).
@@ -107,41 +68,29 @@ struct DropdownPanelValues {
     /// The tiler is down: the Workspaces card says so in place of the workspaces, and the tiler problem's Restart leads.
     var workspacesStopped = false
     var switches: [Switch] = []
-    var running: [Running] = []
-    var commands: [Command] = []
-    /// How many of `commands` lead the card, the rest behind All commands; 0 lists every command under a plain head.
-    var pinnedCommands = 0
     /// While Option is held: the developer rows, then the recent presses as lines of text.
     var developer: [Command] = []
     var presses: [String] = []
-    var sound: Sound?
-    var connections: Connections?
-    var display: Display?
-    var media: Media?
-    var stats: Stats?
-    var extensions: [Extension] = []
     var updateReady = false
     /// The build has somewhere to check (`PilotUpdates.canCheck`): false leaves Check for updates out of the footer.
     var canCheckForUpdates = true
 }
 
-/// The Pilot menu (spec desktop-controls T2, reshaped by pilot-ui-redesign T21 to S4 B, shot 4b): a head with Pilot's
-/// name and the Hyper chip, then the saved blocks in order: status with any problem first, the switch tiles, the
-/// workspaces, what is running, the optional sound, connections, display, media and stats blocks (off by default), the
-/// commands with their keys; then the footer's rows, Open Pilot and Quit Pilot. One column at 344 pt on the pop
-/// radius, hung under Pilot's item by BarPanel from the menu bar or Pilot's top bar.
+/// The Pilot menu (spec desktop-controls T2, reshaped by pilot-ui-redesign T21 to S4 B, shot 4b; fixed since 2026-11-20,
+/// Sven: "pilot menu should be simple"): a head with Pilot's name and the Hyper chip, then any problem in its card, the
+/// four switch tiles, the workspaces, the developer rows while Option is held, and the footer's rows, Open Pilot and
+/// Quit Pilot. One column at 344 pt on the pop radius, hung under Pilot's item by BarPanel from the menu bar or Pilot's
+/// top bar; past the room under it the cards scroll between the head and the footer.
 ///
-/// Each block sits in its own card, as the reference groups them (Sven's pick A, 2026-11-10, over one sheet between
-/// hairlines); the switch tiles and the workspaces are cards themselves, so they stand on the panel (shot 4b). On is
-/// neutral (an ink disc); the signal colour marks Hyper and the current workspace alone (DESIGN.md).
+/// The switch tiles and the workspaces are cards themselves, so they stand on the panel (shot 4b); a problem and the
+/// developer rows sit in a card each. On is neutral (an ink disc); the signal colour marks Hyper and the current
+/// workspace alone (DESIGN.md).
 struct DropdownPanelFace: View {
     /// What a press asks for; the builder (T3, T4) runs it. Indexes are into the values' lists.
     enum Action: Hashable {
-        enum Connection: Hashable { case wifi, bluetooth }
+        /// The pill's Controls sliders.
         enum Level: Hashable { case sound, display }
-        enum Media: Hashable { case previous, playPause, next }
-        case arrange, fix(Int), workspace(String), toggle(Dropdown.Switch), pause(Int), stop(Int)
-        case connection(Connection), level(Level, Double), media(Media), command(Int), allCommands, developer(Int), extensionPage(Int)
+        case fix(Int), workspace(String), toggle(Dropdown.Switch), developer(Int)
         case updates, settings, quit
     }
 
@@ -156,19 +105,19 @@ struct DropdownPanelFace: View {
 
     var body: some View {
         let shape = RoundedRectangle(cornerRadius: style.radii.pop, style: .continuous)
-        let cards = Self.cards(values)
-        let rest = column(cards.rest).padding(.top, cards.rest.isEmpty ? 0 : 8).padding(.bottom, 8)
+        let head = header.padding(.horizontal, 14).padding(.top, 14).padding(.bottom, 12)
+        let rest = cards.padding(.vertical, 8)
         Group {
             if let room {
                 PinnedScrollLayout(room: room) {
-                    top(cards.pinned)
+                    head
                     ScrollView(.vertical) { rest }
                         .scrollBounceBehavior(.basedOnSize)
                         .mask { Self.edgeFade }
                     footer
                 }
             } else {
-                VStack(alignment: .leading, spacing: 0) { top(cards.pinned); rest; footer }
+                VStack(alignment: .leading, spacing: 0) { head; rest; footer }
             }
         }
         .frame(width: Self.width, alignment: .leading)
@@ -179,28 +128,20 @@ struct DropdownPanelFace: View {
         .accessibilityLabel("Pilot menu")
     }
 
-    /// The header and the pinned cards, which stay put while the rest scroll.
-    private func top(_ pinned: [[Dropdown.Block]]) -> some View {
-        VStack(alignment: .leading, spacing: 0) {
-            header.padding(.horizontal, 14).padding(.top, 14).padding(.bottom, 12)
-            if !pinned.isEmpty { column(pinned) }
-        }
-    }
-
-    private func column(_ cards: [[Dropdown.Block]]) -> some View {
+    /// Any problem, the switch tiles, the workspaces and, while Option is held, the developer rows; a part with nothing
+    /// to show is left out.
+    private var cards: some View {
         VStack(alignment: .leading, spacing: 8) {
-            ForEach(cards, id: \.self) { card in
-                if card.allSatisfy(Self.bare.contains) {
-                    VStack(alignment: .leading, spacing: 12) { ForEach(card, id: \.self) { block($0) } }.padding(.horizontal, 4)
-                } else {
-                    section(VStack(alignment: .leading, spacing: 12) { ForEach(card, id: \.self) { block($0) } })
-                }
-            }
+            if !values.problems.isEmpty { section(problems) }
+            if !values.switches.isEmpty { switches.padding(.horizontal, 4) }
+            if values.workspacesStopped { workspacesStopped.padding(.horizontal, 4) }
+            else if !values.workspaces.isEmpty { workspaces.padding(.horizontal, 4) }
+            if !values.developer.isEmpty || !values.presses.isEmpty { section(developer) }
         }
         .padding(.horizontal, 8)
     }
 
-    /// The scroll's ends fade over the 8 pt gaps, so a card passing under the pins or the footer softens at rest nothing.
+    /// The scroll's ends fade over the 8 pt gaps, so a card passing under the head or the footer softens at rest nothing.
     private static var edgeFade: some View {
         VStack(spacing: 0) {
             LinearGradient(colors: [.clear, .black], startPoint: .top, endPoint: .bottom).frame(height: 8)
@@ -209,103 +150,8 @@ struct DropdownPanelFace: View {
         }
     }
 
-    /// The blocks as cards in draw order, split at the pins: Status first whatever `order` says, the developer rows after
-    /// the commands when `order` leaves them out, a block with nothing to show dropped, and Sound and Brightness sharing
-    /// one card when they sit together.
-    static func cards(_ values: DropdownPanelValues) -> (pinned: [[Dropdown.Block]], rest: [[Dropdown.Block]]) {
-        var order: [Dropdown.Block] = []
-        for block in [.status] + (values.order.isEmpty ? DropdownPanelValues.defaultOrder : values.order) where block != .footer && !order.contains(block) {
-            order.append(block)
-        }
-        if !order.contains(.developer) { order.insert(.developer, at: order.firstIndex(of: .rows).map { $0 + 1 } ?? order.endIndex) }
-        let shown = order.filter { shows($0, values) }
-        func grouped(_ blocks: [Dropdown.Block]) -> [[Dropdown.Block]] {
-            blocks.reduce(into: []) { cards, block in
-                if let last = cards.last, last.count == 1, Set(last + [block]) == [.sound, .display] { cards[cards.count - 1].append(block) }
-                else { cards.append([block]) }
-            }
-        }
-        return (grouped(shown.filter(values.pinned.contains)), grouped(shown.filter { !values.pinned.contains($0) }))
-    }
-
-    private static func shows(_ block: Dropdown.Block, _ values: DropdownPanelValues) -> Bool {
-        switch block {
-        case .status: !values.problems.isEmpty
-        case .workspaces: !values.workspaces.isEmpty || values.workspacesStopped
-        case .quickSwitches: !values.switches.isEmpty
-        case .now: !values.running.isEmpty
-        case .rows: !values.commands.isEmpty
-        case .developer: !values.developer.isEmpty || !values.presses.isEmpty
-        case .sound: values.sound != nil
-        case .connections: values.connections != nil
-        case .display: values.display != nil
-        case .media: values.media != nil
-        case .stats: values.stats != nil
-        case .extensions: !values.extensions.isEmpty
-        case .footer: false
-        }
-    }
-
-    @ViewBuilder private func block(_ block: Dropdown.Block) -> some View {
-        switch block {
-        case .status: problems
-        case .workspaces: if values.workspacesStopped { workspacesStopped } else { workspaces }
-        case .quickSwitches: switches
-        case .now: running
-        case .rows: commands
-        case .developer: developer
-        case .sound: if let sound = values.sound { self.sound(sound) }
-        case .connections: if let connections = values.connections { self.connections(connections) }
-        case .display: if let display = values.display { self.display(display) }
-        case .media: if let media = values.media { self.media(media) }
-        case .stats: if let stats = values.stats { self.stats(stats) }
-        case .extensions: extensions
-        case .footer: EmptyView()
-        }
-    }
-
-    /// The blocks made of tiles, drawn on the panel without a card round them (shot 4b).
-    static let bare: Set<Dropdown.Block> = [.quickSwitches, .workspaces]
-
-    /// A block in its own card.
+    /// A part in its own card.
     private func section(_ content: some View) -> some View { FaceCard(padding: 12) { content } }
-
-    // MARK: Extensions
-
-    /// The extensions' bar items Sven picked (Q74 A, his pick of the mock-up, 2026-11-11): a row each, its emoji, title, a
-    /// line under it (why it has nothing, muted behind a warning glyph), the bar's text at the right; a row opens its page
-    /// (Q76).
-    private var extensions: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            blockHead("Extensions", "\(values.extensions.count) in the menu")
-            ForEach(Array(values.extensions.enumerated()), id: \.offset) { i, item in
-                Button { act(.extensionPage(i)) } label: {
-                    HStack(alignment: .center, spacing: 10) {
-                        Text(item.emoji).font(.system(size: 15)).frame(width: 22)
-                        VStack(alignment: .leading, spacing: 1) {
-                            Text(item.title).styleText(\.strong).foregroundStyle(style.color(\.text)).lineLimit(1)
-                            if let problem = item.problem {
-                                // Muted with a warning glyph: Instrument's warn is its signal colour, kept for Hyper and live.
-                                Label(problem, systemImage: "exclamationmark.triangle").labelStyle(.titleAndIcon)
-                                    .styleText(\.small).foregroundStyle(style.color(\.text2)).lineLimit(1).help(problem)
-                            } else if let detail = item.detail {
-                                Text(detail).styleText(\.small).foregroundStyle(style.color(\.text2)).lineLimit(1).help(detail)
-                            }
-                        }
-                        Spacer(minLength: 6)
-                        Text(item.text).font(style.font(\.mono, size: 12)).monospacedDigit().lineLimit(1)
-                            .foregroundStyle(style.color(item.problem == nil ? \.text : \.text3))
-                    }
-                    .contentShape(Rectangle())
-                }
-                .buttonStyle(FacePress(reduceMotion: reduceMotion))
-                .accessibilityElement(children: .ignore)
-                .accessibilityLabel(item.title)
-                .accessibilityValue(item.problem ?? [item.text, item.detail].compactMap { $0 }.joined(separator: ", "))
-                .accessibilityHint("Opens its page")
-            }
-        }
-    }
 
     // MARK: Header
 
@@ -457,165 +303,6 @@ struct DropdownPanelFace: View {
         .buttonStyle(FacePress(reduceMotion: reduceMotion))
         .accessibilityLabel(item.which.title)
         .accessibilityValue(item.on ? "On, \(item.state)" : "Off")
-    }
-
-    /// What runs now: a recording, a focus timer, a download, each with its reading and its buttons.
-    private var running: some View {
-        VStack(alignment: .leading, spacing: 9) {
-            blockHead("Running now", values.running.count == 1 ? "1 active" : "\(values.running.count) active")
-            let stopColumn = values.running.contains(where: \.canStop)
-            ForEach(Array(values.running.enumerated()), id: \.offset) { i, item in
-                RunningRow(item: item, stopColumn: stopColumn, reduceMotion: reduceMotion, onPause: { act(.pause(i)) }, onStop: { act(.stop(i)) })
-            }
-        }
-    }
-
-    /// Wi-Fi and Bluetooth as two tiles, as the reference has them, without the network's name.
-    private func connections(_ value: DropdownPanelValues.Connections) -> some View {
-        HStack(spacing: 6) {
-            connection(.wifi, value.wifiOn ? "wifi" : "wifi.slash", "Wi-Fi", value.wifiOn ? Self.signal(value.wifiBars) : "Off", on: value.wifiOn)
-            connection(.bluetooth, "antenna.radiowaves.left.and.right", "Bluetooth", value.bluetoothOn ? value.bluetoothDetail : "Off", on: value.bluetoothOn)
-        }
-    }
-
-    static func signal(_ bars: Int) -> String {
-        switch bars {
-        case 3...: "On · Strong signal"
-        case 2: "On · Good signal"
-        case 1: "On · Weak signal"
-        default: "On · No network"
-        }
-    }
-
-    private func connection(_ kind: Action.Connection, _ symbol: String, _ title: String, _ detail: String, on: Bool) -> some View {
-        let shape = RoundedRectangle(cornerRadius: style.radii.control + 2, style: .continuous)
-        return Button { act(.connection(kind)) } label: {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                FaceGlyph(symbol: symbol, on: on, size: 28)
-                Spacer()
-                Image(systemName: "chevron.right").font(.system(size: 10, weight: .semibold)).foregroundStyle(style.color(\.text3))
-            }
-            VStack(alignment: .leading, spacing: 1) {
-                Text(title).styleText(\.strong).foregroundStyle(style.color(\.text))
-                Text(detail).styleText(\.small).foregroundStyle(style.color(\.text2)).lineLimit(1)
-            }
-        }
-        .padding(9)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(style.color(\.panel), in: shape)
-        .overlay { shape.strokeBorder(style.color(\.line)) }
-        .contentShape(shape)
-        }
-        .buttonStyle(FacePress(reduceMotion: reduceMotion))
-    }
-
-    /// Sound and brightness, one slider each with its reading; side by side in the order they share one card.
-    private func sound(_ sound: DropdownPanelValues.Sound) -> some View {
-        level(.sound, sound.muted ? "speaker.slash" : "speaker.wave.2", "Sound", sound.device, sound.muted ? "Muted" : "\(Int(sound.level * 100)) %",
-              sound.level, muted: sound.muted)
-    }
-
-    private func display(_ display: DropdownPanelValues.Display) -> some View {
-        level(.display, "sun.max", "Brightness", display.name, "\(Int(display.level * 100)) %", display.level)
-    }
-
-    private func level(_ kind: Action.Level, _ symbol: String, _ title: String, _ detail: String, _ reading: String, _ value: Double, muted: Bool = false) -> some View {
-        VStack(alignment: .leading, spacing: 7) {
-            HStack(spacing: 7) {
-                Image(systemName: symbol).font(.system(size: 12, weight: .medium)).foregroundStyle(style.color(\.text2)).frame(width: 16)
-                Text(title).styleText(\.strong).foregroundStyle(style.color(\.text))
-                Text(detail).styleText(\.small).foregroundStyle(style.color(\.text2)).lineLimit(1)
-                Spacer(minLength: 4)
-                Text(reading).font(style.font(\.mono, size: 11)).monospacedDigit().foregroundStyle(style.color(\.text2))
-            }
-            FaceSlider(value: value, muted: muted, label: title) { act(.level(kind, $0)) }
-        }
-    }
-
-    private func media(_ value: DropdownPanelValues.Media) -> some View {
-        HStack(spacing: 10) {
-            FaceArt(image: value.art, size: CGSize(width: 38, height: 38), radius: 6)
-            VStack(alignment: .leading, spacing: 1) {
-                Text(value.title).styleText(\.strong).foregroundStyle(style.color(\.text)).lineLimit(1)
-                Text(value.artist).styleText(\.small).foregroundStyle(style.color(\.text2)).lineLimit(1)
-            }
-            Spacer(minLength: 4)
-            HStack(spacing: 2) {
-                mediaButton("backward.fill", "Previous", .previous)
-                mediaButton(value.playing ? "pause.fill" : "play.fill", value.playing ? "Pause" : "Play", .playPause)
-                mediaButton("forward.fill", "Next", .next)
-            }
-        }
-    }
-
-    private func mediaButton(_ symbol: String, _ label: String, _ media: Action.Media) -> some View {
-        Button { act(.media(media)) } label: {
-            Image(systemName: symbol).font(.system(size: 12, weight: .semibold)).foregroundStyle(style.color(\.text))
-                .frame(width: 28, height: 28).contentShape(Circle())
-        }
-        .buttonStyle(FacePress(reduceMotion: reduceMotion))
-        .accessibilityLabel(label)
-    }
-
-    /// Battery, CPU and memory as three readings, the number large in mono digits (the reference's bottom row).
-    private func stats(_ value: DropdownPanelValues.Stats) -> some View {
-        HStack(spacing: 6) {
-            if let battery = value.battery {
-                reading(value.charging ? "battery.100.bolt" : "battery.75", "Battery", "\(battery)", "%", value.charging ? "Charging" : "On battery")
-            }
-            reading("cpu", "CPU", "\(value.cpu)", "%", "In use")
-            reading("memorychip", "Memory", String(format: "%.1f", value.memoryUsed), "GB", "of \(Int(value.memoryTotal)) GB")
-        }
-    }
-
-    private func reading(_ symbol: String, _ title: String, _ number: String, _ unit: String, _ detail: String) -> some View {
-        let shape = RoundedRectangle(cornerRadius: style.radii.control + 2, style: .continuous)
-        return VStack(alignment: .leading, spacing: 5) {
-            HStack(spacing: 5) {
-                Image(systemName: symbol).font(.system(size: 10, weight: .medium))
-                Text(title).styleText(\.small)
-            }
-            .foregroundStyle(style.color(\.text2))
-            HStack(alignment: .firstTextBaseline, spacing: 2) {
-                Text(number).font(style.font(\.mono, size: 20)).monospacedDigit().foregroundStyle(style.color(\.text))
-                Text(unit).styleText(\.small).foregroundStyle(style.color(\.text2))
-            }
-            Text(detail).styleText(\.small).foregroundStyle(style.color(\.text2)).lineLimit(1)
-        }
-        .padding(9)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(style.color(\.panel), in: shape)
-        .overlay { shape.strokeBorder(style.color(\.line)) }
-    }
-
-    /// The commands with their keys under one head. With some pinned, those lead and the rest wait behind All commands;
-    /// with none pinned, every command is listed and there is no All commands row.
-    private var commands: some View {
-        let pinned = min(values.pinnedCommands, values.commands.count)
-        let shown = pinned == 0 ? values.commands.count : pinned
-        return VStack(alignment: .leading, spacing: 4) {
-            blockHead("Commands", pinned == 0 ? nil : "\(pinned) pinned").padding(.bottom, 4)
-            ForEach(Array(values.commands.prefix(shown).enumerated()), id: \.offset) { i, command in
-                Button { act(.command(i)) } label: { CommandRow(command: command, layerSign: values.layerSign).contentShape(Rectangle()) }
-                    .buttonStyle(FacePress(reduceMotion: reduceMotion))
-            }
-            if shown < values.commands.count {
-                Button { act(.allCommands) } label: {
-                    HStack(spacing: 10) {
-                        Image(systemName: "square.grid.2x2").font(.system(size: 12, weight: .medium)).foregroundStyle(style.color(\.text2)).frame(width: 16)
-                        Text("All commands").styleText(\.body).foregroundStyle(style.color(\.text))
-                        Spacer()
-                        Text("\(values.commands.count - shown) more").styleText(\.small).foregroundStyle(style.color(\.text2))
-                        Image(systemName: "chevron.right").font(.system(size: 10, weight: .semibold)).foregroundStyle(style.color(\.text3))
-                    }
-                    .padding(.horizontal, 8).frame(minHeight: 30)
-                    .contentShape(Rectangle())
-                }
-                .buttonStyle(FacePress(reduceMotion: reduceMotion))
-                .accessibilityLabel("All commands, \(values.commands.count - shown) more")
-            }
-        }
     }
 
     /// Option held: the developer rows as commands, then the recent presses as lines in mono, newest first.

@@ -28,9 +28,9 @@ extension SettingsSchema {
             .choice("tiling.scrolling.look", "A scrolling strip's look: three columns on screen, one centred, or two on screen", page: "workspaces",
                     PilotBlock.StripLook.allCases, standard: .halves, read: { block.block.scrolling.look },
                     write: { look throws(ControlError) in try await block.written { $0.scrolling.look = look } }),
-            // On for every install (Sven, 2026-11-20); it acts only while Tiling is on, the tiler focusing.
+            // Off unless switched on (Sven, 2026-11-20, after combined-5); it acts only while Tiling is on, the tiler focusing.
             .bool(PilotSettings.focusFollowsMouseKey, "Focus follows mouse: the window the pointer rests on takes focus, no click (while Tiling is on)",
-                  page: "tiling", standard: true, read: { settings.focusFollowsMouse }, write: { settings.focusFollowsMouse = $0 }),
+                  page: "tiling", standard: false, read: { settings.focusFollowsMouse }, write: { settings.focusFollowsMouse = $0 }),
             .choice("windows.dragModifier", "Hold to move or resize with the mouse", page: "tiling", DragModifier.allCases,
                     standard: PilotSettings.dragModifierStart, read: { settings.dragModifier }, write: { settings.dragModifier = $0 }),
             .choice("shelf.pictures", "The Window shelf's window pictures (Stills and Live ask Screen Recording)", page: "tiling",

@@ -125,7 +125,7 @@ final class PillDrop {
         }
     }
 
-    /// The Pilot menu's six switches as the Controls view's tiles.
+    /// The quick switches as the Controls view's tiles.
     static func controls(_ engine: Engine) -> [PillValues.Control] {
         let switches = engine.quickSwitches, layerKeys = engine.settings.layerKeys, tiler = engine.observers.tiler.tilerName
         return Dropdown.Switch.allCases.map { which in
@@ -165,7 +165,7 @@ final class PillDrop {
         watch = switch view {
         case .music: Task { await NowPlaying.shared.watch() }
         case .extensions: readings.map { readings in Task { await Self.holding([.extensions], readings) } }
-        case .controls: readings.map { readings in Task { await DropdownBlocks.hold([.sound, .display], readings: readings) } }
+        case .controls: readings.map { readings in Task { await DropdownBlocks.holdControls(readings: readings) } }
         case .activity, nil: nil
         }
     }
@@ -247,9 +247,9 @@ final class PillDrop {
             // The screen the view reads, so the slider and its reading stay on one display.
             guard let id = screen?.id else { return }
             _ = ScreenBrightness.engine.set(id, level)
-        case .level(let kind, let level):
+        case .level(.sound, let level):
             guard let readings = Engine.shared?.barSources.readings else { return }
-            DropdownBlocks.act(.level(kind, level), readings: readings)
+            DropdownBlocks.setSound(level, readings: readings)
         case .extensionPage(let i):
             BarDrops.shared.close(.pill)
             DropdownBlocks.openPage(layout.layout.extensions, at: i)

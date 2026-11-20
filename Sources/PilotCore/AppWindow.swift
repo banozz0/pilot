@@ -17,7 +17,7 @@ import Foundation
 /// Windows area's sidebar. Reports came onto Update & Clean's front under the Update and Clean block
 /// (Sven, 2026-11-16).
 public enum AppPage: String, CaseIterable, Sendable {
-    case home, binds, menu, workspaces, tiling, menuBar, dock, pilotMenu, look, system, upkeep, clipboard, captures, snippets, notes, files, ai, voice,
+    case home, binds, menu, workspaces, tiling, menuBar, dock, look, system, upkeep, clipboard, captures, snippets, notes, files, ai, voice,
          install, openWith, configs, repos, fonts, general, extensions, widgets
 
     /// The area the page sits in (window directions, Sven 2026-10-11).
@@ -32,7 +32,6 @@ public enum AppPage: String, CaseIterable, Sendable {
         case .tiling: "Tiling"
         case .menuBar: "Menu bar"
         case .dock: "Dock"
-        case .pilotMenu: "Pilot menu"
         case .look: "Look"
         case .system: "System"
         case .upkeep: "Update & Clean"
@@ -64,7 +63,6 @@ public enum AppPage: String, CaseIterable, Sendable {
         case .tiling: "rectangle.split.3x1"
         case .menuBar: "menubar.rectangle"
         case .dock: "dock.rectangle"
-        case .pilotMenu: "list.bullet.below.rectangle"
         case .look: "paintpalette"
         case .system: "slider.horizontal.3"
         case .upkeep: "arrow.triangle.2.circlepath"
@@ -92,7 +90,7 @@ public enum AppPage: String, CaseIterable, Sendable {
         case .home, .clipboard, .captures, .upkeep: 0
         case .binds, .look, .ai, .snippets, .widgets: 1
         case .workspaces, .tiling, .system, .voice: 2
-        case .menu, .menuBar, .dock, .pilotMenu, .general: 3
+        case .menu, .menuBar, .dock, .general: 3
         case .install, .extensions, .files, .fonts, .repos: 4
         case .openWith, .configs, .notes: 5
         }
@@ -158,8 +156,6 @@ public enum AppPage: String, CaseIterable, Sendable {
         case .tiling: ["gaps", "inner", "outer", "between windows", "screen edges", "tiler", "rescue", "border", "defocus", "dim", "blur",
                        "dim other windows"]
         case .workspaces: ["windows", "workspace", "layout", "name", "delete workspace", "add workspace", "your widths", "own sizes", "spot", "preview"]
-        case .pilotMenu: ["pilot menu", "pilot's menu", "dropdown", "menu bar icon", "blocks", "pinned", "quick switches", "running now",
-                          "control centre", "control center", "extensions card"]
         case .menuBar: ["top bar", "status bar", "waybar", "hide", "autohide", "clock", "date and time", "two zones", "workspaces", "menu bar items", "in the menu bar", "item",
                         "bar preset", "full strip", "full bar", "floating strip", "three islands", "pills", "attached", "floating", "adjust sizes", "bar height"]
         // The front's words; the style, the menu's and window's layouts, the glass's tuning, the cursor and the wallpaper
@@ -227,7 +223,7 @@ public enum AppArea: String, CaseIterable, Sendable {
         // The split (Sven, 2026-11-15: "the themes and all that go into one place and the rest into another"): Desktop keeps
         // what is on the desk and how it behaves; Look takes the theme, wallpaper, Material and cursor, and Fonts from Apps
         // ("Fonts, I don't think it should be in Apps"). Windows left it for an area of its own under Keys (Q289).
-        case .desktop: [.menuBar, .dock, .pilotMenu, .widgets]
+        case .desktop: [.menuBar, .dock, .widgets]
         case .look: [.look, .fonts]
         // Majors first (simplify-pages T11): Update & Clean before System, so ⌘7 opens it; Clipboard, Notes, Files, Voice;
         // Open with first in Apps, so ⌘9 opens it (⌘7 until the pages split).
@@ -318,9 +314,27 @@ public enum AppArea: String, CaseIterable, Sendable {
     public static let tabOrder: [AppArea] = [.home, .keys, .windows, .launcher, .tools, .look, .desktop, .ai,
                                              .mac, .apps, .extensions, .pilot, .developer]
 
-    /// How many of `tabOrder` the panel shows as tabs: as many as fit 780 pt with every name on one line (T3's render,
-    /// WindowRailRenders, 2026-11-19: eight take 596 of the bar's 634 pt with More named Extensions; nine would take 652).
+    /// How many of `tabOrder` the panel shows as tabs before its bar is measured, and where no window is (`pilot open
+    /// --where`): what fits the narrowest window, 780 pt, with every name on one line (T3's render, WindowRailRenders,
+    /// 2026-11-19: eight take 596 of the bar's 634 pt with More named Extensions; nine would take 652). The bar itself
+    /// follows the window's width (`tabsThatFit`; ADR 0018, 2026-11-20).
     public static let tabCount = 8
+
+    /// How many tabs fit `room` points, names whole (ADR 0018, Sven 2026-11-20: a bigger window shows more tabs): every one
+    /// when all fit, with no More; else the most that fit beside More, sized for the widest name it can take (the area
+    /// opened from it names it), so opening one never moves a tab. `widths` are the shown tabs' in `tabOrder`, `more[i]`
+    /// More's when it would hold areas `i...`; at least one tab.
+    public static func tabsThatFit(widths: [Double], more: [Double], spacing: Double, room: Double) -> Int {
+        let all = widths.reduce(0, +) + spacing * Double(max(widths.count - 1, 0))
+        guard all > room else { return widths.count }
+        var used = 0.0, count = 0
+        for (i, width) in widths.enumerated() where i + 1 < widths.count {
+            used += width + spacing
+            guard used + more[i + 1] <= room else { break }
+            count = i + 1
+        }
+        return max(count, 1)
+    }
 
     /// The panel's tabs and More's areas: the first `count` of `tabOrder` (Home at least) are tabs, the rest More's,
     /// Developer only while `developer` is on.
@@ -784,7 +798,8 @@ public struct AppPlace: Hashable, Sendable {
     /// Monitors and the swipe left Tiling for Workspaces (Sven's Q207 page map, 2026-10-17).
     static let renamed: [String: AppPlace] = [
         "topBar": AppPlace(.menuBar), "topbar": AppPlace(.menuBar), "menubar": AppPlace(.menuBar),
-        "pilotmenu": AppPlace(.pilotMenu), "dropdown": AppPlace(.pilotMenu),
+        // The Pilot menu's page went with its arrangement (2026-11-20): a link or a saved page lands on Menu bar.
+        "pilotMenu": AppPlace(.menuBar), "pilotmenu": AppPlace(.menuBar), "dropdown": AppPlace(.menuBar),
         "installCatalogue": AppPlace(.catalogue), "pomodoro": AppPlace(.extensionCatalogue),
         "pilot": AppPlace(.general), "setup": AppPlace(.system), "history": AppPlace(.menuBar), "stats": AppPlace(.menuBar), "defaults": AppPlace(.openWith),
         "defaultApps": AppPlace(.openWith), "snapshots": AppPlace(.workspaceRules), "onOff": AppPlace(.home), "otherApps": AppPlace(.general),
