@@ -86,7 +86,8 @@ extension Extension {
         var names = Set<String>()
         commands = try manifest.commands.compactMap { c in
             guard Self.isCommandName(c.name) else { throw Problem.badCommandName(c.name) }
-            guard names.insert(c.name).inserted else { throw Problem.duplicateCommand(c.name) }
+            // Case-folded: `Index` and `index` are one bundle file on the Mac's disk.
+            guard names.insert(c.name.lowercased()).inserted else { throw Problem.duplicateCommand(c.name) }
             let mode: Mode
             switch c.mode {
             case "view": mode = .list

@@ -113,8 +113,10 @@ extension Host {
             spawn(id, file, args, options)
         } as @convention(block) (Int, String, [String], [String: Any]) -> Any)
         add("spawnSync", { (file: String, args: [String], options: [String: Any], input: String) -> Any in
-            if let refused = Measure.refusesSync(file, args, input: input) { return refused }
-            return Host.spawnSync(file, args, options, input: input)
+            switch Measure.admit(file, args, options, sync: true) {
+            case .run(let program, let options): return Host.spawnSync(program, args, options, input: input)
+            case .refused(let kind, let why): return Measure.refusedSync(file, args, input: input, kind: kind, why: why)
+            }
         } as @convention(block) (String, [String], [String: Any], String) -> Any)
         add("childWrite", { [unowned self] (id: Int, text: String) in
             if Measure.swallow(id, text) { return }
@@ -207,6 +209,7 @@ extension Host {
         }
         var made = URLRequest(url: url)
         made.httpMethod = (request["method"] as? String)?.uppercased() ?? "GET"
+        if let refused = Measure.refusesFetch(made.httpMethod ?? "GET", url) { return call("__pilotFetched", [id, ["error": refused]]) }
         for pair in request["headers"] as? [[String]] ?? [] where pair.count == 2 { made.addValue(pair[1], forHTTPHeaderField: pair[0]) }
         if let body = request["body"] as? String { made.httpBody = Data(body.utf8) }
         pending += 1
@@ -242,10 +245,15 @@ extension Host {
     /// passes it by once the host is gone; stdio `ignore` gives it /dev/null, else three pipes read here. Every other
     /// descriptor is closed in it, so it never holds Pilot's pipe. Answers its pid, or the failure.
     func spawn(_ id: Int, _ file: String, _ args: [String], _ options: [String: Any]) -> Any {
-        if let standIn = Measure.refuses(id, file, args, host: self) { return standIn }
-        let detached = options["detached"] as? Bool == true, ignore = options["stdio"] as? String == "ignore"
+        // --measure: the child by its real path with a fixed environment, or a refused stand-in (Measure.admit).
+        let program: String, given: [String: Any]
+        switch Measure.admit(file, args, options, sync: false) {
+        case .run(let path, let made): (program, given) = (path, made)
+        case .refused(let kind, let why): return Measure.standIn(id, file, args, kind: kind, why: why, host: self)
+        }
+        let detached = given["detached"] as? Bool == true, ignore = given["stdio"] as? String == "ignore"
         let started: Started
-        do { started = try Host.start(file, args, options, pipes: !ignore, detached: detached) } catch { return Host.failure(errno: error.code, file) }
+        do { started = try Host.start(program, args, given, pipes: !ignore, detached: detached) } catch { return Host.failure(errno: error.code, file) }
         var child = Child(pid: started.pid, stdin: started.stdin, counted: true, detached: detached)
         for (fd, stream) in [(started.stdout, "stdout"), (started.stderr, "stderr")] {
             guard let fd else { continue }

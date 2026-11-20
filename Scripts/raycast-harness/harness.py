@@ -7,6 +7,7 @@ against a sandbox, the phase gates' proof. Written fresh: none of the spike's co
     harness.py act     --pilot P --socket S --work W --host H --measure M --victim PID [--only a,b]  each gate one's press
     harness.py summary --work W --measure M                          coverage, first answers and host footprints
     harness.py redact --log L --work W                               a log rewritten to counts and shapes (T7 review 1)
+    harness.py probe --work W --host H --prelude JS --measure M --victim PID   --measure's refusals, one try per way out
 
 P is PilotCLI, S the sandbox's socket (Tests/PilotTests/SandboxHost.swift, PILOT_SANDBOX_ALLOW=1), W a work folder, H the
 real pilot-ext-host the sandbox's wrapper starts (its path finds this sandbox's hosts with `pgrep -f`, never another
@@ -333,9 +334,9 @@ def measured(ns, since):
     """The measure log's records from byte `since` on."""
     if not os.path.exists(ns.measure):
         return []
-    with open(ns.measure) as log:
+    with open(ns.measure, "rb") as log:
         log.seek(since)
-        return [json.loads(l) for l in log if l.strip()]
+        return [json.loads(l) for l in log.read().decode("utf-8", "replace").splitlines() if l.strip()]
 
 
 def lines_in(ns):
@@ -507,9 +508,44 @@ def phase_redact(ns):
     say("# redacted %s: %d lines read, %d JSON blocks shaped" % (ns.log, lines, blocks))
 
 
+def phase_probe(ns):
+    """pilot-ext-host --measure on the probe extension (probe/ beside this file), started straight, no sandbox: one row per
+    way a command could act on the Mac, each "ran" or "refused", then what the measure log recorded."""
+    import sqlite3
+    import tempfile
+    work = tempfile.mkdtemp(prefix="probe-", dir=ns.work)
+    folder = os.path.join(work, "probe")
+    shutil.copytree(os.path.join(os.path.dirname(os.path.abspath(__file__)), "probe"), folder)
+    made = sqlite3.connect(os.path.join(folder, "probe.db"))
+    made.execute("CREATE TABLE t (x)")
+    made.executemany("INSERT INTO t VALUES (?)", [(1,), (2,), (3,)])
+    made.commit()
+    made.close()
+    for sub in ("data", "cache"):
+        os.makedirs(os.path.join(work, sub))
+    message = {"type": "run", "extension": "measure-probe", "command": "index", "preferences": {"victim": str(ns.victim)},
+               "paths": {"data": os.path.join(work, "data"), "cache": os.path.join(work, "cache")}}
+    argv = [ns.host, "--measure", ns.measure, "--measure-pid", str(ns.victim), "--prelude", ns.prelude, "index.js"]
+    since = lines_in(ns)
+    say(command_line(argv) + "   # in a copy of probe/, the run message on stdin")
+    done = subprocess.run(argv, cwd=folder, input=json.dumps(message) + "\n", capture_output=True, text=True, timeout=30)
+    # The rows are the probe's own words, so they print whole: the last view the host sent.
+    views = [json.loads(l) for l in done.stdout.splitlines() if l.startswith("{")]
+    last = next((v for v in reversed(views) if v.get("items")), {"items": []})
+    for item in last["items"]:
+        say("  " + item.get("title", ""))
+    say("# exit %d; %d view lines" % (done.returncode, len(views)))
+    say("# what the measure log recorded (children, writes, fetches):")
+    for record in measured(ns, since):
+        if record.get("kind") in ("exec", "applescript", "write", "fetch"):
+            say(json.dumps(shaped(record), sort_keys=True, ensure_ascii=False))
+    shutil.rmtree(work, ignore_errors=True)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
-    parser.add_argument("phase", choices=["install", "run", "act", "summary", "redact"])
+    parser.add_argument("phase", choices=["install", "run", "act", "summary", "redact", "probe"])
+    parser.add_argument("--prelude")
     parser.add_argument("--log")
     parser.add_argument("--pilot")
     parser.add_argument("--socket")
@@ -520,7 +556,7 @@ def main():
     parser.add_argument("--only")
     ns = parser.parse_args()
     ns.extensions = None
-    {"install": phase_install, "run": phase_run, "act": phase_act, "summary": phase_summary, "redact": phase_redact}[ns.phase](ns)
+    {"install": phase_install, "run": phase_run, "act": phase_act, "summary": phase_summary, "redact": phase_redact, "probe": phase_probe}[ns.phase](ns)
 
 
 if __name__ == "__main__":

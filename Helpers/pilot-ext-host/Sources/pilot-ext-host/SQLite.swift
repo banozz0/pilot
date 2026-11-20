@@ -3,8 +3,9 @@ import JavaScriptCore
 import SQLite3
 
 // Node's `node:sqlite` under the prelude (sqlite.js, T7), on macOS's own SQLite, read-only: every database opens with
-// SQLITE_OPEN_READONLY, so no statement can write; macOS's SQLite is built without extension loading (the SDK's
-// sqlite3.h defines SQLITE_OMIT_LOAD_EXTENSION), so none can load. Enough for @raycast/utils' useSQL,
+// SQLITE_OPEN_READONLY and a statement that may write is refused before it runs (sqlite3_stmt_readonly: VACUUM INTO,
+// a pragma that sets); macOS's SQLite is built without extension loading (the SDK's sqlite3.h defines
+// SQLITE_OMIT_LOAD_EXTENSION), so none can load. Enough for @raycast/utils' useSQL,
 // which Chrome's history and VS Code's recent projects read through (`DatabaseSync`, `prepare().all()`). A failure comes
 // back as `{"error": "ERR_SQLITE_ERROR", "message": …}`, as Native.swift's do.
 @MainActor enum SQLiteBridge {
@@ -24,7 +25,9 @@ import SQLite3
 
     static func open(_ path: String) -> Any {
         var db: OpaquePointer?
-        guard sqlite3_open_v2(path, &db, SQLITE_OPEN_READONLY, nil) == SQLITE_OK, let db else {
+        // Under --measure the file opens immutable, so reading a WAL database makes no -shm file beside it (T7 review 1).
+        let named = Measure.on ? "file:\(path.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? path)?immutable=1" : path
+        guard sqlite3_open_v2(named, &db, SQLITE_OPEN_READONLY | (Measure.on ? SQLITE_OPEN_URI : 0), nil) == SQLITE_OK, let db else {
             let why = db.map { String(cString: sqlite3_errmsg($0)) } ?? "out of memory"
             sqlite3_close_v2(db)
             return failure("unable to open database file \(path): \(why)")
@@ -40,6 +43,9 @@ import SQLite3
         var statement: OpaquePointer?
         guard sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK, let statement else { return failure(String(cString: sqlite3_errmsg(db))) }
         defer { sqlite3_finalize(statement) }
+        // SQLITE_OPEN_READONLY alone lets `VACUUM INTO '<path>'` write a new file (and a pragma change the journal): any
+        // statement SQLite says may write is refused before it steps (T7 review 1).
+        guard sqlite3_stmt_readonly(statement) != 0 else { return failure("Pilot's node:sqlite is read-only, and this statement writes") }
         let transient = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
         for (index, value) in params.enumerated() {
             let at = Int32(index + 1)
