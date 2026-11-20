@@ -493,7 +493,8 @@ extension ExtensionCheck {
 
     /// Reads `folder` into a temporary copy, off the main actor: each file once, with its sha256, checked as it is read
     /// against the catalogue index's own rules for an entry (ExtensionCatalogue's `entry(_ line:)`): each path safe inside
-    /// the folder, a manifest, at most `mostFiles` files of `fileLimit` bytes each and `extensionLimit` in all. Symlinks
+    /// the folder, a manifest, at most `mostFiles` files of `fileLimit` bytes each and `extensionLimit` in all (a Raycast-format
+    /// folder's own raycastFileLimit and raycastExtensionLimit). Symlinks
     /// are never followed or copied. Throws a Problem, leaving nothing behind, when a rule fails or a file does not read.
     @concurrent public static func stage(_ folder: URL) async throws -> Staged {
         typealias C = ExtensionCatalogue
@@ -505,13 +506,15 @@ extension ExtensionCheck {
         guard listed.count <= C.mostFiles else { throw C.Problem.failed("it has \(listed.count) files, more than the \(C.mostFiles) an extension may have") }
         let fm = FileManager.default
         let copy = fm.temporaryDirectory.appending(path: "pilot-ext-install-\(UUID().uuidString)").appending(path: folder.lastPathComponent)
+        // A Raycast-format folder is held to its own, larger limits (ExtensionCatalogue.raycastFileLimit).
+        let (fileLimit, extensionLimit) = RaycastManifest.holds(folder) ? (C.raycastFileLimit, C.raycastExtensionLimit) : (C.fileLimit, C.extensionLimit)
         do {
             var total = 0
             let files = try listed.map { file in
                 // Sizes as read, not as listed: a file that grew since is held to the limits too.
-                let data = try read(file, limit: C.fileLimit)
+                let data = try read(file, limit: fileLimit)
                 total += data.count
-                guard total <= C.extensionLimit else { throw C.Problem.failed("it is larger than the \(C.extensionLimit / 1_000_000) MB an extension may be") }
+                guard total <= extensionLimit else { throw C.Problem.failed("it is larger than the \(extensionLimit / 1_000_000) MB an extension may be") }
                 let url = copy.appending(path: file.path)
                 try fm.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
                 try data.write(to: url)
@@ -561,7 +564,8 @@ extension ExtensionCheck {
             guard data.count <= limit else { throw ExtensionCatalogue.Problem.mismatch(path: file) }
             return data
         }
-        return try await ExtensionInstaller(extensions: extensions, source: source, trash: trash).install(entry)
+        let fileLimit = RaycastManifest.holds(staged.copy) ? ExtensionCatalogue.raycastFileLimit : ExtensionCatalogue.fileLimit
+        return try await ExtensionInstaller(extensions: extensions, source: source, trash: trash).install(entry, fileLimit: fileLimit)
     }
 
     /// The folders an install of `id` into `extensions` sends to the Trash, as ExtensionInstaller finds them; throws its
