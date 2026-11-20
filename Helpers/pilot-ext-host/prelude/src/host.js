@@ -182,7 +182,9 @@ globalThis.__pilotImaged = (id, answer) => {
 };
 
 /** A source read as a picture: a URL, or a file under the extension's assets (Raycast names them from there). */
-const isPicture = (source) => /^https?:\/\//i.test(source) || /\.(png|jpe?g|gif|heic|tiff?|webp|bmp)$/i.test(source);
+const isPicture = (source) => /^https?:\/\//i.test(source) || /\.(png|jpe?g|gif|heic|tiff?|webp|bmp|svg)$/i.test(source);
+/** A file's name (`sun.max.svg`, `icon.pdf`): never shown as an icon's text (T28). */
+const isFileName = (source) => /\.[A-Za-z][A-Za-z0-9]{1,4}$/.test(source) || source.includes("/");
 
 /** The picture at `source` once it landed; asked for the first time it is seen, so it comes in a later line. */
 function image(source) {
@@ -197,7 +199,8 @@ function image(source) {
 
 /** A Raycast icon prop as a row's fields: `symbol` for an Icon name, `image` for an asset or URL, else `icon` (Pilot
  *  keeps only an emoji). An object's `source` may be `{ light, dark }` (dark is taken, as the environment says dark) and
- *  its `fallback` stands in while a picture loads or when it fails; tint and mask are not drawn yet. */
+ *  its `fallback` stands in while a picture loads or when it fails; tint and mask are not drawn yet. A file of another
+ *  kind is its fallback or nothing, never its name as text (T28: Weather's bar printed `sun.max.svg`). */
 function picture(prop) {
   const given = prop && typeof prop === "object" ? prop : { source: prop };
   let source = given.source;
@@ -209,6 +212,7 @@ function picture(prop) {
     if (landed) return { image: landed };
     return given.fallback !== undefined ? picture(given.fallback) : {};
   }
+  if (isFileName(source)) return given.fallback !== undefined ? picture(given.fallback) : {};
   return { icon: source };
 }
 

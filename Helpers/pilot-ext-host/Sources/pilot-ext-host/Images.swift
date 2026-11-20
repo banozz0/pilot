@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import ImageIO
 import UniformTypeIdentifiers
@@ -67,10 +68,12 @@ extension Host {
         }
     }
 
-    /// The picture in `data` as base64 within `largest`: PNG or JPEG as it is, else drawn again at `side` as PNG.
+    /// The picture in `data` as base64 within `largest`: PNG or JPEG as it is, else drawn again at `side` as PNG; an SVG
+    /// (`svg`).
     nonisolated static func picture(_ data: Data) -> [String: Any] {
-        guard data.count <= mostDownload, let source = CGImageSourceCreateWithData(data as CFData, nil), let type = CGImageSourceGetType(source),
-              let kind = UTType(type as String), kind.conforms(to: .image) else { return ["error": "not a picture"] }
+        guard data.count <= mostDownload else { return ["error": "not a picture"] }
+        guard let source = CGImageSourceCreateWithData(data as CFData, nil), let type = CGImageSourceGetType(source),
+              let kind = UTType(type as String), kind.conforms(to: .image) else { return svg(data) }
         if data.count <= largest, kind.conforms(to: .png) || kind.conforms(to: .jpeg) { return ["image": data.base64EncodedString()] }
         let options: [CFString: Any] = [kCGImageSourceCreateThumbnailFromImageAlways: true, kCGImageSourceThumbnailMaxPixelSize: side,
                                         kCGImageSourceCreateThumbnailWithTransform: true]
@@ -78,6 +81,28 @@ extension Host {
         let out = NSMutableData()
         guard let png = CGImageDestinationCreateWithData(out, UTType.png.identifier as CFString, 1, nil) else { return ["error": "not drawn"] }
         CGImageDestinationAddImage(png, small, nil)
+        guard CGImageDestinationFinalize(png), out.length <= largest else { return ["error": "larger than 64 KB at \(side) px"] }
+        return ["image": (out as Data).base64EncodedString()]
+    }
+
+    /// An SVG, which ImageIO does not read (Weather's `sun.max.svg`, Obsidian's icon; T28), drawn here by AppKit's own
+    /// SVG reader at `side` px on its longest side as PNG, so Pilot only ever draws PNG or JPEG and never parses an
+    /// extension's SVG itself. Anything else is not a picture.
+    nonisolated static func svg(_ data: Data) -> [String: Any] {
+        guard data.prefix(1024).range(of: Data("<svg".utf8)) != nil, let image = NSImage(data: data),
+              image.size.width > 0, image.size.height > 0 else { return ["error": "not a picture"] }
+        let scale = Double(side) / max(image.size.width, image.size.height)
+        let width = max(1, Int((image.size.width * scale).rounded())), height = max(1, Int((image.size.height * scale).rounded()))
+        guard let context = CGContext(data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: 0,
+                                      space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)
+        else { return ["error": "not drawn"] }
+        NSGraphicsContext.current = NSGraphicsContext(cgContext: context, flipped: false)
+        image.draw(in: NSRect(x: 0, y: 0, width: width, height: height))
+        NSGraphicsContext.current = nil
+        guard let drawn = context.makeImage() else { return ["error": "not drawn"] }
+        let out = NSMutableData()
+        guard let png = CGImageDestinationCreateWithData(out, UTType.png.identifier as CFString, 1, nil) else { return ["error": "not drawn"] }
+        CGImageDestinationAddImage(png, drawn, nil)
         guard CGImageDestinationFinalize(png), out.length <= largest else { return ["error": "larger than 64 KB at \(side) px"] }
         return ["image": (out as Data).base64EncodedString()]
     }
