@@ -9,6 +9,9 @@ import SwiftUI
 /// command's blocks over it with a ‹ back; any other action runs as the extension's, and a run asks the view showing again
 /// as the run ends, a Pilot action 1.5 s later. A view whose answer carries `refresh` is asked again on that pace while it shows (P3).
 /// A page's right-hand pane is the same stack, started at the pushed command (`start`) and asked as a page.
+/// A Raycast menu-bar command's popover (T12) runs its command in a host kept while the popover shows (ExtensionSession):
+/// the menu's rows are its list, each host answer drawn as it comes, and a row's press is its handler's invoke there;
+/// the popover's close ends the host.
 @Observable @MainActor
 final class ExtensionPopoverModel {
     /// One view of the stack: the command it shows and the context handed on to it, its blocks and why it has none.
@@ -39,6 +42,10 @@ final class ExtensionPopoverModel {
     @ObservationIgnored private let now: () -> Date
     /// Runs an action that is not a push as the extension's, a run handing back its task; a test's spy.
     @ObservationIgnored var act: ExtensionActions.Act = { ExtensionActions.run($0, in: $1, inputs: $2) }
+    /// A Raycast item's open host (T12); nil for any other, or once closed.
+    @ObservationIgnored private var session: ExtensionSession?
+    /// The popover closed: a host still to start never does.
+    @ObservationIgnored private var closed = false
 
     /// `shown` are the blocks the bar line last sent, shown until the popover's own answer comes.
     init(id: String, shown: [Extension.Block]? = nil, folder: URL = Extension.folder, storage: ExtensionStorage = ExtensionStorage(),
@@ -74,17 +81,42 @@ final class ExtensionPopoverModel {
         }
     }
 
-    /// Reads the extension from its folder, then asks its bar command for the popover.
+    /// Reads the extension from its folder, then asks its bar command for the popover; a Raycast item's opens its host.
     func open() async {
         let (folder, id) = (folder, id)
-        let found = await Task.detached { Extension.find(in: folder).extensions.first { $0.id == id } }.value
-        ext = found
-        guard let ext = found, let bar = ext.bar else { return say("\(id) has no bar item now.") }
+        let found = await Task.detached { ExtensionBar.bar(id, in: folder) }.value
+        ext = found?.ext
+        guard let (ext, bar) = found else { return say("\(id) has no bar item now.") }
         var why: String?
         inputs = await ExtensionsModule.inputs(for: ext, storage: storage, hud: { why = $0 })
-        guard inputs != nil else { return say(why ?? "\(ext.title) needs a setting first.") }
+        guard let inputs else { return say(why ?? "\(ext.title) needs a setting first.") }
         stack[0] = View(command: bar.command.name, title: nil, context: nil, blocks: stack[0].blocks)
-        await refresh()
+        guard bar.command.runtime == .raycast else { return await refresh() }
+        guard !closed else { return }
+        let session = ExtensionSession(bar.command, context: nil, inputs: inputs, folder: ext.folder)
+        self.session = session
+        session.watch { [weak self] in
+            guard let newest = session.newest?.outcome else { return }
+            Task { @MainActor in if self?.session === session { self?.show(newest) } }
+        }
+        show(await session.ask(""))
+    }
+
+    /// The popover closed: a Raycast item's host ends.
+    func close() {
+        closed = true
+        session?.close()
+        session = nil
+    }
+
+    /// A Raycast item's host answer as the popover's one list (T12).
+    private func show(_ outcome: ListOutcome) {
+        guard let ext, stack.count == 1 else { return }
+        switch outcome {
+        case .items(let items): (stack[0].blocks, stack[0].problem, stack[0].updated) = ([.list(title: nil, items: items)], nil, now())
+        case .error(let why): stack[0].problem = "\(ext.title) \(why)"
+        case .detail, .form: stack[0].problem = "\(ext.title) \(ExtensionRun.unreadable)"
+        }
     }
 
     /// Asks the view on top again; the blocks it showed stay over a failure, the failure said.
@@ -120,6 +152,10 @@ final class ExtensionPopoverModel {
     /// as the extension's; a run asks the view again as it ends, a Pilot action a moment later.
     func perform(_ action: Extension.Item.Action) {
         guard let ext, let inputs else { return }
+        if let session, let handler = action.handler {
+            Task { show(await session.invoke(handler)) }
+            return
+        }
         if case .push(let name, let context) = action.kind, ext.noView(name) != nil {
             Task { await push(name, title: action.title, context: context) }
             return
@@ -182,6 +218,7 @@ struct ExtensionPopoverView: View {
         .extensionGlass()
         .onGeometryChange(for: CGFloat.self, of: \.size.height) { height = $0 }
         .task { await model.open() }
+        .onDisappear { model.close() }
         // Asked again on the top view's own pace only while the popover shows: closing it ends the task.
         .task(id: model.pace) { await model.keepFresh() }
     }

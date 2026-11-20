@@ -77,8 +77,12 @@ public enum ExtensionRun {
             let line = message(command, query: query, context: context, surface: surface, input: input, inputs: inputs)
             return try await ChildProcess.run(path, arguments, environment: env, input: line, directory: directory, timeout: timeout)
         }
-        let line = message(command, query: query, context: context, surface: surface, input: input, inputs: inputs, answers: true)
-        return try await hosted(path, arguments, environment: env, input: line, directory: directory, timeout: timeout, extension: command.id.extension)
+        // A surface's run (a bar tick, a page) never asks the AI or reads the selection (Q478, T12): only a run with no
+        // surface keeps its stdin for answers.
+        let answers = surface == nil
+        let line = message(command, query: query, context: context, surface: surface, input: input, inputs: inputs, answers: answers)
+        return try await hosted(path, arguments, environment: env, input: line, directory: directory, timeout: timeout,
+                                extension: command.id.extension, answers: answers)
     }
 
     /// A Raycast-format view command run once with its first argument filled by `input` (T11), as `list(_:query:…)` runs
@@ -134,9 +138,10 @@ public enum ExtensionRun {
     /// failed exit as Failure, cancellation as CancellationError), with its footprint watched: past the stop it is
     /// killed and throws OverMemory. Its stdin stays open for the answers to its asks (T11): each `ask` line is answered
     /// through ExtensionAI for the extension `id`, never kept as output, and while one waits `timeout` waits too (the
-    /// AI route's own timeout still ends it); stdin closes once the host is gone.
+    /// AI route's own timeout still ends it); stdin closes once the host is gone. Without `answers` (a surface's run, T12)
+    /// stdin closes right after the run message, so the host fails each ask at once, and an ask line is kept as output.
     static func hosted(_ path: String, _ arguments: [String], environment: [String: String], input: Data, directory: URL,
-                       timeout: Duration, extension id: String = "") async throws -> String {
+                       timeout: Duration, extension id: String = "", answers: Bool = true) async throws -> String {
         enum Stop { case late, memory, cancelled }
         struct State {
             var session: ChildProcess.Session?, watch: Task<Void, Never>?, stop: Stop?, lines: [String] = [], done = false
@@ -162,7 +167,7 @@ public enum ExtensionRun {
             if !waits { stop(.late) }
         }
         @Sendable func received(_ line: String) {
-            guard let (number, ask) = ExtensionAI.hostAsk(line) else { return state.withLock { $0.lines.append(line) } }
+            guard answers, let (number, ask) = ExtensionAI.hostAsk(line) else { return state.withLock { $0.lines.append(line) } }
             state.withLock { $0.asking += 1 }
             Task.detached {
                 let answer = await ExtensionAI.answer(number, ask, of: id)
@@ -211,6 +216,7 @@ public enum ExtensionRun {
                 }
                 if stopped != nil { session.stop() }
                 session.send(input)
+                if !answers { session.closeInput() }
                 DispatchQueue.global().asyncAfter(deadline: .now() + timeout.inSeconds) { late() }
             }
         } onCancel: {

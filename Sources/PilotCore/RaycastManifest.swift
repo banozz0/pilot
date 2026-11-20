@@ -6,8 +6,10 @@ import Foundation
 /// commands, each a list Pilot ranks, asked once per open; T3 the `no-view` commands, run as ADR 0010's are, and the
 /// preferences, the extension's and each command's in one list, mapped onto Pilot's kinds (`preferences`). T11: a
 /// command with `arguments` answers at Hyper+Space's root by its keyword, its name lowercased ("todo buy milk" fills its
-/// first argument, as ADR 0010's keyword does; the host fills it from the run's input). `menu-bar` commands (T12) come
-/// later; until then they are skipped.
+/// first argument, as ADR 0010's keyword does; the host fills it from the run's input). T12: each `menu-bar` command is a
+/// top-bar item, paced by its `interval` ("90s", "1m", "12h", "1d") held to 60 s to a day, 120 s without one; its command
+/// is hidden from Hyper+Space, Binds and the Extensions page's list, and its host renders its MenuBarExtra as a bar line
+/// for a tick or as the menu's rows while its popover is open.
 public enum RaycastManifest {
     public static let name = "package.json"
 
@@ -20,6 +22,8 @@ public enum RaycastManifest {
     struct Manifest: Decodable {
         struct Command: Decodable {
             let name: String, title: String, mode: String, preferences: [Preference]?
+            /// A `menu-bar` command's pace (T12); lenient, a wrong type reads as none.
+            let interval: JSONValue?
             /// Lenient: only whether it lists any argument is read here; the host reads the rest.
             let arguments: JSONValue?
             var takesArguments: Bool { if case .array(let list)? = arguments { !list.isEmpty } else { false } }
@@ -84,20 +88,23 @@ extension Extension {
         catch { throw Problem.unreadable("\(RaycastManifest.name) is not a Raycast manifest") }
         guard Self.isName(manifest.name) else { throw Problem.badID(manifest.name) }
         var names = Set<String>()
-        commands = try manifest.commands.compactMap { c in
+        commands = try manifest.commands.map { c in
             guard Self.isName(c.name) else { throw Problem.badCommandName(c.name) }
             guard names.insert(c.name).inserted else { throw Problem.duplicateCommand(c.name) }
             let mode: Mode
             switch c.mode {
-            case "view": mode = .list
+            case "view", "menu-bar": mode = .list
             case "no-view": mode = .noView
-            case "menu-bar": return nil
             default: throw Problem.unknownMode(command: c.name, mode: c.mode)
             }
             guard let bundle = RaycastManifest.bundle(c.name, in: folder) else { throw Problem.missingProgram(command: c.name, run: "\(c.name).js") }
+            let menuBar = c.mode == "menu-bar"
             return Command(id: CommandID(extension: manifest.name, command: c.name), title: c.title, icon: nil, mode: mode, filter: .pilot,
-                           session: false, program: bundle, hidden: false,
-                           keyword: c.takesArguments ? Self.keyword(.string(c.name)) : nil, runtime: .raycast)
+                           session: false, program: bundle, hidden: menuBar,
+                           keyword: c.takesArguments && !menuBar ? Self.keyword(.string(c.name)) : nil, runtime: .raycast)
+        }
+        bars = zip(manifest.commands, commands).filter { $0.0.mode == "menu-bar" }.map { c, command in
+            Surface(kind: .bar, command: command, every: Surface.raycastPace(c.interval))
         }
         guard !commands.isEmpty else { throw Problem.noCommands }
         id = manifest.name
@@ -110,6 +117,6 @@ extension Extension {
         description = if case .string(let d)? = manifest.description { d.trimmingCharacters(in: .whitespacesAndNewlines) } else { "" }
         examples = []
         page = nil
-        bar = nil
+        bar = bars.first
     }
 }

@@ -370,10 +370,18 @@ extension ControlVerbs {
         return extensionRow(item, store.settings)
     }
 
+    /// An item's row; T12 adds what it last showed (its text, its icon as a symbol or a picture's size and hash, never
+    /// its bytes, or why it shows nothing), its command and its pace in seconds.
     private static func extensionRow(_ item: ExtensionBar.Item, _ s: BarSettings) -> JSONValue {
-        let entry = s.extensionEntry(item.id), at = s.topBarPlace(.extension(item.id))
-        return .object(["id": .string(item.id), "title": .string(item.title), "on": .bool(entry.on), "placement": .string(entry.placement.rawValue),
-                        "side": at.map { .string($0.side.rawValue) } ?? .null, "index": at.map { .number(Double($0.index)) } ?? .null])
+        let entry = s.extensionEntry(item.id), at = s.topBarPlace(.extension(item.id)), answer = item.answer
+        var row: [String: JSONValue] = ["id": .string(item.id), "title": .string(item.title), "on": .bool(entry.on), "placement": .string(entry.placement.rawValue),
+                                        "side": at.map { .string($0.side.rawValue) } ?? .null, "index": at.map { .number(Double($0.index)) } ?? .null,
+                                        "command": .string(item.command), "every": .number(Double(item.every))]
+        row["text"] = answer.map { .string($0.text) }
+        row["symbol"] = answer?.symbol.map(JSONValue.string)
+        row["image"] = answer?.image.map { .string("\($0.count) B, sha256 \(ExtensionCatalogue.sha256($0).prefix(12))") }
+        row["problem"] = item.problem.map(JSONValue.string)
+        return .object(row)
     }
 
 

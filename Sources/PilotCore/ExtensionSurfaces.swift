@@ -23,6 +23,18 @@ extension Extension {
             guard let asked, asked.isFinite else { return standard }
             return min(max(Int(asked.rounded()), floor), 3600)
         }
+
+        /// A Raycast `menu-bar` command's pace (T12) from its manifest `interval`, a number and s, m, h or d ("90s",
+        /// "1m", "12h", "1d"; developers.raycast.com, Manifest): held to 60 s at the most often (Raycast's Manifest page
+        /// says "The minimum value is 1 minute") and a day at the longest; 120 s, a bar item's default, without one.
+        public static let raycastPaces = 60...86_400
+
+        public static func raycastPace(_ interval: JSONValue?) -> Int {
+            guard case .string(let text)? = interval, let match = text.wholeMatch(of: /([0-9]+(?:\.[0-9]+)?)([smhd])/),
+                  let number = Double(match.1) else { return 120 }
+            let seconds = number * ["s": 1, "m": 60, "h": 3600, "d": 86_400][String(match.2), default: 1]
+            return min(max(Int(seconds.rounded()), raycastPaces.lowerBound), raycastPaces.upperBound)
+        }
     }
 
     /// The manifest's `surfaces`: a page and a bar item, each an object with `command` and an optional `every`; any other
@@ -309,23 +321,29 @@ extension Extension {
     }
 
     /// A bar command's answer: the item's short text (at most 24 characters), its gauges (Surfaces v2), its tone, and the
-    /// blocks its popover shows until the popover's own answer comes. Neither text nor gauges hides the item.
+    /// blocks its popover shows until the popover's own answer comes. Neither text nor gauges hides the item. T12: a
+    /// Raycast MenuBarExtra's icon, as an SF Symbol or a picture (a PNG or JPEG of 64 KB at most), drawn before its text;
+    /// an icon alone shows the item too.
     public struct BarAnswer: Equatable, Sendable {
         public static let longest = 24
 
         public let text: String, tone: Tone?, blocks: [Block], gauges: [Gauge]
+        public let symbol: String?, image: Data?
         /// What Pilot's dock draws for it (ADR 0010, 2026-11-13): optional; an answer without them is drawn from its text
         /// or gauges, and the top bar never reads them.
         public let faces: [Face]
 
-        public init(text: String, tone: Tone? = nil, blocks: [Block] = [], gauges: [Gauge] = [], faces: [Face] = []) {
+        public init(text: String, tone: Tone? = nil, blocks: [Block] = [], gauges: [Gauge] = [], faces: [Face] = [],
+                    symbol: String? = nil, image: Data? = nil) {
             let line = text.trimmingCharacters(in: .whitespacesAndNewlines).split(whereSeparator: \.isNewline).first.map(String.init) ?? ""
             self.text = line.count > Self.longest ? String(line.prefix(Self.longest - 1)) + "…" : line
             self.tone = tone; self.blocks = blocks; self.gauges = Array(gauges.prefix(Gauge.most)); self.faces = Array(faces.prefix(Face.most))
+            self.symbol = symbol.flatMap(Item.symbolName)
+            self.image = image.flatMap { $0.count <= Item.largestImage ? $0 : nil }
         }
 
-        /// Whether the item draws: a text or a gauge to show.
-        public var shows: Bool { !text.isEmpty || !gauges.isEmpty }
+        /// Whether the item draws: a text, a gauge or an icon to show.
+        public var shows: Bool { !text.isEmpty || !gauges.isEmpty || symbol != nil || image != nil }
 
         /// One line of words for where gauges are not drawn (the menu's Extensions card): its text, else its gauges as
         /// "Claude 97% · OpenAI 100%"; empty when it shows neither.
@@ -649,8 +667,9 @@ extension Extension.Block {
 
 extension ExtensionRun {
     /// A page's or a popover's command may take this long, a bar item's this (design: 5 s and 2 s), then it is stopped
-    /// and says so.
-    public static let pageTimeout: Duration = .seconds(5), barTimeout: Duration = .seconds(2)
+    /// and says so. A Raycast menu-bar command's bar render has 10 s in all (ADR 0017's deadlines, T12): its host ends it
+    /// once its MenuBarExtra is no longer loading.
+    public static let pageTimeout: Duration = .seconds(5), barTimeout: Duration = .seconds(2), raycastBarTimeout: Duration = .seconds(10)
 
     /// Runs `surface`'s command with `"surface": "page"` or `"bar"` in its run message and reads its answer; concurrent,
     /// so a large answer is decoded off the main actor that runs the key tap.
@@ -665,7 +684,7 @@ extension ExtensionRun {
     @concurrent public static func blocks(_ command: Extension.Command, surface: Extension.Surface.Kind, context: JSONValue? = nil,
                                           inputs: Inputs, environment pilot: [String: String] = ProcessInfo.processInfo.environment,
                                           timeout: Duration? = nil) async -> SurfaceOutcome {
-        let timeout = timeout ?? (surface == .bar ? barTimeout : pageTimeout)
+        let timeout = timeout ?? (surface != .bar ? pageTimeout : command.runtime == .raycast ? raycastBarTimeout : barTimeout)
         do {
             let printed = try await output(command, context: context, surface: surface, inputs: inputs, environment: pilot, timeout: timeout)
             return surfaceAnswer(printed, kind: surface)
@@ -674,6 +693,8 @@ extension ExtensionRun {
 
     private struct SurfaceLine: Decodable {
         let type: String, text: String?, tone: String?, blocks: [Extension.Block.Line]?, gauges: JSONValue?, faces: JSONValue?, refresh: JSONValue?
+        /// A Raycast MenuBarExtra's icon (T12): an SF Symbol name, or a picture as base64.
+        let symbol: String?, image: String?
     }
 
     /// The answer in what a surface's command printed: the first error message wins, else the last blocks message (a
@@ -691,7 +712,8 @@ extension ExtensionRun {
             case ("bar", .bar):
                 last = .bar(Extension.BarAnswer(text: message.text ?? "", tone: message.tone.flatMap(Extension.Tone.init(rawValue:)),
                                                 blocks: Extension.Block.blocks(message.blocks), gauges: Extension.Gauge.gauges(message.gauges),
-                                                faces: Extension.Face.faces(message.faces)))
+                                                faces: Extension.Face.faces(message.faces), symbol: message.symbol,
+                                                image: message.image.flatMap { Data(base64Encoded: $0) }))
             default: continue
             }
         }
