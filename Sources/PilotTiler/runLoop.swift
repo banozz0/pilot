@@ -110,8 +110,12 @@ struct AxTimeout: Error {}
 /// session, so the rest of the refresh and layout goes on. MacApp.answering logs the stall once.
 @MainActor
 func skippingSlowApp(_ body: @MainActor () async throws -> Void) async throws {
-    do { try await body() } catch is AxTimeout {}
+    do { try await body() } catch is AxTimeout { slowAppSkips += 1 }
 }
+
+/// Pilot (perf-round): how many times a slow app was skipped, so a session that skipped one leaves it to the complete
+/// refresh after it (runLightSession).
+@MainActor var slowAppSkips = 0
 
 private let stallLog = Mutex<@Sendable (String) -> Void>({ tilerLog.notice("\($0, privacy: .public)") })
 

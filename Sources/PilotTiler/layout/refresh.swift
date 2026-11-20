@@ -111,6 +111,7 @@ func runLightSession<T>(
     defer { signposter.endInterval(#function, state) }
     activeRefreshTask?.cancel() // Give priority to runSession
     activeRefreshTask = nil
+    let skips = slowAppSkips
     return try await withFaultBoundary { try await $refreshSessionEvent.withValue(event) {
         gcMonitors() // Pilot: as in the heavy session
         let nativeFocused = try await getNativeFocusedWindow(.cancellable)
@@ -129,7 +130,8 @@ func runLightSession<T>(
         }
         switch event {
             case .focusFollowsMouse, .dragPreview, .gapResize: break // Pilot: a live swap's preview or a held gap changed only the tree
-            default: scheduleCancellableCompleteRefreshSession(event, laidOut: true) // Pilot (perf-round): laid out above
+            // Pilot (perf-round): laid out above, unless a slow app's window was skipped, which the refresh lays out
+            default: scheduleCancellableCompleteRefreshSession(event, laidOut: slowAppSkips == skips)
         }
         return result
     } }
