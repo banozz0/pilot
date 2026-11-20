@@ -249,10 +249,13 @@ struct NotesPanelRenders {
                 let rep = try #require(snapshot(content, scale: 2))
                 try #require(rep.representation(using: .png, properties: [:])).write(to: dir.appendingPathComponent("T29-\(theme)-\(state).png"))
                 if state == "draw" {
-                    // Escape is Done (T30): the panel's key monitor saves the sketch and holds the key, the list left alone;
-                    // the sketch saved in attachments/, linked on the line under Route, and read back stroke for stroke.
-                    try #require(NotesKey.pressed(53, [], "\u{1b}", model: model, responder: panel.firstResponder) == .held,
-                                 "Escape while sketching was not held")
+                    // Escape is Done (T30): the Notes page's key read on the first pass, the panel's on the second; each
+                    // saves the sketch and holds the key, the list left alone, with the window holding the keyboard as
+                    // the canvas leaves it; the sketch saved in attachments/, linked on the line under Route, and read
+                    // back stroke for stroke.
+                    let escape = n == 0 ? NotesPageKeys.key(53, [], "\u{1b}", model: model, responder: panel.firstResponder)
+                        : NotesKey.pressed(53, [], "\u{1b}", model: model, responder: panel.firstResponder)
+                    try #require(escape == .held, "Escape while sketching was not held (\(n == 0 ? "page" : "panel"))")
                     try #require(!board.isOpen && !model.listFocused, "Escape while sketching left the canvas or opened the list")
                     let saved = try #require(model.text.components(separatedBy: "\n").first { $0.hasPrefix("![Sketch](attachments/sketch-") })
                     try #require(model.text.hasPrefix(head + saved + "\n"), "the link is not on the line under Route")
@@ -270,6 +273,16 @@ struct NotesPanelRenders {
                     try #require(try Sketch.load(from: folder.appending(path: path)).strokes.count == Self.route.count - 1)
                     try #require(model.text.contains(link), "the link moved")
                     try #require(editor.pictureRects().first?.image !== before, "the sketch was drawn from the cache")
+                    // The window closing mid-sketch keeps it (T30): its willClose is Done while the editor is still there.
+                    let links = Sketch.count(in: model.text)
+                    board.open(on: editor)
+                    board.sketch.strokes = Self.route
+                    NotificationCenter.default.post(name: NSWindow.willCloseNotification, object: panel)
+                    try #require(!board.isOpen, "the window closing left the canvas open")
+                    try #require(Sketch.count(in: model.text) == links + 1, "the window closing lost the sketch")
+                    let kept = try #require(model.text.components(separatedBy: "\n").last { $0.hasPrefix("![Sketch](attachments/sketch-") && $0 != link })
+                    let keptPath = String(kept.dropFirst("![Sketch](".count).dropLast())
+                    try #require(try Sketch.load(from: folder.appending(path: keptPath)).strokes.count == Self.route.count)
                 }
             }
         }

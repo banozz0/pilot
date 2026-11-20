@@ -100,10 +100,13 @@ final class NotesPageKeys {
     }
 
     /// What a key does on the page with `responder` holding the keyboard: the panel's key while the note's editor or the
-    /// list's own field has it (the editor's outranking a list the model still thinks open, NotesKey.pressed); nil (the
-    /// key goes on) for any other field.
+    /// list's own field has it (the editor's outranking a list the model still thinks open, NotesKey.pressed), or while a
+    /// sketch is drawn in this window, which holds the keyboard itself then (SketchBoard.open), so Escape is Done (T30);
+    /// nil (the key goes on) for any other field.
     static func key(_ code: UInt16, _ flags: NSEvent.ModifierFlags, _ characters: String?, model: NotesModel, responder: NSResponder?) -> NotesKey? {
-        guard responder is NotesTextView || NotesField.holds(responder) else { return nil }
+        let board = SketchBoard.shared
+        let sketching = board.isOpen && board.view?.window.map { responder === $0 || (responder as? NSView)?.window === $0 } == true
+        guard responder is NotesTextView || NotesField.holds(responder) || sketching else { return nil }
         return NotesKey.pressed(code, flags, characters, model: model, responder: responder)
     }
 

@@ -52,6 +52,9 @@ final class SketchBoard {
     @ObservationIgnored private(set) var at = 0
     /// An eraser drag already remembered for Undo, so one drag undoes as one.
     @ObservationIgnored private var erasing = false
+    /// The editor's window closing while open: Done then, while the note's views are still there (the app window lets its
+    /// tree go a pass after the close, AppWindowController.release), so the sketch is never lost with them.
+    @ObservationIgnored private var closing: NSObjectProtocol?
 
     /// A new sketch's height; its width is the note's.
     static let height: Double = 220
@@ -75,6 +78,11 @@ final class SketchBoard {
         history = []
         current = nil
         isOpen = true
+        closing = view.window.map { window in
+            NotificationCenter.default.addObserver(forName: NSWindow.willCloseNotification, object: window, queue: nil) { [weak self] _ in
+                MainActor.assumeIsolated { self?.done() }
+            }
+        }
         if view.window?.firstResponder === view { view.window?.makeFirstResponder(nil) }
         // The canvas and its tools in sight: the note scrolls to them when they would run past its foot.
         if let corner = view.sketchCorner(at: at, link: link) {
@@ -119,11 +127,14 @@ final class SketchBoard {
         sketch.strokes = last
     }
 
-    /// Done, and the way out when the note goes elsewhere (Escape to the list, another note): a new sketch with strokes
-    /// saved in attachments/ and linked at the caret on a line of its own, as an edit Undo takes back; a sketch reopened
-    /// written over its file, or its line taken out once every stroke is gone. Nothing drawn changes nothing.
+    /// Done, and the way out when the note goes elsewhere (another note, the Trash question, the window closing): a new
+    /// sketch with strokes saved in attachments/ and linked at the caret on a line of its own, as an edit Undo takes back;
+    /// a sketch reopened written over its file, or its line taken out once every stroke is gone. Nothing drawn changes
+    /// nothing.
     func done() {
         guard isOpen else { return }
+        if let closing { NotificationCenter.default.removeObserver(closing) }
+        closing = nil
         lift()
         isOpen = false
         let (view, link, sketch) = (self.view, self.link, self.sketch)
