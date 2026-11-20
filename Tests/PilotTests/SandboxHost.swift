@@ -47,6 +47,12 @@ struct SandboxHost {
             try FileManager.default.createDirectory(at: PilotFolder.support, withIntermediateDirectories: true)
             try Data("{}".utf8).write(to: Binds.url)
         }
+        // PILOT_SANDBOX_DROPDOWN=<file.json>: a Pilot menu layout an earlier Pilot saved (spec pilot-ui-redesign T20, Open
+        // question 6), put in the registration domain every defaults suite of this run falls back on, so the settings'
+        // dropdown store (a throwaway suite of its own) reads it as its saved dropdown.layout. Read only here, as PRIOR.
+        if let file = ProcessInfo.processInfo.environment["PILOT_SANDBOX_DROPDOWN"] {
+            UserDefaults.standard.register(defaults: [DropdownLayoutStore.key: try Data(contentsOf: URL(filePath: file))])
+        }
         // PILOT_SANDBOX_TOOLS=<folder>: a stand-in Mac for where commands land: `<folder>/home` as home and Homebrew's
         // prefixes under `<folder>`, so `pilot list helpers` finds a fixture's npm (an nvm or Volta one), never the Mac's.
         if let tools = ProcessInfo.processInfo.environment["PILOT_SANDBOX_TOOLS"] { InstallCheck.standIn = ("\(tools)/home", tools) }
