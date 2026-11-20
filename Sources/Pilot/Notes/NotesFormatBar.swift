@@ -10,8 +10,10 @@ import UniformTypeIdentifiers
 struct NotesFormatBar: View {
     @Environment(\.style) var style
     let handle: NotesEditorHandle
-    /// The note's words: a change redraws the bar, so what is lit follows an edit.
+    /// The note's words and where the selection is: a change in either redraws the bar, so what is lit follows an edit
+    /// and a selection moved.
     var text = ""
+    var selection: CGRect = .zero
     @State var hovered: MarkdownFormat?
 
     /// Its size, to keep it inside the note (NotesEditor): 3 pt round the Aa button (40), two rules (7 each) and six

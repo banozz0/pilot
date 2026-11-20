@@ -220,7 +220,7 @@ struct NotesEditor: View {
                         let size = NotesFormatBar.size
                         let x = min(max(selection.minX - 8, 4), max(g.size.width - size.width - 4, 4))
                         let above = selection.minY - size.height - 6
-                        NotesFormatBar(handle: own, text: text)
+                        NotesFormatBar(handle: own, text: text, selection: selection)
                             .offset(x: x, y: above >= 2 ? above : selection.maxY + 6)
                     }
                 }
