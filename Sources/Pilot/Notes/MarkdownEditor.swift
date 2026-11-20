@@ -2,9 +2,10 @@ import AppKit
 import PilotCore
 import SwiftUI
 
-/// The notes panel's editor (card agent-bo-95423042): plain text drawn as its Markdown reads (Q114, Sven 2026-10-15,
-/// Obsidian's live preview): the marks (`#`, `**`, `_`, backticks, `>`, fences, table pipes, link brackets) are hidden
-/// and drawn as what they make, and show again on the line the caret is on. Headings sized, `-` a dot, `- [ ]` a
+/// The notes panel's editor (card agent-bo-95423042): plain text drawn as its Markdown reads (Q114, Sven 2026-10-15): the
+/// marks (`#`, `**`, `_`, `~~`, `<u>`, backticks, `>`, fences, table pipes, a link's brackets and address) are hidden and
+/// drawn as what they make, on every line, the caret's too, as Apple Notes shows a note (Sven, 2026-11-20, Q285, which
+/// retired Q114's caret-line reveal); formats change through the format bar, Aa, Cmd+K and their keys. Headings sized, `-` a dot, `- [ ]` a
 /// checkbox a click toggles (done dim and struck through), a quote a callout with a bar, fenced code a panel, a table a
 /// grid, and a line that only links a picture drawn with the picture under it (notes round 2). The text stays the
 /// Markdown on disk; styling only sets attributes, so nothing typed is ever rewritten. A picture pasted or dropped in is
@@ -158,7 +159,14 @@ final class NotesEditorHandle {
         views.allObjects.first { $0.isEditable && $0.window?.isKeyWindow == true } ?? last
     }
 
+    /// The editor it holds, in any window: the format bar's own hold, so what the bar lights and Aa's tick read its
+    /// editor whether or not its window is key.
+    var held: NotesTextView? { views.allObjects.first }
+
     func apply(_ format: MarkdownFormat) { view?.format(format) }
+
+    /// The link field's address on the selection of the editor it holds; nil takes the link off.
+    func link(_ address: String?) { (view ?? held)?.setLink(address) }
 
     /// Cmd+K's Rename: the note's title words picked, so typing replaces them (the title is the note's first line); now
     /// when the editor already holds `text`, else once the note opened for it arrives.
@@ -322,6 +330,10 @@ enum MarkdownMarks {
     static let bold = try! NSRegularExpression(pattern: #"(\*\*|__)(?=\S)(.+?)(?<=\S)\1"#)
     /// `_words_` or `*words*`; an underscore's may sit right inside or outside bold's `**` (`**_both_**`, `_**both**_`).
     static let italic = try! NSRegularExpression(pattern: #"(?<!\w)_(?=[^\s_]).+?(?<=[^\s_])_(?!\w)|(?<![\*\w])\*(?=[^\s\*_]).+?(?<=[^\s\*_])\*(?![\*\w])"#)
+    /// `<u>words</u>`: underline, as inline HTML (Markdown has none of its own).
+    static let underline = try! NSRegularExpression(pattern: #"<u>(?=\S)(.+?)(?<=\S)</u>"#)
+    /// `~~words~~`, GitHub's strikethrough.
+    static let strike = try! NSRegularExpression(pattern: #"~~(?=\S)(.+?)(?<=\S)~~"#)
     static let code = try! NSRegularExpression(pattern: #"`[^`\n]+`"#)
     static let link = try! NSRegularExpression(pattern: #"\[([^\]\n]+)\]\(([^)\s]+)\)"#)
     static let bareURL = try! NSRegularExpression(pattern: #"(?<![\(\[])https?://[^\s)\]]+"#)
@@ -409,34 +421,230 @@ final class NotesTextView: NSTextView {
         takeFocus()
     }
 
-    /// The lines whose marks show (the caret's, while this editor has the keyboard), as the last restyle drew them.
-    private(set) var revealed: NSRange?
-    /// True between becoming and resigning first responder: only the note being typed in shows a line's marks.
+    /// True between becoming and resigning first responder: the format bar shows only over the note being typed in.
     private var hasFocus = false
-    /// True while a click or a drag is held: the marks wait for the release, so text never moves under the pointer.
+    /// True while a click or a drag is held: the format bar waits for the release.
     private var tracking = false
 
-    /// The lines the caret or the selection is on, while this editor is typed into; nil shows every line as it reads.
-    func revealedLines() -> NSRange? {
-        guard isEditable, hasFocus, let storage = textStorage else { return nil }
-        return (storage.string as NSString).paragraphRange(for: selectedRange())
+    // MARK: The caret round hidden marks
+
+    // Marks never show, the caret's line included (Sven, 2026-11-20, Q285, retiring Q114's caret-line reveal), so the
+    // caret never rests inside one. A line's own marks (heading, quote, list or check mark) are one stop: the caret
+    // starts the line's words after them, and ← there goes to the line above. An inline span's marks are one place: the
+    // caret sits before them, so typing takes the style of the character before it as Apple Notes does: at a bold word's
+    // end typing stays bold, at its start it is plain; a space or Return at a span's end goes after its closing mark
+    // (Markdown keeps no span that ends in a space), and Cmd+B there ends the style for what is typed next. → over a
+    // span's closing mark moves past the character after it. A line that is all marks (a fence, a picture, a table's
+    // `|---|`) is passed over whole.
+
+    /// True inside a leftward or upward move, so a caret landing in marks goes back past them.
+    private var backward = false
+    /// True while the editor places the caret itself (a format, its own edits): no settling.
+    private var placing = false
+    /// The caret a format put past a span's closing mark: it stays there, so what is typed next is plain, until it moves.
+    private var outside: Int?
+    /// Inline formats asked for with nothing picked (⌘B …): the next typing is wrapped in their marks.
+    private(set) var pending: [MarkdownFormat] = []
+
+    private func side(_ i: Int) -> NotesMarkSide? {
+        guard let storage = textStorage, i >= 0, i < storage.length else { return nil }
+        return (storage.attribute(.notesHidden, at: i, effectiveRange: nil) as? Int).flatMap(NotesMarkSide.init)
     }
 
-    /// Restyles when the caret has gone to another line.
-    func restyleIfMoved() {
-        guard !tracking, revealedLines() != revealed else { return }
-        // Inside an edit of the text (an undo's group), after it.
-        if let storage = textStorage, !storage.editedMask.isEmpty {
-            return DispatchQueue.main.async { [weak self] in self?.restyleIfMoved() }
+    private func isLineMark(_ i: Int) -> Bool {
+        guard let storage = textStorage, i >= 0, i < storage.length else { return false }
+        return storage.attribute(.notesLineMark, at: i, effectiveRange: nil) != nil
+    }
+
+    /// `p`'s line: its range, where its words end (before the line end) and where they start (past its own marks).
+    private func line(at p: Int) -> (range: NSRange, end: Int, lead: Int) {
+        let s = string as NSString
+        var start = 0, end = 0, contents = 0
+        s.getLineStart(&start, end: &end, contentsEnd: &contents, for: NSRange(location: min(p, s.length), length: 0))
+        var lead = start
+        while lead < contents, isLineMark(lead) || side(lead) == .plain {
+            lead += 1
         }
-        restyle()
+        return (NSRange(location: start, length: end - start), contents, lead)
     }
 
-    /// The caret onto another line shows that line's marks and hides the last one's, once a drag has settled.
+    /// Where a caret put at `p` (from `old`) rests: never inside marks.
+    func settled(_ p: Int, from old: Int) -> Int {
+        var p = p
+        for _ in 0..<8 {
+            let (range, end, lead) = line(at: p)
+            // A line that is all marks: passed over whole.
+            if end > range.location, lead == end, (range.location..<end).allSatisfy({ side($0) != nil }) {
+                if backward, range.location > 0 { p = range.location - 1; continue }
+                if !backward, end < NSMaxRange(range) { p = NSMaxRange(range); continue }
+                return p
+            }
+            if p < lead {
+                // ← from the words' start goes to the line above.
+                if backward, old == lead, range.location > 0 { p = range.location - 1; continue }
+                return lead
+            }
+            var start = p, stop = p
+            while start > lead, side(start - 1) != nil { start -= 1 }
+            while stop < end, side(stop) != nil { stop += 1 }
+            guard start != stop, outside != p else { return p }
+            // → from before a span's closing mark: past the character after it, or onto the next line.
+            if !backward, old == start, p > old {
+                if stop < end { return stop + 1 }
+                if end < NSMaxRange(range) { p = NSMaxRange(range); continue }
+                return stop
+            }
+            return start
+        }
+        return p
+    }
+
     override func setSelectedRanges(_ ranges: [NSValue], affinity: NSSelectionAffinity, stillSelecting: Bool) {
+        let old = selectedRange()
+        var ranges = ranges
+        if !placing, !stillSelecting, ranges.count == 1, let one = ranges.first?.rangeValue, one.length == 0, one != old {
+            outside = nil
+            pending = []
+            let p = settled(one.location, from: old.location)
+            if p != one.location { ranges = [NSValue(range: NSRange(location: p, length: 0))] }
+        }
         super.setSelectedRanges(ranges, affinity: affinity, stillSelecting: stillSelecting)
-        if !stillSelecting { restyleIfMoved() }
         reportSelection()
+    }
+
+    /// A move leftward or up: a caret landing in marks goes back past them.
+    private func back(_ move: () -> Void) {
+        backward = true
+        defer { backward = false }
+        move()
+    }
+
+    /// ← and → step one character themselves, never through hidden marks' glyphs (which take no room): the caret then
+    /// rests as `settled` puts it.
+    override func moveLeft(_ sender: Any?) {
+        let caret = selectedRange()
+        guard caret.length == 0, caret.location > 0 else { return back { super.moveLeft(sender) } }
+        let p = (string as NSString).rangeOfComposedCharacterSequence(at: caret.location - 1).location
+        back { place(settled(p, from: caret.location)) }
+        scrollRangeToVisible(selectedRange())
+    }
+
+    override func moveRight(_ sender: Any?) {
+        let caret = selectedRange(), s = string as NSString
+        guard caret.length == 0, caret.location < s.length else { return super.moveRight(sender) }
+        place(settled(NSMaxRange(s.rangeOfComposedCharacterSequence(at: caret.location)), from: caret.location))
+        scrollRangeToVisible(selectedRange())
+    }
+    override func moveBackward(_ sender: Any?) { back { super.moveBackward(sender) } }
+    override func moveWordLeft(_ sender: Any?) { back { super.moveWordLeft(sender) } }
+    override func moveWordBackward(_ sender: Any?) { back { super.moveWordBackward(sender) } }
+    override func moveUp(_ sender: Any?) { back { super.moveUp(sender) } }
+
+    /// Puts the caret at `p` as is, with no settling.
+    private func place(_ p: Int) {
+        placing = true
+        defer { placing = false }
+        setSelectedRange(NSRange(location: p, length: 0))
+    }
+
+    /// Replaces `range` with `text` as an edit Undo takes back, the caret then at `caret`.
+    private func edit(_ range: NSRange, _ text: String, caret: Int) {
+        guard shouldChangeText(in: range, replacementString: text) else { return }
+        textStorage?.replaceCharacters(in: range, with: NSAttributedString(string: text, attributes: style.plain))
+        didChangeText()
+        place(caret)
+    }
+
+    /// Typing: wrapped in the formats asked for with nothing picked; a space or Return at a span's end goes past its
+    /// closing mark.
+    override func insertText(_ string: Any, replacementRange: NSRange) {
+        let text = (string as? String) ?? (string as? NSAttributedString)?.string
+        let caret = selectedRange()
+        guard !placing, let text, !text.isEmpty, caret.length == 0, replacementRange.location == NSNotFound || replacementRange == caret else {
+            return super.insertText(string, replacementRange: replacementRange)
+        }
+        if !pending.isEmpty {
+            let marks = pending.compactMap(\.marks)
+            pending = []
+            let open = marks.map(\.open).joined(), close = marks.reversed().map(\.close).joined()
+            return edit(caret, open + text + close, caret: caret.location + (open as NSString).length + (text as NSString).length)
+        }
+        if side(caret.location) == .close, text.first?.isWhitespace == true {
+            var stop = caret.location
+            while side(stop) == .close { stop += 1 }
+            return edit(NSRange(location: stop, length: 0), text, caret: stop + (text as NSString).length)
+        }
+        super.insertText(string, replacementRange: replacementRange)
+    }
+
+    override func insertNewline(_ sender: Any?) {
+        let caret = selectedRange()
+        if !placing, caret.length == 0, side(caret.location) == .close {
+            var stop = caret.location
+            while side(stop) == .close { stop += 1 }
+            place(stop)
+        }
+        super.insertNewline(sender)
+    }
+
+    /// Backspace: at a line's words' start takes the line's style off (a list, check, heading or quote mark); after a
+    /// line that is all marks, a picture's goes and any other is stepped over; a span left empty loses its marks.
+    override func deleteBackward(_ sender: Any?) {
+        let caret = selectedRange()
+        guard caret.length == 0, caret.location > 0 else { return super.deleteBackward(sender) }
+        let (range, _, lead) = line(at: caret.location)
+        if caret.location == lead, lead > range.location {
+            if isLineMark(range.location) { return edit(NSRange(location: range.location, length: lead - range.location), "", caret: range.location) }
+            return back { place(settled(range.location - 1, from: caret.location)) }
+        }
+        if caret.location == range.location {
+            let above = line(at: range.location - 1)
+            if above.end > above.range.location, above.lead == above.end {
+                if textStorage?.attribute(.notesImage, at: above.range.location, effectiveRange: nil) != nil {
+                    return edit(above.range, "", caret: above.range.location)
+                }
+                return back { place(settled(range.location - 1, from: caret.location)) }
+            }
+        }
+        // The caret stays where the letter was (no settling), so a span left empty is found there.
+        placing = true
+        super.deleteBackward(sender)
+        placing = false
+        dropEmptyPair(at: caret.location - 1)
+    }
+
+    /// Delete: over marks to the next character; at a line's end the next line joins without its own marks.
+    override func deleteForward(_ sender: Any?) {
+        let caret = selectedRange()
+        guard caret.length == 0 else { return super.deleteForward(sender) }
+        let (range, end, _) = line(at: caret.location)
+        var at = caret.location
+        while at < end, side(at) != nil { at += 1 }
+        if at == end {
+            guard end < NSMaxRange(range) else { return }
+            let next = line(at: NSMaxRange(range))
+            // A line that is all marks below (a fence, a picture) is not pulled up.
+            if next.end > next.range.location, next.lead == next.end { return }
+            let marks = isLineMark(next.range.location) ? next.lead - next.range.location : 0
+            return edit(NSRange(location: end, length: NSMaxRange(range) - end + marks), "", caret: caret.location)
+        }
+        placing = true
+        if at != caret.location { setSelectedRange(NSRange(location: at, length: 0)) }
+        super.deleteForward(sender)
+        placing = false
+        dropEmptyPair(at: at)
+    }
+
+    /// A span's two marks with nothing left between them at `at` (its last letter deleted): the marks go.
+    private func dropEmptyPair(at: Int) {
+        let s = string as NSString
+        for marks in MarkdownFormat.spans {
+            let open = (marks.open as NSString).length, close = (marks.close as NSString).length
+            guard at >= open, at + close <= s.length,
+                  s.substring(with: NSRange(location: at - open, length: open)) == marks.open,
+                  s.substring(with: NSRange(location: at, length: close)) == marks.close else { continue }
+            return edit(NSRange(location: at - open, length: open + close), "", caret: at - open)
+        }
     }
 
     override func becomeFirstResponder() -> Bool {
@@ -445,7 +653,6 @@ final class NotesTextView: NSTextView {
             hasFocus = true
             handle?.focused(self)
             onFocus?()
-            restyleIfMoved()
             reportSelection()
         }
         return took
@@ -453,7 +660,7 @@ final class NotesTextView: NSTextView {
 
     override func resignFirstResponder() -> Bool {
         let gave = super.resignFirstResponder()
-        if gave { hasFocus = false; restyleIfMoved(); reportSelection() }
+        if gave { hasFocus = false; reportSelection() }
         return gave
     }
 
@@ -494,8 +701,6 @@ final class NotesTextView: NSTextView {
     func restyle() {
         guard let storage = textStorage else { return }
         let all = NSRange(location: 0, length: storage.length), s = storage.string as NSString
-        let reveal = revealedLines()
-        revealed = reveal
         storage.beginEditing()
         storage.setAttributes(style.plain, range: all)
         let fences = MarkdownBlocks.fences(s)
@@ -505,15 +710,19 @@ final class NotesTextView: NSTextView {
             regex.enumerateMatches(in: storage.string, range: all) { m, _, _ in if let m, !quiet(m.range) { body(m) } }
         }
         func mute(_ range: NSRange) { storage.addAttribute(.foregroundColor, value: style.muted, range: range) }
-        /// Whether `range`'s lines show their marks: the caret is on one of them.
-        func shows(_ range: NSRange) -> Bool {
-            guard let reveal else { return false }
-            let lines = s.paragraphRange(for: range)
-            return NSIntersectionRange(lines, reveal).length > 0 || lines.location == reveal.location
+        /// A mark, hidden and taking no room on every line, the caret's too (Sven, 2026-11-20, Q285): which side of its
+        /// words it sits on, so the caret and typing at a span's edge know (NotesTextView.settled).
+        func hide(_ range: NSRange, _ side: NotesMarkSide = .plain) {
+            if range.length > 0 { storage.addAttribute(.notesHidden, value: side.rawValue, range: range) }
         }
-        func hide(_ range: NSRange) { if range.length > 0 { storage.addAttribute(.notesHidden, value: true, range: range) } }
-        /// A mark: hidden and taking no room, or muted on the caret's line.
-        func mark(_ range: NSRange) { shows(range) ? mute(range) : hide(range) }
+        /// A line's own marks from its start (a heading's `#`s, a quote's `>`, a list or check mark, its indent): the
+        /// caret starts the line's words after them, and Backspace there takes the line's style off.
+        func lineMark(_ range: NSRange) {
+            let line = s.lineRange(for: range)
+            if NSMaxRange(range) > line.location { storage.addAttribute(.notesLineMark, value: true, range: NSRange(location: line.location, length: NSMaxRange(range) - line.location)) }
+        }
+        /// An inline span's two marks.
+        func marks(_ open: NSRange, _ close: NSRange) { hide(open, .open); hide(close, .close) }
         func restyleFonts(_ range: NSRange, _ change: (NSFont) -> NSFont) {
             storage.enumerateAttribute(.font, in: range) { value, r, _ in
                 guard let font = value as? NSFont else { return }
@@ -531,17 +740,13 @@ final class NotesTextView: NSTextView {
         /// whatever paragraph the line before has by then.
         var blocks: [NSRange] = []
 
-        // Fenced code: the code face on the panel, its words in from the panel's edge; off the caret, the fences are the
-        // panel's padding.
+        // Fenced code: the code face on the panel, its words in from the panel's edge; the fences are the panel's padding.
         for fence in fences {
-            let raw = shows(fence.block)
             storage.addAttributes([.font: style.code, .foregroundColor: style.text, .notesCodeBlock: fence.block.location], range: fence.block)
             lineStyle(fence.block, style.paragraph(line: style.codeLine, indent: MarkdownStyle.blockPad, first: MarkdownStyle.blockPad))
             for line in [fence.open, fence.close].compactMap({ $0 }) {
-                if raw { mute(line) } else {
-                    hide(line)
-                    lineStyle(line, style.paragraph(line: MarkdownStyle.blockPad - 2))
-                }
+                hide(line)
+                lineStyle(line, style.paragraph(line: MarkdownStyle.blockPad - 2))
             }
             blocks.append(fence.block)
         }
@@ -557,14 +762,17 @@ final class NotesTextView: NSTextView {
             }
             var end = NSMaxRange(m.range(at: 1))
             while end < NSMaxRange(m.range), [32, 9].contains(s.character(at: end)) { end += 1 }
-            mark(NSRange(location: m.range(at: 1).location, length: end - m.range(at: 1).location))
+            let marks = NSRange(location: m.range(at: 1).location, length: end - m.range(at: 1).location)
+            hide(marks)
+            lineMark(marks)
         }
         // A quote: a callout, its words in the second text colour in from its bar.
         var quoteLines: [NSRange] = []
         each(MarkdownMarks.quote) { m in
             let line = s.lineRange(for: m.range)
             storage.addAttributes([.notesQuote: true, .foregroundColor: style.quote], range: line)
-            mark(m.range(at: 1))
+            hide(m.range(at: 1))
+            lineMark(m.range(at: 1))
             lineStyle(m.range, style.paragraph(line: style.line + 4, indent: MarkdownStyle.blockPad + 2, first: MarkdownStyle.blockPad + 2))
             if let last = quoteLines.last, NSMaxRange(last) == line.location {
                 quoteLines[quoteLines.count - 1] = NSUnionRange(last, line)
@@ -575,8 +783,15 @@ final class NotesTextView: NSTextView {
         blocks += quoteLines
         each(MarkdownMarks.bold) { m in
             restyleFonts(m.range, style.emboldened)
-            mark(m.range(at: 1))
-            mark(NSRange(location: NSMaxRange(m.range) - m.range(at: 1).length, length: m.range(at: 1).length))
+            marks(m.range(at: 1), NSRange(location: NSMaxRange(m.range) - m.range(at: 1).length, length: m.range(at: 1).length))
+        }
+        each(MarkdownMarks.underline) { m in
+            storage.addAttributes([.underlineStyle: NSUnderlineStyle.single.rawValue], range: m.range(at: 1))
+            marks(NSRange(location: m.range.location, length: 3), NSRange(location: NSMaxRange(m.range) - 4, length: 4))
+        }
+        each(MarkdownMarks.strike) { m in
+            storage.addAttributes([.strikethroughStyle: NSUnderlineStyle.single.rawValue], range: m.range(at: 1))
+            marks(NSRange(location: m.range.location, length: 2), NSRange(location: NSMaxRange(m.range) - 2, length: 2))
         }
         each(MarkdownMarks.italic) { m in
             restyleFonts(m.range) { NSFontManager.shared.convert($0, toHaveTrait: .italicFontMask) }
@@ -585,31 +800,29 @@ final class NotesTextView: NSTextView {
                 guard let font = value as? NSFont, !font.fontDescriptor.symbolicTraits.contains(.italic) else { return }
                 storage.addAttribute(.obliqueness, value: MarkdownStyle.slant, range: r)
             }
-            mark(NSRange(location: m.range.location, length: 1))
-            mark(NSRange(location: NSMaxRange(m.range) - 1, length: 1))
+            marks(NSRange(location: m.range.location, length: 1), NSRange(location: NSMaxRange(m.range) - 1, length: 1))
         }
+        // A link shows its words; its address is edited in the format bar's link field or Cmd+K's Edit link.
         each(MarkdownMarks.link) { m in
             storage.addAttribute(.link, value: s.substring(with: m.range(at: 2)), range: m.range(at: 1))
-            mark(NSRange(location: m.range.location, length: 1))
-            mark(NSRange(location: NSMaxRange(m.range(at: 1)), length: NSMaxRange(m.range) - NSMaxRange(m.range(at: 1))))
+            marks(NSRange(location: m.range.location, length: 1),
+                  NSRange(location: NSMaxRange(m.range(at: 1)), length: NSMaxRange(m.range) - NSMaxRange(m.range(at: 1))))
         }
         each(MarkdownMarks.bareURL) { m in storage.addAttribute(.link, value: s.substring(with: m.range), range: m.range) }
         each(MarkdownMarks.code) { m in
             storage.addAttributes([.font: style.code, .foregroundColor: style.text], range: m.range)
             storage.removeAttribute(.link, range: m.range)
-            let ticks = [NSRange(location: m.range.location, length: 1), NSRange(location: NSMaxRange(m.range) - 1, length: 1)]
-            ticks.forEach(mark)
-            // The fill sits on what shows: the words alone once the backticks are hidden.
-            let raw = shows(m.range)
-            let filled = raw ? m.range : NSRange(location: m.range.location + 1, length: m.range.length - 2)
+            marks(NSRange(location: m.range.location, length: 1), NSRange(location: NSMaxRange(m.range) - 1, length: 1))
+            // The fill sits on what shows: the words alone, the backticks hidden.
+            let filled = NSRange(location: m.range.location + 1, length: m.range.length - 2)
             storage.addAttribute(.notesCode, value: true, range: filled)
             // Room for the fill's 4 pt each side, so it never touches the words beside it.
             kern(4, at: NSMaxRange(filled) - 1)
             if m.range.location > 0, s.character(at: m.range.location - 1) != 10 { kern(4, at: m.range.location - 1) }
         }
         // A line that only shows a picture, never a link to click: the picture in place of the link, which is a mark like
-        // the others (bug 11, 2026-11-18: a pasted picture showed as its `![](attachments/…)`). On the caret's line the
-        // link shows muted with the picture under it; a file that does not read leaves the link muted.
+        // the others (bug 11, 2026-11-18: a pasted picture showed as its `![](attachments/…)`); a file that does not read
+        // leaves the link muted.
         picturesWidth = textContainer?.size.width ?? 0
         hasPictures = false
         each(MarkdownMarks.image) { m in
@@ -618,29 +831,23 @@ final class NotesTextView: NSTextView {
             guard let size = pictureSize(link) else { mute(m.range); return }
             storage.addAttribute(.notesImage, value: link, range: m.range)
             hasPictures = true
-            let room = size.height + 2 * Self.pictureGap
-            if shows(m.range) {
-                mute(m.range)
-                lineStyle(m.range, style.paragraph(after: room))
-            } else {
-                hide(m.range)
-                lineStyle(m.range, style.paragraph(line: room))
-            }
+            hide(m.range)
+            lineStyle(m.range, style.paragraph(line: size.height + 2 * Self.pictureGap))
         }
-        // A list: `-`, `*` or `+` drawn as a dot (raw while the caret sits inside the mark), numbers in the quote's
-        // colour; a wrapped line lines up under its own text.
-        let caret = selectedRange()
+        // A list: `-` or `*` drawn as a dot and `+` as a dash, numbers in the quote's colour; a wrapped line lines up under
+        // its own text.
         each(MarkdownMarks.list) { m in
             let sign = m.range(at: 2)
             let line = s.lineRange(for: m.range)
             let isBox = MarkdownMarks.checkbox.firstMatch(in: storage.string, range: line) != nil
             if sign.length == 1, "-*+".contains(s.substring(with: sign)), !isBox {
-                let inside = reveal != nil && caret.length == 0 && caret.location > sign.location && caret.location < NSMaxRange(m.range)
-                if inside { mute(sign) } else { storage.addAttributes([.notesBullet: true, .foregroundColor: NSColor.clear], range: sign) }
+                let drawn: NSAttributedString.Key = s.character(at: sign.location) == 43 ? .notesDash : .notesBullet
+                storage.addAttributes([drawn: true, .foregroundColor: NSColor.clear], range: sign)
             } else if !isBox {
                 storage.addAttribute(.foregroundColor, value: style.quote, range: sign)
             }
             lineStyle(m.range, style.paragraph(indent: width(m.range)))
+            lineMark(m.range)
         }
         each(MarkdownMarks.checkbox) { m in
             let ticked = s.substring(with: m.range(at: 2)) != " "
@@ -651,6 +858,7 @@ final class NotesTextView: NSTextView {
             for i in marker.location..<NSMaxRange(marker) { kern(spread, at: i) }
             let lead = NSRange(location: m.range.location, length: marker.location - m.range.location)
             lineStyle(m.range, style.paragraph(indent: width(lead) + style.box + style.boxGap))
+            lineMark(m.range)
             if ticked {
                 let rest = s.lineRange(for: m.range)
                 let after = NSRange(location: NSMaxRange(m.range), length: NSMaxRange(rest) - NSMaxRange(m.range))
@@ -659,7 +867,7 @@ final class NotesTextView: NSTextView {
             }
         }
         for table in MarkdownBlocks.tables(s, skipping: fences.map(\.block)) {
-            grid(table, raw: shows(table.block))
+            grid(table)
             blocks.append(table.block)
         }
         // Room above and below each block, on top of what the lines round it already keep.
@@ -673,16 +881,10 @@ final class NotesTextView: NSTextView {
         layoutManager?.invalidateLayout(forCharacterRange: all, actualCharacterRange: nil)
         needsDisplay = true
 
-        /// A table as a grid (or its raw lines, pipes muted, on the caret): the pipes and the spaces round each cell's words
-        /// hidden, the `|---|` line a hairline, the header bold, each cell's words moved to their column with kerning.
-        func grid(_ table: MarkdownBlocks.Table, raw: Bool) {
+        /// A table as a grid: the pipes and the spaces round each cell's words hidden, the `|---|` line a hairline, the
+        /// header bold, each cell's words moved to their column with kerning.
+        func grid(_ table: MarkdownBlocks.Table) {
             let pad = MarkdownStyle.blockPad
-            if raw {
-                for row in table.rows {
-                    for i in row.location..<NSMaxRange(row) where s.character(at: i) == 124 { mute(NSRange(location: i, length: 1)) }
-                }
-                return
-            }
             var cells: [[NSRange]] = []
             for (n, row) in table.rows.enumerated() {
                 if n == 1 {
@@ -789,13 +991,12 @@ final class NotesTextView: NSTextView {
     /// The picture a link names, read once at most 1200 px a side; nil without a folder or when the file does not read.
     private func picture(_ link: String) -> NSImage? {
         guard let folder, !unreadable.contains(link), let url = NoteAttachments.url(link, in: folder) else { return nil }
-        // A sketch (UI redesign T28, T29): its paths drawn in the text colour, cached by file and ink, so a theme change
-        // draws it anew in the new ink rather than the first look's.
+        // A sketch a note already holds (UI redesign T28): its paths drawn in the text colour, cached by file and ink, so
+        // a theme change draws it anew in the new ink rather than the first look's.
         if Sketch.isSVG(link) {
             let ink = Self.hex(style.text), key = Self.sketchKey(url, ink: ink)
             if let known = Self.pictures.object(forKey: key) { return known }
             guard let image = Sketch.picture(at: url, ink: style.text) else { unreadable.insert(link); return nil }
-            Self.sketchInks.insert(ink)
             Self.pictures.setObject(image, forKey: key)
             return image
         }
@@ -808,9 +1009,6 @@ final class NotesTextView: NSTextView {
         return picture
     }
 
-    /// The inks sketches were drawn in, so a sketch saved over can be let go in every one of them.
-    private static var sketchInks: Set<String> = []
-
     /// A sketch's cache key: its file and the ink it was drawn in.
     private static func sketchKey(_ url: URL, ink: String) -> NSURL {
         NSURL(string: "#ink-\(ink)", relativeTo: url)?.absoluteURL as NSURL? ?? url as NSURL
@@ -822,17 +1020,6 @@ final class NotesTextView: NSTextView {
         return String(format: "%02x%02x%02x", Int(c.redComponent * 255), Int(c.greenComponent * 255), Int(c.blueComponent * 255))
     }
 
-    /// A sketch saved over its own file (the canvas's Done on a sketch reopened, UI redesign T29): its drawing let go from
-    /// the shared cache in every ink and tried again here, then drawn anew; the note's words did not change, so nothing
-    /// else would redraw it.
-    func forgetSketch(_ link: String) {
-        guard let folder, let url = NoteAttachments.url(link, in: folder) else { return }
-        for ink in Self.sketchInks { Self.pictures.removeObject(forKey: Self.sketchKey(url, ink: ink)) }
-        unreadable.remove(link)
-        restyle()
-        needsDisplay = true
-    }
-
     /// A picture's size on the page: its own, made smaller to fit the line's width and at most 280 pt tall.
     private func pictureSize(_ link: String) -> NSSize? {
         guard let size = picture(link)?.size, size.width > 0, size.height > 0 else { return nil }
@@ -840,8 +1027,8 @@ final class NotesTextView: NSTextView {
         return NSSize(width: (size.width * fit).rounded(), height: (size.height * fit).rounded())
     }
 
-    /// Each picture and where it draws, in view coordinates, at the line's start: on its line while the link is hidden,
-    /// under it while the caret's line shows the link.
+    /// Each picture and where it draws, in view coordinates, at the line's start: on its line, its link hidden (under the
+    /// line when a picture's link reads as words, which no restyle does now).
     func pictureRects() -> [(rect: NSRect, image: NSImage)] {
         guard let storage = textStorage, let layout = layoutManager else { return [] }
         var shown: [(NSRect, NSImage)] = []
@@ -850,7 +1037,7 @@ final class NotesTextView: NSTextView {
             // The line's own fragment: a hidden link's glyphs are null ones, so its newline's, when it has one.
             let glyph = layout.glyphIndexForCharacter(at: NSMaxRange(range) < storage.length ? NSMaxRange(range) : NSMaxRange(range) - 1)
             guard let line = fragment(at: glyph) else { return }
-            // The link hidden, the picture is the line; shown (the caret's line), the picture is under it.
+            // The link hidden, the picture is the line.
             let hidden = storage.attribute(.notesHidden, at: range.location, effectiveRange: nil) != nil
             let height = hidden ? 0 : (storage.attribute(.paragraphStyle, at: range.location, effectiveRange: nil) as? NSParagraphStyle)?.minimumLineHeight ?? style.line
             shown.append((NSRect(x: line.rect.minX, y: line.rect.minY + height + Self.pictureGap, width: size.width, height: size.height), image))
@@ -1018,16 +1205,24 @@ final class NotesTextView: NSTextView {
 
     /// Each list dot: the hidden `-`'s place, centred on its line.
     func bullets() -> [NSRect] {
+        let dot = (style.body.pointSize * 0.36).rounded()
+        return marks(.notesBullet, width: dot, height: dot)
+    }
+
+    /// Each dashed list's dash: the hidden `+`'s place, a short rule centred on its line.
+    func dashes() -> [NSRect] { marks(.notesDash, width: (style.body.pointSize * 0.6).rounded(), height: 1.5) }
+
+    /// A list mark drawn in place of the hidden character `key` is on: `width` by `height`, centred on its place and line.
+    private func marks(_ key: NSAttributedString.Key, width: CGFloat, height: CGFloat) -> [NSRect] {
         guard let storage = textStorage, let layout = layoutManager else { return [] }
-        let size = (style.body.pointSize * 0.36).rounded()
-        return runs(.notesBullet).flatMap { run in
+        return runs(key).flatMap { run in
             (run.range.location..<NSMaxRange(run.range)).compactMap { at -> NSRect? in
                 let glyph = layout.glyphIndexForCharacter(at: at)
                 guard let line = fragment(at: glyph) else { return nil }
-                let height = (storage.attribute(.paragraphStyle, at: at, effectiveRange: nil) as? NSParagraphStyle)?.minimumLineHeight ?? style.line
+                let lineHeight = (storage.attribute(.paragraphStyle, at: at, effectiveRange: nil) as? NSParagraphStyle)?.minimumLineHeight ?? style.line
                 let x = line.rect.minX + layout.location(forGlyphAt: glyph).x
                 let advance = style.body.advancement(forCGGlyph: layout.cgGlyph(at: glyph)).width
-                return NSRect(x: (x + (advance - size) / 2).rounded(), y: (line.rect.minY + (height - size) / 2).rounded(), width: size, height: size)
+                return NSRect(x: (x + (advance - width) / 2).rounded(), y: line.rect.minY + ((lineHeight - height) / 2).rounded(), width: width, height: height)
             }
         }
     }
@@ -1047,6 +1242,7 @@ final class NotesTextView: NSTextView {
         }
         style.quote.setFill()
         for dot in bullets() where dot.intersects(dirtyRect) { NSBezierPath(ovalIn: dot).fill() }
+        for dash in dashes() where dash.intersects(dirtyRect) { NSBezierPath(roundedRect: dash, xRadius: 0.75, yRadius: 0.75).fill() }
         // A checklist's box is round (round 2 shot 6c): a filled circle ticked, a ring not.
         for box in checkboxes() where box.rect.intersects(dirtyRect) {
             if box.ticked {
@@ -1065,35 +1261,83 @@ final class NotesTextView: NSTextView {
         if isEditable, let box = checkboxes().first(where: { $0.rect.insetBy(dx: -3, dy: -3).contains(point) }) {
             return toggle(box.range, ticked: box.ticked)
         }
-        // NSTextView tracks the drag until the release; the marks follow the caret after it.
+        // NSTextView tracks the drag until the release; the format bar waits for it.
         tracking = true
         super.mouseDown(with: event)
         tracking = false
-        restyleIfMoved()
         reportSelection()
     }
 
-    /// ⌘B, ⌘I, ⌘E, ⌘⇧H and ⌘⇧L format the selection while this editor has the keyboard (direction B), in the panel and on
-    /// the Notes page alike; any other key equivalent goes on as before.
+    /// The formats' keys (⌘B, ⌘I, ⌘U, ⌘E, ⌘⇧L and the styles' ⌘⇧T, H, J, B, 7, 8 and 9; MarkdownFormat.shortcut) format the
+    /// selection while this editor has the keyboard (direction B), in the panel and on the Notes page alike; any other key
+    /// equivalent goes on as before.
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
         let flags = event.modifierFlags.intersection([.command, .shift, .option, .control])
         guard isEditable, window?.firstResponder === self, flags.isSubset(of: [.command, .shift]),
-              let format = MarkdownFormat.keyed(event.charactersIgnoringModifiers, command: flags.contains(.command), shift: flags.contains(.shift))
+              let format = MarkdownFormat.keyed(event.characters(byApplyingModifiers: []), command: flags.contains(.command), shift: flags.contains(.shift))
         else { return super.performKeyEquivalent(with: event) }
         self.format(format)
         return true
     }
 
     /// A format at the selection (the format bar, Cmd+K or its key), as an edit Undo takes back; the editor keeps the
-    /// keyboard.
+    /// keyboard. With nothing picked an inline format types no marks: at a span's end (the caret before its closing
+    /// mark) it ends the style for what is typed next; outside one it is asked for the next typing (`pending`), and a
+    /// second press takes it back; inside one it takes the style off the span.
     func format(_ format: MarkdownFormat) {
         guard isEditable else { return }
-        let edit = format.edit(string, selection: selectedRange())
+        let sel = selectedRange()
+        if sel.length == 0, let marks = format.marks {
+            let close = (marks.close as NSString).length
+            let spans = marks.span.matches(in: string, range: (string as NSString).lineRange(for: sel)).map(\.range)
+            if let span = spans.first(where: { NSMaxRange($0) - close == sel.location }) {
+                place(NSMaxRange(span))
+                outside = NSMaxRange(span)
+                return
+            }
+        }
+        let edit = format.edit(string, selection: sel)
+        if sel.length == 0, let marks = format.marks, edit.range.length == 0, edit.replacement == marks.open + marks.close {
+            if let at = pending.firstIndex(of: format) { pending.remove(at: at) } else { pending.append(format) }
+            return
+        }
+        apply(edit)
+    }
+
+    /// The link field's address on the selection (MarkdownFormat.linking); nil takes the link off.
+    func setLink(_ address: String?) {
+        guard isEditable else { return }
+        apply(MarkdownFormat.linking(string, selection: selectedRange(), address: address))
+    }
+
+    /// An edit of the selection, as Undo takes back, its selection placed as is; the editor keeps the keyboard.
+    private func apply(_ edit: MarkdownFormat.Edit) {
+        guard edit.range.length > 0 || !edit.replacement.isEmpty || edit.selection != selectedRange() else { return }
         guard shouldChangeText(in: edit.range, replacementString: edit.replacement) else { return }
+        placing = true
+        defer { placing = false }
         textStorage?.replaceCharacters(in: edit.range, with: NSAttributedString(string: edit.replacement, attributes: style.plain))
         didChangeText()
         setSelectedRange(edit.selection)
         window?.makeFirstResponder(self)
+    }
+
+    /// The caret's line, in the scroll view's points from its top left: where the link field opens with nothing picked.
+    func caretRect() -> CGRect? {
+        guard let layout = layoutManager, let scroll = enclosingScrollView else { return nil }
+        let at = min(selectedRange().location, (string as NSString).length)
+        let glyph = layout.glyphIndexForCharacter(at: max(at - (at == (string as NSString).length && at > 0 ? 1 : 0), 0))
+        guard (string as NSString).length > 0, let line = fragment(at: glyph) else { return nil }
+        let inScroll = convert(line.rect, to: scroll)
+        return scroll.isFlipped ? inScroll : NSRect(x: inScroll.minX, y: scroll.bounds.height - inScroll.maxY, width: inScroll.width, height: inScroll.height)
+    }
+
+    /// Picks the words of the link the caret is in, so Cmd+K's Edit link opens on it.
+    func pickLink() {
+        guard let found = MarkdownFormat.link(in: string, selection: selectedRange()) else { return }
+        placing = true
+        defer { placing = false }
+        setSelectedRange(NSRange(location: found.whole.location + 1, length: (found.words as NSString).length))
     }
 
     /// Ticks or unticks the box at `range`, as an edit Undo takes back.

@@ -3,10 +3,10 @@ import PilotCore
 import SwiftUI
 import UniformTypeIdentifiers
 
-/// The format bar over a selection (UI redesign T26, S6 A, round 1 shot 6a): Aa for the heading, then bold, italic and
-/// code, then the bulleted list, the checklist and the link, each typing its Markdown (MarkdownFormat, with its key). A
-/// format the selection already has is lit. No underline or strikethrough: Markdown has no underline, and strikethrough
-/// is out of the spec's scope.
+/// The format bar over a selection (UI redesign T26, S6 A, round 1 shot 6a; Apple Notes' styles, Sven 2026-11-20): Aa
+/// opens the paragraph styles (NotesStylesMenu), then bold, italic, underline and strikethrough, then code, the bulleted
+/// list, the checklist and the link, each typing its Markdown (MarkdownFormat, with its key). A format the selection
+/// already has is lit.
 struct NotesFormatBar: View {
     @Environment(\.style) var style
     let handle: NotesEditorHandle
@@ -14,22 +14,29 @@ struct NotesFormatBar: View {
     /// and a selection moved.
     var text = ""
     var selection: CGRect = .zero
+    /// The Aa menu, open under the bar (NotesEditor draws it).
+    @Binding var styling: Bool
+    /// The link field, open under the bar (NotesEditor draws it).
+    @Binding var linking: Bool
+    /// The button under the pointer: a format, or nil with `aaHovered` for Aa.
     @State var hovered: MarkdownFormat?
+    @State var aaHovered = false
 
-    /// Its size, to keep it inside the note (NotesEditor): 3 pt round the Aa button (40), two rules (7 each) and six
+    /// Its size, to keep it inside the note (NotesEditor): 3 pt round the Aa button (40), two rules (7 each) and eight
     /// buttons (28 each).
-    static let size = CGSize(width: 3 + 40 + 7 + 3 * 28 + 7 + 3 * 28 + 3, height: 32)
+    static let size = CGSize(width: 3 + 40 + 7 + 4 * 28 + 7 + 4 * 28 + 3, height: 32)
 
-    /// The bar's groups, in order: the heading, the inline formats, the line formats and the link.
-    static let groups: [[MarkdownFormat]] = [[.heading], [.bold, .italic, .code], [.bullets, .checklist, .link]]
+    /// The bar's groups after Aa, in order: the inline marks, then code, the line formats and the link.
+    static let groups: [[MarkdownFormat]] = [[.bold, .italic, .underline, .strike], [.code, .bullets, .checklist, .link]]
 
     var body: some View { bar }
 
     private var bar: some View {
-        let lit = Self.lit(handle.view)
+        let lit = Self.lit(handle.held)
         return HStack(spacing: 0) {
-            ForEach(Array(Self.groups.enumerated()), id: \.offset) { index, group in
-                if index > 0 { InstrumentRule(vertical: true, role: \.line2, length: 16).padding(.horizontal, 3) }
+            aa
+            ForEach(Self.groups, id: \.self) { group in
+                InstrumentRule(vertical: true, role: \.line2, length: 16).padding(.horizontal, 3)
                 ForEach(group) { button($0, lit: lit.contains($0)) }
             }
         }
@@ -41,20 +48,26 @@ struct NotesFormatBar: View {
         .accessibilityElement(children: .contain).accessibilityLabel("Format")
     }
 
+    /// Aa: the paragraph styles, lit while their menu is open. A press that just closed the menu (on Aa itself) leaves it
+    /// closed.
+    private var aa: some View {
+        Button { if !NotesPopoverWatch.closingPress { styling.toggle() } } label: {
+            chip(Text("Aa").font(.system(size: 13, weight: .medium)), width: 40, lit: styling, hovered: aaHovered)
+        }
+        .buttonStyle(.plain).focusable(false)
+        .onHover { aaHovered = $0 }
+        .help("Paragraph styles").accessibilityLabel("Paragraph styles")
+        .accessibilityAddTraits(styling ? .isSelected : [])
+    }
+
     private func button(_ format: MarkdownFormat, lit: Bool) -> some View {
-        Button { handle.apply(format) } label: {
-            Group {
-                if format == .heading {
-                    Text("Aa").font(.system(size: 13, weight: .medium))
-                } else {
-                    Image(systemName: format.symbol).font(.system(size: 12, weight: format == .bold ? .semibold : .medium))
-                }
-            }
-            .foregroundStyle(style.color(lit ? \.accentText : hovered == format ? \.text : \.text2))
-            .frame(width: format == .heading ? 40 : 28, height: 26)
-            .background { if lit { RoundedRectangle(cornerRadius: 6, style: .continuous).fill(style.color(\.accentSoft)) } }
-            .instrumentRaised(hovered == format && !lit, radius: 6)
-            .contentShape(.rect)
+        // The link opens the field for its address, which never shows in the note (Q285).
+        Button {
+            guard format == .link else { return handle.apply(format) }
+            if !NotesPopoverWatch.closingPress { styling = false; linking.toggle() }
+        } label: {
+            chip(Image(systemName: format.symbol).font(.system(size: 12, weight: format == .bold ? .semibold : .medium)), width: 28,
+                 lit: lit, hovered: hovered == format)
         }
         .buttonStyle(.plain).focusable(false)
         .onHover { hovered = $0 ? format : hovered == format ? nil : hovered }
@@ -62,10 +75,20 @@ struct NotesFormatBar: View {
         .accessibilityAddTraits(lit ? .isSelected : [])
     }
 
+    /// A button's face: lit in the accent on its soft fill, raised under the pointer.
+    private func chip(_ label: some View, width: CGFloat, lit: Bool, hovered: Bool) -> some View {
+        label
+            .foregroundStyle(style.color(lit ? \.accentText : hovered ? \.text : \.text2))
+            .frame(width: width, height: 26)
+            .background { if lit { RoundedRectangle(cornerRadius: 6, style: .continuous).fill(style.color(\.accentSoft)) } }
+            .instrumentRaised(hovered && !lit, radius: 6)
+            .contentShape(.rect)
+    }
+
     func help(_ format: MarkdownFormat) -> String { format.key.map { "\(format.title)  \($0)" } ?? format.title }
 
-    /// The formats the selection in `view` already has: bold, italic, code or a link round it, a heading, bullet or check
-    /// mark on its first line.
+    /// The formats the selection in `view` already has: bold, italic, underline, strikethrough, code or a link round it, a
+    /// bullet or check mark on its first line.
     static func lit(_ view: NSTextView?) -> Set<MarkdownFormat> {
         guard let view else { return [] }
         return lit(view.string, selection: view.selectedRange())
@@ -75,14 +98,10 @@ struct NotesFormatBar: View {
         let s = text as NSString
         guard sel.location <= s.length else { return [] }
         let line = s.lineRange(for: NSRange(location: sel.location, length: 0))
-        let body = s.substring(with: line)
-        let trimmed = String(body.drop { $0 == " " || $0 == "\t" })
         var out = Set<MarkdownFormat>()
-        if MarkdownFormat.headingLevel(body) > 0 { out.insert(.heading) }
-        func has(_ mark: NSRegularExpression, _ line: String) -> Bool {
-            mark.firstMatch(in: line, range: NSRange(location: 0, length: (line as NSString).length)) != nil
-        }
-        if has(MarkdownFormat.checkMark, trimmed) { out.insert(.checklist) } else if has(MarkdownFormat.bulletMark, trimmed) { out.insert(.bullets) }
+        // The line's kind, as Aa ticks it: the bar's bulleted list or checklist.
+        let kind = MarkdownFormat.lineStyle(s.substring(with: line))
+        if kind == .bullets || kind == .checklist { out.insert(kind) }
         // An inline span holds the selection when it covers every picked character, or the caret strictly inside it.
         let words = MarkdownFormat.words(s, sel)
         func around(_ mark: NSRegularExpression) -> Bool {
@@ -92,15 +111,138 @@ struct NotesFormatBar: View {
         }
         if around(MarkdownMarks.bold) { out.insert(.bold) }
         if around(MarkdownMarks.italic) { out.insert(.italic) }
+        if around(MarkdownMarks.underline) { out.insert(.underline) }
+        if around(MarkdownMarks.strike) { out.insert(.strike) }
         if around(MarkdownMarks.code) { out.insert(.code) }
         if around(MarkdownMarks.link) { out.insert(.link) }
         return out
     }
 }
 
-/// What the note head's + puts in a note (round 2 shot 6c-insert; Open question 9: the drawn keys, Table left out).
+/// The link's address (Sven, 2026-11-20, Q285: a link shows its words, never its address): the format bar's link and
+/// Cmd+K's Edit link open it under the selection, the address typed or changed, Return sets it on the link (or makes the
+/// picked words one), Remove link takes it off, its words kept. It takes the keyboard; Escape and a press outside close
+/// it with nothing changed.
+struct NotesLinkField: View {
+    @Environment(\.style) private var style
+    let existing: Bool
+    let apply: (String?) -> Void
+    let close: () -> Void
+    @State private var address: String
+    @FocusState private var focused: Bool
+
+    static let width: CGFloat = 320
+    static let height: CGFloat = 40
+
+    init(address: String, existing: Bool, apply: @escaping (String?) -> Void, close: @escaping () -> Void) {
+        self.existing = existing
+        self.apply = apply
+        self.close = close
+        _address = State(initialValue: address)
+    }
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "link").font(.system(size: 12, weight: .medium)).foregroundStyle(style.color(\.text3)).accessibilityHidden(true)
+            TextField("https://", text: $address)
+                .textFieldStyle(.plain).styleText(\.body).foregroundStyle(style.color(\.text))
+                .focused($focused)
+                .onSubmit { apply(address) }
+                .onExitCommand { close() }
+                .accessibilityLabel("Link address")
+            if existing {
+                Button("Remove link") { apply(nil) }
+                    .buttonStyle(.plain).focusable(false).styleText(\.caption).foregroundStyle(style.color(\.text2))
+            }
+        }
+        .padding(.horizontal, 10)
+        .frame(width: Self.width, height: Self.height)
+        .background(style.color(\.panel), in: .rect(cornerRadius: 9, style: .continuous))
+        .overlay { RoundedRectangle(cornerRadius: 9, style: .continuous).strokeBorder(style.color(\.line2)) }
+        .background(NotesPopoverWatch(close: close))
+        .onAppear { focused = true }
+        .accessibilityElement(children: .contain).accessibilityLabel("Link")
+    }
+}
+
+/// Aa's list (Apple Notes' paragraph styles, Sven 2026-11-20): Title, Heading, Subheading, Body, Monostyled, Bulleted,
+/// Dashed and Numbered List and Block Quote, each drawn in its own look as the note draws it, the selection's line's
+/// style ticked, each style's key at the right. A pick converts the picked lines (MarkdownFormat). Drawn in the note, a
+/// ring and no shadow (DESIGN.md); it closes as a popover does (NotesPopoverWatch) and on Escape (NotesKey).
+struct NotesStylesMenu: View {
+    @Environment(\.style) private var style
+    let markdown: MarkdownStyle
+    /// The selection's line's style, ticked.
+    let current: MarkdownFormat?
+    let pick: (MarkdownFormat) -> Void
+    let close: () -> Void
+    @State private var hovered: MarkdownFormat?
+
+    static let width: CGFloat = 264
+    /// A row's height: Title's taller, for its face.
+    static func rowHeight(_ format: MarkdownFormat) -> CGFloat { format == .title ? 40 : format == .heading ? 34 : 30 }
+    /// Its height: the rows, the room between them and its padding.
+    static var height: CGFloat { MarkdownFormat.styles.map(rowHeight).reduce(12, +) + CGFloat(MarkdownFormat.styles.count - 1) }
+
+    var body: some View {
+        VStack(spacing: 1) {
+            ForEach(MarkdownFormat.styles) { format in
+                Button { pick(format) } label: { row(format) }
+                    .buttonStyle(.plain).focusable(false)
+                    .onHover { hovered = $0 ? format : hovered == format ? nil : hovered }
+                    .accessibilityLabel(format.title)
+                    .accessibilityHint(format.key.map { "Key \($0)" } ?? "")
+                    .accessibilityAddTraits(format == current ? .isSelected : [])
+            }
+        }
+        .padding(6)
+        .frame(width: Self.width)
+        .background(style.color(\.panel), in: .rect(cornerRadius: 11, style: .continuous))
+        .overlay { RoundedRectangle(cornerRadius: 11, style: .continuous).strokeBorder(style.color(\.line2)) }
+        .background(NotesPopoverWatch(close: close))
+        .accessibilityElement(children: .contain).accessibilityLabel("Paragraph styles")
+    }
+
+    private func row(_ format: MarkdownFormat) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: "checkmark").font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(style.color(\.accent)).opacity(format == current ? 1 : 0).frame(width: 14).accessibilityHidden(true)
+            sample(format).lineLimit(1)
+            Spacer(minLength: 8)
+            if let key = format.key {
+                Text(key).styleText(\.mono).foregroundStyle(style.color(\.text3)).fixedSize().accessibilityHidden(true)
+            }
+        }
+        .padding(.horizontal, 8).frame(height: Self.rowHeight(format))
+        .instrumentRaised(hovered == format, radius: 7)
+        .contentShape(.rect)
+    }
+
+    /// The style's name in its own look: the note's faces, a list's mark before it, a quote's bar beside it.
+    @ViewBuilder private func sample(_ format: MarkdownFormat) -> some View {
+        if format == .quote {
+            HStack(spacing: 8) {
+                RoundedRectangle(cornerRadius: 1.5).fill(Color(markdown.quoteBar)).frame(width: 3, height: 18)
+                Text(format.title).font(Font(markdown.body)).foregroundStyle(Color(markdown.quote))
+            }
+        } else {
+            let face: NSFont = switch format {
+            case .title: markdown.h1.font
+            case .heading: markdown.h2.font
+            case .subheading: markdown.bold
+            case .mono: markdown.code
+            default: markdown.body
+            }
+            let lead = [MarkdownFormat.bullets: "•  ", .dashes: "–  ", .numbers: "1.  "][format] ?? ""
+            (Text(lead).foregroundStyle(Color(markdown.quote)) + Text(format.title).foregroundStyle(Color(markdown.text))).font(Font(face))
+        }
+    }
+}
+
+/// What the note head's + puts in a note (round 2 shot 6c-insert; Open question 9: the drawn keys, Table left out; the
+/// sketch removed, Sven 2026-11-20).
 enum NotesInsert: String, CaseIterable, Identifiable {
-    case checklist, picture, sketch
+    case checklist, picture
 
     var id: String { rawValue }
 
@@ -108,7 +250,6 @@ enum NotesInsert: String, CaseIterable, Identifiable {
         switch self {
         case .checklist: "Checklist"
         case .picture: "Picture…"
-        case .sketch: "Sketch"
         }
     }
 
@@ -116,29 +257,22 @@ enum NotesInsert: String, CaseIterable, Identifiable {
         switch self {
         case .checklist: MarkdownFormat.checklist.symbol
         case .picture: "photo"
-        case .sketch: "scribble.variable"
         }
     }
 
-    /// Its key as the row shows it: the checklist's is MarkdownFormat's ⌘⇧L; Sketch's is ⌘⇧D, which no notes key, AppKit
-    /// text binding or default Pilot bind uses (clash check, T26); Picture has none.
+    /// Its key as the row shows it: the checklist's is MarkdownFormat's ⌘⇧L; Picture has none.
     var key: String? {
         switch self {
         case .checklist: MarkdownFormat.checklist.key
         case .picture: nil
-        case .sketch: "⌘⇧D"
         }
     }
-
-    /// Sketch's way in: opens the sketch canvas at the caret, set by the note's view (NotesNote, UI redesign T29).
-    @MainActor static var openSketch: ((NotesEditorHandle) -> Void)?
 
     /// Puts it in the note the handle holds, at the caret.
     @MainActor func perform(_ handle: NotesEditorHandle) {
         switch self {
         case .checklist: handle.apply(.checklist)
         case .picture: Self.choosePictures(handle)
-        case .sketch: Self.openSketch?(handle)
         }
     }
 
@@ -164,7 +298,7 @@ enum NotesInsert: String, CaseIterable, Identifiable {
     }
 }
 
-/// The Insert menu under the head's +: Checklist, Picture… and Sketch, each its own glyph, its name and its key. Drawn
+/// The Insert menu under the head's +: Checklist and Picture…, each its own glyph, its name and its key. Drawn
 /// in the panel, a ring and no shadow (DESIGN.md), so it renders offscreen as Pilot shows it.
 struct NotesInsertMenu: View {
     @Environment(\.style) private var style

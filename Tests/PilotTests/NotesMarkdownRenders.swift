@@ -17,7 +17,7 @@ extension SharedLook {
 struct NotesMarkdownRenders {
     nonisolated static let env = ProcessInfo.processInfo.environment
 
-    @Test("The reference note renders as it reads, with the caret's line raw, and previewed from the list, in Instrument dark and light",
+    @Test("The reference note renders as it reads, with no marks on the caret's line (in a bold word, a link, a list line), and previewed from the list, in Instrument dark and light",
           .enabled(if: env["PILOT_RENDER_DIR"] != nil && env["CFFIXED_USER_HOME"] != nil))
     func render() throws {
         let home = try #require(Self.env["CFFIXED_USER_HOME"])
@@ -42,7 +42,9 @@ struct NotesMarkdownRenders {
             look.themeID = theme
             let dir = out.appendingPathComponent("notes-markdown-\(style.rawValue)-\(side)")
             try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-            for state in ["1-reference", "2-caret-line", "3-list-preview", "4-trash", "5-actions", "6-empty-note", "7-scratch"] {
+            // The caret's line, dark only: in a bold word, in a link's words and in a list line (Sven, 2026-11-20, Q285).
+            let carets = side == "dark" ? ["2-caret-bold", "2-caret-link", "2-caret-list"] : []
+            for state in ["1-reference"] + carets + ["3-list-preview", "4-trash", "5-actions", "6-empty-note", "7-scratch"] {
                 let model = NotesModel(store: store, defaults: UserDefaults(suiteName: testSuite())!)
                 model.reload()
                 model.open(state == "3-list-preview" || state == "7-scratch" ? NoteStore.scratch : reference.id)
@@ -65,10 +67,20 @@ struct NotesMarkdownRenders {
                 let content = try #require(panel.contentView)
                 RunLoop.main.run(until: Date().addingTimeInterval(0.5))
                 if let editor = Self.editors(in: content).first(where: \.isEditable) {
-                    if state == "2-caret-line" {
-                        // The caret on the Attendees line: its `**` show, every other line stays drawn.
+                    if state.hasPrefix("2-caret") {
+                        // The caret inside a bold word, a link or a list line, the editor holding the keyboard: no mark shows.
                         panel.makeFirstResponder(editor)
-                        editor.setSelectedRange(NSRange(location: (editor.string as NSString).range(of: "Attendees").location + 4, length: 0))
+                        try #require(panel.firstResponder === editor, "the editor does not have the keyboard")
+                        let s = editor.string as NSString
+                        let at = ["2-caret-bold": "Attendees", "2-caret-link": "search ranking", "2-caret-list": "Ship the notes"][state]!
+                        editor.setSelectedRange(NSRange(location: s.range(of: at).location + 4, length: 0))
+                        editor.restyle()
+                        for mark in ["**Attendees", "[search ranking", "](https://example.com", "- Ship", "**Tip"] {
+                            let i = s.range(of: mark).location
+                            let gone = editor.textStorage?.attribute(.notesHidden, at: i, effectiveRange: nil) != nil
+                                || editor.textStorage?.attribute(.notesBullet, at: i, effectiveRange: nil) != nil
+                            try #require(gone, "\(state): \(mark) shows")
+                        }
                     } else {
                         // The caret on the empty last line, so no line shows its marks.
                         editor.setSelectedRange(NSRange(location: (editor.string as NSString).length, length: 0))

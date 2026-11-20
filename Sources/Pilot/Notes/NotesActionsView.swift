@@ -1,3 +1,4 @@
+import AppKit
 import PilotCore
 import SwiftUI
 
@@ -82,6 +83,92 @@ struct NotesActionsView: View {
         }
         .frame(width: 290)
         .styleSurface(\.pop, fill: \.panel, radius: \.card)
+        .background(NotesPopoverWatch { model.perform(.closeActions) })
+    }
+}
+
+/// Closes a pop-up drawn inside a window as a popover closes (Sven, 2026-11-20: Cmd+K's actions stayed open on a click
+/// outside them and with another app in front): on a press outside its frame, in its window or another of Pilot's, on
+/// its window losing the keyboard, and on another app coming in front (the panel never activates Pilot, so Pilot's own
+/// resign is not enough). Escape stays the keys' (NotesKey). Laid behind the pop-up, so its frame is the pop-up's.
+struct NotesPopoverWatch: NSViewRepresentable {
+    let close: () -> Void
+
+    func makeNSView(context: Context) -> Watch { Watch() }
+    func updateNSView(_ view: Watch, context: Context) { view.close = close }
+
+    /// True from a press that closed a pop-up to that press's release, so a button the press lands on (the head's
+    /// Actions, the format bar's Aa) does not open it again.
+    @MainActor private(set) static var closingPress = false
+    @MainActor private static var release: Any?
+
+    @MainActor final class Watch: NSView {
+        var close: (() -> Void)?
+        private var monitor: Any?
+        private var observers: [(center: NotificationCenter, observer: NSObjectProtocol)] = []
+
+        override func hitTest(_ point: NSPoint) -> NSView? { nil }
+
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            stop()
+            guard let window else { return }
+            monitor = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown, .otherMouseDown]) { [weak self] event in
+                MainActor.assumeIsolated { self?.pressed(event) }
+                return event
+            }
+            let center = NotificationCenter.default, workspace = NSWorkspace.shared.notificationCenter
+            let resigned = center.addObserver(forName: NSWindow.didResignKeyNotification, object: window, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated { self?.dismiss() }
+            }
+            let inactive = center.addObserver(forName: NSApplication.didResignActiveNotification, object: nil, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated { self?.dismiss() }
+            }
+            let other = workspace.addObserver(forName: NSWorkspace.didActivateApplicationNotification, object: nil, queue: .main) { [weak self] note in
+                let app = note.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication
+                guard app?.processIdentifier != ProcessInfo.processInfo.processIdentifier else { return }
+                MainActor.assumeIsolated { self?.dismiss() }
+            }
+            observers = [(center, resigned), (center, inactive), (workspace, other)]
+        }
+
+        /// A press Pilot is handed (its local monitor): outside the pop-up's frame, it closes the pop-up.
+        func pressed(_ event: NSEvent) {
+            guard let window, close != nil else { return }
+            if event.window === window, bounds.contains(convert(event.locationInWindow, from: nil)) { return }
+            NotesPopoverWatch.awaitRelease()
+            dismiss()
+        }
+
+        private func dismiss() {
+            guard window != nil, let close else { return }
+            close()
+        }
+
+        private func stop() {
+            if let monitor { NSEvent.removeMonitor(monitor) }
+            monitor = nil
+            observers.forEach { $0.center.removeObserver($0.observer) }
+            observers = []
+        }
+    }
+
+    /// Marks a closing press until its release has been handed on; the pop-up's own watch is gone by then.
+    @MainActor private static func awaitRelease() {
+        closingPress = true
+        if let release { NSEvent.removeMonitor(release) }
+        release = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseUp, .rightMouseUp, .otherMouseUp]) { event in
+            MainActor.assumeIsolated { released() }
+            return event
+        }
+    }
+
+    /// The closing press's release: once it has been handed on, a press is a press again.
+    @MainActor static func released() {
+        if let release { NSEvent.removeMonitor(release) }
+        release = nil
+        // On the run loop's next turn, which a render's wait turns too (a main-queue block would wait for it to end).
+        RunLoop.main.perform(inModes: [.common]) { MainActor.assumeIsolated { closingPress = false } }
     }
 }
 

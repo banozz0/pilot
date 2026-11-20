@@ -66,6 +66,10 @@ final class NotesModel {
     var confirmingTrash = false
     /// Cmd+K's actions on the open note (the highlighted one while the list has the keyboard); nil while closed.
     private(set) var actions: NoteActions?
+    /// The format bar's Aa styles open (NotesStylesMenu); Escape closes them first.
+    var styling = false
+    /// The format bar's link field open (NotesLinkField, Cmd+K's Edit link); Escape closes it first.
+    var linking = false
     /// A failed read or write, shown in the panel.
     private(set) var problem: String?
 
@@ -111,10 +115,7 @@ final class NotesModel {
         }
     }
 
-    /// Another note ends an open sketch first, while the editor still shows this one, so its link lands here and is
-    /// saved with it (spec-end review 1, blocker 1); the same note again (a reload) keeps the canvas open.
     func open(_ id: String) {
-        if id != current { SketchBoard.shared.done() }
         flush()
         guard let note = notes.first(where: { $0.id == id }) else { return }
         current = id
@@ -131,7 +132,6 @@ final class NotesModel {
 
     /// Escape in the note: the list takes the keyboard on the open note, unfiltered.
     func focusList() {
-        SketchBoard.shared.done()
         flush()
         confirmingTrash = false
         listFocused = true
@@ -174,8 +174,10 @@ final class NotesModel {
             // From the list it asks about the highlighted note, which opens so the question shows it.
             if listFocused, let id = selectedNote?.id, id != current { open(id) }
             askTrash()
-        case .actions: actions == nil ? openActions() : (actions = nil)
+        // A press that just closed them (on the head's Actions) leaves them closed.
+        case .actions: actions == nil && !NotesPopoverWatch.closingPress ? openActions() : (actions = nil)
         case .closeActions: actions = nil
+        case .closePopover: styling = false; linking = false
         case .stepActions(let by): stepActions(by)
         case .runAction: runAction()
         case .filterActions(let typed): filterActions(typed)
@@ -238,6 +240,10 @@ final class NotesModel {
             if id != current { open(id) }
             askTrash()
         case .format(let format): editor.apply(format)
+        case .editLink:
+            // On the link the caret is in, its words picked so the field opens over them.
+            editor.view?.pickLink()
+            linking = true
         }
     }
 
@@ -288,7 +294,6 @@ final class NotesModel {
     /// 2026-10-15), which Cmd+Backspace in its editor does too.
     func askTrash() {
         guard note?.isScratch == false else { return }
-        SketchBoard.shared.done()
         if isEmptyNote { trash(current) } else { confirmingTrash = true }
     }
 
@@ -306,8 +311,6 @@ final class NotesModel {
     /// Trash's work, throwing for the pilot command (CLI W12).
     func moveToTrash(_ id: String) throws {
         guard id != NoteStore.scratch else { return }
-        // Before the open note's text is dropped, so a sketch never brings a trashed note back through the next save.
-        SketchBoard.shared.done()
         defer { confirmingTrash = false }
         if id == current {
             pendingSave?.cancel()
@@ -339,7 +342,6 @@ final class NotesModel {
     /// The pilot command's write (CLI W12): what is typed is saved first, then `text` replaces the note's on disk, the
     /// open one followed when a new first line renames it. Answers the id it is saved under.
     func write(_ id: String, text: String) throws -> String {
-        SketchBoard.shared.done()
         flush()
         let saved = try store.save(id, text: text)
         if id == current { current = saved }
@@ -489,10 +491,6 @@ final class NotesPanel {
     /// Saves, then hides; the model stays, so the next show lands on the same note. The panel itself goes, as the menu's
     /// and the clipboard's do, so the next show is built in the Look of that moment (the style, the theme, the glass).
     func hide() {
-        // Hiding orders the panel out, never closes it, so its willClose never ends a sketch: Done here, before the save,
-        // for a sketch in the panel only; one on the Notes page stays open there.
-        let board = SketchBoard.shared
-        if let panel, board.view?.window === panel { board.done() }
         model?.flush()
         if let keyMonitor { NSEvent.removeMonitor(keyMonitor) }
         keyMonitor = nil
@@ -579,8 +577,6 @@ final class NotesPanel {
     /// Points the notes at `new`, first moving every note there when `move` (task N1); the panel and the Notes page
     /// then read the new folder.
     func changeFolder(to new: URL, move: Bool) throws {
-        // A sketch open ends in its note in the old folder, saved there before anything moves (spec-end review 2).
-        SketchBoard.shared.done()
         model?.flush()
         let moved = move ? try NotesFolder.move(from: folder, to: new) : NotesFolder.Moved()
         Engine.shared?.settings.notesFolder = NotesFolder.setting(new)
@@ -591,8 +587,6 @@ final class NotesPanel {
     /// the Notes page starts a new one.
     func currentModel() -> NotesModel {
         if let model, model.store.folder == folder { return model }
-        // The old model's sketch ends in its own note before that model is saved and let go.
-        SketchBoard.shared.done()
         model?.flush()
         welcomeOnce()
         let model = NotesModel(store: NoteStore(folder: folder))
@@ -753,14 +747,17 @@ final class NotesPanel {
 /// the key's characters, modifiers aside (NSEvent's charactersIgnoringModifiers).
 enum NotesKey: Equatable {
     case hide, list, keep, confirmTrash, open, step(Int), new, pin, askTrash, actions, closeActions, stepActions(Int), runAction
+    /// Escape while the format bar's Aa styles or link field are open: they close, before anything else Escape does.
+    case closePopover
     /// A character for Cmd+K's search, or nil: Backspace takes one off.
     case filterActions(String?)
     case held
 
     init?(code: UInt16, flags modifiers: NSEvent.ModifierFlags, key raw: String?, list: Bool, confirming: Bool, actions: Bool = false,
-          empty: Bool = false) {
+          popover: Bool = false, empty: Bool = false) {
         let flags = modifiers.intersection([.command, .shift, .option, .control])
         let key = raw?.lowercased()
+        if popover, code == 53 { self = .closePopover; return }
         if actions {
             switch (code, flags, key) {
             case (53, _, _), (_, [.command], "k"): self = .closeActions
@@ -801,21 +798,16 @@ extension NotesKey {
     /// list leaves first, so Return, ↑↓ and ⌘⌫ are the editor's and never answer for the list.
     @MainActor static func pressed(_ code: UInt16, _ flags: NSEvent.ModifierFlags, _ key: String?, model: NotesModel,
                                    responder: NSResponder?) -> NotesKey? {
-        // Escape while a sketch is drawn is Done, and the note keeps the keyboard (UI redesign T30, from T29).
-        if code == 53, SketchBoard.shared.isOpen, model.actions == nil {
-            SketchBoard.shared.done()
-            return .held
-        }
         if responder is NotesTextView, model.listFocused { model.leaveList() }
         return NotesKey(code: code, flags: flags, key: key, list: model.listFocused, confirming: model.confirmingTrash,
-                        actions: model.actions != nil, empty: code == 51 && model.isEmptyNote)
+                        actions: model.actions != nil, popover: model.styling || model.linking, empty: code == 51 && model.isEmptyNote)
     }
 }
 
 /// One of Cmd+K's actions on a note (Sven 2026-10-15), in the menu's groups: the note itself, its words, the formats with
 /// their keys (direction B, 2026-10-18), a new one, the Trash last in the problem colour.
 enum NoteAction: Equatable {
-    case pin, unpin, rename, duplicate, copy, reveal, format(MarkdownFormat), new, trash
+    case pin, unpin, rename, duplicate, copy, reveal, format(MarkdownFormat), editLink, new, trash
 
     var title: String {
         switch self {
@@ -828,6 +820,7 @@ enum NoteAction: Equatable {
         case .new: "New note"
         case .trash: "Move to Trash"
         case .format(let format): format.title
+        case .editLink: "Edit link…"
         }
     }
 
@@ -852,6 +845,7 @@ enum NoteAction: Equatable {
         case .new: "square.and.pencil"
         case .trash: "trash"
         case .format(let format): format.symbol
+        case .editLink: MarkdownFormat.link.symbol
         }
     }
 
@@ -859,7 +853,7 @@ enum NoteAction: Equatable {
         switch self {
         case .pin, .unpin, .rename, .duplicate: 0
         case .copy, .reveal: 1
-        case .format: 2
+        case .format, .editLink: 2
         case .new: 3
         case .trash: 4
         }
@@ -870,7 +864,8 @@ enum NoteAction: Equatable {
     /// A note's actions, the formats only for the note being `writing` in: Scratch, never pinned, empty and kept, has only
     /// its words, Finder, the formats and New note.
     static func choices(for note: Note, writing: Bool = true) -> [NoteAction] {
-        let formats = writing ? MarkdownFormat.keyed.map(NoteAction.format) : []
+        // The link's address never shows in the note (Q285): Edit link opens the format bar's field on it.
+        let formats = writing ? MarkdownFormat.keyed.map(NoteAction.format) + [.editLink] : []
         if note.isScratch { return [.copy, .reveal] + formats + [.new] }
         return [note.pinned ? .unpin : .pin, .rename, .duplicate, .copy, .reveal] + formats + [.new, .trash]
     }

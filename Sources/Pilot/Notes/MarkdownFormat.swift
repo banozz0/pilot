@@ -3,45 +3,85 @@ import PilotCore
 
 /// The notes toolbar's edits (Q116, Sven 2026-10-15): each one types Markdown at the selection, never styles it, so
 /// the file stays plain Markdown. Pure: the text and selection in, one replacement and the selection after it out; the
-/// editor applies it as an edit Undo takes back.
+/// editor applies it as an edit Undo takes back. The paragraph styles are Apple Notes' (Sven, 2026-11-20), each a plain
+/// Markdown line form: Title `# `, Heading `## `, Subheading `### `, Body none, Monostyled a fenced block, Bulleted List
+/// `- `, Dashed List `+ ` (CommonMark's third bullet, which Pilot draws as a dash), Numbered List `1. `, Block Quote `> `.
+/// Underline is `<u>…</u>` (inline HTML, which CommonMark keeps), strikethrough GitHub's `~~…~~`.
 enum MarkdownFormat: String, CaseIterable, Identifiable {
-    case heading, bold, italic, link, code, bullets, checklist
+    case title, heading, subheading, body, mono, bullets, dashes, numbers, quote
+    case bold, italic, underline, strike, code, checklist, link
 
     var id: String { rawValue }
 
-    /// Its name: the format bar's tooltip, what VoiceOver reads, its row in Cmd+K's Format group.
+    /// The paragraph styles, in the Aa menu's order (Apple Notes').
+    static let styles: [MarkdownFormat] = [.title, .heading, .subheading, .body, .mono, .bullets, .dashes, .numbers, .quote]
+
+    /// Its name: the format bar's tooltip, what VoiceOver reads, its row in the Aa menu and Cmd+K's Format group.
     var title: String {
         switch self {
+        case .title: "Title"
         case .heading: "Heading"
+        case .subheading: "Subheading"
+        case .body: "Body"
+        case .mono: "Monostyled"
+        case .bullets: "Bulleted List"
+        case .dashes: "Dashed List"
+        case .numbers: "Numbered List"
+        case .quote: "Block Quote"
         case .bold: "Bold"
         case .italic: "Italic"
-        case .link: "Link"
+        case .underline: "Underline"
+        case .strike: "Strikethrough"
         case .code: "Code"
-        case .bullets: "Bulleted list"
         case .checklist: "Checklist"
+        case .link: "Link"
         }
     }
 
-    /// Its key in the editor (direction B, 2026-10-18): Command with this character, Shift too for the two line formats;
-    /// Link and the bulleted list have none.
+    /// Its key in the editor (direction B, 2026-10-18; Apple Notes' style keys, 2026-11-20): Command with this
+    /// character, Shift too for the line formats. ⌘⇧H sets Heading (it cycled #, ##, ### before the Aa menu).
     var shortcut: (character: String, shift: Bool)? {
         switch self {
+        case .title: ("t", true)
+        case .heading: ("h", true)
+        case .subheading: ("j", true)
+        case .body: ("b", true)
+        case .bullets: ("7", true)
+        case .dashes: ("8", true)
+        case .numbers: ("9", true)
         case .bold: ("b", false)
         case .italic: ("i", false)
+        case .underline: ("u", false)
         case .code: ("e", false)
-        case .heading: ("h", true)
         case .checklist: ("l", true)
-        case .link, .bullets: nil
+        case .mono, .quote, .strike, .link: nil
         }
     }
 
     /// The key as its row shows it: ⌘B, ⌘⇧H.
     var key: String? { shortcut.map { "⌘" + ($0.shift ? "⇧" : "") + $0.character.uppercased() } }
 
-    /// The formats with a key, in the format bar's order: Cmd+K's Format group.
+    /// An inline format's two marks and the span the editor draws with them; nil for the line formats and the link.
+    var marks: (open: String, close: String, span: NSRegularExpression)? {
+        switch self {
+        case .bold: ("**", "**", MarkdownMarks.bold)
+        case .italic: ("_", "_", MarkdownMarks.italic)
+        case .underline: ("<u>", "</u>", MarkdownMarks.underline)
+        case .strike: ("~~", "~~", MarkdownMarks.strike)
+        case .code: ("`", "`", MarkdownMarks.code)
+        default: nil
+        }
+    }
+
+    /// Every inline span's marks the editor draws, longer before shorter: one left with nothing between is dropped
+    /// (NotesTextView.dropEmptyPair).
+    static let spans: [(open: String, close: String)] = [("<u>", "</u>"), ("**", "**"), ("__", "__"), ("~~", "~~"), ("_", "_"), ("*", "*"), ("`", "`")]
+
+    /// The formats with a key, the styles first: Cmd+K's Format group.
     static let keyed = allCases.filter { $0.shortcut != nil }
 
-    /// The format a key asks for: Command with `character` (its characters, modifiers aside), and Shift or not.
+    /// The format a key asks for: Command with `character` (the key's own character, no modifier applied, so ⌘⇧7 reads
+    /// "7"), and Shift or not.
     static func keyed(_ character: String?, command: Bool, shift: Bool) -> MarkdownFormat? {
         guard command, let character = character?.lowercased() else { return nil }
         return keyed.first { $0.shortcut?.character == character && $0.shortcut?.shift == shift }
@@ -49,13 +89,22 @@ enum MarkdownFormat: String, CaseIterable, Identifiable {
 
     var symbol: String {
         switch self {
+        case .title: "textformat.size.larger"
         case .heading: "textformat.size"
+        case .subheading: "textformat.size.smaller"
+        case .body: "textformat"
+        case .mono: "curlybraces"
+        case .bullets: "list.bullet"
+        case .dashes: "list.dash"
+        case .numbers: "list.number"
+        case .quote: "text.quote"
         case .bold: "bold"
         case .italic: "italic"
-        case .link: "link"
+        case .underline: "underline"
+        case .strike: "strikethrough"
         case .code: "chevron.left.forwardslash.chevron.right"
-        case .bullets: "list.bullet"
         case .checklist: "checklist"
+        case .link: "link"
         }
     }
 
@@ -70,25 +119,110 @@ enum MarkdownFormat: String, CaseIterable, Identifiable {
     /// This format applied to `selection` in `text`.
     func edit(_ text: String, selection: NSRange) -> Edit {
         let s = text as NSString
+        if self == .code, let unfenced = Self.unfence(s, selection) { return unfenced }
+        if self == .code, s.substring(with: Self.words(s, selection)).contains("\n") { return Self.fence(s, selection) }
+        if let marks { return Self.inline(s, selection, marks.open, marks.close, marks.span) }
         switch self {
-        case .bold: return Self.inline(s, selection, "**", MarkdownMarks.bold)
-        case .italic: return Self.inline(s, selection, "_", MarkdownMarks.italic)
-        case .code:
-            if let unfenced = Self.unfence(s, selection) { return unfenced }
-            return s.substring(with: Self.words(s, selection)).contains("\n") ? Self.fence(s, selection) : Self.inline(s, selection, "`", MarkdownMarks.code)
         case .link: return Self.link(s, selection)
-        case .heading:
-            let level = Self.headingLevel(s.substring(with: s.lineRange(for: NSRange(location: selection.location, length: 0))))
-            let next = level >= 3 ? 0 : level + 1
-            return Self.lines(s, selection) { line in
-                // A heading is never a list item: a list or check mark before the words goes.
-                let rest = String(line.drop { $0 == " " || $0 == "\t" })
-                let body = Self.has(rest, Self.listMark) ? Self.strip(rest, Self.listMark) : Self.strip(line, Self.headingMark)
-                return next == 0 ? body : String(repeating: "#", count: next) + " " + body
-            }
-        case .bullets: return Self.prefix(s, selection, "- ", has: Self.bulletMark)
-        case .checklist: return Self.prefix(s, selection, "- [ ] ", has: Self.checkMark)
+        // The paragraph styles and the checklist: a line's kind.
+        default: return style(s, selection)
         }
+    }
+
+    // MARK: Paragraph styles
+
+    /// This paragraph style (or the checklist) over the picked lines, as Apple Notes' Aa menu sets it: each line's marks
+    /// (a quote's `>`, a heading's `#`s, a list or check mark) swapped for this style's; when every picked line already
+    /// has it, they go back to Body. Monostyled fences the lines (their marks taken off first), or takes the fence off when they sit in
+    /// one; any other style inside a fence takes the fence off first.
+    private func style(_ s: NSString, _ sel: NSRange) -> Edit {
+        if let unfenced = Self.unfence(s, sel) {
+            guard self != .mono else { return unfenced }
+            // The picked lines where they land once the opening fence line is gone, inside the block's lines.
+            let fenceLine = s.lineRange(for: NSRange(location: unfenced.range.location, length: 0)).length
+            let body = unfenced.selection, start = min(max(sel.location - fenceLine, body.location), NSMaxRange(body))
+            let end = min(max(NSMaxRange(sel) - fenceLine, start), NSMaxRange(body))
+            return Self.then(s, unfenced) { text, _ in edit(text, selection: NSRange(location: start, length: end - start)) }
+        }
+        if self == .mono {
+            return Self.then(s, Self.restyle(s, sel, .body)) { text, sel in Self.fence(text as NSString, sel) }
+        }
+        return Self.restyle(s, sel, self)
+    }
+
+    /// The picked lines in `style` (not Monostyled), or back to Body when they all have it; a numbered list counts 1, 2,
+    /// 3 down the lines with words. Lists and checklists keep their indent; headings and quotes start at the line's
+    /// start. Blank lines stay blank unless the caret is on one alone.
+    private static func restyle(_ s: NSString, _ sel: NSRange, _ style: MarkdownFormat) -> Edit {
+        let picked = pieces(s, sel)
+        let filled = picked.count == 1 ? picked : picked.filter { !$0.body.trimmingCharacters(in: .whitespaces).isEmpty }
+        let off = style != .body && !filled.isEmpty && filled.allSatisfy { lineStyle($0.body) == style }
+        var number = 0
+        return lines(s, sel) { line in
+            let indent = String(line.prefix { $0 == " " || $0 == "\t" })
+            let rest = String(line.dropFirst(indent.count))
+            if picked.count > 1, rest.trimmingCharacters(in: .whitespaces).isEmpty { return line }
+            let words = bare(rest)
+            if off { return indent + words }
+            number += 1
+            switch style {
+            case .title: return "# " + words
+            case .heading: return "## " + words
+            case .subheading: return "### " + words
+            case .bullets: return indent + "- " + words
+            case .dashes: return indent + "+ " + words
+            case .numbers: return indent + "\(number). " + words
+            case .quote: return "> " + words
+            case .checklist: return indent + "- [ ] " + words
+            default: return indent + words
+            }
+        }
+    }
+
+    /// A line's words with the marks it starts with taken off: a quote's `>`s, then a heading's `#`s or a list or check mark.
+    private static func bare(_ line: String) -> String {
+        var rest = line
+        while has(rest, quoteMark) { rest = strip(rest, quoteMark) }
+        return strip(strip(rest, headingMark), listMark)
+    }
+
+    /// The paragraph style a line is in, its indent aside, or the checklist (which the Aa menu does not list).
+    static func lineStyle(_ line: String) -> MarkdownFormat {
+        let rest = String(line.drop { $0 == " " || $0 == "\t" })
+        if has(rest, quoteMark) { return .quote }
+        switch headingLevel(rest) {
+        case 1: return .title
+        case 2: return .heading
+        case 3...: return .subheading
+        default: break
+        }
+        if has(rest, checkMark) { return .checklist }
+        if has(rest, dashMark) { return .dashes }
+        if has(rest, bulletMark) { return .bullets }
+        if has(rest, numberMark) { return .numbers }
+        return .body
+    }
+
+    /// The paragraph style the selection's first line is in: Monostyled inside a fenced block (where Monostyled would
+    /// take the fence off); the Aa menu ticks it.
+    static func style(of text: String, selection sel: NSRange) -> MarkdownFormat? {
+        let s = text as NSString
+        guard sel.location <= s.length else { return nil }
+        if unfence(s, sel) != nil { return .mono }
+        return lineStyle(s.substring(with: s.lineRange(for: NSRange(location: sel.location, length: 0))))
+    }
+
+    /// `first`, then `next` on the text and selection it leaves, as one edit of `s`: the span the two changed.
+    private static func then(_ s: NSString, _ first: Edit, _ next: (String, NSRange) -> Edit) -> Edit {
+        let middle = s.replacingCharacters(in: first.range, with: first.replacement) as NSString
+        let second = next(middle as String, first.selection)
+        let end = middle.replacingCharacters(in: second.range, with: second.replacement) as NSString
+        var head = 0
+        while head < s.length, head < end.length, s.character(at: head) == end.character(at: head) { head += 1 }
+        var tail = 0
+        while tail < s.length - head, tail < end.length - head, s.character(at: s.length - 1 - tail) == end.character(at: end.length - 1 - tail) { tail += 1 }
+        return Edit(range: NSRange(location: head, length: s.length - head - tail),
+                    replacement: end.substring(with: NSRange(location: head, length: end.length - head - tail)), selection: second.selection)
     }
 
     // MARK: Inline
@@ -156,15 +290,16 @@ enum MarkdownFormat: String, CaseIterable, Identifiable {
         return Edit(range: range, replacement: replacement, selection: NSRange(location: range.location, length: (replacement as NSString).length))
     }
 
-    /// `mark` round the words picked, or taken off when they already have it. Over lines, each line's words on their own
-    /// (a mark never spans a line end), the marks coming off only when every line has them. Quiet lines are left alone.
-    private static func inline(_ s: NSString, _ sel: NSRange, _ mark: String, _ span: NSRegularExpression) -> Edit {
+    /// `open` and `close` round the words picked, or taken off when they already have them. Over lines, each line's words
+    /// on their own (a mark never spans a line end), the marks coming off only when every line has them. Quiet lines are
+    /// left alone.
+    private static func inline(_ s: NSString, _ sel: NSRange, _ open: String, _ close: String, _ span: NSRegularExpression) -> Edit {
         let words = words(s, sel), one = !s.substring(with: words).contains("\n"), quiet = quiet(s, tables: !one)
         let each = pieces(s, words).compactMap { line -> (edit: Edit, off: Bool)? in
             let start = max(line.range.location, words.location), end = min(NSMaxRange(line.range), NSMaxRange(words))
             guard end >= start, !isQuiet(quiet, line.range) else { return nil }
             let picked = Self.words(s, NSRange(location: start, length: end - start))
-            return one || picked.length > 0 ? wrap(s, picked, mark, span) : nil
+            return one || picked.length > 0 ? wrap(s, picked, open, close, span) : nil
         }
         if one, let only = each.first { return only.edit }
         let off = !each.isEmpty && each.allSatisfy(\.off)
@@ -175,32 +310,32 @@ enum MarkdownFormat: String, CaseIterable, Identifiable {
     /// No edit: the selection as it was.
     private static func unchanged(_ sel: NSRange) -> Edit { Edit(range: NSRange(location: sel.location, length: 0), replacement: "", selection: sel) }
 
-    /// `mark` round one line's words, or taken off (`off`) when they sit in a span the editor draws with it (`span`), the
+    /// `open` and `close` round one line's words, or taken off (`off`) when they sit in a span the editor draws with them (`span`), the
     /// marks picked or not, other marks between; same-style spans inside the words merge into the one wrap. No selection
     /// types the pair with the caret between, and a second press takes the empty pair off. Never inside an address, nor
     /// bold or italic inside code (`snap`); italic takes whole words, as the editor draws no `_` inside or beside one.
-    private static func wrap(_ s: NSString, _ sel: NSRange, _ mark: String, _ span: NSRegularExpression) -> (edit: Edit, off: Bool) {
+    private static func wrap(_ s: NSString, _ sel: NSRange, _ open: String, _ close: String, _ span: NSRegularExpression) -> (edit: Edit, off: Bool) {
         func word(_ i: Int) -> Bool {
             guard i >= 0, i < s.length, let c = UnicodeScalar(s.character(at: i)) else { return false }
             return c == "_" || CharacterSet.alphanumerics.contains(c)
         }
-        var sel = snap(s, sel, code: mark != "`")
-        let m = (mark as NSString).length
+        var sel = snap(s, sel, code: open != "`")
+        let o = (open as NSString).length, c = (close as NSString).length
         let spans = span.matches(in: s as String, range: s.lineRange(for: sel)).map(\.range)
         // The empty pair, which no span matches: never part of a longer run of the mark (a fence's ```, `user__name`) unless
         // that is a span's own mark beside it (`**a**` then the pair), nor the end of one span and the start of the next
         // (`**a**|**b**`).
-        func same(_ i: Int) -> Bool { i >= 0 && i < s.length && s.character(at: i) == (mark as NSString).character(at: 0) }
-        if sel.length == 0, sel.location >= m, sel.location + m <= s.length,
-           s.substring(with: NSRange(location: sel.location - m, length: 2 * m)) == mark + mark,
-           !same(sel.location - m - 1) || spans.contains(where: { NSMaxRange($0) == sel.location - m }),
-           !same(sel.location + m) || spans.contains(where: { $0.location == sel.location + m }),
-           !(mark == "_" && word(sel.location - m - 1) && word(sel.location + m)),
+        func same(_ i: Int, _ mark: String) -> Bool { i >= 0 && i < s.length && s.character(at: i) == (mark as NSString).character(at: 0) }
+        if sel.length == 0, sel.location >= o, sel.location + c <= s.length,
+           s.substring(with: NSRange(location: sel.location - o, length: o + c)) == open + close,
+           !same(sel.location - o - 1, open) || spans.contains(where: { NSMaxRange($0) == sel.location - o }),
+           !same(sel.location + c, close) || spans.contains(where: { $0.location == sel.location + c }),
+           !(open == "_" && word(sel.location - o - 1) && word(sel.location + c)),
            !spans.contains(where: { NSMaxRange($0) == sel.location || $0.location == sel.location }) {
-            return (Edit(range: NSRange(location: sel.location - m, length: 2 * m), replacement: "", selection: NSRange(location: sel.location - m, length: 0)), true)
+            return (Edit(range: NSRange(location: sel.location - o, length: o + c), replacement: "", selection: NSRange(location: sel.location - o, length: 0)), true)
         }
         // `_` never opens or closes italic beside a word's letters: a caret touching a word takes the word.
-        if mark == "_", sel.length > 0 || word(sel.location - 1) || word(sel.location) {
+        if open == "_", sel.length > 0 || word(sel.location - 1) || word(sel.location) {
             var start = sel.location, end = NSMaxRange(sel)
             while word(start - 1) { start -= 1 }
             while word(end) { end += 1 }
@@ -209,11 +344,11 @@ enum MarkdownFormat: String, CaseIterable, Identifiable {
         }
         let picked = s.substring(with: sel)
         let around = spans.first { r in
-            sel.length > 0 ? holds(r, sel) : r.location + m <= sel.location && sel.location <= NSMaxRange(r) - m
+            sel.length > 0 ? holds(r, sel) : r.location + o <= sel.location && sel.location <= NSMaxRange(r) - c
         }
         if let around {
-            let inner = NSRange(location: around.location + m, length: around.length - 2 * m)
-            func moved(_ i: Int) -> Int { min(max(i, inner.location), NSMaxRange(inner)) - m }
+            let inner = NSRange(location: around.location + o, length: around.length - o - c)
+            func moved(_ i: Int) -> Int { min(max(i, inner.location), NSMaxRange(inner)) - o }
             let start = moved(sel.location)
             return (Edit(range: around, replacement: s.substring(with: inner), selection: NSRange(location: start, length: moved(NSMaxRange(sel)) - start)), true)
         }
@@ -222,13 +357,13 @@ enum MarkdownFormat: String, CaseIterable, Identifiable {
             let whole = inside.reduce(sel, NSUnionRange)
             var text = "", at = whole.location
             for r in inside {
-                text += s.substring(with: NSRange(location: at, length: r.location - at)) + s.substring(with: NSRange(location: r.location + m, length: r.length - 2 * m))
+                text += s.substring(with: NSRange(location: at, length: r.location - at)) + s.substring(with: NSRange(location: r.location + o, length: r.length - o - c))
                 at = NSMaxRange(r)
             }
             text += s.substring(with: NSRange(location: at, length: NSMaxRange(whole) - at))
-            return (Edit(range: whole, replacement: mark + text + mark, selection: NSRange(location: whole.location + m, length: (text as NSString).length)), false)
+            return (Edit(range: whole, replacement: open + text + close, selection: NSRange(location: whole.location + o, length: (text as NSString).length)), false)
         }
-        return (Edit(range: sel, replacement: mark + picked + mark, selection: NSRange(location: sel.location + m, length: sel.length)), false)
+        return (Edit(range: sel, replacement: open + picked + close, selection: NSRange(location: sel.location + o, length: sel.length)), false)
     }
 
     /// A selection over lines as a fenced code block, the fences on lines of their own.
@@ -282,6 +417,36 @@ enum MarkdownFormat: String, CaseIterable, Identifiable {
             : Edit(range: sel, replacement: replacement, selection: NSRange(location: sel.location + w + 3, length: 8))
     }
 
+    /// The link the selection is in (its words, or the caret inside it), a picture's aside: the whole `[words](address)`,
+    /// its words and its address.
+    static func link(in text: String, selection sel: NSRange) -> (whole: NSRange, words: String, address: String)? {
+        let s = text as NSString
+        guard sel.location <= s.length else { return nil }
+        guard let found = links(s, sel).first(where: { !$0.picture && holds($0.whole, sel) }) else { return nil }
+        return (found.whole, s.substring(with: found.match.range(at: 1)), s.substring(with: found.match.range(at: 2)))
+    }
+
+    /// The link field's edit (the format bar's link, Cmd+K's Edit link): `address` set on the link the selection is in,
+    /// or the picked words (else the address itself) made a link to it; nil takes the link off, its words kept. The
+    /// address never shows in the note (Sven, 2026-11-20, Q285), so it is only ever typed in the field.
+    static func linking(_ text: String, selection sel: NSRange, address: String?) -> Edit {
+        let s = text as NSString
+        let address = address?.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let found = link(in: text, selection: sel) {
+            let words = found.words, w = (words as NSString).length
+            guard let address, !address.isEmpty else {
+                return Edit(range: found.whole, replacement: words, selection: NSRange(location: found.whole.location, length: w))
+            }
+            return Edit(range: found.whole, replacement: "[\(words)](\(address))", selection: NSRange(location: found.whole.location + 1, length: w))
+        }
+        guard let address, !address.isEmpty else { return unchanged(sel) }
+        var picked = words(s, sel)
+        let first = s.substring(with: picked).prefix { $0 != "\n" }
+        picked.length = (String(first) as NSString).length
+        let label = picked.length == 0 ? address : String(first)
+        return Edit(range: picked, replacement: "[\(label)](\(address))", selection: NSRange(location: picked.location + 1, length: (label as NSString).length))
+    }
+
     /// A note's title words: its first line with words, past a heading's `#` marks; empty at the start for a note with
     /// none. Cmd+K's Rename picks them, Duplicate adds " copy" after them.
     static func titleRange(_ text: String) -> NSRange {
@@ -303,7 +468,11 @@ enum MarkdownFormat: String, CaseIterable, Identifiable {
     static let headingMark = try! NSRegularExpression(pattern: #"^#{1,6}[ \t]+"#)
     /// A list or checklist mark with its indent kept out: `- `, `* `, `+ `, `1. `, `- [ ] `.
     static let listMark = try! NSRegularExpression(pattern: #"^([-*+][ \t]+\[[ xX]\]|[-*+]|\d+[.)])[ \t]+"#)
-    static let bulletMark = try! NSRegularExpression(pattern: #"^[-*+][ \t]+(?!\[[ xX]\][ \t])"#)
+    /// A bulleted line's `- ` or `* `; `+ ` is the dashed list's.
+    static let bulletMark = try! NSRegularExpression(pattern: #"^[-*][ \t]+(?!\[[ xX]\][ \t])"#)
+    static let dashMark = try! NSRegularExpression(pattern: #"^\+[ \t]+(?!\[[ xX]\][ \t])"#)
+    static let numberMark = try! NSRegularExpression(pattern: #"^\d+[.)][ \t]+"#)
+    static let quoteMark = try! NSRegularExpression(pattern: #"^>[ \t]?"#)
     static let checkMark = try! NSRegularExpression(pattern: #"^[-*+][ \t]+\[[ xX]\][ \t]+"#)
 
     static func headingLevel(_ line: String) -> Int {
@@ -320,22 +489,6 @@ enum MarkdownFormat: String, CaseIterable, Identifiable {
 
     private static func has(_ line: String, _ mark: NSRegularExpression) -> Bool {
         mark.firstMatch(in: line, range: NSRange(location: 0, length: (line as NSString).length)) != nil
-    }
-
-    /// `mark` before each picked line, its indent kept and any other list mark swapped out; when every picked line already
-    /// has it, it comes off them all. Blank lines stay blank unless the caret is on one alone.
-    private static func prefix(_ s: NSString, _ sel: NSRange, _ mark: String, has own: NSRegularExpression) -> Edit {
-        let picked = pieces(s, sel)
-        let filled = picked.count == 1 ? picked : picked.filter { !$0.body.trimmingCharacters(in: .whitespaces).isEmpty }
-        let off = !filled.isEmpty && filled.allSatisfy { has($0.body.drop { $0 == " " || $0 == "\t" }.description, own) }
-        return lines(s, sel) { line in
-            let indent = String(line.prefix { $0 == " " || $0 == "\t" })
-            let rest = String(line.dropFirst(indent.count))
-            if picked.count > 1, rest.trimmingCharacters(in: .whitespaces).isEmpty { return line }
-            // A list item is never a heading: a heading's `#`s before the words go.
-            let body = strip(strip(rest, headingMark), listMark)
-            return indent + (off ? body : mark + body)
-        }
     }
 
     /// The picked lines without their line ends.

@@ -104,9 +104,8 @@ enum MarkdownBlocks {
     }
 }
 
-/// A sketch drawn in a note (pilot-ui-redesign T28): its strokes as paths, never an image buffer per stroke, so the
-/// editor's picture and the canvas (T29) draw the same lines. ImageIO reads no SVG, so a sketch's link draws
-/// through `picture(at:)`.
+/// A sketch a note already holds (pilot-ui-redesign T28): its strokes drawn as paths. ImageIO reads no SVG, so a
+/// sketch's link draws through `picture(at:)`.
 extension Sketch {
     /// One stroke as a path in the sketch's own points, origin top left (a flipped context): round ends and joins, as
     /// the SVG says.
@@ -154,11 +153,21 @@ final class MarkdownTableGrid: NSObject {
     }
 }
 
+/// Which side of its words a hidden mark sits on (`.notesHidden`'s value): an inline span's opening or closing mark, or
+/// neither (`plain`: a fence line, a picture's link, a table's pipes, a line's own marks).
+enum NotesMarkSide: Int {
+    case plain, open, close
+}
+
 extension NSAttributedString.Key {
-    /// Characters drawn as nothing and taking no room: a mark off the caret's line (live preview).
+    /// Characters drawn as nothing and taking no room: a mark, on every line (Q285); its value is its NotesMarkSide.
     static let notesHidden = NSAttributedString.Key("PilotNotesHidden")
     /// On a list's `-`, drawn clear: a dot is drawn in its place.
     static let notesBullet = NSAttributedString.Key("PilotNotesBullet")
+    /// On a line's own marks from its start (heading, quote, list or check mark): the caret starts its words after them.
+    static let notesLineMark = NSAttributedString.Key("PilotNotesLineMark")
+    /// On a dashed list's `+`: drawn as a dash in its place (Apple Notes' Dashed List, 2026-11-20).
+    static let notesDash = NSAttributedString.Key("PilotNotesDash")
     /// On a quote's lines, their ends included, so a quote's lines read as one callout.
     static let notesQuote = NSAttributedString.Key("PilotNotesQuote")
     /// On a fenced code block's lines: its start, so two blocks one under the other stay two panels.
