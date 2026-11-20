@@ -289,6 +289,17 @@ def chosen(ns):
     return [(folder, title) for folder, title in FROZEN if not only or folder in only]
 
 
+# Pilot keys a Raycast extension named as one of its own extensions raycast-<name> (RaycastManifest.id, raycast-extensions
+# T28): GitHub and Video Downloader here. A kept folder goes back in under that id.
+PILOT_OWN = {"ai-usage", "claude-sessions", "dev-utils", "easy-cd", "ghostex", "git", "github", "markets", "now-playing",
+             "obsidian-search", "pomodoro", "ports", "ssh-hosts", "summarise", "tailscale", "todo", "video-downloader", "weather"}
+
+
+def pilot_id(name):
+    """The id Pilot keys a Raycast extension named `name` by."""
+    return "raycast-" + name if name in PILOT_OWN else name
+
+
 def installed(ns):
     """The ids the sandbox has installed."""
     _, answer, _ = pilot(["list", "extensions"], ns)
@@ -305,7 +316,7 @@ def ensure(ns, folder):
     if not os.path.isdir(kept):
         say("# %s: no installed folder kept (its GitHub install failed or never ran)" % folder)
         return None
-    ext = json.load(open(os.path.join(kept, "package.json")))["name"]
+    ext = pilot_id(json.load(open(os.path.join(kept, "package.json")))["name"])
     if ext in ns.have:
         if not ns.extensions:
             _, card, _ = pilot(["ext", "show", ext], ns)
