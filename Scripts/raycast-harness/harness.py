@@ -106,6 +106,9 @@ def worded(args):
     """A child's arguments: its first word (a subcommand), flags, numbers and the harness's names whole, every other word
     its length; a shell line word by word."""
     def word(i, w):
+        if w.startswith("-") and "=" in w:
+            flag, _, value = w.partition("=")
+            return flag + "=" + (value if value.isdigit() or PLACEHOLDER.fullmatch(value) else masked(value))
         return w if (i == 0 and w.isalnum()) or w.startswith("-") or w.isdigit() or w in SAFE or PLACEHOLDER.fullmatch(w) else masked(w)
     def line(a):
         return " ".join(word(j, x) for j, x in enumerate(re.findall(r"<[^<>]*>|[^ ]+", a)))
@@ -138,8 +141,8 @@ def shaped(value, key=None):
         if key in STRUCTURAL:
             return value
         if key in ("file", "program"):
-            # A program in the system's folders, or a bare name (`ps`), passes; any other path is its length.
-            return value if value.startswith(SYSTEM) or re.fullmatch(r"[A-Za-z0-9_.-]+", value) else masked(value)
+            # Only an absolute program in the system's folders, already its own realpath, passes; anything else is its length.
+            return value if value.startswith(SYSTEM) and os.path.realpath(value) == value else masked(value)
         if key == "host":
             return value if value in HOSTS else masked(value)
         if URL.match(value):
@@ -177,19 +180,43 @@ def shown(text):
     return "\n".join(out)
 
 
-def command_line(argv):
-    """A command as the log shows it: the row `ext act` presses and its --then, --query and --input values masked."""
-    shownArgs, after = list(argv), None
+def secrets(argv):
+    """The places in `argv` the log masks: the row `ext act` presses and the --then, --query, --input and --answer values."""
+    places, after = [], False
     for i, word in enumerate(argv):
         if after:
-            shownArgs[i], after = masked(word), None
+            places.append(i)
+            after = False
         elif word in ("--then", "--query", "--input", "--answer"):
             after = True
     if "act" in argv:
         at = argv.index("act") + 2
         if at < len(argv) and not argv[at].startswith("--"):
-            shownArgs[at] = masked(argv[at])
+            places.append(at)
+    return places
+
+
+def command_line(argv):
+    """A command as the log shows it: the values secrets() names masked."""
+    shownArgs = list(argv)
+    for i in secrets(argv):
+        shownArgs[i] = masked(argv[i])
     return "$ " + shlex.join(shownArgs)
+
+
+def scrubbed(text, argv):
+    """`text` with every value command_line() masks replaced by its mask wherever it appears (T7 review 3): an `ext act`
+    error names the row it was given ("no action <row> on …"), a JSON answer the same row with its quotes escaped. A
+    pressed `row/action` is replaced whole and by its row alone; the longest go first."""
+    values = set()
+    for i in secrets(argv):
+        value = argv[i]
+        values.update(v for v in (value, value.partition("/")[0]) if v and masked(v) != v)
+    for value in sorted(values, key=len, reverse=True):
+        for form in {value, json.dumps(value)[1:-1]}:
+            # Whole words only, so a short row name never cuts into a key or another word.
+            text = re.sub(r"(?<![A-Za-z0-9])%s(?![A-Za-z0-9])" % re.escape(form), lambda _: masked(value), text)
+    return text
 
 
 def run(argv, env=None, timeout=120):
@@ -203,9 +230,9 @@ def run(argv, env=None, timeout=120):
         code, out, err = "timeout", (late.stdout or b"").decode() if isinstance(late.stdout, bytes) else (late.stdout or ""), ""
     took = time.monotonic() - started
     if out:
-        say(shown(out.rstrip("\n")))
+        say(shown(scrubbed(out.rstrip("\n"), argv)))
     if err:
-        say("# stderr:\n" + shown(err.rstrip("\n")))
+        say("# stderr:\n" + shown(scrubbed(err.rstrip("\n"), argv)))
     say("# exit %s, %.2f s" % (code, took))
     return code, out, took
 
@@ -422,7 +449,11 @@ def phase_act(ns):
         if code != 0:
             result["presses"] = 2
             # A slow synchronous call at load (Chrome's `brew --prefix`) can hold a view's first answer past 2 s: once more.
-            say("# the press failed; once more")
+            say("# the press failed: the failed try's records, and this sandbox's hosts, before the one retry")
+            for record in measured(ns, since):
+                if record.get("kind") not in ("out", "in"):
+                    say(json.dumps(shaped(record), sort_keys=True, ensure_ascii=False))
+            hosts_left(ns)
             since = lines_in(ns)
             code, pressed, _ = pilot(press, ns, timeout=60)
         left = hosts_left(ns)
@@ -506,7 +537,7 @@ def phase_redact(ns):
     out_path = ns.log + ".redacting"
     blocks = lines = 0
     with open(ns.log, encoding="utf-8", errors="replace") as src, open(out_path, "w", encoding="utf-8") as out:
-        block, listing = None, False
+        block, listing, hosts, cut = None, False, False, 0
         for raw in src:
             line = raw.rstrip("\n")
             lines += 1
@@ -523,6 +554,16 @@ def phase_redact(ns):
                 row, _, action = line.partition("/")
                 out.write(masked(row) + ("/" + action if action else "") + "\n")
                 continue
+            # The old "every pilot-ext-host on this Mac" listings held other sessions' command lines: cut, to the next
+            # comment, command or JSON line (T7 review 3).
+            if hosts:
+                if not line or line.startswith(("#", "$", "{", "[")):
+                    hosts = False
+                else:
+                    continue
+            if line.startswith("# every pilot-ext-host on this Mac"):
+                hosts, cut = True, cut + 1
+                continue
             listing = line.endswith(("it offers:", "whole name:"))
             if line.startswith("$ "):
                 try:
@@ -534,7 +575,7 @@ def phase_redact(ns):
         if block is not None:
             out.write(shown("\n".join(block)) + "\n")
     os.replace(out_path, ns.log)
-    say("# redacted %s: %d lines read, %d JSON blocks shaped" % (ns.log, lines, blocks))
+    say("# redacted %s: %d lines read, %d JSON blocks shaped, %d host listings cut" % (ns.log, lines, blocks, cut))
 
 
 def phase_probe(ns):
@@ -568,6 +609,10 @@ def phase_probe(ns):
         if record.get("kind") in ("exec", "applescript", "write", "fetch"):
             say(json.dumps(shaped(record), sort_keys=True, ensure_ascii=False))
     shutil.rmtree(work, ignore_errors=True)
+    # Review 3: a value an `ext act` command names never reaches the log whole, even when the program's own output
+    # repeats it, as an ext act error does with its row. /bin/echo stands in for that error, so nothing runs.
+    say("# masking probe: an output that repeats the pressed row, the --then and the --query (echo stands in for ext act):")
+    run(["/bin/echo", "no action", "ext", "act", "measure-probe", "T7 probe row", "--then", "T7 probe then", "--query", "T7 probe query", "on", "its page"])
 
 
 def main():

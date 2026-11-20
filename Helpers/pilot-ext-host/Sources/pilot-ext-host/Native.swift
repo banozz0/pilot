@@ -115,7 +115,7 @@ extension Host {
         add("spawnSync", { (file: String, args: [String], options: [String: Any], input: String) -> Any in
             switch Measure.admit(file, args, options, sync: true) {
             case .run(let program, let argv, let options): return Host.spawnSync(program, argv, options, input: input)
-            case .refused(let kind, let why): return Measure.refusedSync(file, args, input: input, kind: kind, why: why)
+            case .refused(let kind, let why, let subject): return Measure.refusedSync(file, args, input: input, kind: kind, why: why, subject: subject)
             }
         } as @convention(block) (String, [String], [String: Any], String) -> Any)
         add("childWrite", { [unowned self] (id: Int, text: String) in
@@ -249,7 +249,7 @@ extension Host {
         let program: String, argv: [String], given: [String: Any]
         switch Measure.admit(file, args, options, sync: false) {
         case .run(let path, let words, let made): (program, argv, given) = (path, words, made)
-        case .refused(let kind, let why): return Measure.standIn(id, file, args, kind: kind, why: why, host: self)
+        case .refused(let kind, let why, let subject): return Measure.standIn(id, file, args, kind: kind, why: why, subject: subject, host: self)
         }
         let detached = given["detached"] as? Bool == true, ignore = given["stdio"] as? String == "ignore"
         let started: Started

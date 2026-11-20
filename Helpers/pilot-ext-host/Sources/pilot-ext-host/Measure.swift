@@ -130,8 +130,11 @@ import Foundation
         var info = stat()
         let link = lstat(url.path, &info) == 0 && (info.st_mode & S_IFMT) == S_IFLNK
         let full = realpath(url.deletingLastPathComponent().path).map { ($0 as NSString).appendingPathComponent(url.lastPathComponent) } ?? url.path
-        if !link, exact.contains(full) || folders.contains(where: { full.hasPrefix($0) || full + "/" == $0 }) { return nil }
-        record(["kind": "write", "what": what, "path": full, "ran": false, "why": link ? "its last name is a link" : "outside the run's folders"])
+        // `..` is refused outright: standardizing resolves it by text, so `<data>/link/../x` would pass a link (T7 review 3).
+        let dots = path.split(separator: "/").contains("..")
+        if !link, !dots, exact.contains(full) || folders.contains(where: { full.hasPrefix($0) || full + "/" == $0 }) { return nil }
+        record(["kind": "write", "what": what, "path": full, "ran": false,
+                "why": dots ? "a path with .." : link ? "its last name is a link" : "outside the run's folders"])
         return ["error": "EPERM", "message": "EPERM: pilot-ext-host --measure writes nothing outside the run's folders, '\(path)'"]
     }
 
@@ -157,7 +160,7 @@ import Foundation
     /// Programs that only read, whatever their arguments.
     static let readOnly: Set<String> = ["ps", "pgrep", "lsof", "sw_vers", "uname", "id", "whoami", "which", "mdfind", "mdls", "du", "df",
                                         "ls", "cat", "head", "tail", "stat", "wc", "vm_stat", "ioreg", "system_profiler", "getconf", "true"]
-    /// The exact argv shapes Brew's views issue (T7 review 2), each word a literal or `<name>` (a formula or cask name).
+    /// The exact argv shapes Brew's views issue (T7 review 2), matched word for word.
     static let brewShapes: [[String]] = [
         ["--prefix"], ["--cache"], ["--version"], ["--repository"], ["--cellar"], ["--caskroom"],
         ["info", "--json=v2", "--installed"], ["outdated", "--json=v2"], ["outdated", "--json=v2", "--greedy"],
@@ -166,7 +169,7 @@ import Foundation
 
     /// What a child asks for, under --measure: run its program by its absolute path with this argv and the fixed
     /// environment, or refuse it.
-    enum Admission { case run(String, [String], [String: Any]), refused(kind: String, why: String) }
+    enum Admission { case run(String, [String], [String: Any]), refused(kind: String, why: String, subject: String?) }
 
     /// The child as it may run, or why not; recorded either way unless it runs unmeasured.
     static func admit(_ file: String, _ args: [String], _ options: [String: Any], sync: Bool) -> Admission {
@@ -179,11 +182,15 @@ import Foundation
             record(["kind": kind, "file": file, "program": program, "args": args, "argv": argv, "ran": true].merging(sync ? ["sync": true] : [:]) { $1 })
             return .run(program, argv, options)
         case .failure(let why):
-            return .refused(kind: kind, why: why.text)
+            return .refused(kind: kind, why: why.text, subject: why.subject)
         }
     }
 
-    struct Why: Error { let text: String; init(_ text: String) { self.text = text } }
+    /// Why a child is refused: a fixed text, and apart from it the path or name it concerns, which the harness masks.
+    struct Why: Error {
+        let text: String, subject: String?
+        init(_ text: String, subject: String? = nil) { self.text = text; self.subject = subject }
+    }
 
     /// The program and argv a child starts as: Node's `/bin/sh -c <line>` becomes the line's own words, never a shell.
     static func judged(_ file: String, _ args: [String]) -> Result<(String, [String]), Why> {
@@ -198,12 +205,12 @@ import Foundation
 
     /// `file` as an absolute program: a bare name on the fixed PATH, or an absolute path; never relative to a folder.
     static func located(_ file: String) -> Result<String, Why> {
-        guard !file.contains("/") || file.hasPrefix("/") else { return .failure(Why("\(file) is relative to a folder")) }
+        guard !file.contains("/") || file.hasPrefix("/") else { return .failure(Why("a program named relative to a folder", subject: file)) }
         let found = file.hasPrefix("/") ? file : searchPath.split(separator: ":").map { "\($0)/\(file)" }
             .first { FileManager.default.isExecutableFile(atPath: $0) } ?? file
-        guard let program = realpath(found), FileManager.default.isExecutableFile(atPath: program) else { return .failure(Why("\(file) is not a program here")) }
+        guard let program = realpath(found), FileManager.default.isExecutableFile(atPath: program) else { return .failure(Why("not a program here", subject: file)) }
         guard program == brew || systemFolders.contains(where: program.hasPrefix) else {
-            return .failure(Why("\(program) is outside the system's own folders"))
+            return .failure(Why("a program outside the system's own folders", subject: program))
         }
         return .success(program)
     }
@@ -229,7 +236,7 @@ import Foundation
         case "hostname": why = args.allSatisfy({ ["-s", "-f"].contains($0) }) ? nil : "hostname that may set the name"
         case "osascript": why = "AppleScript, which acts on the Mac"
         case "sh", "bash", "zsh", "dash", "ksh", "csh", "tcsh": why = "a shell, which never starts under --measure"
-        default: why = readOnly.contains(name) ? nil : "\(name) is not on the read-only list"
+        default: why = readOnly.contains(name) ? nil : "a program not on the read-only list"
         }
         return why.map { .failure(Why($0)) } ?? .success((program, args))
     }
@@ -249,12 +256,13 @@ import Foundation
     }
 
     /// A refused child's stand-in: it takes its stdin and ends with exit 1 on the next turn, its pid answered as 0.
-    static func standIn(_ id: Int, _ file: String, _ args: [String], kind: String, why: String, host: Host) -> Any {
+    static func standIn(_ id: Int, _ file: String, _ args: [String], kind: String, why: String, subject: String?, host: Host) -> Any {
         swallowed[id] = ""
         host.pending += 1
         DispatchQueue.main.async {
             MainActor.assumeIsolated {
-                record(["kind": kind, "file": file, "args": args, "stdin": swallowed.removeValue(forKey: id) ?? "", "ran": false, "why": why])
+                record(["kind": kind, "file": file, "args": args, "stdin": swallowed.removeValue(forKey: id) ?? "", "ran": false, "why": why,
+                        "subject": subject ?? NSNull()])
                 host.call("__pilotChild", [id, "stderr", "pilot-ext-host --measure: not run on this Mac (\(why))\n"])
                 host.call("__pilotChild", [id, "exit", 1, NSNull()])
                 host.call("__pilotChild", [id, "close"])
@@ -266,8 +274,8 @@ import Foundation
     }
 
     /// spawnSync's refused answer, recorded: exit 1.
-    static func refusedSync(_ file: String, _ args: [String], input: String, kind: String, why: String) -> Any {
-        record(["kind": kind, "file": file, "args": args, "stdin": input, "ran": false, "why": why, "sync": true])
+    static func refusedSync(_ file: String, _ args: [String], input: String, kind: String, why: String, subject: String?) -> Any {
+        record(["kind": kind, "file": file, "args": args, "stdin": input, "ran": false, "why": why, "subject": subject ?? NSNull(), "sync": true])
         return ["status": 1, "signal": NSNull(), "stdout": "", "stderr": "pilot-ext-host --measure: not run on this Mac (\(why))\n", "pid": 0]
     }
 

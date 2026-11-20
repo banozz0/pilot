@@ -69,6 +69,8 @@ attempt("date +%Y (a read)", () => run("/bin/date", ["+%Y"]));
 attempt("write in /private/tmp", () => fs.writeFileSync("/private/tmp/t7-probe", "x"));
 attempt("write in the TMPDIR around this run's", () => fs.writeFileSync(path.join(data, "t7-probe"), "x"));
 attempt("write in this run's own TMPDIR", () => fs.writeFileSync(path.join(os.tmpdir(), "t7-probe"), "x"));
+// Review 3: a path through `..` is refused outright, even inside the run's own folder (string-built, so nothing normalizes it).
+attempt("review 3: write through sub/../ in this run's own TMPDIR", () => fs.writeFileSync(`${os.tmpdir().replace(/\/$/, "")}/sub/../t7-dots`, "x"));
 
 // node:sqlite: a read, then statements that would write past SQLITE_OPEN_READONLY.
 const db = path.join(os.tmpdir(), "probe.db");
