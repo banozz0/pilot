@@ -11,7 +11,8 @@ import Foundation
 //   form; `sh` only with one plain `-c` line of such a command; a kill only of pids the caller named. It gets a fixed
 //   environment, never the extension's, so no BASH_ENV, ENV or ZDOTDIR reaches a shell. Anything else (AppleScript
 //   included) is recorded and refused: the child ends at once with exit 1.
-// - A file write goes only to the run's data and cache folders and a temporary folder made for this run alone, which
+// - A file write goes only to the run's data and cache folders (and ExtensionData/<id> around the data one, for
+//   gaps.json) and a temporary folder made for this run alone, which
 //   TMPDIR names to the extension and its children and which goes at the exit; anything else fails with EPERM.
 // - A fetch is recorded by its method and host; one that is not a GET or HEAD fails.
 // - An `open`, copy or paste the run asks for is Pilot's to perform, never the host's; its action line is recorded as that call.
@@ -78,7 +79,9 @@ import Foundation
         // Only the run message carries the paths; the text is checked before any line is parsed.
         if line.contains("\"run\""), let data = line.data(using: .utf8), let message = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
            message["type"] as? String == "run", let paths = message["paths"] as? [String: String] {
-            folders += paths.values.filter { !$0.isEmpty }.compactMap(realpath).map { $0.hasSuffix("/") ? $0 : $0 + "/" }
+            // The data folder's own folder too, ExtensionData/<id>, where the gap recorder keeps gaps.json (gaps.js).
+            let given = paths.values.filter { !$0.isEmpty } + [paths["data"].map { ($0 as NSString).deletingLastPathComponent }].compactMap { $0 }
+            folders += given.compactMap(realpath).map { $0.hasSuffix("/") ? $0 : $0 + "/" }
         }
     }
 
