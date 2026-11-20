@@ -233,7 +233,7 @@ struct NotesEditor: View {
     /// This editor's text view, known once it has had the keyboard: a sketch opened on it is drawn here.
     @State private var mine = NotesEditorView()
     /// The sketch under the pointer and its picture's frame.
-    @State private var hovered: (link: String, frame: CGRect)?
+    @State private var hovered: NotesSketchSpot?
     /// Bumped when this editor takes the keyboard or its note scrolls, so the canvas and Edit sketch follow.
     @State private var moved = 0
     private static let nowhere = NSObject()
@@ -265,23 +265,30 @@ struct NotesEditor: View {
                             SketchCanvas(board: board, ink: style.text).offset(x: origin.x, y: origin.y)
                         }
                     }
-                } else if editable, !board.isOpen, let sketch = hovered ?? (sketchHover ? mine.view?.sketchFrames().first : nil) {
+                } else if editable, !board.isOpen,
+                          let sketch = hovered ?? (sketchHover ? mine.view?.sketchFrames().first.map { NotesSketchSpot(link: $0.link, frame: $0.frame) } : nil) {
                     editSketch(sketch)
                 }
             }
+            // Written only when the sketch under the pointer changes, so a pointer moving over words redraws nothing.
             .onContinuousHover { phase in
-                guard case .active(let point) = phase, editable, !board.isOpen, text.contains(".svg") else { return hovered = nil }
-                hovered = mine.view?.sketchFrames().first { $0.frame.insetBy(dx: -4, dy: -4).contains(point) }
+                var spot: NotesSketchSpot?
+                if case .active(let point) = phase, editable, !board.isOpen, text.contains(".svg"),
+                   let found = mine.view?.sketchFrames().first(where: { $0.frame.insetBy(dx: -4, dy: -4).contains(point) }) {
+                    spot = NotesSketchSpot(link: found.link, frame: found.frame)
+                }
+                if spot != hovered { hovered = spot }
             }
+            // A scroll moves the canvas and Edit sketch with their line; it redraws nothing while neither shows.
             .onReceive(NotificationCenter.default.publisher(for: NSView.boundsDidChangeNotification,
                                                             object: mine.view?.enclosingScrollView?.contentView ?? Self.nowhere)) { _ in
-                hovered = nil
-                moved += 1
+                if hovered != nil { hovered = nil }
+                if drawing || sketchHover { moved += 1 }
             }
     }
 
     /// Edit sketch at the picture's top right: the canvas opens on that sketch.
-    private func editSketch(_ sketch: (link: String, frame: CGRect)) -> some View {
+    private func editSketch(_ sketch: NotesSketchSpot) -> some View {
         Button {
             hovered = nil
             if let view = mine.view { SketchBoard.shared.open(on: view, link: sketch.link) }
@@ -301,6 +308,12 @@ struct NotesEditor: View {
         .frame(width: sketch.frame.width - 12, alignment: .trailing)
         .offset(x: sketch.frame.minX + 6, y: sketch.frame.minY + 6)
     }
+}
+
+/// A sketch in the note and its picture's frame, in the scroll view's points.
+struct NotesSketchSpot: Equatable {
+    let link: String
+    let frame: CGRect
 }
 
 /// An editor's text view, held weakly: the one NotesEditor draws a sketch over.

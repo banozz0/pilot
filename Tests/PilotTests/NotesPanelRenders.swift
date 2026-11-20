@@ -255,6 +255,18 @@ struct NotesPanelRenders {
                     try #require(model.text.hasPrefix(head + saved + "\n"), "the link is not on the line under Route")
                     let path = String(saved.dropFirst("![Sketch](".count).dropLast())
                     try #require(try Sketch.load(from: folder.appending(path: path)).strokes.count == Self.route.count)
+                } else if theme == "porcelain" {
+                    // Edit sketch, the last pass: the sketch reopened, a stroke taken out, Done writes over the same file,
+                    // and the editor draws it anew rather than the cached picture.
+                    let path = String(link.dropFirst("![Sketch](".count).dropLast())
+                    let before = try #require(editor.pictureRects().first?.image)
+                    board.open(on: editor, link: path)
+                    try #require(board.isOpen, "Edit sketch did not reopen the sketch")
+                    board.sketch.strokes.removeLast()
+                    board.done()
+                    try #require(try Sketch.load(from: folder.appending(path: path)).strokes.count == Self.route.count - 1)
+                    try #require(model.text.contains(link), "the link moved")
+                    try #require(editor.pictureRects().first?.image !== before, "the sketch was drawn from the cache")
                 }
             }
         }
