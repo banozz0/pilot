@@ -291,7 +291,7 @@ public struct Extension: Equatable, Sendable {
     public static func command(inAction id: String) -> CommandID? {
         guard id.hasPrefix(prefix) else { return nil }
         let parts = id.dropFirst(prefix.count).prefix { $0 != "/" }.split(separator: ".", omittingEmptySubsequences: false)
-        guard parts.count == 2, parts.allSatisfy({ isName(String($0)) }) else { return nil }
+        guard parts.count == 2, isName(String(parts[0])), isCommandName(String(parts[1]), raycast: true) else { return nil }
         return CommandID(extension: String(parts[0]), command: String(parts[1]))
     }
 
@@ -375,6 +375,13 @@ public struct Extension: Equatable, Sendable {
 
     /// An id or a command name: lowercase letters, digits and hyphens, so `ext.<id>.<command>` splits one way.
     static func isName(_ s: String) -> Bool { s.wholeMatch(of: /[a-z0-9][a-z0-9-]*/) != nil }
+
+    /// A command's name: `isName`, or for a Raycast-format extension (ADR 0017) Raycast's own spelling, capitals kept
+    /// (`searchNoteCommand`): still only letters, digits and hyphens, so the id splits one way and a question shows no
+    /// space or punctuation (T6's review 1). Install.swift's `plan()` holds a fetched manifest to the same rule.
+    static func isCommandName(_ s: String, raycast: Bool) -> Bool {
+        raycast ? s.count <= 64 && s.wholeMatch(of: /[A-Za-z0-9][A-Za-z0-9-]*/) != nil : isName(s)
+    }
 
     /// `icon` when it is one emoji, the only icon Pilot draws for now.
     private static func emoji(_ icon: String?) -> String? { icon.flatMap { ScriptCommand.isEmoji($0) ? $0 : nil } }

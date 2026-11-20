@@ -154,6 +154,8 @@ export function makeAPI(message, mode) {
     constructor(options = {}) {
       const name = String(options.namespace ?? "default").replace(/[^A-Za-z0-9._-]/g, "_");
       this.#store = store(cache ? `${cache}/raycast-cache-${name}.json` : "");
+      // Bound, as Raycast's are: @raycast/utils hands `cache.subscribe` to useSyncExternalStore on its own (T7).
+      for (const m of ["get", "has", "set", "remove", "clear", "subscribe"]) this[m] = this[m].bind(this);
     }
     get isEmpty() { return Object.keys(this.#store.read()).length === 0; }
     get(key) { const v = this.#store.read()[String(key)]; return typeof v === "string" ? v : undefined; }

@@ -42,8 +42,15 @@ public enum RaycastManifest {
             guard let type = kinds[p.type] else { throw Extension.Problem.unknownPreferenceType(preference: p.name, type: p.type) }
             let title = [p.title, p.label].compactMap { $0?.trimmingCharacters(in: .whitespaces) }.first { !$0.isEmpty } ?? p.name
             return try Extension.Preference(Extension.Preference.Line(name: p.name, type: type, title: title, required: p.required,
-                                                                      default: p.default, description: p.description, data: p.data))
+                                                                      default: macOS(p.default), description: p.description, data: p.data))
         }
+    }
+
+    /// A default given per platform (`{"macOS": "com.apple.Terminal", "Windows": "Terminal"}`, Raycast's cross-platform
+    /// manifests) as its macOS value, none when it has no macOS one; any other default as it is.
+    static func macOS(_ given: JSONValue?) -> JSONValue? {
+        guard case .object(let platforms)? = given, platforms.keys.contains(where: { ["macOS", "Windows"].contains($0) }) else { return given }
+        return platforms["macOS"]
     }
 
     /// The extension folder a command's bundle belongs to: the bundle's own folder when it holds the manifest, else the
@@ -78,7 +85,7 @@ extension Extension {
         guard Self.isName(manifest.name) else { throw Problem.badID(manifest.name) }
         var names = Set<String>()
         commands = try manifest.commands.compactMap { c in
-            guard Self.isName(c.name) else { throw Problem.badCommandName(c.name) }
+            guard Self.isCommandName(c.name, raycast: true) else { throw Problem.badCommandName(c.name) }
             guard names.insert(c.name).inserted else { throw Problem.duplicateCommand(c.name) }
             let mode: Mode
             switch c.mode {

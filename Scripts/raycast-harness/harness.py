@@ -108,17 +108,31 @@ def installed(ns):
 
 
 def ensure(ns, folder):
-    """Installs the folder `install` kept, as a local folder, when this sandbox lacks it; answers the extension's id."""
+    """Puts the folder `install` kept back into this sandbox when it lacks it; answers the extension's id. Kill Process
+    goes through `pilot ext install <folder>`, whose answer names the sandbox's Extensions folder; every other one is
+    copied into that folder, which Pilot reads on each call: a local install asks its whole question, and a big
+    extension's passes the 1,200 characters Pilot shows (only the GitHub route counts them down), so it is denied."""
     kept = os.path.join(ns.work, "installed", folder)
     if not os.path.isdir(kept):
         say("# %s: no installed folder kept (its GitHub install failed or never ran)" % folder)
         return None
     ext = json.load(open(os.path.join(kept, "package.json")))["name"]
-    if ext not in ns.have:
-        code, _, _ = pilot(["ext", "install", kept], ns)
-        if code != 0:
+    if ext in ns.have:
+        return ext
+    if not getattr(ns, "extensions", None):
+        code, answer, _ = pilot(["ext", "install", os.path.join(ns.work, "installed", "kill-process")], ns)
+        if code != 0 or not isinstance(answer, dict) or not answer.get("folder"):
             return None
-        ns.have.add(ext)
+        ns.extensions = os.path.dirname(answer["folder"])
+        ns.have.add("kill-process")
+        if ext in ns.have:
+            return ext
+    shutil.copytree(kept, os.path.join(ns.extensions, ext), symlinks=True)
+    say("# copied %s into the sandbox's Extensions folder %s" % (kept, ns.extensions))
+    code, _, _ = pilot(["ext", "show", ext], ns)
+    if code != 0:
+        return None
+    ns.have.add(ext)
     return ext
 
 
@@ -228,7 +242,7 @@ def phase_act(ns):
             results[folder] = result
             continue
         since = lines_in(ns)
-        code, pressed, _ = pilot(["ext", "act", ext, row, "--command", spec["command"]], ns, timeout=60)
+        code, pressed, _ = pilot(["ext", "act", ext, row, "--command", spec["command"]] + (["--query", query] if query else []), ns, timeout=60)
         left = hosts_left(ns)
         time.sleep(0.5)
         records, _ = measured(ns, since)

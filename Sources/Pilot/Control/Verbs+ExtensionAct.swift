@@ -143,7 +143,7 @@ extension ControlVerbs {
             let inputs = try await tools.inputs(ext)
             let session = ExtensionSession(command, context: nil, inputs: inputs, folder: ext.folder)
             let answer: Result<JSONValue, ControlError>
-            do throws(ControlError) { answer = .success(try await Self.press(word, handler: handler, in: session, command, ext, tools, peer: peer)) }
+            do throws(ControlError) { answer = .success(try await Self.press(word, handler: handler, query: args.value("query") ?? "", in: session, command, ext, tools, peer: peer)) }
             catch { answer = .failure(error) }
             session.close()
             await session.ended()
@@ -151,9 +151,9 @@ extension ControlVerbs {
         }
     }
 
-    /// Opens the view in `session`, finds the callback (a row's first, row/action, or the handler named), asks Allow for
+    /// Opens the view in `session` (searched for `query`), finds the callback (a row's first, row/action, or the handler named), asks Allow for
     /// the press and presses it.
-    private static func press(_ word: String, handler: String?, in session: ExtensionSession, _ command: Extension.Command, _ ext: Extension,
+    private static func press(_ word: String, handler: String?, query: String, in session: ExtensionSession, _ command: Extension.Command, _ ext: Extension,
                               _ tools: ExtensionTools, peer: ControlPeer?) async throws(ControlError) -> JSONValue {
         func shown(_ outcome: ListOutcome) throws(ControlError) -> (items: [Extension.Item], json: [String: JSONValue]) {
             switch outcome {
@@ -162,12 +162,22 @@ extension ControlVerbs {
             case .error(let why): throw tools.failed(command, why, in: ext)
             }
         }
-        _ = try shown(await session.ask(""))
-        let before = try shown(await session.settled()?.outcome ?? .error("sent no list"))
+        // --query opens the view searched, as `ext run --query` does: a view with rows only for a search (Google Search).
+        _ = try shown(await session.ask(query))
+        var before = try shown(await session.settled()?.outcome ?? .error("sent no list"))
+        let callbacks = { (items: [Extension.Item]) in Self.targets([.list(title: nil, items: items)]).filter { $0.action.handler != nil } }
+        // A view may settle before it fills in (Kill Process commits an empty list until `ps` answers): the press waits,
+        // up to 2 s, for a newer view that offers what it names.
+        let until = ContinuousClock.now + .seconds(2)
+        while ContinuousClock.now < until, !(handler.map { id in callbacks(before.items).contains { $0.action.handler == id } }
+                                            ?? ((try? Self.target(word, in: callbacks(before.items), page: command.actionID)) != nil)) {
+            try? await Task.sleep(for: .milliseconds(50))
+            if let newest = session.newest?.outcome { before = try shown(newest) }
+        }
         let target = if let handler {
             PageTarget(path: "handler \(handler)", action: Extension.Item.Action(kind: .invoke(handler: handler)), box: nil, alt: false)
         } else {
-            try Self.target(word, in: Self.targets([.list(title: nil, items: before.items)]).filter { $0.action.handler != nil }, page: command.actionID)
+            try Self.target(word, in: callbacks(before.items), page: command.actionID)
         }
         let id = target.action.handler ?? word
         let label = target.bare ? " (\(ControlGate.Ask.visible(target.action.label)))" : ""

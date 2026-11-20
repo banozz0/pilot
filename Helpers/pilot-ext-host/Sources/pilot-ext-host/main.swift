@@ -17,7 +17,8 @@ import JavaScriptCore
 
 /// Writes one line to stdout or stderr, unbuffered.
 func put(_ line: String, to handle: FileHandle) {
-    if handle.fileDescriptor == 1 { MainActor.assumeIsolated { Measure.wrote(line) } }
+    // A run's lines come on the main queue; the installer's (a detached task) are not measured.
+    if handle.fileDescriptor == 1, Measure.measuresLines { MainActor.assumeIsolated { Measure.wrote(line) } }
     handle.write(Data((line + "\n").utf8))
 }
 

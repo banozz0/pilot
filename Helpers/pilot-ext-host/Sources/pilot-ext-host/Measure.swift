@@ -21,6 +21,8 @@ import Foundation
     private static let born = Date()
 
     static var on: Bool { log >= 0 }
+    /// Whether stdout lines are recorded: a measured run's, written on the main queue; never the installer's.
+    nonisolated(unsafe) static var measuresLines = false
 
     /// Takes `--measure <log>` and each `--measure-pid <pid>` off the front of `arguments`.
     static func take(_ arguments: inout [String]) {
@@ -29,7 +31,7 @@ import Foundation
             arguments.removeFirst(2)
         }
         guard on else { return }
-        if let first = arguments.first, Installer.modes.contains(first) { mode = "install" }
+        if let first = arguments.first, Installer.modes.contains(first) { mode = "install" } else { measuresLines = true }
         folders = [ProcessInfo.processInfo.environment["TMPDIR"], NSTemporaryDirectory(), "/private/tmp/", "/tmp/"].compactMap { $0 }
         record(["kind": "start", "mode": mode, "killable": killable.sorted().map(Int.init)])
     }
