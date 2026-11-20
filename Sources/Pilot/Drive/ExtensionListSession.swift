@@ -9,8 +9,9 @@ import PilotCore
 /// Raycast-format command (ADR 0017) is always a session, its host kept while the view is open: every answer it sends is
 /// drawn, the newest last, a List still loading under Pilot's loading row, and a row's callback is pressed in it (T2).
 /// An `Action.Push` (T8) opens a view of the menu's own over this one, filled by the same host: its first ask is the
-/// push, it draws the host's answers while it is on top, and its Escape sends the host `navigation.pop` and hands the
-/// answers back to the view under it. A push or pop a callback makes itself redraws the view on top in place.
+/// push, it draws the host's answers while it is on top, and its Escape sends the host back to the view under it
+/// (`navigation.pop.<depth>`) and hands the answers back to that view. A push or pop a callback makes itself redraws the
+/// view on top in place; the next Escape still lands on the view under it.
 @MainActor
 final class ExtensionListSession: MenuSource {
     /// How long typing must pause before the program is asked again: a run per keystroke would mostly be killed unread.
@@ -33,8 +34,10 @@ final class ExtensionListSession: MenuSource {
     private var query = ""
     /// A pushed view's push, which its first ask presses (T8).
     private var pushing: String?
-    /// The host's handler that goes back a view: Escape in a pushed view.
-    static let pop = "navigation.pop"
+    /// How many views deep this one is in its host's stack: the command's own view is 1.
+    private let depth: Int
+    /// The host's handler that goes back a view (Escape), and `.<n>` after it back to the n-th; a push's ends in `.push`.
+    static let pop = "navigation.pop", push = ".push"
 
     /// What the row that pushed this list handed on, in each run message (card agent-bo-95423244).
     let context: JSONValue?
@@ -45,7 +48,7 @@ final class ExtensionListSession: MenuSource {
     init(_ ext: Extension, _ command: Extension.Command, inputs: ExtensionRun.Inputs, context: JSONValue? = nil,
          run: ((Extension.Command, String) async -> ListOutcome)? = nil, end: (() -> Void)? = nil,
          pause: @escaping () async -> Void = { try? await Task.sleep(for: ExtensionListSession.pause) }) {
-        self.ext = ext; self.command = command; self.inputs = inputs; self.context = context; self.pause = pause
+        self.ext = ext; self.command = command; self.inputs = inputs; self.context = context; self.pause = pause; depth = 1
         var raycast: ExtensionSession?
         if let run {
             self.run = run
@@ -68,10 +71,11 @@ final class ExtensionListSession: MenuSource {
         ext = parent.ext; command = parent.command; inputs = parent.inputs; context = parent.context; pause = parent.pause
         self.session = session
         pushing = handler
+        depth = parent.depth + 1
         run = { await session.ask($1) }
-        end = { [weak parent] in
+        end = { [weak parent, back = "\(Self.pop).\(parent.depth)"] in
             parent?.listen()
-            Task { _ = await session.invoke(ExtensionListSession.pop) }
+            Task { _ = await session.invoke(back) }
         }
     }
 
@@ -101,12 +105,12 @@ final class ExtensionListSession: MenuSource {
         self.query = query
         task?.cancel()
         // A pushed view's first ask is its push; the answers it brings are drawn here, not in the view under it.
-        let push = pushing.flatMap { handler in session.map { (handler, $0) } }
+        let push = pushing
         if push != nil { pushing = nil; listen() }
-        task = Task { [weak self, command, run, pause] in
+        task = Task { [weak self, command, run, pause, session] in
             if !now { await pause() }
             guard !Task.isCancelled else { return }
-            let outcome = if let (handler, session) = push { await session.invoke(handler) } else { await run(command, query) }
+            let outcome = if let push, let session { await session.invoke(push) } else { await run(command, query) }
             guard !Task.isCancelled, let self else { return }
             // A Raycast host's answers are drawn as they come (drawQueued); only a stop's reason, which is no line, is drawn here.
             if session == nil { display(outcome) } else if case .error = outcome { display(outcome) }
@@ -173,7 +177,7 @@ final class ExtensionListSession: MenuSource {
         guard let action = action(index, for: row) else { return .stay }
         guard case .invoke(let handler) = action.kind else { return ExtensionActions.pick(action, in: ext, inputs: inputs) }
         guard let session else { return .stay }
-        if handler.hasSuffix(".push") { return .push(action.label, ExtensionListSession(pushing: handler, over: self, in: session)) }
+        if handler.hasSuffix(Self.push) { return .push(action.label, ExtensionListSession(pushing: handler, over: self, in: session)) }
         return .keep(clear: false, back: false) { Task { _ = await session.invoke(handler) } }
     }
 }

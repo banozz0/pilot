@@ -11,8 +11,9 @@
 // The view stack (T8): the run renders its layers, the command's view first, each `Action.Push` target or
 // `useNavigation().push` view over it, every layer kept mounted so a pop finds its state as it was; only the top layer
 // is the answer, so only its handlers can be pressed. An `Action.Push` goes out as an invoke action whose handler ends in
-// `.push`, which Pilot's menu opens as a view of its own; the reserved handler `navigation.pop` is Escape, and at the
-// root it answers the view unchanged.
+// `.push`, which Pilot's menu opens as a view of its own. The reserved handler `navigation.pop` is Escape, one layer
+// back; `navigation.pop.<n>` goes back to the n-th layer (Pilot's menu sends its own view's depth, so a push or pop a
+// callback made never leaves the two stacks apart). At the root both answer the view unchanged.
 import { createContext, createElement } from "react";
 import Reconciler from "react-reconciler";
 import { ConcurrentRoot, DefaultEventPriority, DiscreteEventPriority, NoEventPriority } from "react-reconciler/constants";
@@ -296,24 +297,26 @@ export function render(component, message) {
   const root = reconciler.createContainer(container, ConcurrentRoot, null, false, null, "", fail, logged, logged, noop);
   const props = { arguments: message.arguments ?? {}, launchType: "userInitiated", launchContext: message.context };
 
-  // The view stack: each layer's element and its onPop, the command's own view at the bottom.
-  const stack = [{ key: 0, element: createElement(component, props) }];
+  // The view stack, the command's own view at the bottom: each layer wrapped once, with its onPop.
+  const stack = [];
   let layers = 0;
-  const paint = () => reconciler.updateContainer(stack.map(({ key, element }) =>
-    createElement("Pilot.Layer", { key }, createElement(Navigation.Provider, { value: navigation }, element))), root, null, null);
+  const paint = () => reconciler.updateContainer(stack.map((layer) => layer.wrapped), root, null, null);
+  /** Back to `depth` layers (at least the root), each popped layer's onPop called once the view under it is drawn. */
+  const popTo = (depth) => {
+    const gone = stack.splice(Math.max(1, depth));
+    if (!gone.length) return;
+    paint();
+    for (const layer of gone.reverse()) if (typeof layer.onPop === "function") layer.onPop();
+  };
   const navigation = Object.freeze({
     push(element, onPop) {
-      stack.push({ key: ++layers, element, onPop });
+      const key = layers++;
+      stack.push({ onPop, wrapped: createElement("Pilot.Layer", { key }, createElement(Navigation.Provider, { value: navigation }, element)) });
       paint();
     },
-    pop() {
-      if (stack.length < 2) return;
-      const gone = stack.pop();
-      paint();
-      if (typeof gone.onPop === "function") gone.onPop();
-    },
+    pop() { popTo(stack.length - 1); },
   });
-  paint();
+  navigation.push(createElement(component, props));
 
   /** Request `seq`: `work` runs, its commit (flushed in this call's microtasks) carries the ack; when nothing committed,
    *  the current view goes again on the next turn. A throw is the error line, which answers it. */
@@ -343,16 +346,13 @@ export function render(component, message) {
     },
     /** A press: the callback `id` names in the newest answer, called with the element's props as they are now, at a
      *  discrete event's priority so its update renders at once, as a click's does. A push mounts its target over the
-     *  view and calls its onPush; `navigation.pop` goes back a layer. A stale id answers the current view. */
+     *  view and calls its onPush; `navigation.pop[.<n>]` goes back. A stale id answers the current view. */
     invoke(id, seq) {
       request(seq, () => {
-        const node = handlers.get(id), prop = String(id).split(".").pop();
-        let callback = node?.props?.[prop];
-        if (id === "navigation.pop") callback = navigation.pop;
-        else if (node?.type === "Action.Push" && prop === "push") {
-          const { target, onPush, onPop } = node.props;
-          callback = () => { navigation.push(target, onPop); if (typeof onPush === "function") return onPush(); };
-        }
+        const word = String(id), node = handlers.get(word), back = /^navigation\.pop(?:\.(\d+))?$/.exec(word);
+        const callback = back ? () => popTo(back[1] === undefined ? stack.length - 1 : Number(back[1]))
+          : node?.type === "Action.Push" ? () => { navigation.push(node.props.target, node.props.onPop); return node.props.onPush?.(); }
+          : node?.props?.[word.split(".").pop()];
         if (typeof callback !== "function") return console.error(`no handler ${id} in the current view: answering it unchanged`);
         const before = priority;
         priority = DiscreteEventPriority;

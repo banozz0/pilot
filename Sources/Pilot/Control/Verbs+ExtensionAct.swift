@@ -164,16 +164,20 @@ extension ControlVerbs {
             case .error(let why): throw tools.failed(command, why, in: ext)
             }
         }
+        /// A press by its handler id, or the callback a row's name finds in `items`.
+        func pressing(_ id: String, path: String) -> PageTarget {
+            PageTarget(path: path, action: Extension.Item.Action(kind: .invoke(handler: id)), box: nil, alt: false)
+        }
+        func find(_ word: String, in items: [Extension.Item]) throws(ControlError) -> PageTarget {
+            try Self.target(word, in: Self.targets([.list(title: nil, items: items)]).filter { $0.action.handler != nil }, page: command.actionID)
+        }
         _ = try shown(await session.ask(""))
         let before = try shown(await session.settled()?.outcome ?? .error("sent no list"))
-        let target = if let handler {
-            PageTarget(path: "handler \(handler)", action: Extension.Item.Action(kind: .invoke(handler: handler)), box: nil, alt: false)
-        } else {
-            try Self.target(word, in: Self.targets([.list(title: nil, items: before.items)]).filter { $0.action.handler != nil }, page: command.actionID)
-        }
+        let target = if let handler { pressing(handler, path: "handler \(handler)") } else { try find(word, in: before.items) }
         let id = target.action.handler ?? word
         let label = target.bare ? " (\(ControlGate.Ask.visible(target.action.label)))" : ""
-        let second = then.map { ", then \($0.lowercased() == "escape" ? "Escape (back a view)" : ControlGate.Ask.visible($0)), runs their callbacks" } ?? ", runs its callback"
+        let escape = then?.lowercased() == "escape"
+        let second = then.map { ", then \(escape ? "Escape (back a view)" : ControlGate.Ask.visible($0)), runs their callbacks" } ?? ", runs its callback"
         let ask = ControlGate.Ask("Press on \(ControlGate.Ask.visible(ext.title))",
                                   "presses \(ControlGate.Ask.visible(target.path))\(label)\(second) in pilot-ext-host")
         return try await tools.gate.allow(ask, peer: peer) { () throws(ControlError) in
@@ -182,12 +186,10 @@ extension ControlVerbs {
                                                "before": .object(before.json)]
             if let then {
                 // The second press is found in the view the first left; escape is the host's own back (T8).
-                let next = then.lowercased() == "escape"
-                    ? PageTarget(path: "Escape", action: Extension.Item.Action(kind: .invoke(handler: ExtensionListSession.pop)), box: nil, alt: false)
-                    : try Self.target(then, in: Self.targets([.list(title: nil, items: after.items)]).filter { $0.action.handler != nil }, page: command.actionID)
+                let next = escape ? pressing(ExtensionListSession.pop, path: "Escape") : try find(then, in: after.items)
                 answer["between"] = .object(after.json)
                 answer["then"] = .string(next.path)
-                after = try shown(await session.invoke(next.action.handler ?? then))
+                after = try shown(await session.invoke(next.action.handler ?? ExtensionListSession.pop))
             }
             log.notice("ext act: \(ext.id, privacy: .public) pressed a callback, from the pilot command")
             answer.merge(after.json) { $1 }

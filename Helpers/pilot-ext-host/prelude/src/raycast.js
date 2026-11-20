@@ -70,11 +70,7 @@ Action.Style = Object.freeze({ Regular: "regular", Destructive: "destructive" })
 /** The run's view stack (host.js provides it to every layer): `push(view, onPop)` mounts a view over the current one,
  *  `pop()` goes back to the one under it, its state kept. */
 export const Navigation = createContext(null);
-function useNavigation() {
-  const navigation = useContext(Navigation);
-  if (!navigation) throw new Error("useNavigation works only inside a view command");
-  return navigation;
-}
+const useNavigation = () => useContext(Navigation);
 
 /** Raycast's named constants (Icon, Color): each name answers itself, so `Icon.Checkmark` is "Checkmark" (host.js maps an Icon name to its SF Symbol, T5). */
 const names = () => new Proxy({}, { get: (_, key) => (typeof key === "string" ? key : undefined) });
