@@ -26,6 +26,13 @@ struct DisplayNicknameUITests {
         return (root.accessibilityChildren?() ?? []).lazy.compactMap { identifier(id, in: $0 as AnyObject) }.first
     }
 
+    /// Presses the popover's name to rename it, as a double-click or its right-click menu's Rename does.
+    static func rename(_ id: String, in root: AnyObject) throws {
+        let name = try #require(identifier("display-rename-\(id)", in: root))
+        #expect(name.accessibilityPerformPress?() == true)
+        PanelTestSupport.pump()
+    }
+
     static func type(_ value: String, into panel: NSPanel) throws {
         func field(in view: NSView) -> NSTextField? {
             if let field = view as? NSTextField, field.isEditable { return field }
@@ -49,34 +56,41 @@ struct DisplayNicknameUITests {
         PanelTestSupport.pump()
         let root = try #require(panel.contentView)
         #expect(SharedLook.BarPopoversTests.texts(in: root).contains("CU34G4Z"))
-        let rename = try #require(Self.element("Rename CU34G4Z", in: root))
-        #expect(rename.accessibilityPerformPress?() == true)
-        PanelTestSupport.pump()
+        try Self.rename(Self.first, in: root)
         #expect(Self.element("Name for CU34G4Z", in: root) != nil)
         try Self.type("Desk café 🖥️", into: panel)
         try Self.press("Save", in: root)
         #expect(rig.displays.nicknames.nickname(for: Self.first) == "Desk café 🖥️")
-        #expect(Self.element("Rename Desk café 🖥️", in: root) != nil)
+        #expect(SharedLook.BarPopoversTests.texts(in: root).contains("Desk café 🖥️"))
         #expect(SharedLook.BarPopoversTests.texts(in: root).contains("24G1WG4"))
-        try Self.press("Rename Desk café 🖥️", in: root)
+        try Self.rename(Self.first, in: root)
         try Self.type("Discard me", into: panel)
         try Self.press("Cancel", in: root)
         #expect(rig.displays.nicknames.nickname(for: Self.first) == "Desk café 🖥️")
-        try Self.press("Rename Desk café 🖥️", in: root)
+        try Self.rename(Self.first, in: root)
         try Self.press("Clear", in: root)
         try Self.press("Save", in: root)
         #expect(rig.displays.nicknames.nickname(for: Self.first) == nil)
-        #expect(Self.element("Rename CU34G4Z", in: root) != nil)
+        #expect(SharedLook.BarPopoversTests.texts(in: root).contains("CU34G4Z"))
         #expect(rig.hardware.calls.isEmpty && rig.screens.applied.isEmpty)
     }
 
-    @Test("Missing and ambiguous physical identity disable Rename", .pilotFocus, arguments: [false, true])
+    @Test("Missing and ambiguous physical identity offer no Rename", .pilotFocus, arguments: [false, true])
     func unidentified(_ duplicate: Bool) async throws {
         let uuids: [String?] = duplicate ? [Self.first, Self.first] : [nil, Self.second]
         let rig = DisplayNicknameTests.Rig(defaults: .pilot(), uuids: uuids)
         await rig.displays.connections?.refresh()
         if duplicate { try rig.displays.nicknames.set("Unavailable identity", for: Self.first) }
-        #expect(SharedLook.BarPopoversTests.enabled("Rename CU34G4Z", in: DisplaysPopover(displays: rig.displays, brightness: nil).pilotTheme()) == false)
+        do {
+            let panel = PanelTestSupport.open(DisplaysPopover(displays: rig.displays, brightness: nil).pilotTheme())
+            defer { panel.close() }
+            let assistive = NSAccessibility.Attribute(rawValue: "AXEnhancedUserInterface")
+            NSApp.accessibilitySetValue(true, forAttribute: assistive)
+            defer { NSApp.accessibilitySetValue(false, forAttribute: assistive) }
+            PanelTestSupport.pump()
+            let root = try #require(panel.contentView)
+            #expect(Self.identifier("display-rename-\(duplicate ? Self.first : "CU34G4Z")", in: root) == nil)
+        }
         let shown = SharedLook.BarPopoversTests.labels(DisplaysPopover(displays: rig.displays, brightness: nil).pilotTheme())
         #expect(shown.contains("CU34G4Z") && !shown.contains("Unavailable identity"))
         #expect(rig.hardware.calls.isEmpty)
@@ -120,14 +134,12 @@ struct DisplayNicknameUITests {
         defer { NSApp.accessibilitySetValue(false, forAttribute: assistive) }
         let root = try #require(panel.contentView)
         for (uuid, name) in [(Self.first, "Left"), (Self.second, "Right")] {
-            let rename = try #require(Self.identifier("display-rename-\(uuid)", in: root))
-            #expect(rename.accessibilityPerformPress?() == true)
-            PanelTestSupport.pump()
+            try Self.rename(uuid, in: root)
             try Self.type(name, into: panel)
             try Self.press("Save", in: root)
             #expect(rig.displays.nicknames.nickname(for: uuid) == name)
         }
-        #expect(Self.element("Rename Left", in: root) != nil && Self.element("Rename Right", in: root) != nil)
+        #expect(Self.element("Left", in: root) != nil && Self.element("Right", in: root) != nil)
         #expect(rig.hardware.screens == originals && rig.hardware.calls.isEmpty && rig.screens.applied.isEmpty)
     }
 

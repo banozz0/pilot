@@ -21,7 +21,10 @@ struct SetupDisplaysTests {
         ]
         var modesByDisplay: [UInt32: [DisplayMode]] = [1: [wide, wideLow], 2: [portrait]]
         var applied: [(mode: DisplayMode, display: UInt32, permanently: Bool)] = []
+        /// The screens offering Rotate; none unless a test says so.
+        var rotatable: Set<UInt32> = []
 
+        func canRotate(_ display: UInt32) -> Bool { rotatable.contains(display) }
         func displays() -> [DisplayInfo] { stale ?? screens }
         func modes(_ display: UInt32) -> [DisplayMode] { modesByDisplay[display] ?? [] }
         func apply(_ mode: DisplayMode, to display: UInt32, permanently: Bool) throws {
