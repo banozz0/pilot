@@ -36,6 +36,13 @@ enum WidgetGitHub {
     /// The placement's loop while it shows: the kept read or a new one, then a sleep until it is an hour old (ten
     /// minutes after a failure). `told` hears each answer's problem, for `pilot status --part widgets`.
     static func feed(_ model: WidgetTileModel, user: String, told: (String?) -> Void) async {
+        // A tile with nothing yet draws the kept read at once, however old, while gh reads a new one.
+        if model.contributions == nil {
+            let file = cacheFile(user)
+            if let kept = await Task.detached(priority: .utility, operation: { WidgetGitHub.kept(file) }).value, !Task.isCancelled {
+                (model.contributions, model.blocks, model.message) = (Shown(calendar: kept), [], nil)
+            }
+        }
         while !Task.isCancelled {
             let shown = await read(user)
             if Task.isCancelled { return }

@@ -33,6 +33,9 @@ final class WidgetDesk: ScreenPausing {
     private var models: [String: WidgetTileModel] = [:]
     /// Each placement's page, while it has one, and the end waiting on one hidden (60 s, Q676).
     private var pages: [String: WidgetWebView] = [:]
+    /// The data each placement's page was sent last, kept while it hides: a page made again (its old one ended after 60 s
+    /// hidden) loads with it, so it draws at once on its next show and its feed refreshes it after.
+    private var lastData: [String: JSONValue] = [:]
     /// A ready desk widget's height fitted to its content, by placement, as its page last measured it.
     private var fittedHeights: [String: Double] = [:]
     /// Each placement showing an extension's page (Q697): the Extensions page's own model, which asks it and runs its buttons.
@@ -228,6 +231,7 @@ final class WidgetDesk: ScreenPausing {
         panels.removeValue(forKey: id)?.close()
         models[id] = nil
         lastAnswers[id] = nil
+        lastData[id] = nil
         fittedHeights[id] = nil
         extensionPages[id] = nil
         noteOpens[id] = nil
@@ -259,7 +263,8 @@ final class WidgetDesk: ScreenPausing {
     /// writes trust): each of its placements starts over, its page ended and its feed started again by the next refresh.
     /// A locked widget's feed waits idle for this.
     func widgetChanged(_ widget: String) {
-        for placement in placements where placement.widget == widget { restart(placement.id) }
+        // Its files or trust changed, so its last data may not fit its page now.
+        for placement in placements where placement.widget == widget { restart(placement.id); lastData[placement.id] = nil }
         resync()
     }
 
@@ -274,6 +279,8 @@ final class WidgetDesk: ScreenPausing {
     func placementChanged(_ id: String) {
         placements = store.placements()
         restart(id)
+        // Its last data was for its old settings (another city): its page waits for its feed instead.
+        lastData[id] = nil
         resync()
     }
 
@@ -402,7 +409,7 @@ final class WidgetDesk: ScreenPausing {
         let ground = panels[id]?.contentView
         guard let placement = placements.first(where: { $0.id == id }), let ground,
               let page = WidgetWebView(widget: widget, store: store, size: ground.bounds.size,
-                                       layout: widget.layout(of: placement)) else { return nil }
+                                       layout: widget.layout(of: placement), last: lastData[id]) else { return nil }
         page.view.autoresizingMask = [.width, .height]
         page.view.wantsLayer = true
         page.view.layer?.cornerRadius = 18
@@ -419,6 +426,13 @@ final class WidgetDesk: ScreenPausing {
             page.fixed = Self.fixed(placement)
         }
         return page
+    }
+
+    /// Sends a placement's page its data, kept as its last for a page made again.
+    private func deliver(_ data: JSONValue, to page: WidgetWebView, placement id: String, widget: String) {
+        page.send(data)
+        lastData[id] = data
+        WidgetPreviews.shared.remember(widget, page)
     }
 
     /// What a widget shows before its data: the Trust to run card when it would run (a page or a command) but is locked,
@@ -478,7 +492,7 @@ final class WidgetDesk: ScreenPausing {
                         return
                     }
                     let data = await WidgetReadings.data(readings)
-                    if let page { page.send(data); WidgetPreviews.shared.remember(widget.id, page) } else { model.blocks = WidgetReadings.blocks(readings, data); model.message = nil }
+                    if let page { self?.deliver(data, to: page, placement: id, widget: widget.id) } else { model.blocks = WidgetReadings.blocks(readings, data); model.message = nil }
                     self?.lastAnswers[id] = (.now, "reading", nil)
                     try? await Task.sleep(for: .seconds(Widget.fewestSeconds))
                 }
@@ -506,7 +520,7 @@ final class WidgetDesk: ScreenPausing {
                     switch run.answer {
                     case _ where !run.trust.runs: model.blocks = []; model.locked = current; self?.endPage(id)
                     case .blocks(let blocks): model.blocks = blocks; model.message = nil
-                    case .data(let data): if let page { page.send(data); WidgetPreviews.shared.remember(widget.id, page) } else { model.message = "It sent data, which only a page draws" }
+                    case .data(let data): if let page { self?.deliver(data, to: page, placement: id, widget: widget.id) } else { model.message = "It sent data, which only a page draws" }
                     // The tile shows what the program said; status keeps Pilot's reason only.
                     case .error(let reason, let said): model.message = [reason, said].compactMap { $0 }.joined(separator: ": "); why = reason
                     }
@@ -531,7 +545,7 @@ final class WidgetDesk: ScreenPausing {
             case .setting(let name):
                 // One of its own settings as text (the note), read when it shows; Edit widget restarts it (placementChanged).
                 let text = values[name]?.string ?? ""
-                if let page { page.send(.object([name: .string(text)])); WidgetPreviews.shared.remember(placement.widget, page) } else { model.blocks = [.markdown(text.isEmpty ? "–" : text)] }
+                if let page { self?.deliver(.object([name: .string(text)]), to: page, placement: id, widget: placement.widget) } else { model.blocks = [.markdown(text.isEmpty ? "–" : text)] }
                 self?.idle.insert(id)
             case .notes(let name):
                 // Pilot's notes as its note setting picks them, read again only when a note or the pins change.

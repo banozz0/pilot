@@ -45,8 +45,9 @@ final class WidgetWebView {
     var fixed: CGSize? { didSet { if fixed != oldValue { resized() } } }
 
     /// Nil for anything but an HTML widget whose trust runs, read now from its record. `size` is the tile's it will fill,
-    /// which gives its first class.
-    init?(widget: Widget, store: WidgetStore, size tile: CGSize? = nil, layout: Widget.SizeClass? = nil) {
+    /// which gives its first class. `last` is the data a page before it was sent last: the kit reads it at load
+    /// (`/__pilot/data`), so the page draws it from its first paint, before its feed answers.
+    init?(widget: Widget, store: WidgetStore, size tile: CGSize? = nil, layout: Widget.SizeClass? = nil, last: JSONValue? = nil) {
         guard widget.draw == .html, store.trust(of: widget).runs else { return nil }
         handler = WidgetSchemeHandler(widget: widget, store: store)
         guardian = WidgetNavigationGuard(id: widget.id)
@@ -67,6 +68,7 @@ final class WidgetWebView {
         if shares { Self.desk.add(view) }
         Self.made += 1
         seeThrough = Self.clearBackground(view)
+        if let last { handler.latest = themed(last) }
         view.navigationDelegate = guardian
         view.uiDelegate = guardian
         page.resized = { [weak self] in self?.resized() }
@@ -126,11 +128,7 @@ final class WidgetWebView {
     /// colours, PilotKit.theme; the desk renders hand their own): kept for `/__pilot/data`, and sent as a `pilotdata` event
     /// whose detail is the data, passed as an argument, never written into script text.
     func send(_ data: JSONValue) {
-        var data = data
-        if case .object(var fields) = data, fields["theme"] == nil {
-            fields["theme"] = Self.theme(Look.shared.theme, stepped: bare)
-            data = .object(fields)
-        }
+        let data = themed(data)
         handler.latest = data
         guard let object = try? JSONSerialization.jsonObject(with: JSONEncoder().encode(data), options: [.fragmentsAllowed]) else { return }
         view.callAsyncJavaScript("window.dispatchEvent(new CustomEvent('pilotdata', {detail: data}))", arguments: ["data": object],
@@ -139,6 +137,13 @@ final class WidgetWebView {
         view.callAsyncJavaScript("return window.PilotKit && PilotKit.height ? PilotKit.height() : 0", arguments: [:], in: nil, in: .page) { [weak self] result in
             if case .success(let height as NSNumber) = result, height.doubleValue > 0 { self?.fitted?(height.doubleValue) }
         }
+    }
+
+    /// `data` with Pilot's theme now as its `theme`, when it is an object without one.
+    private func themed(_ data: JSONValue) -> JSONValue {
+        guard case .object(var fields) = data, fields["theme"] == nil else { return data }
+        fields["theme"] = Self.theme(Look.shared.theme, stepped: bare)
+        return .object(fields)
     }
 
     /// PilotTheme's fields as the look kit takes them (`--pk-<field>`), each colour `#rrggbb`; `stepped`, Light's faintest
