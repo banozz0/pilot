@@ -8,8 +8,8 @@ import SwiftUI
 /// a click or Space then a click takes a window, Tab copies the pixel's colour, Return
 /// takes the whole display, and Escape closes. It also closes the moment another app takes the keys (Cmd+Tab) or a
 /// display comes, goes or changes, so it can never hold them or cover the wrong screen. Nothing is posted to another app: arrows move the pointer over the overlay itself.
-/// Opened by a capture bind with Captures › Capture box on, it is the capture box (pilot-ui-redesign T23, S5 B): its
-/// letters switch the mode on every display through the panels' own keys, no event tap (Q257).
+/// Opened by Capture tool, it is the capture box (pilot-ui-redesign T23, S5 B; Sven, 2026-11-20): its letters switch the
+/// mode on every display through the panels' own keys, no event tap (Q257).
 @MainActor
 final class CaptureOverlay {
     enum Result {
@@ -517,8 +517,8 @@ final class CaptureOverlayView: NSView {
             let ring = NSBezierPath(rect: hole.insetBy(dx: -0.5, dy: -0.5))
             ring.lineWidth = ringed ? 3 : 1
             ring.stroke()
-            if box != nil {
-                readout(area: selection.mode == .area ? area : nil)
+            if let box {
+                readout(area: selection.mode == .area ? area : nil, clear: barFrame(box))
             } else if selection.mode == .area, let area {
                 label(size(area), below: area)
             }
@@ -534,9 +534,9 @@ final class CaptureOverlayView: NSView {
     /// `rect`'s size in the display's pixels.
     private func size(_ rect: CGRect) -> String { "\(Int(rect.width * grab.scale)) × \(Int(rect.height * grab.scale))" }
 
-    /// The box's readout (shots 5c-*): an area's size under its right edge, the hovered window's app and size over its
-    /// top right, Full's display and size at the top of the screen.
-    private func readout(area: CGRect?) {
+    /// The box's readout (shots 5c-*): an area's size by its right edge, on the side the bar (`clear`) leaves free, the
+    /// hovered window's app and size over its top right, Full's display and size at the top of the screen.
+    private func readout(area: CGRect?, clear bar: CGRect?) {
         if full {
             let name = NSScreen.screens.first { $0.displayID == grab.id }?.localizedName
             chrome.chip(name: name, figures: "\(grab.image.width) × \(grab.image.height)") { CGPoint(x: (bounds.midX - $0.width / 2).rounded(), y: 22) }
@@ -550,18 +550,31 @@ final class CaptureOverlayView: NSView {
         } else if let area {
             chrome.chip(name: nil, figures: size(area)) { chip in
                 let x = min(max(area.maxX - chip.width, bounds.minX + 4), bounds.maxX - chip.width - 4)
-                let below = area.maxY + 10
-                return CGPoint(x: x, y: below + chip.height <= bounds.maxY - 4 ? below : area.minY - chip.height - 10)
+                let places = [area.maxY + 10, area.minY - chip.height - 10].filter { $0 >= bounds.minY + 4 && $0 + chip.height <= bounds.maxY - 4 }
+                let free = places.first { y in bar.map { !$0.intersects(CGRect(x: x, y: y, width: chip.width, height: chip.height)) } ?? true }
+                // Neither side free of the bar: inside the area's top right.
+                return CGPoint(x: x, y: free ?? area.minY + 8)
             }
         }
     }
 
-    /// The box's bar at the foot of the display, drawn once per mode.
-    private func drawBar(_ box: CaptureBox) {
+    /// The bar's picture for `box`, made once per mode.
+    private func barImage(_ box: CaptureBox) -> NSImage? {
         if bar?.box != box { bar = chrome.bar(box).map { (box, $0) } }
-        guard let image = bar?.image else { return hint(box.action) }
-        let frame = CGRect(x: (bounds.midX - image.size.width / 2).rounded(), y: bounds.maxY - image.size.height - 26,
-                           width: image.size.width, height: image.size.height)
+        return bar?.image
+    }
+
+    /// Where the bar goes (Sven, 2026-11-20): under the held or dragged area, so it follows a drag and a resize; at the
+    /// display's foot for Full, Window and before an area is dragged (`CaptureBox.barFrame`).
+    private func barFrame(_ box: CaptureBox) -> CGRect? {
+        guard let image = barImage(box) else { return nil }
+        let area = selection.mode == .area && !full ? held ?? selection.area : nil
+        return CaptureBox.barFrame(image.size, under: area, within: bounds)
+    }
+
+    /// The box's bar, under the picked area.
+    private func drawBar(_ box: CaptureBox) {
+        guard let image = barImage(box), let frame = barFrame(box) else { return hint(box.action) }
         image.draw(in: frame, from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
     }
 

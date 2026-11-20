@@ -83,6 +83,8 @@ struct CaptureOverlayRenders {
 
     /// The box's six modes as shots 5c-* draw them: Area, Record and Text with a held area and its handles, Scroll
     /// held over the window that scrolls, Window with the window under the pointer ringed, Full on the whole display.
+    /// The bar sits under a held area (Area, mid-screen), above one at the display's foot (Area at the bottom) and at the
+    /// foot for Full and Window (Sven, 2026-11-20).
     static func boxes(_ grab: DisplayGrab) -> [(String, CaptureOverlayView)] {
         let area = CGRect(x: 380, y: 170, width: 460, height: 340)
         func view(_ box: CaptureBox, pointer: CGPoint, held: CGRect?) -> CaptureOverlayView {
@@ -94,6 +96,7 @@ struct CaptureOverlayRenders {
         }
         return [
             ("area", view(CaptureBox(how: .area), pointer: CGPoint(x: 560, y: 230), held: area)),
+            ("area-bottom", view(CaptureBox(how: .area), pointer: CGPoint(x: 560, y: 600), held: CGRect(x: 300, y: 560, width: 520, height: 170))),
             ("window", view(CaptureBox(how: .window), pointer: CGPoint(x: 900, y: 420), held: nil)),
             ("full", view(CaptureBox(how: .full), pointer: CGPoint(x: 600, y: 380), held: nil)),
             ("scroll", view(CaptureBox(how: .scroll), pointer: CGPoint(x: 700, y: 320), held: CGRect(x: 620, y: 288, width: 460, height: 332))),
