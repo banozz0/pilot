@@ -173,6 +173,14 @@ final class ExtensionListSession: MenuSource {
         show(rows)
     }
 
+    /// A Raycast command's host still runs, so its view can be kept as the panel closes (T30).
+    var keepsRunning: Bool { session.map { $0.stopped == nil } ?? false }
+
+    /// The host's newest answer drawn again: a kept view shown once more, its draws while hidden having gone nowhere.
+    func redraw() {
+        if session?.newest != nil { drawQueued() }
+    }
+
     /// The run in flight has answered or been cancelled.
     func settled() async { await task?.value }
 

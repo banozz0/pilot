@@ -77,6 +77,9 @@ public final class ExtensionSession: Sendable {
     /// A Raycast-format command's newest answer; nil before its first.
     public var newest: View? { state.withLock { $0.newest } }
 
+    /// Why the program no longer answers, nil while it runs (or before it started).
+    public var stopped: String? { state.withLock { $0.stopped } }
+
     /// Tells `watcher` of each answer (off the main actor).
     public func watch(_ watcher: @escaping @Sendable () -> Void) { state.withLock { $0.watcher = watcher } }
 
