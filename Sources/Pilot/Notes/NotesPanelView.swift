@@ -4,19 +4,29 @@ import SwiftUI
 /// The notes panel, direction B, "note first" (P60, Sven Q307, 2026-10-18; design-refs/notes-directions-2026-10-18.html
 /// section 03): the panel is the note. A 34 pt head (the list's key, where the note is listed, its words and time, ⌘K
 /// and +) over the note at a 560 pt measure, no foot. Escape slides the list over the note's left edge as a drawer, its
-/// search focused (180 ms, no slide under Reduce Motion); a format bar rises over a selection; ⌘K holds the rest. The
+/// search focused (180 ms, no slide under Reduce Motion); a format bar rises over a selection; the head's + opens Insert
+/// (Checklist, Picture…, Sketch; UI redesign T26); ⌘K holds the rest. The
 /// shared shape, drawn in the picked style by its pieces (InstrumentNotes, ToyNotes); the Notes page docks the same list
 /// beside the same head and note (NotesPage).
 struct NotesPanelView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Bindable var model: NotesModel
+    /// The Insert menu under the head's +: open, and the row under the pointer. A render opens it from the start.
+    @State private var inserting: Bool
+    @State private var insertHovered: NotesInsert?
 
     static let drawerWidth: CGFloat = 300
+
+    init(model: NotesModel, inserting: Bool = false, insertHovered: NotesInsert? = nil) {
+        self.model = model
+        _inserting = State(initialValue: inserting)
+        _insertHovered = State(initialValue: insertHovered)
+    }
 
     var body: some View {
         let drawer = model.listing
         VStack(spacing: 0) {
-            NotesHead(model: model, listKey: true)
+            NotesHead(model: model, listKey: true, inserting: $inserting)
             NotesNote(model: model, measure: NotesMeasure.panel, beside: drawer ? Self.drawerWidth : 0)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .overlay(alignment: .leading) {
@@ -33,6 +43,29 @@ struct NotesPanelView: View {
         }
         // Cmd+K's actions over the note's corner, as the menu's float over its list's.
         .overlay(alignment: .bottomTrailing) { NotesActionsView(model: model).padding(12) }
+        // Insert hangs under the +, over the note; a click anywhere else closes it.
+        .overlay(alignment: .topTrailing) {
+            if inserting {
+                ZStack(alignment: .topTrailing) {
+                    Color.clear.contentShape(.rect).onTapGesture { inserting = false }.accessibilityHidden(true)
+                    NotesInsertMenu(hovered: $insertHovered) { item in
+                        inserting = false
+                        item.perform(model.editor)
+                    }
+                    .padding(.top, 38).padding(.trailing, 8)
+                }
+            }
+        }
+        // Sketch's key while the note is being written in (Open question 9); the checklist's ⌘⇧L is the editor's own.
+        .background {
+            Button("Sketch") { NotesInsert.sketch.perform(model.editor) }
+                .keyboardShortcut("d", modifiers: [.command, .shift])
+                .disabled(model.listFocused || model.confirmingTrash || model.actions != nil || model.previewNote != nil)
+                .opacity(0).frame(width: 0, height: 0).accessibilityHidden(true)
+        }
+        .onChange(of: model.listFocused) { if model.listFocused { inserting = false } }
+        .onChange(of: model.actions == nil) { if model.actions != nil { inserting = false } }
+        .onChange(of: inserting) { if !inserting { insertHovered = nil } }
     }
 }
 
@@ -48,12 +81,14 @@ enum NotesMeasure {
 }
 
 /// The head over the note (34 pt): the list's key (the panel's; the page docks it), the note's section and title, its
-/// words and when it was edited ("preview" while the list shows another), ⌘K and +. Its own view, so a keystroke
-/// redraws only it and the note.
+/// words and when it was edited ("preview" while the list shows another), ⌘K and +: Insert's menu where the view gives
+/// it one (the panel), a new note otherwise (the Notes page). Its own view, so a keystroke redraws only it and the note.
 struct NotesHead: View {
     @Environment(\.style) private var style
     let model: NotesModel
     var listKey = false
+    /// The Insert menu's open state, drawn by the view over the note.
+    var inserting: Binding<Bool>?
 
     var body: some View {
         let preview = model.previewNote
@@ -75,7 +110,13 @@ struct NotesHead: View {
                                 label: model.pinnedOnScreen ? "Unpin from screen" : "Pin on screen") { NotesPanel.shared.togglePinned() }
             }
             NotesHeadButton(key: "⌘K", label: "Actions") { model.perform(.actions) }
-            NotesHeadButton(symbol: "plus", label: "New note") { model.new() }
+            if let inserting {
+                NotesHeadButton(symbol: "plus", label: "Insert") { inserting.wrappedValue.toggle() }
+                    .instrumentRaised(inserting.wrappedValue, radius: 6)
+                    .accessibilityAddTraits(inserting.wrappedValue ? .isSelected : [])
+            } else {
+                NotesHeadButton(symbol: "plus", label: "New note") { model.new() }
+            }
         }
         .padding(.horizontal, 8).frame(height: 34)
         .overlay(alignment: .bottom) { NotesRule() }
@@ -179,7 +220,7 @@ struct NotesEditor: View {
                         let size = NotesFormatBar.size
                         let x = min(max(selection.minX - 8, 4), max(g.size.width - size.width - 4, 4))
                         let above = selection.minY - size.height - 6
-                        NotesFormatBar(handle: own)
+                        NotesFormatBar(handle: own, text: text)
                             .offset(x: x, y: above >= 2 ? above : selection.maxY + 6)
                     }
                 }
@@ -403,25 +444,6 @@ struct NotesHeadButton: View {
         .onHover { hovered = $0 }
         .help(key.map { "\(label)  \($0)" } ?? label).accessibilityLabel(label)
     }
-}
-
-/// The format bar over a selection: heading, bold, italic, link, code, then the two lists, each typing its Markdown.
-struct NotesFormatBar: View {
-    @Environment(\.style) var style
-    let handle: NotesEditorHandle
-    @State var hovered: MarkdownFormat?
-
-    /// Its size, to keep it inside the note.
-    static let size = CGSize(width: 216, height: 32)
-
-    var body: some View {
-        switch style.kind {
-        case .instrument: instrument
-        case .toybox: toybox
-        }
-    }
-
-    func help(_ format: MarkdownFormat) -> String { format.key.map { "\(format.title)  \($0)" } ?? format.title }
 }
 
 /// Cmd+Backspace's question: the note's title, what goes and that Finder can put it back, and its two keys.

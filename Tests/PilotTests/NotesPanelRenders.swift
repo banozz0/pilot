@@ -105,6 +105,68 @@ struct NotesPanelRenders {
         }
     }
 
+    /// The note round 2 drew notes in (shots 6c-*): a ticked checklist under Pack, a heading with nothing under it yet.
+    static let trip = """
+        # Trip plan
+        Leave **Friday 07:30**, train to the airport.
+
+        ## Pack
+        - [x] Passport
+        - [ ] Charger and the _small_ adapter
+        - [ ] Rain jacket
+
+        ## Route
+
+        """
+
+    /// UI redesign T26 (shots 6c-insert and round 1's 6a): the format bar over a selection, the head's Insert menu with
+    /// Sketch under the pointer, and the note's ticked checklist, in Instrument on Tokyo Night and Porcelain, written as
+    /// `T26-<theme>-<state>.png`.
+    @Test("The notes panel renders the format bar and the Insert menu", .enabled(if: env["PILOT_RENDER_DIR"] != nil && env["CFFIXED_USER_HOME"] != nil))
+    func renderInsert() throws {
+        let home = try #require(Self.env["CFFIXED_USER_HOME"])
+        try #require(NSHomeDirectory() == home, "the home directory did not move; refusing to touch Sven's data")
+        let dir = URL(fileURLWithPath: try #require(Self.env["PILOT_RENDER_DIR"])).appendingPathComponent("notes-panel")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        testApp()
+        DisplayFaces.directory = LookThemeTests.fonts
+        DisplayFaces.register()
+        let look = Look.shared
+        let saved = (look.style, look.themeID, look.glass)
+        look.glass = false
+        defer { (look.style, look.themeID, look.glass) = saved }
+
+        let folder = FileManager.default.temporaryDirectory.appending(path: "pilot-render-notes-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let store = NoteStore(folder: folder)
+        _ = try store.load()
+        try Data(Self.trip.utf8).write(to: folder.appending(path: "trip-plan-100010.md"))
+        let trip = try #require(try store.load().first { $0.title == "Trip plan" })
+
+        look.style = .instrument
+        for theme in ["tokyo-night", "porcelain"] {
+            look.themeID = theme
+            for state in ["select", "insert", "checklist"] {
+                let model = NotesModel(store: store, defaults: UserDefaults(suiteName: testSuite())!)
+                model.reload()
+                model.open(trip.id)
+                let view = NotesPanelView(model: model, inserting: state == "insert", insertHovered: state == "insert" ? .sketch : nil)
+                let panel = HUD.makePanel(view.frame(width: NotesPanel.defaultSize.width, height: NotesPanel.defaultSize.height), surface: .notes)
+                defer { panel.close() }
+                let content = try #require(panel.contentView)
+                RunLoop.main.run(until: Date().addingTimeInterval(0.6))
+                if state == "select", let editor = NotesMarkdownRenders.editors(in: content).first(where: \.isEditable) {
+                    panel.makeFirstResponder(editor)
+                    editor.setSelectedRange((editor.string as NSString).range(of: "train to the airport"))
+                    RunLoop.main.run(until: Date().addingTimeInterval(0.3))
+                }
+                content.layoutSubtreeIfNeeded()
+                let rep = try #require(snapshot(content, scale: 2))
+                try #require(rep.representation(using: .png, properties: [:])).write(to: dir.appendingPathComponent("T26-\(theme)-\(state).png"))
+            }
+        }
+    }
+
     /// Nine notes over Scratch, Pinned, Today, Yesterday and two older days (Earlier), each file dated as it was last edited.
     static func seed(_ folder: URL) throws -> NoteStore {
         let store = NoteStore(folder: folder)
