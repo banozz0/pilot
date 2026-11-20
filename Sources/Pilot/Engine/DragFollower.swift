@@ -32,8 +32,8 @@ final class DragFollower {
         self.reader = reader; self.ticker = ticker; self.held = held; self.now = now
     }
 
-    /// An AX move or resize while window `id` is focused: true when the left button is held and the drag is followed
-    /// here, so the move needs no read of its own.
+    /// A move or resize while window `id` is focused (AX's, or AppKit's for Pilot's own window): true when the left
+    /// button is held and the drag is followed here, so the move needs no read of its own.
     func moved(_ id: CGWindowID?) -> Bool {
         guard let id, held() else { return false }
         if window != id {
@@ -106,14 +106,16 @@ final class DragFollower {
         }
     }
 
-    /// The display link of the screen under the mouse, on the main run loop in every mode.
-    static func displayTicker(_ tick: @escaping @MainActor () -> Void) -> (@MainActor () -> Void) { displayTicker(rate: 120, tick) }
+    /// The display link of the screen under the mouse, on the main run loop in every mode, at that screen's every frame:
+    /// at 120 a 240 Hz screen's border trailed a drag by 2 frames (2026-11-20).
+    static func displayTicker(_ tick: @escaping @MainActor () -> Void) -> (@MainActor () -> Void) { displayTicker(rate: nil, tick) }
 
-    /// At most `rate` frames a second: the ring aims well at 60 (P74).
-    static func displayTicker(rate: Float, _ tick: @escaping @MainActor () -> Void) -> (@MainActor () -> Void) {
+    /// At most `rate` frames a second (nil: the screen's most): the ring aims well at 60 (P74).
+    static func displayTicker(rate: Float?, _ tick: @escaping @MainActor () -> Void) -> (@MainActor () -> Void) {
         let target = LinkTarget(tick)
         let mouse = NSEvent.mouseLocation
         guard let screen = NSScreen.screens.first(where: { NSMouseInRect(mouse, $0.frame, false) }) ?? NSScreen.main else { return {} }
+        let rate = rate ?? Float(screen.maximumFramesPerSecond)
         let link = screen.displayLink(target: target, selector: #selector(LinkTarget.step))
         link.preferredFrameRateRange = CAFrameRateRange(minimum: min(60, rate), maximum: rate, preferred: rate)
         link.add(to: .main, forMode: .common)
