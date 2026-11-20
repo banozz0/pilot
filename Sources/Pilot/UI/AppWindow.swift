@@ -213,7 +213,7 @@ final class AppWindowModel {
 
 /// Pilot's app window (story 40, card agent-bo-95422748): one real Mac window, its eleven pages, opened from the
 /// dropdown, Cmd+, the Hyper+Space menu, a pilot://open link or a second launch. Pilot has a Dock icon and a Cmd+Tab
-/// entry only while it is open (DockIcon); Cmd+W or Esc closes it and Pilot keeps running; Cmd+Q quits Pilot.
+/// entry only while it is open (DockIcon); Cmd+W closes it (Esc never does) and Pilot keeps running; Cmd+Q quits Pilot.
 /// A normal titled window the tiler tiles, resizable, minimisable and full screen from the green button (Sven 2026-11-20,
 /// reversing UI redesign T2's fixed panel): the first open is 3/4 of a 16-inch MacBook Pro's screen, centred; after that
 /// it keeps the frame the user or the tiler gave it (makeAppWindow).
@@ -417,12 +417,12 @@ final class AppWindowController: NSObject {
     }
 
     /// The app window: makeWindow's resizable, minimisable frame, so the tiler tiles it like any app's window, with the
-    /// green button's full screen (its own Space), and Esc closes it as Cmd+W does outside full screen. A titled window,
-    /// never an NSPanel, so the Dock rule and the close's release count it.
+    /// green button's full screen (its own Space). Esc never closes it, tiled, floating or full screen (Sven 2026-11-21):
+    /// it stays the views' (a popover, a sheet, Cmd+K, the search's clear, a page's Back); Cmd+W closes it. A titled
+    /// window, never an NSPanel, so the Dock rule and the close's release count it.
     static func makeAppWindow(content: NSView) -> PilotWindow {
         let w = makeWindow(content: content)
         w.collectionBehavior.insert(.fullScreenPrimary)
-        w.closesOnEscape = true
         return w
     }
 
@@ -488,18 +488,6 @@ final class AppWindowController: NSObject {
 /// Cmd+W closes the window and Cmd+Q quits Pilot, whatever the main menu holds (Sven, 2026-10-04).
 final class PilotWindow: NSWindow {
     var onQuit: () -> Void = {}
-    /// The app window's Esc (T2): set by makeAppWindow only, so Files and Gallery keep theirs.
-    var closesOnEscape = false
-
-    /// Esc that no view took: a focused field's own Esc (the search's clear, an editor's Cancel) runs first and never
-    /// reaches here. A text field still focused only ends its editing; the window closes when nothing is being typed
-    /// in and no sheet is up (coordinator's answer on T2, 2026-11-19), except in full screen, where Esc does nothing:
-    /// closing there would throw the user out of the window's Space (2026-11-20).
-    override func cancelOperation(_ sender: Any?) {
-        guard closesOnEscape, attachedSheet == nil else { return super.cancelOperation(sender) }
-        if firstResponder is NSText { makeFirstResponder(nil) } else if !styleMask.contains(.fullScreen) { performClose(nil) }
-    }
-
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
         let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask).subtracting([.capsLock, .numericPad, .function])
         if event.type == .keyDown, flags == .command {
