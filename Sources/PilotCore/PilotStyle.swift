@@ -371,12 +371,12 @@ public struct StyleTokens: Equatable, Sendable {
             groups: moduleSoft, onGroup: text, onGroup2: text2,
             // Each page's candy in AppPage's order, every page its own: the mockup's NAV colours where its page kept them
             // (C3 moved the pages: Home sun, Binds grape, Workspaces mint, Menu bar sky), then round the wheel; Snippets
-            // salmon and Files sage came with the Tools group, Stats' blush after Activity (2026-10-10), Captures' rose after
-            // Clipboard, Voice's periwinkle after AI (2026-10-16); Agent instructions' seafoam left with its page (2026-10-17); Update & Clean's
-            // lime after Activity (2026-10-20); Widgets' slate last (2026-10-31); Repos' jade and Fonts' rose after Configs (2026-11-01);
-            // Pilot menu's deep sky after Menu bar's (2026-11-12); Dock's cornflower between them (2026-11-13);
-            // Login & Background's peach after Update & Clean's lime (2026-11-17).
-            pageTiles: [0xFFC933, 0xA98BFF, 0xFF79C0, 0x3FD7A0, 0x6FE3C1, 0x5BC0FF, 0x69B7FF, 0x4FA3E0, 0xD98CFF, 0xA5DC50, 0xF0567A, 0xC8F05A, 0xFFA8A8, 0xFFB3E6, 0x3CD2DB, 0xFF6F91,
+            // salmon and Files sage came with the Tools group, Captures' rose after Clipboard, Voice's periwinkle after AI
+            // (2026-10-16); Agent instructions' seafoam left with its page (2026-10-17); Update & Clean's lime after System
+            // (2026-10-20); Widgets' slate last (2026-10-31); Repos' jade and Fonts' rose after Configs (2026-11-01);
+            // Pilot menu's deep sky after Menu bar's (2026-11-12); Dock's cornflower between them (2026-11-13); Activity's
+            // red, Login & Background's peach and Stats' blush left with their pages (feature trim, 2026-11-19).
+            pageTiles: [0xFFC933, 0xA98BFF, 0xFF79C0, 0x3FD7A0, 0x6FE3C1, 0x5BC0FF, 0x69B7FF, 0x4FA3E0, 0xD98CFF, 0xA5DC50, 0xC8F05A, 0x3CD2DB, 0xFF6F91,
                         0xFF8A65, 0xFFB347, 0xB0E0A0, 0x8EE3F0, 0x9FB4FF, 0xFF9F4A, 0x7B8CFF, 0xE0C46B, 0x7FD8A8, 0xF28CB1, 0xC9C4E4, 0xE3A86B, 0x96A9C8]
                 .map { Paint($0) },
             // binds.html's .board: the Windows grape, a deep indigo in the dark.
