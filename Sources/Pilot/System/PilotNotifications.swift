@@ -58,7 +58,14 @@ final class NotificationSettings {
         hideMacBanners = defaults.bool(forKey: Self.hideKey)
         showIn = defaults.string(forKey: Self.showInKey).flatMap(ShowIn.init) ?? .floating
         layer = defaults.string(forKey: Self.layerKey).flatMap(Layer.init) ?? .above
+        // A Dock saved before Q284 never put the bar's bell item on, so with Pilot's dock off it would show in the top bar
+        // with no bell: once, it goes on as picking Dock now does; switched off after, it stays off.
+        if showIn == .dock, !defaults.bool(forKey: Self.dockBellKey) {
+            defaults.set(true, forKey: Self.dockBellKey)
+            BarItemsStore.shared.settings.set(.notifications, on: true)
+        }
     }
+    static let dockBellKey = "notifications.dockBellOn"
 
     /// Where they show now: the dock only while Pilot's is on; Dock while it is off, as Top bar (Sven, 2026-11-20, Q284:
     /// "Hide Dock, use Top bar"); the top bar only while Pilot's is on, else floating. The one rule the panels, the bar's
