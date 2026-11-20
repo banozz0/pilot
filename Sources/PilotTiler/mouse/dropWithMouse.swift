@@ -32,7 +32,10 @@ enum DropPlan {
 func dropPlan(_ window: Window, at point: CGPoint) throws -> DropPlan? {
     let target = point.monitorApproximation.activeWorkspace
     let root = try target.rootTilingContainer
-    if var kept = arrangements[target.name], kept.auto {
+    // On its own workspace it swaps with the window under the point, below, an auto one too (its open order follows the
+    // swap); only a stage keeps its groups (ADR 0015). dropOrder's slots for the others are a layout without it, not the
+    // one on screen: a release on the near half of the tile beside it left it where it was (Sven, 2026-11-20).
+    if var kept = arrangements[target.name], kept.auto, target != window.nodeWorkspace || kept.preset == .stage {
         // Its windows in open order, the order dropOrder's slots and the landing's tiles go by.
         let tiled = try kept.openOrder(on: target)
         kept.order = kept.order(dropping: window.windowId, at: point, among: tiled, in: target.workspaceMonitor.visibleRectPaddedByOuterGaps,
