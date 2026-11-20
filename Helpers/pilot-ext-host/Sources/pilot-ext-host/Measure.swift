@@ -5,23 +5,32 @@ import Foundation
 // --prelude …` runs a command as ever, but nothing it asks for acts on the Mac. Each line it writes, each message it reads,
 // each child, file write and fetch it asks for, and its exit (time to its first line, peak footprint) is one JSON line
 // appended to <log>. Off unless the flag is given; Pilot never gives it (only a stand-in host in a sandbox's
-// PILOT_EXT_HOST folder does), so a Mac's real runs never see it. Under it (T7 review 1):
-// - A child runs only in an exact read-only shape (admit): its program found by realpath in /bin, /usr/bin, /usr/sbin or
-//   /sbin (or the real brew) and started by that path, never a copy elsewhere; its arguments held to that program's read
-//   form; `sh` only with one plain `-c` line of such a command; a kill only of pids the caller named. It gets a fixed
-//   environment, never the extension's, so no BASH_ENV, ENV or ZDOTDIR reaches a shell. Anything else (AppleScript
-//   included) is recorded and refused: the child ends at once with exit 1.
-// - A file write goes only to the run's data and cache folders (and ExtensionData/<id> around the data one, for
-//   gaps.json) and a temporary folder made for this run alone, which
-//   TMPDIR names to the extension and its children and which goes at the exit; anything else fails with EPERM.
-// - A fetch is recorded by its method and host; one that is not a GET or HEAD fails.
+// PILOT_EXT_HOST folder does), so a Mac's real runs never see it. Under it (T7 reviews 1 and 2):
+// - No child ever starts through a shell (the coordinator's call after review 2). A child is its program and its argv:
+//   the program a bare name found on the fixed PATH or an absolute path (never one relative to any folder), resolved by
+//   realpath, and only in /bin, /usr/bin, /usr/sbin or /sbin, or the real brew; it starts as that absolute path with
+//   that argv and a fixed environment, never the extension's. A `/bin/sh -c <line>` (Node's exec) is not handed to sh:
+//   the line is split by a strict tokenizer (any $, backtick, backslash, shell operator, glob or bracket character, a
+//   quote inside a word or a line break refuses it) and its words start as that program and argv, judged the same.
+// - Its arguments must be that program's read form: any arguments for the plain readers, read forms for defaults,
+//   sysctl, date and hostname, a kill of only the pids the caller named, and for brew only the exact argv shapes Brew's
+//   views issue. Anything else (AppleScript included) is recorded and refused: the child ends at once with exit 1.
+// - A file write goes only into the run's data and cache folders and a temporary folder made for this run alone (which
+//   TMPDIR names and which goes at the exit), or to ExtensionData/<id>/gaps.json itself and its folder (the gap
+//   recorder's); a path is judged by its parent's realpath and its last name, and a last name that is a link is
+//   refused. Anything else fails with EPERM.
+// - A fetch is recorded by its method and host. A GET or HEAD still goes out to the network (only reads are allowed,
+//   not none); any other method fails.
 // - An `open`, copy or paste the run asks for is Pilot's to perform, never the host's; its action line is recorded as that call.
-// - node:sqlite opens a database immutable (SQLite.swift), so reading a WAL database makes no -shm file beside it.
+// - node:sqlite opens a database immutable (SQLite.swift), so reading a WAL database makes no -shm file beside it, and
+//   so reads only what the main file holds: a WAL database's newest rows (Chrome's History) may be missing.
 @MainActor enum Measure {
     private static var log: Int32 = -1
     private static var killable: Set<Int32> = []
     private static var mode = "run", firstLine: Double?
     private static var folders: [String] = []
+    /// Single paths a write may name (the gap recorder's file and its folder), beside the folders.
+    private static var exact: Set<String> = []
     /// This run's own temporary folder, made at the start and removed at the exit.
     private static var scratch: String?
     /// Refused children still taking stdin (an osascript's script), by child id.
@@ -79,9 +88,11 @@ import Foundation
         // Only the run message carries the paths; the text is checked before any line is parsed.
         if line.contains("\"run\""), let data = line.data(using: .utf8), let message = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
            message["type"] as? String == "run", let paths = message["paths"] as? [String: String] {
-            // The data folder's own folder too, ExtensionData/<id>, where the gap recorder keeps gaps.json (gaps.js).
-            let given = paths.values.filter { !$0.isEmpty } + [paths["data"].map { ($0 as NSString).deletingLastPathComponent }].compactMap { $0 }
-            folders += given.compactMap(realpath).map { $0.hasSuffix("/") ? $0 : $0 + "/" }
+            folders += paths.values.filter { !$0.isEmpty }.compactMap(realpath).map { $0.hasSuffix("/") ? $0 : $0 + "/" }
+            // The gap recorder's file beside the data folder (gaps.js: ExtensionData/<id>/gaps.json) and its folder, exactly.
+            if let data = paths["data"], !data.isEmpty, let around = realpath((data as NSString).deletingLastPathComponent) {
+                exact.formUnion([around, around + "/gaps.json"])
+            }
         }
     }
 
@@ -114,9 +125,13 @@ import Foundation
     /// Nil when a write to `path` may go ahead; else it is recorded, and this is the failure the prelude reads.
     static func refusesWrite(_ what: String, _ path: String) -> [String: Any]? {
         guard on else { return nil }
-        let full = realpath(path) ?? URL(filePath: path).standardizedFileURL.path
-        guard !folders.contains(where: { full.hasPrefix($0) || full + "/" == $0 }) else { return nil }
-        record(["kind": "write", "what": what, "path": full, "ran": false])
+        // The parent's realpath and the last name as written: a link already at that name could point anywhere, so it is refused.
+        let url = URL(filePath: path).standardizedFileURL
+        var info = stat()
+        let link = lstat(url.path, &info) == 0 && (info.st_mode & S_IFMT) == S_IFLNK
+        let full = realpath(url.deletingLastPathComponent().path).map { ($0 as NSString).appendingPathComponent(url.lastPathComponent) } ?? url.path
+        if !link, exact.contains(full) || folders.contains(where: { full.hasPrefix($0) || full + "/" == $0 }) { return nil }
+        record(["kind": "write", "what": what, "path": full, "ran": false, "why": link ? "its last name is a link" : "outside the run's folders"])
         return ["error": "EPERM", "message": "EPERM: pilot-ext-host --measure writes nothing outside the run's folders, '\(path)'"]
     }
 
@@ -142,23 +157,27 @@ import Foundation
     /// Programs that only read, whatever their arguments.
     static let readOnly: Set<String> = ["ps", "pgrep", "lsof", "sw_vers", "uname", "id", "whoami", "which", "mdfind", "mdls", "du", "df",
                                         "ls", "cat", "head", "tail", "stat", "wc", "vm_stat", "ioreg", "system_profiler", "getconf", "true"]
-    /// brew's subcommands that change nothing.
-    static let brewReads: Set<String> = ["list", "ls", "info", "outdated", "search", "desc", "deps", "uses", "leaves", "config",
-                                         "--prefix", "--cellar", "--repository", "--caskroom", "--cache", "--version", "--env", "commands", "tap-info"]
+    /// The exact argv shapes Brew's views issue (T7 review 2), each word a literal or `<name>` (a formula or cask name).
+    static let brewShapes: [[String]] = [
+        ["--prefix"], ["--cache"], ["--version"], ["--repository"], ["--cellar"], ["--caskroom"],
+        ["info", "--json=v2", "--installed"], ["outdated", "--json=v2"], ["outdated", "--json=v2", "--greedy"],
+        ["list", "--versions"], ["leaves"], ["config"], ["tap"], ["tap-info", "--json=v1", "--installed"], ["services", "list", "--json"],
+    ]   // Seen and refused (T7.log): update (writes), doctor --json and vulns --json (run checks and fetch beyond a read).
 
-    /// What a child asks for, under --measure: run it (by its real path, with the fixed environment), or refuse it.
-    enum Admission { case run(String, [String: Any]), refused(kind: String, why: String) }
+    /// What a child asks for, under --measure: run its program by its absolute path with this argv and the fixed
+    /// environment, or refuse it.
+    enum Admission { case run(String, [String], [String: Any]), refused(kind: String, why: String) }
 
     /// The child as it may run, or why not; recorded either way unless it runs unmeasured.
     static func admit(_ file: String, _ args: [String], _ options: [String: Any], sync: Bool) -> Admission {
-        guard on else { return .run(file, options) }
+        guard on else { return .run(file, args, options) }
         let kind = (file as NSString).lastPathComponent == "osascript" ? "applescript" : "exec"
-        switch judge(file, args, shell: true) {
-        case .success(let program):
+        switch judged(file, args) {
+        case .success(let (program, argv)):
             var options = options
             options["env"] = childEnvironment
-            record(["kind": kind, "file": file, "program": program, "args": args, "ran": true].merging(sync ? ["sync": true] : [:]) { $1 })
-            return .run(program, options)
+            record(["kind": kind, "file": file, "program": program, "args": args, "argv": argv, "ran": true].merging(sync ? ["sync": true] : [:]) { $1 })
+            return .run(program, argv, options)
         case .failure(let why):
             return .refused(kind: kind, why: why.text)
         }
@@ -166,58 +185,67 @@ import Foundation
 
     struct Why: Error { let text: String; init(_ text: String) { self.text = text } }
 
-    /// The real program `file` names and whether `args` is its read form: the program's path, or why it is refused.
-    static func judge(_ file: String, _ args: [String], shell: Bool) -> Result<String, Why> {
-        let found = file.contains("/") ? file : searchPath.split(separator: ":").map { "\($0)/\(file)" }
+    /// The program and argv a child starts as: Node's `/bin/sh -c <line>` becomes the line's own words, never a shell.
+    static func judged(_ file: String, _ args: [String]) -> Result<(String, [String]), Why> {
+        guard case .success(let program) = located(file) else { return located(file).map { ($0, args) } }
+        if (program as NSString).lastPathComponent == "sh" {
+            guard args.count == 2, args[0] == "-c" else { return .failure(Why("a shell, which never starts under --measure")) }
+            guard let words = tokens(args[1]), let first = words.first else { return .failure(Why("a shell line with more than plain words")) }
+            return judge(first, Array(words.dropFirst()))
+        }
+        return judge(file, args)
+    }
+
+    /// `file` as an absolute program: a bare name on the fixed PATH, or an absolute path; never relative to a folder.
+    static func located(_ file: String) -> Result<String, Why> {
+        guard !file.contains("/") || file.hasPrefix("/") else { return .failure(Why("\(file) is relative to a folder")) }
+        let found = file.hasPrefix("/") ? file : searchPath.split(separator: ":").map { "\($0)/\(file)" }
             .first { FileManager.default.isExecutableFile(atPath: $0) } ?? file
         guard let program = realpath(found), FileManager.default.isExecutableFile(atPath: program) else { return .failure(Why("\(file) is not a program here")) }
         guard program == brew || systemFolders.contains(where: program.hasPrefix) else {
             return .failure(Why("\(program) is outside the system's own folders"))
         }
+        return .success(program)
+    }
+
+    /// The program `file` names and its argv when `args` is its read form, else why it is refused.
+    static func judge(_ file: String, _ args: [String]) -> Result<(String, [String]), Why> {
+        let program: String
+        switch located(file) {
+        case .success(let path): program = path
+        case .failure(let why): return .failure(why)
+        }
         let name = (program as NSString).lastPathComponent
         let why: String?
         switch name {
-        case "sh" where shell:
-            guard args.count == 2, args[0] == "-c", let words = simple(args[1]), let first = words.first else { return .failure(Why("a shell not given one plain -c line")) }
-            // The shell finds the line's program on the same fixed PATH, so it starts the program judged here.
-            let inner = judge(first, Array(words.dropFirst()), shell: false)
-            if case .failure = inner { return inner }
-            why = nil
         case "kill":
             // At most one leading signal flag (-9, -KILL), then only pids the harness named: `kill <pid> -1` is refused.
             let pids = args.first.map { $0.wholeMatch(of: /-([0-9]+|[A-Z]+)/) != nil } == true ? Array(args.dropFirst()) : args
             why = !pids.isEmpty && pids.allSatisfy({ Int32($0).map(killable.contains) == true }) ? nil : "a kill of a process the harness did not start"
-        case "brew":
-            let sub = args.first.flatMap { brewReads.contains($0) ? $0 : nil } ?? args.first { !$0.hasPrefix("-") } ?? ""
-            why = sub == "tap" ? (args.count == 1 ? nil : "brew tap with a name adds one") : brewReads.contains(sub) ? nil : "brew \(sub) may change something"
+        case "brew": why = brewShapes.contains(args) ? nil : "brew in a shape Brew's views do not read with"
         case "defaults": why = ["read", "read-type", "domains"].contains(args.first ?? "") ? nil : "defaults that is not a read"
         case "sysctl": why = args.allSatisfy({ ["-n", "-a", "-b", "-h"].contains($0) || $0.wholeMatch(of: /[a-z][a-z0-9_.]*/) != nil }) ? nil : "sysctl that may set a value"
         case "date": why = args.allSatisfy({ ["-u", "-j"].contains($0) || $0.hasPrefix("+") }) ? nil : "date that may set the clock"
         case "hostname": why = args.allSatisfy({ ["-s", "-f"].contains($0) }) ? nil : "hostname that may set the name"
         case "osascript": why = "AppleScript, which acts on the Mac"
+        case "sh", "bash", "zsh", "dash", "ksh", "csh", "tcsh": why = "a shell, which never starts under --measure"
         default: why = readOnly.contains(name) ? nil : "\(name) is not on the read-only list"
         }
-        return why.map { .failure(Why($0)) } ?? .success(program)
+        return why.map { .failure(Why($0)) } ?? .success((program, args))
     }
 
-    /// A shell line's words when it is one plain command (quotes allowed; no ; & | < > $ ` or line break), else nil.
-    static func simple(_ line: String) -> [String]? {
-        var words: [String] = [], word = "", quote: Character?, any = false
-        for c in line {
-            if let q = quote {
-                if c == q { quote = nil } else { word.append(c) }
-                continue
-            }
-            switch c {
-            case "'", "\"": quote = c; any = true
-            case " ", "\t": if any || !word.isEmpty { words.append(word); word = ""; any = false }
-            case ";", "&", "|", "<", ">", "$", "`", "\n", "(", ")", "\\", "*", "?": return nil
-            default: word.append(c)
-            }
+    /// The words of a shell line made only of plain words: letters, digits and `_ . , = + : / @ % -`, a word optionally
+    /// wrapped whole in one pair of ' or ". Anything else anywhere in the line (a $, backtick, backslash, operator,
+    /// glob, bracket, a quote inside a word, a tab or line break) refuses the whole line: nil.
+    static func tokens(_ line: String) -> [String]? {
+        var words: [String] = []
+        for part in line.split(separator: " ", omittingEmptySubsequences: true) {
+            var word = String(part)
+            if word.count >= 2, let q = word.first, q == word.last, q == "'" || q == "\"" { word = String(word.dropFirst().dropLast()) }
+            guard !word.isEmpty, word.wholeMatch(of: /[A-Za-z0-9_.,=+:\/@%-]+/) != nil else { return nil }
+            words.append(word)
         }
-        guard quote == nil else { return nil }
-        if any || !word.isEmpty { words.append(word) }
-        return words
+        return words.isEmpty ? nil : words
     }
 
     /// A refused child's stand-in: it takes its stdin and ends with exit 1 on the next turn, its pid answered as 0.

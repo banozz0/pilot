@@ -114,7 +114,7 @@ extension Host {
         } as @convention(block) (Int, String, [String], [String: Any]) -> Any)
         add("spawnSync", { (file: String, args: [String], options: [String: Any], input: String) -> Any in
             switch Measure.admit(file, args, options, sync: true) {
-            case .run(let program, let options): return Host.spawnSync(program, args, options, input: input)
+            case .run(let program, let argv, let options): return Host.spawnSync(program, argv, options, input: input)
             case .refused(let kind, let why): return Measure.refusedSync(file, args, input: input, kind: kind, why: why)
             }
         } as @convention(block) (String, [String], [String: Any], String) -> Any)
@@ -246,14 +246,14 @@ extension Host {
     /// descriptor is closed in it, so it never holds Pilot's pipe. Answers its pid, or the failure.
     func spawn(_ id: Int, _ file: String, _ args: [String], _ options: [String: Any]) -> Any {
         // --measure: the child by its real path with a fixed environment, or a refused stand-in (Measure.admit).
-        let program: String, given: [String: Any]
+        let program: String, argv: [String], given: [String: Any]
         switch Measure.admit(file, args, options, sync: false) {
-        case .run(let path, let made): (program, given) = (path, made)
+        case .run(let path, let words, let made): (program, argv, given) = (path, words, made)
         case .refused(let kind, let why): return Measure.standIn(id, file, args, kind: kind, why: why, host: self)
         }
         let detached = given["detached"] as? Bool == true, ignore = given["stdio"] as? String == "ignore"
         let started: Started
-        do { started = try Host.start(program, args, given, pipes: !ignore, detached: detached) } catch { return Host.failure(errno: error.code, file) }
+        do { started = try Host.start(program, argv, given, pipes: !ignore, detached: detached) } catch { return Host.failure(errno: error.code, file) }
         var child = Child(pid: started.pid, stdin: started.stdin, counted: true, detached: detached)
         for (fd, stream) in [(started.stdout, "stdout"), (started.stderr, "stderr")] {
             guard let fd else { continue }

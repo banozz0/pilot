@@ -33,12 +33,25 @@ attempt("copy of /bin/ls run from a writable folder", () => {
 });
 attempt("zsh -c ls", () => run("/bin/zsh", ["-c", "ls /"]));
 attempt("bash -c ls", () => run("/bin/bash", ["-c", "ls /"]));
-attempt("sh -c ls with ENV and BASH_ENV set by the extension", () => {
+attempt("sh -c ls with ENV and BASH_ENV set by the extension (runs as ls, no shell)", () => {
   const rc = path.join(os.tmpdir(), "rc.sh");
   fs.writeFileSync(rc, `touch ${os.tmpdir()}/sourced\n`);
   run("/bin/sh", ["-c", "ls -d /"], { env: { ENV: rc, BASH_ENV: rc, PATH: os.tmpdir() } });
   return fs.existsSync(path.join(os.tmpdir(), "sourced")) ? "rc file sourced" : "rc file not sourced";
 });
+// Review 2's blockers, one row each: a substitution inside double quotes (1), a shell line naming a copied program by a
+// relative and by an absolute path (2), a brew shape its views never issue (3); (4) is the osascript row's stdin, logged
+// as its length only.
+attempt("review 2 (1): sh -c with $(...) inside double quotes", () => run("/bin/sh", ["-c", 'ls "$(/usr/bin/true)"']));
+attempt("review 2 (2): sh -c naming a copied program by a relative path", () => {
+  const bin = path.join(os.tmpdir(), "deep", "bin");
+  fs.mkdirSync(bin, { recursive: true });
+  fs.copyFileSync("/bin/ls", path.join(bin, "ls"));
+  const up = "../".repeat(40);
+  return run("/bin/sh", ["-c", `${up}${bin.slice(1)}/ls -d /`], { cwd: bin });
+});
+attempt("review 2 (2): sh -c naming a copied program by its absolute path", () => run("/bin/sh", ["-c", `${path.join(os.tmpdir(), "deep", "bin", "ls")} -d /`]));
+attempt("review 2 (3): brew info --quiet, a shape Brew's views never issue", () => run("/opt/homebrew/bin/brew", ["info", "--quiet", "t7-probe-none"]));
 attempt("kill <harness pid> -<harness pid> (a group after a pid)", () => run("/bin/kill", ["-0", victim, `-${victim}`]));
 attempt("kill -0 <harness pid>", () => run("/bin/kill", ["-0", victim]));
 attempt("sqlite3 -readonly with a dot command", () => run("/usr/bin/sqlite3", ["-readonly", ":memory:", ".shell id"]));
@@ -48,7 +61,7 @@ attempt("sysctl -w", () => run("/usr/sbin/sysctl", ["-w", "kern.maxfiles=1"]));
 attempt("date <time>", () => run("/bin/date", ["0101000026"]));
 attempt("hostname <name>", () => run("/bin/hostname", ["t7-probe"]));
 attempt("brew pin", () => run("/opt/homebrew/bin/brew", ["pin", "t7-probe-none"]));
-attempt("osascript", () => run("/usr/bin/osascript", ["-e", "return 1"]));
+attempt("review 2 (4): osascript with a script on stdin (logged as its length)", () => run("/usr/bin/osascript", [], { input: 'tell application "Finder" to return 1' }));
 attempt("sysctl -n hw.ncpu (a read)", () => run("/usr/sbin/sysctl", ["-n", "hw.ncpu"]));
 attempt("date +%Y (a read)", () => run("/bin/date", ["+%Y"]));
 
