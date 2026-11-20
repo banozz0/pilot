@@ -162,7 +162,9 @@ final class RaycastStoreCommands: MenuSource {
 
     func search(_ query: String) {
         show(ext.listed.map { command in
-            var row = MenuEntry(title: command.title, target: .action(command.actionID), subtitle: ext.title, icon: .command(emoji: command.icon))
+            var icon = MenuIcon.command(emoji: command.icon)
+            icon.file = command.picture ?? ext.picture
+            var row = MenuEntry(title: command.title, target: .action(command.actionID), subtitle: ext.title, icon: icon)
             row.ownActions = ["Run"]
             return row
         })

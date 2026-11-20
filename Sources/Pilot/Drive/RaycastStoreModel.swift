@@ -143,8 +143,8 @@ final class RaycastStoreModel {
 
     func title(_ folder: String) -> String { infos[folder]?.title ?? folder }
 
-    /// The folder's icon file once fetched.
-    func iconFile(_ folder: String) -> String? { icons[folder] }
+    /// The folder's icon file once fetched, else an installed one's own (T29): never the plug for what is on this Mac.
+    func iconFile(_ folder: String) -> String? { icons[folder] ?? installedExtension(folder)?.picture }
 
     /// The folder's package.json: kept at its tree hash, else read now; one read per folder at a time. Nil when the
     /// folder is not listed or the read failed (why in `infoFailures`).

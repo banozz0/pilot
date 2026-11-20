@@ -713,11 +713,13 @@ struct EmojiTile: View {
         glyph.instrumentTile(size)
     }
 
-    private var picture: NSImage? {
-        guard let file else { return nil }
-        if let kept = Self.pictures.object(forKey: file as NSString) { return kept }
+    private var picture: NSImage? { file.flatMap(Self.image) }
+
+    /// A picture file read once, for any view that draws an extension's icon (the sidebar's rows too, T29).
+    @MainActor static func image(_ file: String) -> NSImage? {
+        if let kept = pictures.object(forKey: file as NSString) { return kept }
         guard let image = NSImage(contentsOfFile: file) else { return nil }
-        Self.pictures.setObject(image, forKey: file as NSString)
+        pictures.setObject(image, forKey: file as NSString)
         return image
     }
 
