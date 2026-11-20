@@ -85,8 +85,9 @@ struct LookPage: View {
     /// the prototype had Theme first); under them the cursor and the wallpaper's folders (pages round 4).
     private var column: some View {
         @Bindable var look = look
+        // Cursor and the wallpaper's folders under the fold held the switch ~50 ms (page-perf): built as they scroll in.
         return ScrollView {
-            VStack(alignment: .leading, spacing: 0) {
+            PageStack(asked: section != nil || focus != nil) {
                 // The preview takes the row's height, level with Glass and Wallpaper beside it (InstrumentPair's trick).
                 HStack(alignment: .top, spacing: 14) {
                     LookPreview(look: look).padding(.top, ink.style.density.padding)

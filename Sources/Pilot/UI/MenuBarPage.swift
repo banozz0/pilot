@@ -80,25 +80,28 @@ struct MenuBarPage: View {
                     barColour(store)
                 }
             }
-            // Rows of two cards, each row's blocks one height; the readings are a group like any other (Sven, 2026-10-16).
-            let columns = 2, groups = BarGroup.allCases
-            Grid(horizontalSpacing: 12, verticalSpacing: 12) {
-                ForEach(Array(stride(from: 0, to: groups.count, by: columns)), id: \.self) { start in
-                    GridRow(alignment: .top) {
-                        ForEach(groups[start..<min(start + columns, groups.count)], id: \.self) { group in groupTile(group, store: store) }
+            // The blocks under the fold, built as they scroll in (page-perf: the group grid held the switch ~90 ms).
+            PageStack(spacing: ink.style.density.gap * 2) {
+                // Rows of two cards, each row's blocks one height; the readings are a group like any other (Sven, 2026-10-16).
+                let columns = 2, groups = BarGroup.allCases
+                Grid(horizontalSpacing: 12, verticalSpacing: 12) {
+                    ForEach(Array(stride(from: 0, to: groups.count, by: columns)), id: \.self) { start in
+                        GridRow(alignment: .top) {
+                            ForEach(groups[start..<min(start + columns, groups.count)], id: \.self) { group in groupTile(group, store: store) }
+                        }
                     }
                 }
-            }
-            // The clock and the bell's notifications, both Time and focus items, side by side.
-            Grid(horizontalSpacing: 12, verticalSpacing: 12) {
-                GridRow(alignment: .top) {
-                    clock(store)
-                    notifications.id(AppSection.notifications)
+                // The clock and the bell's notifications, both Time and focus items, side by side.
+                Grid(horizontalSpacing: 12, verticalSpacing: 12) {
+                    GridRow(alignment: .top) {
+                        clock(store)
+                        notifications.id(AppSection.notifications)
+                    }
                 }
+                // The pill's block once it ships (PillFeature, Sven on build 2425).
+                if PillFeature.released { PillEditor(extensionBar: extensionBar) }
+                screenChoices(topBar)
             }
-            // The pill's block once it ships (PillFeature, Sven on build 2425).
-            if PillFeature.released { PillEditor(extensionBar: extensionBar) }
-            screenChoices(topBar)
         } }
         .disabled(store.loadError != nil)
         .onAppear { hold(previewed(store)) }

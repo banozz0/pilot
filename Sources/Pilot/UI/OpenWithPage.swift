@@ -17,7 +17,7 @@ struct OpenWithPage: View {
     private let editor: EditorChoice
 
     /// A render or a test may fold All kinds out and pass its own defaults and editor.
-    init(allKinds: Bool = false, kinds: DefaultAppsModel = DefaultAppsModel(), editor: EditorChoice = .shared) {
+    init(allKinds: Bool = false, kinds: DefaultAppsModel = .shared, editor: EditorChoice = .shared) {
         _allKinds = State(initialValue: allKinds)
         _kinds = State(initialValue: kinds)
         self.editor = editor
@@ -63,7 +63,9 @@ struct OpenWithPage: View {
             AppRolesBlock().id(AppSection.appsForKeys)
         }
         .onAppear {
-            kinds.load()
+            // Every kind's apps from LaunchServices hold the main thread ~40 ms: read before the first draw, then on a
+            // visit after it, just after the page shows, so the switch does not wait on them (page-perf).
+            if kinds.rows.isEmpty { kinds.load() } else { Task { kinds.load() } }
             choices = EditorChoice.choices()
         }
     }

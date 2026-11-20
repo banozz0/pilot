@@ -25,7 +25,10 @@ struct InstrumentBindsPage: View {
     var below: AnyView? = nil
     /// The module the board lights; nil for all six.
     @State var module: Int?
-    @State private var width: CGFloat = 0
+    /// The page's width, from the last one measured: a visit opens at the window's width, so the board is laid out once
+    /// rather than at 0 first and again at the width (page-perf: three layouts of every key a switch).
+    @State private var width: CGFloat = Self.lastWidth
+    private static var lastWidth: CGFloat = 0
     @State private var clashes: [SymbolicHotKeys.Clash] = []
 
     /// The width from which the inspector may stand beside the board, and its own.
@@ -72,7 +75,7 @@ struct InstrumentBindsPage: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .background(Theme.windowFill(style.color(\.canvas)))
-        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
+        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0; Self.lastWidth = $0 }
         // ShortcutConflicts' clashes, read once per change of the binds, as the window's Conflicts count is.
         .task(id: engine.binds.store.binds) { clashes = ShortcutConflicts.shared.clashes(binds: engine.binds.store.binds) }
     }

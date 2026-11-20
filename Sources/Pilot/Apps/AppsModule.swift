@@ -327,8 +327,20 @@ enum AppsModule {
     /// Installed apps a person launches plus every running one, so apps outside the application folders (Finder) can
     /// take a rule too: Add app's choices in Workspaces and Focus sessions. Hidden apps are left out, running or not, unless
     /// `hidden` (Hidden apps' own picker).
-    static func pickableApps(hidden: Bool = false) -> [(name: String, bundle: String)] {
-        let installed = scan().filter { isPickable($0.url, info: $0.info) }.map { (name: $0.name, bundle: $0.bundle) }
+    static func pickableApps(hidden: Bool = false) -> [(name: String, bundle: String)] { pickable(pickableInstalled(), hidden: hidden) }
+
+    /// pickableApps with the disk read off the main actor: the scan opens every app's Info.plist and walks the home
+    /// folder, which held Tiling's and Workspaces' switch (page-perf).
+    static func pickableAppsOffMain(hidden: Bool = false) async -> [(name: String, bundle: String)] {
+        pickable(await Task.detached(priority: .userInitiated) { pickableInstalled() }.value, hidden: hidden)
+    }
+
+    nonisolated private static func pickableInstalled() -> [(name: String, bundle: String)] {
+        scan().filter { isPickable($0.url, info: $0.info) }.map { (name: $0.name, bundle: $0.bundle) }
+    }
+
+    /// The installed apps with the running ones they lack, by name, the hidden left out unless `hidden`.
+    private static func pickable(_ installed: [(name: String, bundle: String)], hidden: Bool) -> [(name: String, bundle: String)] {
         let known = Set(installed.map(\.bundle))
         let running = NSWorkspace.shared.runningApplications.filter { $0.activationPolicy == .regular }.compactMap { app in
             app.bundleIdentifier.flatMap { known.contains($0) ? nil : (name: app.localizedName ?? $0, bundle: $0) }
@@ -339,7 +351,7 @@ enum AppsModule {
 
     /// An app a person launches: not dot-named (.Karabiner-VirtualHIDDevice-Manager), not an agent or background-only
     /// helper (LSUIElement, LSBackgroundOnly), not an app inside another app's bundle.
-    static func isPickable(_ url: URL, info: [String: Any]?) -> Bool {
+    nonisolated static func isPickable(_ url: URL, info: [String: Any]?) -> Bool {
         func on(_ key: String) -> Bool { (info?[key] as? Bool) == true || (info?[key] as? String) == "1" }
         return !url.lastPathComponent.hasPrefix(".") && !url.deletingLastPathComponent().pathComponents.contains { $0.hasSuffix(".app") }
             && !on("LSUIElement") && !on("LSBackgroundOnly")
