@@ -174,12 +174,15 @@ extension [Widget.Placement] {
     /// main screen only by the fallback (`onFallback`) given a display where one is plain: those sharing one lost UUID were
     /// on one display, so when exactly one connected display has room for every one of them unpulled (`fits`), they move
     /// to it, its UUID and identity recorded. None or several such displays: they stay on the fallback, nothing recorded,
-    /// since a display only guessed at and recorded would hold them there for good. Whether any changed.
+    /// since a display only guessed at and recorded would hold them there for good. A fit counts only where it ruled a
+    /// display out, so with fewer than two displays of known size nothing is matched: Test connection's off step, or a
+    /// start with one display awake, would otherwise pin them to the one left. Whether any changed.
     /// Sven's seven widgets (2026-11-20): saved on the ultrawide's UUID from before 2026-11-16, never given an identity,
     /// they followed the main display to the 24G1WG4 when Test connection left that one main.
     @discardableResult public mutating func fillIdentities(from live: [LiveDisplay]) -> Bool {
         var changed = false
         for i in indices where self[i].fillIdentity(from: live) { changed = true }
+        guard live.count(where: { $0.size != nil }) >= 2 else { return changed }
         let lost = Dictionary(grouping: indices.filter { !self[$0].onHome && self[$0].onFallback(in: live) }) { self[$0].screen ?? "" }
         for members in lost.values {
             let room = live.filter { display in display.size.map { size in members.allSatisfy { self[$0].fits(on: size) } } ?? false }
