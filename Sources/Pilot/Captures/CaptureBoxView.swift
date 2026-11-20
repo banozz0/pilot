@@ -2,7 +2,7 @@ import AppKit
 import PilotCore
 import SwiftUI
 
-// The capture box's views (pilot-ui-redesign T24, S5 B, shots 5c-*): the bar at the foot of the display with the box's
+// The capture box's views (pilot-ui-redesign T24, S5 B, shots 5c-*): the bar under the picked area with the box's
 // mode, timer and action, each choice carrying its fixed letter (Q257); the held area's handles and its size; and the key
 // sheet, the user's capture binds beside the box's own letters. Instrument only, ring and fill, no shadow (DESIGN.md).
 
@@ -111,7 +111,7 @@ struct CaptureKeySheet: View {
     var body: some View {
         let shape = RoundedRectangle(cornerRadius: style.radii.pop, style: .continuous)
         HStack(alignment: .top, spacing: 0) {
-            column("Each capture bind opens the box in its mode") {
+            column("Each capture bind captures in its mode at once") {
                 ForEach(Array(binds.enumerated()), id: \.element.id) { index, bind in
                     row(first: index == 0) {
                         Group {
@@ -133,7 +133,7 @@ struct CaptureKeySheet: View {
                         if let second = pair.1 { letter(second.key, second.does) }
                     }
                 }
-                Text("Turn off Captures › Capture box and the binds capture at once.")
+                Text("Capture tool opens the box; pick a mode, then press Return.")
                     .styleText(\.caption).foregroundStyle(style.color(\.text3))
                     .padding(.top, 10)
             }

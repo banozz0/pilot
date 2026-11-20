@@ -14,18 +14,12 @@ final class CaptureSettingsStore {
     static let shared = CaptureSettingsStore()
 
     var settings: CaptureSettings { didSet { save() } }
-    /// Captures › Capture box (pilot-ui-redesign T23, Open 7): each capture bind opens the box in its own mode; off, the
-    /// binds capture at once. On until turned off, for new and existing installs alike. Its own key, outside `settings`,
-    /// so a stored `settings` from before still decodes.
-    var box: Bool { didSet { defaults.set(box, forKey: Self.boxKey) } }
     @ObservationIgnored private let defaults: UserDefaults
     private static let key = "capture.settings"
-    private static let boxKey = "capture.box"
 
     init(defaults: UserDefaults = .pilot()) {
         self.defaults = defaults
         settings = defaults.data(forKey: Self.key).flatMap { try? JSONDecoder().decode(CaptureSettings.self, from: $0) } ?? .default
-        box = defaults.object(forKey: Self.boxKey) as? Bool ?? true
     }
 
     func folder(_ kind: CaptureKind) -> URL { settings.folder(kind) }
@@ -103,8 +97,8 @@ final class PilotCapture {
 
     /// A capture key pressed. A second press while the overlay shows closes it, so a key never leaves it up; the record
     /// key while a recording runs or counts down stops it. `taken` runs once a full screen's still is grabbed (the
-    /// keyboard lock's Screenshot, whose screen hides the thumbnail). `box` is the mode a capture bind opens the capture
-    /// box in (pilot-ui-redesign T23); with Captures › Capture box off, or none given, the press captures at once.
+    /// keyboard lock's Screenshot, whose screen hides the thumbnail). `box` is the mode Capture tool opens the capture box
+    /// in (pilot-ui-redesign T23); none given, the press captures at once, as every specific capture bind does.
     func run(_ request: Request, box: CaptureBox? = nil, taken: (@MainActor () -> Void)? = nil) {
         if let overlay { return overlay.close() }
         if let timing {
@@ -114,7 +108,7 @@ final class PilotCapture {
         }
         if request == .record, recorder.isActive { return recorder.stop() }
         if request == .scroll || request == .scrollUp, let scrolling { return scrolling.end() }
-        var box = store.box ? box : nil
+        var box = box
         // A recording counts down as Recording › Count down first says, until the box's T changes it.
         if box?.what == .record { box?.timer = store.settings.countdown }
         // The box's Scroll goes down and its Text copies, whichever mode it ends in.

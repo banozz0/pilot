@@ -5,7 +5,8 @@ import PilotCore
 let clog = Logger(subsystem: "dev.banozz.pilot", category: "captures")
 
 /// Captures through Pilot's own capture (PilotCapture, spec `capture.html`); screen recording (Hyper+Shift+A) is Pilot's
-/// own recorder (story 192). The six capture binds open the capture box (`CaptureBox`) unless Captures › Capture box is off.
+/// own recorder (story 192). Each capture bind captures its own way at once; Capture tool opens the capture box (`CaptureBox`),
+/// where a mode is picked on its bar or by a letter and Return captures (Sven, 2026-11-20).
 @MainActor
 enum CapturesModule {
     static func register(into registry: inout ActionRegistry) {
@@ -17,6 +18,8 @@ enum CapturesModule {
         capture(&registry, "ocr", "Capture text", Key("x"), .ocr)
         capture(&registry, "activeWindow", "Capture a window", Key("s", .shift), .window)
         capture(&registry, "screenRecording", "Screen recording", Key("a", .shift), .record)
+        // The capture box (pilot-ui-redesign T23, changed by Sven 2026-11-20): Area to start, any mode from its bar; no key.
+        add(&registry, "tool", "Capture tool", nil) { DispatchQueue.main.async { PilotCapture.shared.run(.area, box: CaptureBox()) } }
         add(&registry, "editLast", "Edit the last capture", Key("e", .alt)) { DispatchQueue.main.async { editLast() } }
         add(&registry, "pinLast", "Pin the last capture", nil) { DispatchQueue.main.async { pinLast() } }
         // P71: pick a recording and open it in the video editor (the Captures menu's Edit video…).
@@ -44,11 +47,11 @@ enum CapturesModule {
         add(&registry, "menu", "Capture menu", Key("c", .ctrl)) { PilotMenu.shared.toggle(branch: .capture) }
     }
 
-    /// A PilotCapture request, run after the tap's callback: a capture reads the screen and writes files. The six binds
-    /// the capture box knows open it in their mode while Captures › Capture box is on (pilot-ui-redesign T23).
+    /// A PilotCapture request, run after the tap's callback: a capture reads the screen and writes files. A specific bind
+    /// already says its mode, so it captures as it did before the box: an area on the drag's release, a window on the
+    /// click, the full screen at once (Sven, 2026-11-20).
     private static func capture(_ registry: inout ActionRegistry, _ id: String, _ label: String, _ key: Key?, _ request: PilotCapture.Request) {
-        let box = CaptureBox.opening("captures.\(id)")
-        add(&registry, id, label, key) { DispatchQueue.main.async { PilotCapture.shared.run(request, box: box) } }
+        add(&registry, id, label, key) { DispatchQueue.main.async { PilotCapture.shared.run(request) } }
     }
 
     private static func add(_ registry: inout ActionRegistry, _ id: String, _ label: String, _ key: Key?,

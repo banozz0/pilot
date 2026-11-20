@@ -29,7 +29,6 @@ struct CapturesPage: View {
 
     /// What each row does, the ⓘ's words.
     enum Info {
-        static let box = "Every capture key opens it in its own mode. Off: keys capture at once."
         static let menu = "Where Capture's own item sits: the macOS menu bar, the top bar or both. A click lists every capture with its key; while recording it shows the time, with Stop and Pause."
         static let hideIcons = "Leaves the desktop icons out of captures and recordings. The desktop itself stays as it is."
         static let afterCapture = "What a capture or a recording does once saved: shows a thumbnail, opens its editor (a recording's is the video editor), or only copies it."
@@ -46,8 +45,9 @@ struct CapturesPage: View {
         static let recordingsFolder = "Where recordings are saved. Show opens it, Change picks another, Default goes back to ~/Movies/Pilot."
     }
 
-    /// The keys Capture's first block shows: Area, Window and Full screen; the rest are under More capture keys.
-    static let frontKeys = 3
+    /// The keys Capture's first block shows: Capture tool (the capture box), Area, Window and Full screen; the rest are
+    /// under More capture keys.
+    static let frontKeys = 4
 
     /// More's index (simplify-pages T7): a block's rows, a heading not counted. A row added or moved changes its count.
     static let entries = [
@@ -79,13 +79,11 @@ struct CapturesPage: View {
         window.sections[.captures] = .recording
     }
 
-    /// Capture's front: the Capture box switch (pilot-ui-redesign T23), After capture and the three daily keys, then the folder.
+    /// Capture's front: After capture, Capture tool and the three daily keys, then the folder.
     @ViewBuilder private var captureTab: some View {
         CapturePreview(after: store.settings.afterCapture, place: store.settings.thumbnailPlace)
         KitBlock(title: "Capture", symbol: "camera.viewfinder", note: Self.note) {
-            BlockRow(first: true) { Toggle("Capture box", isOn: $store.box).toggleStyle(.pilotSwitchRow(info: Info.box)) }
-                .landingRing("capture.box")
-            BlockRow {
+            BlockRow(first: true) {
                 label("After capture", Info.afterCapture)
                 Segments(selection: $store.settings.afterCapture, options: [(.thumbnail, "Thumbnail"), (.editor, "Open editor"), (.copy, "Copy only")],
                          label: "After capture")
@@ -197,7 +195,7 @@ struct CapturesPage: View {
     }
 
     static let keys: [(id: String, title: String)] = [
-        ("captures.area", "Area"), ("captures.activeWindow", "Window"), ("captures.fullscreen", "Full screen"),
+        ("captures.tool", "Capture tool"), ("captures.area", "Area"), ("captures.activeWindow", "Window"), ("captures.fullscreen", "Full screen"),
         ("captures.scrolling", "Scrolling"), ("captures.scrollingUp", "Scrolling, upward"),
         ("captures.ocr", "Read text and QR codes"),
         ("captures.subject", "A subject, background removed"), ("captures.pickColour", "Pick a colour"),

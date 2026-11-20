@@ -114,7 +114,7 @@ public enum PilotDefault {
     }()
 
     /// Easy, the new-install default (Q1): letters you can guess, the window keys a Mac with tiling off can use, the
-    /// three capture keys the capture box needs and the two plain combos Q251/Q252 kept. Every key sits on Complex's.
+    /// three capture keys (area, window, recording) and the two plain combos Q251/Q252 kept. Every key sits on Complex's.
     public static let easy: [String: Key] = [
         "ai.chat": Key("q"),
         "apps.browser": Key("b"),
