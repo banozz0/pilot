@@ -246,16 +246,21 @@ struct AppWindowFrameTests {
         #expect(AppWindowModel(defaults: defaults).page == .home)
     }
 
-    @Test("The window is a 780 × 560 panel that never resizes, dark, titled Pilot with the title hidden, closed by Esc (ui-redesign T2)")
+    @Test("The window is a normal one: 1296 × 838 at first, centred and shrunk to a smaller screen, resizable, full screen, dark, titled Pilot with the title hidden, closed by Esc (Sven 2026-11-20)")
     func frame() {
-        let w = AppWindowController.makePanel(content: NSView())
-        #expect(w.frame.size == AppWindowController.size && AppWindowController.size == NSSize(width: 780, height: 560))
-        #expect(w.minSize == AppWindowController.minSize)
-        #expect(!w.styleMask.contains(.resizable) && !w.styleMask.contains(.miniaturizable) && w.closesOnEscape)
+        let w = AppWindowController.makeAppWindow(content: NSView())
+        #expect(w.frame.size == AppWindowController.size && AppWindowController.size == NSSize(width: 1296, height: 838))
+        #expect(w.minSize == AppWindowController.minSize && AppWindowController.minSize == NSSize(width: 780, height: 560))
+        #expect(w.styleMask.contains(.resizable) && w.styleMask.contains(.miniaturizable) && w.closesOnEscape)
+        #expect(w.collectionBehavior.contains(.fullScreenPrimary))
         #expect(w.level == .normal && !AppWindowController.makeWindow(content: NSView()).closesOnEscape)
-        // A frame write at another size (a Hyper right-drag, a size bind) moves the panel, its top-left kept, never resizes it.
+        // A frame write at another size (a Hyper resize, the tiler, a size bind) resizes it.
         w.setFrame(NSRect(x: 100, y: 100, width: 1200, height: 900), display: false)
-        #expect(w.frame == NSRect(x: 100, y: 440, width: 780, height: 560), "\(w.frame)")
+        #expect(w.frame == NSRect(x: 100, y: 100, width: 1200, height: 900), "\(w.frame)")
+        // The first open: centred on a big screen, shrunk to a 13-inch one's visible frame, never under the minimum.
+        #expect(AppWindowController.firstFrame(in: NSRect(x: 0, y: 0, width: 3440, height: 1415)) == NSRect(x: 1072, y: 289, width: 1296, height: 838))
+        #expect(AppWindowController.firstFrame(in: NSRect(x: 0, y: 0, width: 1280, height: 775)) == NSRect(x: 0, y: 0, width: 1280, height: 775))
+        #expect(AppWindowController.firstFrame(in: NSRect(x: 0, y: 0, width: 640, height: 480)).size == AppWindowController.minSize)
         #expect(w.appearance?.name == .darkAqua)
         #expect(w.title == "Pilot" && w.titleVisibility == .hidden)
         #expect(w.styleMask.contains(.fullSizeContentView) && w.styleMask.contains(.closable))

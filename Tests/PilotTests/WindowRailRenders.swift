@@ -7,8 +7,8 @@ import Testing
 @testable import Pilot
 
 /// The panel's shell (pilot-ui-redesign T3, round 2's shots 7c-home, 7c-tools, 7c-more): Home, Tools › Captures, and More's
-/// card open over an area it holds, at the panel's 780 by 560 in Instrument, Tokyo Night and Porcelain. First it measures
-/// the tabs: `AppArea.tabCount` of `tabOrder` fit the bar with every name on one line, the More tab carrying its widest
+/// card open over an area it holds, at the window's first-open size in Instrument, Tokyo Night and Porcelain. First it measures
+/// the tabs at its narrowest (`minSize`): `AppArea.tabCount` of `tabOrder` fit the bar with every name on one line, the More tab carrying its widest
 /// name, and one more would not. The suite keeps the rail's name so the suite list stays stable. Seeded as Home's renders
 /// are, in a moved home.
 /// `CFFIXED_USER_HOME=<fresh dir> PILOT_RENDER_DIR=<fresh dir> swift test --filter WindowRailRenders`
@@ -19,7 +19,7 @@ struct WindowRailRenders {
     nonisolated static let env = ProcessInfo.processInfo.environment
     static let looks: [(name: String, theme: String)] = [("dark", "tokyo-night"), ("light", "porcelain")]
 
-    @Test("The panel's tab bar fits its tabs named, and Home, Tools › Captures and More render at 780 by 560", .enabled(if: env["PILOT_RENDER_DIR"] != nil && env["CFFIXED_USER_HOME"] != nil))
+    @Test("The panel's tab bar fits its tabs named, and Home, Tools › Captures and More render at the first-open size", .enabled(if: env["PILOT_RENDER_DIR"] != nil && env["CFFIXED_USER_HOME"] != nil))
     func render() throws {
         let engine = try InstrumentBindsRenders().engine()
         let dir = URL(fileURLWithPath: try #require(Self.env["PILOT_RENDER_DIR"])).appendingPathComponent("panel")
@@ -29,7 +29,7 @@ struct WindowRailRenders {
         look.style = .instrument
 
         // The count that fits: the strip's own width at each count, the More tab named for the widest area it can hold.
-        let room = PanelTabBar.room(AppWindowController.size.width)
+        let room = PanelTabBar.room(AppWindowController.minSize.width)
         for developer in [false, true] {
             func width(_ count: Int) -> CGFloat {
                 let split = AppArea.tabs(count: count, developer: developer)

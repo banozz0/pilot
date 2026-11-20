@@ -212,8 +212,9 @@ final class AppWindowModel {
 /// Pilot's app window (story 40, card agent-bo-95422748): one real Mac window, its eleven pages, opened from the
 /// dropdown, Cmd+, the Hyper+Space menu, a pilot://open link or a second launch. Pilot has a Dock icon and a Cmd+Tab
 /// entry only while it is open (DockIcon); Cmd+W or Esc closes it and Pilot keeps running; Cmd+Q quits Pilot.
-/// Since the UI redesign (spec pilot-ui-redesign T2, Sven 2026-11-19) it is a panel: 780 × 560, fixed, opened centred,
-/// left untiled at the normal window level (makePanel).
+/// A normal titled window the tiler tiles, resizable, minimisable and full screen from the green button (Sven 2026-11-20,
+/// reversing UI redesign T2's fixed panel): the first open is 3/4 of a 16-inch MacBook Pro's screen, centred; after that
+/// it keeps the frame the user or the tiler gave it (makeAppWindow).
 @MainActor
 final class AppWindowController: NSObject {
     static let shared = AppWindowController()
@@ -232,8 +233,16 @@ final class AppWindowController: NSObject {
     /// close theirs meanwhile, which closed and kept the icon under a test's window (full runs, 2026-10-11).
     var countsWindow: (NSWindow) -> Bool = { AppWindowController.counts($0) }
 
-    /// The panel's one size (Open question 2: fixed, no resize); `minSize` stays for the views and renders that read it.
-    static let size = NSSize(width: 780, height: 560), minSize = size
+    /// The first open's size, 3/4 of a 16-inch MacBook Pro's default 1728 × 1117 (Sven 2026-11-20), and the smallest the
+    /// window goes, which the shell's views and the renders read too.
+    static let size = NSSize(width: 1296, height: 838), minSize = NSSize(width: 780, height: 560)
+
+    /// The first open's frame on a screen whose visible frame is `visible`: `size`, shrunk to fit a smaller screen (never
+    /// under `minSize`), centred.
+    static func firstFrame(in visible: NSRect) -> NSRect {
+        let w = max(min(size.width, visible.width), minSize.width), h = max(min(size.height, visible.height), minSize.height)
+        return NSRect(x: (visible.midX - w / 2).rounded(), y: (visible.midY - h / 2).rounded(), width: w, height: h)
+    }
 
     /// Whether the screen is locked now; a seam for the tests.
     var screenLocked: () -> Bool = { ScreenEvents.isLocked() }
@@ -324,12 +333,17 @@ final class AppWindowController: NSObject {
     func present(_ content: @autoclosure () -> NSView) {
         applyDockIcon(.dock)
         if window == nil {
-            let w = Self.makePanel(content: content())
+            let w = Self.makeAppWindow(content: content())
             w.onQuit = { [weak self] in self?.quit() }
-            // Centred at every open after a close: the panel keeps no place, and the frame the old window autosaved
-            // (1000 × 660) is dropped, never read back.
-            if let autosaveName { NSWindow.removeFrame(usingName: autosaveName) }
-            w.center()
+            // The size and place it had at its last close, as Gallery keeps its own; the first open's default without one.
+            if let autosaveName {
+                if !w.setFrameUsingName(autosaveName), let visible = (NSScreen.main ?? NSScreen.screens.first)?.visibleFrame {
+                    w.setFrame(Self.firstFrame(in: visible), display: false)
+                }
+                w.setFrameAutosaveName(autosaveName)
+            } else {
+                w.center()
+            }
             window = w
             followLook()
             // On screen as occlusion and moves say (the tiler parks a window on a hidden workspace by moving it off
@@ -400,13 +414,13 @@ final class AppWindowController: NSObject {
         return w
     }
 
-    /// The app window as a panel (T2): makeWindow's frame at `size`, not resizable or minimisable, so the tiler leaves it
-    /// untiled as a dialog at the normal level (Hyper-drag still moves it), and Esc closes it as Cmd+W does. Still a
-    /// titled window, never an NSPanel, so the Dock rule and the close's release count it.
-    static func makePanel(content: NSView) -> PilotWindow {
-        let w = makeWindow(content: content, styleMask: [.titled, .closable, .fullSizeContentView])
+    /// The app window: makeWindow's resizable, minimisable frame, so the tiler tiles it like any app's window, with the
+    /// green button's full screen (its own Space), and Esc closes it as Cmd+W does outside full screen. A titled window,
+    /// never an NSPanel, so the Dock rule and the close's release count it.
+    static func makeAppWindow(content: NSView) -> PilotWindow {
+        let w = makeWindow(content: content)
+        w.collectionBehavior.insert(.fullScreenPrimary)
         w.closesOnEscape = true
-        w.fixedSize = w.frame.size
         return w
     }
 
@@ -428,9 +442,12 @@ final class AppWindowController: NSObject {
 
     /// The window closed: it goes with its SwiftUI tree, every page's views, pictures and observers, which a closed
     /// window kept in memory for as long as Pilot ran (2026-10-10, idle RAM 164 MB against 45). The next open makes it
-    /// again, centred (the panel keeps no frame, T2), on the page shown last (the model stays).
+    /// again, at its autosaved frame, on the page shown last (the model stays).
     private func release(_ closing: NSWindow) {
         guard closing === window else { return }
+        // The saved frame stays; the name goes with the closing window, which AppKit keeps until it is freed and which
+        // would refuse the name to the next open's window.
+        closing.setFrameAutosaveName("")
         windowObservers.forEach(NotificationCenter.default.removeObserver)
         windowObservers = []
         window = nil
@@ -462,41 +479,23 @@ final class AppWindowController: NSObject {
         watchCloses()
     }
 
-    /// Where the old resizable window kept its size and place, removed at each open now that the panel keeps none (T2);
-    /// the tests name none, so they leave the real one alone.
+    /// Where the window keeps its size and place across closes; the tests name none, so they leave the real one alone.
     var autosaveName: String? = "PilotAppWindow"
 }
 
 /// Cmd+W closes the window and Cmd+Q quits Pilot, whatever the main menu holds (Sven, 2026-10-04).
 final class PilotWindow: NSWindow {
     var onQuit: () -> Void = {}
-    /// The app panel's Esc (T2): set by makePanel only, so Files and Gallery keep theirs.
+    /// The app window's Esc (T2): set by makeAppWindow only, so Files and Gallery keep theirs.
     var closesOnEscape = false
-    /// The app panel's one size (T2): every frame write keeps it and moves only the origin, so a Hyper right-drag, the
-    /// tiler's frame or a size bind can move the panel but never resize it (T2 review 1). Nil leaves a window free.
-    var fixedSize: NSSize?
-
-    override func setFrame(_ frameRect: NSRect, display flag: Bool) {
-        super.setFrame(keepingSize(frameRect), display: flag)
-    }
-
-    override func setFrame(_ frameRect: NSRect, display displayFlag: Bool, animate animateFlag: Bool) {
-        super.setFrame(keepingSize(frameRect), display: displayFlag, animate: animateFlag)
-    }
-
-    /// `frame` at the fixed size, its top-left corner kept: a drag on the bottom or right edge leaves the panel where it
-    /// is, one on the top or left moves it with the edge.
-    private func keepingSize(_ frame: NSRect) -> NSRect {
-        guard let fixedSize, frame.size != fixedSize else { return frame }
-        return NSRect(x: frame.minX, y: frame.maxY - fixedSize.height, width: fixedSize.width, height: fixedSize.height)
-    }
 
     /// Esc that no view took: a focused field's own Esc (the search's clear, an editor's Cancel) runs first and never
-    /// reaches here. A text field still focused only ends its editing; the panel closes when nothing is being typed
-    /// in and no sheet is up (coordinator's answer on T2, 2026-11-19).
+    /// reaches here. A text field still focused only ends its editing; the window closes when nothing is being typed
+    /// in and no sheet is up (coordinator's answer on T2, 2026-11-19), except in full screen, where Esc does nothing:
+    /// closing there would throw the user out of the window's Space (2026-11-20).
     override func cancelOperation(_ sender: Any?) {
         guard closesOnEscape, attachedSheet == nil else { return super.cancelOperation(sender) }
-        if firstResponder is NSText { makeFirstResponder(nil) } else { performClose(nil) }
+        if firstResponder is NSText { makeFirstResponder(nil) } else if !styleMask.contains(.fullScreen) { performClose(nil) }
     }
 
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
