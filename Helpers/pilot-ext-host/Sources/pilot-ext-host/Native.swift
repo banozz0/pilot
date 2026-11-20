@@ -26,6 +26,7 @@ extension Host {
             do { return String(decoding: try Data(contentsOf: URL(filePath: path)), as: UTF8.self) } catch { return Host.failure(error, path) }
         } as @convention(block) (String) -> Any)
         add("fsWrite", { (path: String, text: String, append: Bool) -> Any in
+            if let refused = Measure.refusesWrite("write", path) { return refused }
             do {
                 if append, let handle = FileHandle(forWritingAtPath: path) {
                     defer { try? handle.close() }
@@ -49,20 +50,25 @@ extension Host {
             do { return try FileManager.default.contentsOfDirectory(atPath: path).sorted() } catch { return Host.failure(error, path) }
         } as @convention(block) (String) -> Any)
         add("fsMakeFolder", { (path: String, recursive: Bool) -> Any in
+            if let refused = Measure.refusesWrite("make a folder", path) { return refused }
             do { try FileManager.default.createDirectory(atPath: path, withIntermediateDirectories: recursive); return true } catch { return Host.failure(error, path) }
         } as @convention(block) (String, Bool) -> Any)
         add("fsRemove", { (path: String, folder: Bool) -> Any in
+            if let refused = Measure.refusesWrite("remove", path) { return refused }
             guard (folder ? rmdir(path) : unlink(path)) == 0 else { return Host.failure(errno: errno, path) }
             return true
         } as @convention(block) (String, Bool) -> Any)
         add("fsRemoveAll", { (path: String) -> Any in
+            if let refused = Measure.refusesWrite("remove", path) { return refused }
             do { try FileManager.default.removeItem(atPath: path); return true } catch { return Host.failure(error, path) }
         } as @convention(block) (String) -> Any)
         add("fsMove", { (from: String, to: String) -> Any in
-            rename(from, to) == 0 ? true : Host.failure(errno: errno, from)
+            if let refused = Measure.refusesWrite("move", from) ?? Measure.refusesWrite("move", to) { return refused }
+            return rename(from, to) == 0 ? true : Host.failure(errno: errno, from)
         } as @convention(block) (String, String) -> Any)
         add("fsCopy", { (from: String, to: String) -> Any in
-            copyfile(from, to, nil, copyfile_flags_t(COPYFILE_ALL)) == 0 ? true : Host.failure(errno: errno, from)
+            if let refused = Measure.refusesWrite("copy", to) { return refused }
+            return copyfile(from, to, nil, copyfile_flags_t(COPYFILE_ALL)) == 0 ? true : Host.failure(errno: errno, from)
         } as @convention(block) (String, String) -> Any)
         add("fsReal", { (path: String) -> Any in
             guard let real = realpath(path, nil) else { return Host.failure(errno: errno, path) }
@@ -107,13 +113,18 @@ extension Host {
             spawn(id, file, args, options)
         } as @convention(block) (Int, String, [String], [String: Any]) -> Any)
         add("spawnSync", { (file: String, args: [String], options: [String: Any], input: String) -> Any in
-            Host.spawnSync(file, args, options, input: input)
+            switch Measure.admit(file, args, options, sync: true) {
+            case .run(let program, let argv, let options): return Host.spawnSync(program, argv, options, input: input)
+            case .refused(let kind, let why, let subject): return Measure.refusedSync(file, args, input: input, kind: kind, why: why, subject: subject)
+            }
         } as @convention(block) (String, [String], [String: Any], String) -> Any)
         add("childWrite", { [unowned self] (id: Int, text: String) in
+            if Measure.swallow(id, text) { return }
             guard let fd = children[id]?.stdin else { return }
             Data(text.utf8).withUnsafeBytes { _ = write(fd, $0.baseAddress, $0.count) }
         } as @convention(block) (Int, String) -> Void)
         add("childEnd", { [unowned self] (id: Int) in
+            if Measure.isStandIn(id) { return }
             guard let fd = children[id]?.stdin else { return }
             close(fd)
             children[id]?.stdin = nil
@@ -198,6 +209,7 @@ extension Host {
         }
         var made = URLRequest(url: url)
         made.httpMethod = (request["method"] as? String)?.uppercased() ?? "GET"
+        if let refused = Measure.refusesFetch(made.httpMethod ?? "GET", url) { return call("__pilotFetched", [id, ["error": refused]]) }
         for pair in request["headers"] as? [[String]] ?? [] where pair.count == 2 { made.addValue(pair[1], forHTTPHeaderField: pair[0]) }
         if let body = request["body"] as? String { made.httpBody = Data(body.utf8) }
         pending += 1
@@ -233,9 +245,15 @@ extension Host {
     /// passes it by once the host is gone; stdio `ignore` gives it /dev/null, else three pipes read here. Every other
     /// descriptor is closed in it, so it never holds Pilot's pipe. Answers its pid, or the failure.
     func spawn(_ id: Int, _ file: String, _ args: [String], _ options: [String: Any]) -> Any {
-        let detached = options["detached"] as? Bool == true, ignore = options["stdio"] as? String == "ignore"
+        // --measure: the child by its real path with a fixed environment, or a refused stand-in (Measure.admit).
+        let program: String, argv: [String], given: [String: Any]
+        switch Measure.admit(file, args, options, sync: false) {
+        case .run(let path, let words, let made): (program, argv, given) = (path, words, made)
+        case .refused(let kind, let why, let subject): return Measure.standIn(id, file, args, kind: kind, why: why, subject: subject, host: self)
+        }
+        let detached = given["detached"] as? Bool == true, ignore = given["stdio"] as? String == "ignore"
         let started: Started
-        do { started = try Host.start(file, args, options, pipes: !ignore, detached: detached) } catch { return Host.failure(errno: error.code, file) }
+        do { started = try Host.start(program, argv, given, pipes: !ignore, detached: detached) } catch { return Host.failure(errno: error.code, file) }
         var child = Child(pid: started.pid, stdin: started.stdin, counted: true, detached: detached)
         for (fd, stream) in [(started.stdout, "stdout"), (started.stderr, "stderr")] {
             guard let fd else { continue }

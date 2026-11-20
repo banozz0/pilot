@@ -4,6 +4,7 @@
 // nothing here prints there.
 import { missing, stubs } from "./gaps.js";
 import "./web.js";
+import { Buffer } from "./buffer.js";
 const native = globalThis.__native;
 
 function text(args) {
@@ -50,6 +51,9 @@ globalThis.setInterval = (fn, ms, ...args) => arm(fn, ms, args, true);
 globalThis.clearTimeout = disarm;
 globalThis.clearInterval = disarm;
 globalThis.queueMicrotask = (fn) => { Promise.resolve().then(fn); };
+// Node's setImmediate as the next timer turn (T7: fast-glob, Obsidian's notes).
+globalThis.setImmediate = (fn, ...args) => arm(fn, 0, args, false);
+globalThis.clearImmediate = disarm;
 
 const started = Date.now();
 globalThis.performance = { now: () => Date.now() - started };
@@ -60,8 +64,8 @@ globalThis.process = stubs("process", ["exit", "on", "once", "kill", "chdir", "m
   env, platform: "darwin", arch: "arm64", argv: [], pid: 0, version: "v22.14.0", versions: { node: "22.14.0" }, release: { name: "node" },
   cwd: () => native.cwd(), nextTick: (fn, ...a) => queueMicrotask(() => fn(...a)), emitWarning: (w) => console.warn(String(w)),
 });
-// Node's Buffer and the browser's Blob and friends are not here yet: each is a stub that records its use.
-globalThis.Buffer = stubs("Buffer", ["from", "alloc", "allocUnsafe", "isBuffer", "concat", "byteLength", "compare", "isEncoding"]);
+// Node's Buffer (buffer.js, T7); the browser's Blob and friends are not here yet: each is a stub that records its use.
+globalThis.Buffer = Buffer;
 for (const name of ["Blob", "FormData", "WebSocket", "XMLHttpRequest", "EventSource", "structuredClone"]) {
   globalThis[name] = missing(`global.${name}`);
 }

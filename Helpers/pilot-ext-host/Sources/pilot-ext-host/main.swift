@@ -25,6 +25,12 @@ import JavaScriptCore
 /// Writes one line to stdout or stderr, unbuffered.
 func put(_ line: String, to handle: FileHandle) { handle.write(Data((line + "\n").utf8)) }
 
+/// A run's line to Pilot, recorded first under --measure (T7); the installer writes through put() and is never measured.
+@MainActor func answer(_ line: String) {
+    Measure.wrote(line)
+    put(line, to: .standardOutput)
+}
+
 @MainActor final class Host {
     static let drain: TimeInterval = 0.15, closeDeadline: TimeInterval = 0.4, answerGrace: TimeInterval = 0.5
     /// A run's deadline from its start: a view's, or a no-view command's once the prelude says it is one.
@@ -68,7 +74,7 @@ func put(_ line: String, to handle: FileHandle) { handle.write(Data((line + "\n"
 
     private func installNative() {
         let native = JSValue(newObjectIn: context)!
-        let write: @convention(block) (String) -> Void = { line in put(line, to: .standardOutput) }
+        let write: @convention(block) (String) -> Void = { line in answer(line) }
         let log: @convention(block) (String, String) -> Void = { level, text in put("[\(level)] \(text)", to: .standardError) }
         let setTimer: @convention(block) (Int, Double) -> Void = { [unowned self] id, ms in self.arm(id, after: ms) }
         let clearTimer: @convention(block) (Int) -> Void = { [unowned self] id in self.timers.removeValue(forKey: id)?.cancel() }
@@ -99,6 +105,7 @@ func put(_ line: String, to handle: FileHandle) { handle.write(Data((line + "\n"
         native.setObject(menuBar, forKeyedSubscript: "menuBar" as NSString)
         native.setObject(barReady, forKeyedSubscript: "barReady" as NSString)
         installSystem(into: native)
+        SQLiteBridge.install(into: native)  // node:sqlite, read-only (T7)
         context.setObject(native, forKeyedSubscript: "__native" as NSString)
     }
 
@@ -198,6 +205,7 @@ func put(_ line: String, to handle: FileHandle) { handle.write(Data((line + "\n"
 
     private func finish() {
         stopChildren()
+        Measure.exit()
         exit(0)
     }
 
@@ -205,7 +213,7 @@ func put(_ line: String, to handle: FileHandle) { handle.write(Data((line + "\n"
     private func uncaught(_ exception: JSValue?) {
         let text = exception?.toString() ?? "an error"
         put("[uncaught] \(text) \(exception?.objectForKeyedSubscript("stack")?.toString() ?? "")", to: .standardError)
-        put(Host.errorLine(text), to: .standardOutput)
+        answer(Host.errorLine(text))
     }
 
     static func errorLine(_ text: String) -> String {
@@ -216,7 +224,8 @@ func put(_ line: String, to handle: FileHandle) { handle.write(Data((line + "\n"
 
 struct HostError: Error { let text: String; init(_ text: String) { self.text = text } }
 
-let arguments = Array(CommandLine.arguments.dropFirst())
+var arguments = Array(CommandLine.arguments.dropFirst())
+Measure.take(&arguments)  // --measure (T7): the harness's record of every call, none acting on the Mac
 // The GitHub install route's two steps (Install.swift) run no JSContext and keep none of a run's deadlines.
 if let mode = arguments.first, Installer.modes.contains(mode) { Installer.run(arguments) }
 guard arguments.count == 3, arguments[0] == "--prelude" else {
@@ -227,11 +236,12 @@ let host: Host
 do {
     host = try Host(prelude: URL(filePath: arguments[1]), bundle: URL(filePath: arguments[2]))
 } catch {
-    put(Host.errorLine((error as? HostError)?.text ?? error.localizedDescription), to: .standardOutput)
+    answer(Host.errorLine((error as? HostError)?.text ?? error.localizedDescription))
+    Measure.exit()
     exit(0)
 }
 Thread.detachNewThread {
-    while let line = readLine() { DispatchQueue.main.async { MainActor.assumeIsolated { host.received(line) } } }
+    while let line = readLine() { DispatchQueue.main.async { MainActor.assumeIsolated { Measure.read(line); host.received(line) } } }
     DispatchQueue.main.async { MainActor.assumeIsolated { host.inputEnded() } }
 }
 dispatchMain()

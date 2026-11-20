@@ -130,7 +130,7 @@ public struct GitHubInstall: Sendable {
     static let prefix = ".ext-github-"
 
     /// The plan, once Pilot holds every remote word the question shows to its own rules too, as the host's plan() does:
-    /// the id and every command name as Extension.isName, Raycast's three modes, each preference name a letter then
+    /// the id as Extension.isName, every command name as Extension.isCommandName (Raycast's capitals kept), Raycast's three modes, each preference name a letter then
     /// letters, digits, _ and -, the tree 40 lowercase hex digits, each package's key names, real name and version npm's,
     /// and the title, the one free text, at most 80 Unicode scalars (escaped, never refused: the question and every
     /// refusal the pilot command echoes pass it through ControlGate.Ask.visible; the version shows only when
@@ -147,8 +147,8 @@ public struct GitHubInstall: Sendable {
         let (lines, last) = try await host(["--fetch", spec, workspace.path, tools.path], input: Data())
         let plan = try JSONDecoder().decode(Plan.self, from: last)
         guard Extension.isName(plan.id), plan.title.unicodeScalars.count <= 80,
-              plan.commands.allSatisfy({ Extension.isName($0.name) && ["view", "no-view", "menu-bar"].contains($0.mode) }) else {
-            throw Refused(errorDescription: "its package.json names it or a command outside Pilot's id rule (a-z, 0-9 and hyphens)")
+              plan.commands.allSatisfy({ Extension.isCommandName($0.name) && ["view", "no-view", "menu-bar"].contains($0.mode) }) else {
+            throw Refused(errorDescription: "its package.json names it outside Pilot's id rule (a-z, 0-9 and hyphens) or a command outside letters, digits and hyphens")
         }
         guard plan.preferences.allSatisfy({ $0.count <= 64 && $0.wholeMatch(of: #/[A-Za-z][A-Za-z0-9_-]*/#) != nil }) else {
             throw Refused(errorDescription: "its package.json names a preference outside a letter then letters, digits, _ and -")

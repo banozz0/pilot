@@ -15,12 +15,14 @@ import { makeAPI } from "./raycast.js";
 import { fail, render } from "./host.js";
 import { modules as node } from "./node.js";
 import { gapsAt, record } from "./gaps.js";
+import { modules as more } from "./buffer.js";
+import { sqlite } from "./sqlite.js";
 
 const native = globalThis.__native;
 let view = null;
 
 function requirer(api) {
-  const modules = { ...node, react: React, "react/jsx-runtime": JSX, "react/jsx-dev-runtime": JSX, "@raycast/api": api };
+  const modules = { ...node, ...more, sqlite, react: React, "react/jsx-runtime": JSX, "react/jsx-dev-runtime": JSX, "@raycast/api": api };
   return (name) => {
     const plain = String(name).replace(/^node:/, "");
     const found = modules[plain];
@@ -66,7 +68,11 @@ globalThis.__pilotStart = (factory, message) => {
       return;
     }
     view = render(command, message);
-    if (message.query) view.search(message.query);
+    // Two timer turns on: after the first commit (React's scheduler queued its timer first) and its effects, which may
+    // set the extension's search state, so the List's onSearchTextChange is mounted and its answer is not undone. It
+    // leans on that scheduler order; holding the query in host.js until a List with onSearchTextChange commits is the
+    // general form, left for when host.js is not being changed by another task.
+    if (message.query) setTimeout(() => setTimeout(() => view?.search(message.query), 0), 0);
   } catch (error) {
     fail(error);
   }

@@ -32,6 +32,13 @@ function withParts(name) {
   return component;
 }
 
+/** An API Pilot lacks that answers a Promise in Raycast: its use is recorded and the Promise rejects, so an
+ *  extension's own `.catch` handles it, as it would a failure (T7: Obsidian's getDefaultApplication). */
+function rejecting(api) {
+  const call = missing(api);
+  return (...args) => { try { return Promise.resolve(call(...args)); } catch (error) { return Promise.reject(error); } };
+}
+
 /** An action Pilot lacks: rendering it records it, and it shows nothing, so the rest of its panel still works. */
 function lacking(api) {
   const component = () => { record(api); return null; };
@@ -185,6 +192,8 @@ export function makeAPI(message, mode) {
     constructor(options = {}) {
       const name = String(options.namespace ?? "default").replace(/[^A-Za-z0-9._-]/g, "_");
       this.#store = store(cache ? `${cache}/raycast-cache-${name}.json` : "");
+      // Bound, as Raycast's are: @raycast/utils hands `cache.subscribe` to useSyncExternalStore on its own (T7).
+      for (const m of ["get", "has", "set", "remove", "clear", "subscribe"]) this[m] = this[m].bind(this);
     }
     get isEmpty() { return Object.keys(this.#store.read()).length === 0; }
     get(key) { const v = this.#store.read()[String(key)]; return typeof v === "string" ? v : undefined; }
@@ -226,13 +235,16 @@ export function makeAPI(message, mode) {
     // Views and namespaces that come in later tasks, or not at all: each records its use.
     // A view Pilot lacks records and throws on render, so the run shows why it has nothing to draw.
     Form,
-    Grid: missing("Grid"), MenuBarExtra,
+    Grid: Object.assign(missing("Grid"), { Inset: names(), Fit: names(), ItemSize: names() }), MenuBarExtra,
     AI, getSelectedText: selectedText, confirmAlert: (options) => confirmAlert(options, noView),
     OAuth: stubs("OAuth", ["PKCEClient"], { RedirectMethod: Object.freeze({ Web: "web", App: "app", AppURI: "appURI" }) }),
     BrowserExtension: stubs("BrowserExtension", ["getContent", "getTabs"]),
     WindowManagement: stubs("WindowManagement", ["getActiveWindow", "getWindowsOnActiveDesktop", "getDesktops", "setWindowBounds"]),
   };
-  for (const name of ["trash", "getApplications", "getDefaultApplication", "getFrontmostApplication", "getSelectedFinderItems", "launchCommand", "updateCommandMetadata", "openExtensionPreferences", "openCommandPreferences",
-    "captureException"]) api[name] = missing(name);
+  for (const name of ["trash", "getApplications", "getDefaultApplication", "getFrontmostApplication", "getSelectedFinderItems",
+    "launchCommand", "updateCommandMetadata", "openExtensionPreferences", "openCommandPreferences"]) {
+    api[name] = rejecting(name);
+  }
+  api.captureException = missing("captureException");
   return guard("", api);
 }

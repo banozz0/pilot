@@ -93,12 +93,12 @@ enum Installer {
         }
         guard tree["truncated"] as? Bool != true else { throw Refused("GitHub cut its listing of \(path) short") }
         fetched(listing, "tree \(owner)/\(repo)/\(path)", data.count, "\(entries.count) entries, not truncated")
-        // Only what a build reads: the manifest, the lockfile, src/ and assets/. Links and submodules never. Its tsconfig is
-        // not read: the build gives esbuild its own settings, so no `extends` or `paths` reaches outside the folder.
+        // Only what a build reads: the manifest, the lockfile, its tsconfig, src/ and assets/. Links and submodules never.
+        // Of the tsconfig only `baseUrl` and `paths` reach esbuild, each inside the folder (tsconfigRaw), never `extends`.
         let wanted = entries.compactMap { e -> (path: String, sha: String, size: Int)? in
             guard e["type"] as? String == "blob", let p = e["path"] as? String, let sha = e["sha"] as? String,
                   ["100644", "100755"].contains(e["mode"] as? String ?? "") else { return nil }
-            let top = ["package.json", "package-lock.json"].contains(p)
+            let top = ["package.json", "package-lock.json", "tsconfig.json"].contains(p)
             guard top || p.hasPrefix("src/") || p.hasPrefix("assets/") else { return nil }
             return (p, sha, e["size"] as? Int ?? 0)
         }
@@ -146,16 +146,20 @@ enum Installer {
             throw Refused("its package.json is not a Raycast manifest")
         }
         // Every remote word the question shows is held to a rule here, and again in GitHubInstall.fetch: the id and command
-        // names to Pilot's id rule (Extension.isName), the modes to Raycast's three, preference names to an identifier, each
+        // names to Pilot's id rule (Extension.isName; a command Extension.isCommandName), the modes to Raycast's three, preference names to an identifier, each
         // package's key, real name and version to npm's (below), the version through ExtensionCatalogue.Version when shown.
         // The title is the one free text, cut to 80 Unicode scalars, last on its line and escaped by Pilot when it builds the
         // question (ControlGate.Ask.visible), as is every refusal text below that quotes a remote word (cut, at most 120
         // scalars). The tree is the listing's own 40 hex digits (fetch).
-        let name = #/[a-z0-9][a-z0-9-]*/#
+        // A command keeps Raycast's capitals (Extension.isCommandName): letters, digits and hyphens.
+        let name = #/[a-z0-9][a-z0-9-]*/#, commandName = #/[A-Za-z0-9][A-Za-z0-9-]*/#
         guard id.wholeMatch(of: name) != nil, id.count <= 64 else { throw Refused("its package.json names it \"\(cut(id, 64))\", not an id of a-z, 0-9 and hyphens") }
+        // Names are compared case-folded: `Index` and `index` would both build dist/index.js on the Mac's own disk.
+        var folded = Set<String>()
         for command in commands {
             let c = command["name"] as? String ?? ""
-            guard c.wholeMatch(of: name) != nil, c.count <= 64 else { throw Refused("a command in its package.json is named \"\(cut(c, 64))\", not a-z, 0-9 and hyphens") }
+            guard c.wholeMatch(of: commandName) != nil, c.count <= 64 else { throw Refused("a command in its package.json is named \"\(cut(c, 64))\", not letters, digits and hyphens") }
+            guard folded.insert(c.lowercased()).inserted else { throw Refused("two commands in its package.json are both named \"\(cut(c, 64))\", case aside") }
             guard ["view", "no-view", "menu-bar"].contains(command["mode"] as? String ?? "view") else { throw Refused("command \(c) has a mode Raycast does not have") }
         }
         // The extension's, then each command's, a name given twice kept once (RaycastManifest.preferences).
@@ -274,7 +278,8 @@ enum Installer {
             let meta = workspace.appending(path: "meta-\(name).json")
             try esbuildRun(esbuild.url, in: source, [
                 entry, "--bundle", "--platform=node", "--format=cjs", "--target=es2022", "--jsx=automatic", "--log-level=error",
-                "--tsconfig-raw={}", "--define:process.env.NODE_ENV=\"production\"", "--external:@raycast/api", "--external:react",
+                // dynamic import() becomes require(): a bare JSContext has no module loader (useSQL's node:sqlite, T7).
+                "--tsconfig-raw=\(tsconfigRaw(source))", "--supported:dynamic-import=false", "--define:process.env.NODE_ENV=\"production\"", "--external:@raycast/api", "--external:react",
                 "--external:react/*", "--metafile=\(meta.path)", "--outfile=\(built.appending(path: "dist/\(name).js").path)",
             ])
             // Every file bundled must be the folder's own or a package unpacked into it: Node's lookup also climbs to
@@ -295,6 +300,24 @@ enum Installer {
         }
         say(["type": "built", "folder": built.path, "esbuild": esbuild.reused ? "reused" : "downloaded", "esbuildPath": esbuild.url.path,
              "esbuildVersion": esbuildVersion])
+    }
+
+    /// esbuild's tsconfig: the extension's own `baseUrl` and `paths` alone (Obsidian's `@/*` → `src/*`), when each is a
+    /// relative place inside the folder (safe(): no `..`, never absolute) and the file reads as JSON; else `{}`. No other
+    /// option and no `extends` is passed, and the metafile check after the build still refuses any input outside the folder.
+    static func tsconfigRaw(_ source: URL) -> String {
+        guard let data = try? Data(contentsOf: source.appending(path: "tsconfig.json")),
+              let read = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let options = read["compilerOptions"] as? [String: Any], let paths = options["paths"] as? [String: [String]] else { return "{}" }
+        let base = options["baseUrl"] as? String ?? "."
+        func inside(_ place: String) -> Bool {
+            let plain = place.hasPrefix("./") ? String(place.dropFirst(2)) : place
+            return plain.isEmpty || plain == "." || safe(plain.replacingOccurrences(of: "*", with: "x"))
+        }
+        guard inside(base), paths.count <= 50, paths.allSatisfy({ key, targets in
+            key.count <= 200 && !key.contains("..") && !key.hasPrefix("/") && targets.count <= 10 && targets.allSatisfy(inside)
+        }), let raw = try? JSONSerialization.data(withJSONObject: ["compilerOptions": ["baseUrl": base, "paths": paths]], options: .sortedKeys) else { return "{}" }
+        return String(decoding: raw, as: UTF8.self)
     }
 
     // MARK: esbuild
@@ -547,7 +570,8 @@ enum Installer {
             }
             let full = paxPath ?? longName ?? (prefix.isEmpty ? name : prefix + "/" + name)
             (paxPath, longName) = (nil, nil)
-            let inner = full.split(separator: "/").dropFirst().joined(separator: "/")
+            // npm packs some archives as `package/./dist/…`: a single `.` segment is dropped, never `..`, which safe() refuses.
+            let inner = full.split(separator: "/").filter { $0 != "." }.dropFirst().joined(separator: "/")
             guard !inner.isEmpty else { continue }
             guard safe(inner) else { throw Refused("a package's archive holds \(cut(full)), which leaves its folder") }
             let to = folder.appending(path: inner)

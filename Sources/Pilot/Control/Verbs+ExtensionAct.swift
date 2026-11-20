@@ -8,7 +8,8 @@ import Synchronization
 /// the action and asks the page again; the answer is what it did and the blocks after. Its command runs as the page's
 /// do, the HUD left out (its line comes back instead); an open, copy, paste, Pilot action, timer or alert is answered,
 /// never performed, as `ext run` answers them. A Raycast-format extension (ADR 0017) has no page: `ext act` presses a
-/// callback of one of its view's rows instead (actView, T2), and fills and submits a Form (fill, T10).
+/// callback of one of its view's rows instead (actView, T2), answers a row's typed action unperformed (T7), and fills and
+/// submits a Form (fill, T10).
 extension ControlVerbs {
     /// One action a page offers: its name as `ext act` takes it ("Refresh", "Milk/Remove"), the action, and the input box
     /// it belongs to (nil for any other block), with whether it is that box's Option+Return, and whether it is a row's or a
@@ -148,7 +149,7 @@ extension ControlVerbs {
             let inputs = try await tools.inputs(ext)
             let session = ExtensionSession(command, context: nil, inputs: inputs, folder: ext.folder)
             let answer: Result<JSONValue, ControlError>
-            do throws(ControlError) { answer = .success(try await Self.press(word, handler: handler, then: args.value("then"), fill: filling ? args : nil, in: session, command, ext, tools, peer: peer)) }
+            do throws(ControlError) { answer = .success(try await Self.press(word, handler: handler, query: args.value("query") ?? "", then: args.value("then"), fill: filling ? args : nil, in: session, command, ext, tools, peer: peer)) }
             catch { answer = .failure(error) }
             session.close()
             await session.ended()
@@ -156,9 +157,9 @@ extension ControlVerbs {
         }
     }
 
-    /// Opens the view in `session`, finds the callback (a row's first, row/action, or the handler named), asks Allow for
-    /// the press and presses it; with `fill`'s arguments, fills its form (fill).
-    private static func press(_ word: String?, handler: String?, then: String?, fill: ControlArguments?, in session: ExtensionSession,
+    /// Opens the view in `session` (searched for `query`), finds the callback (a row's first, row/action, or the handler
+    /// named), asks Allow for the press and presses it; with `fill`'s arguments, fills its form (fill).
+    private static func press(_ word: String?, handler: String?, query: String, then: String?, fill: ControlArguments?, in session: ExtensionSession,
                               _ command: Extension.Command, _ ext: Extension, _ tools: ExtensionTools, peer: ControlPeer?) async throws(ControlError) -> JSONValue {
         func shown(_ outcome: ListOutcome) throws(ControlError) -> (items: [Extension.Item], json: [String: JSONValue]) {
             let json = try Self.outcome(outcome, command, ext, tools)
@@ -173,19 +174,39 @@ extension ControlVerbs {
         func pressing(_ id: String, path: String) -> PageTarget {
             PageTarget(path: path, action: Extension.Item.Action(kind: .invoke(handler: id)), box: nil, alt: false)
         }
+        /// A row's action by its name: a callback, or a typed one (open, copy, paste: T7), which is answered, never performed.
         func find(_ word: String, in items: [Extension.Item]) throws(ControlError) -> PageTarget {
-            try Self.target(word, in: Self.targets([.list(title: nil, items: items)]).filter { $0.action.handler != nil }, page: command.actionID)
+            try Self.target(word, in: Self.targets([.list(title: nil, items: items)]), page: command.actionID)
         }
-        _ = try shown(await session.ask(""))
-        let first = await session.settled()?.outcome ?? .error("sent no list")
-        let before = try shown(first)
+        // --query opens the view searched, as `ext run --query` does: a view with rows only for a search (Google Search).
+        _ = try shown(await session.ask(query))
+        var first = await session.settled()?.outcome ?? .error("sent no list")
+        var before = try shown(first)
+        // A view may settle before it fills in (Kill Process commits an empty list until `ps` answers): the press waits,
+        // up to 2 s, for a newer view that offers what it names. A fill (T10) presses its form as it settled.
+        func offers(_ items: [Extension.Item]) -> Bool {
+            if fill != nil { return true }
+            if let handler { return items.contains { $0.actions.contains { $0.handler == handler } } }
+            return (try? find(word ?? "", in: items)) != nil
+        }
+        let until = ContinuousClock.now + .seconds(2)
+        var seen = session.newest
+        while ContinuousClock.now < until, !offers(before.items) {
+            try? await Task.sleep(for: .milliseconds(50))
+            if let newest = session.newest, newest != seen { seen = newest; first = newest.outcome; before = try shown(first) }
+        }
         if let fill {
             guard let form = first.form else { throw ControlError(.badValue, "--type and --submit fill a form; \(command.actionID) shows none") }
             let named = try word.map { name throws(ControlError) in try find(name, in: before.items).action }
             return try await Self.fill(form, pressing: named, fill, before: before.json, in: session, command, ext, tools, peer: peer)
         }
         let target = if let handler { pressing(handler, path: "handler \(handler)") } else { try find(word ?? "", in: before.items) }
-        let id = target.action.handler ?? word ?? ""
+        guard let id = target.action.handler else {
+            // Raycast's typed actions are Pilot's to perform on a press in the menu, never the host's: answered, as a page's are.
+            guard then == nil else { throw ControlError(.badRequest, "--then follows a callback; \(target.path) is \(target.action.label), which Pilot performs") }
+            return .object(["command": .string(command.actionID), "pressed": .string(target.path), "action": Self.action(target.action),
+                            "before": .object(before.json), "note": .string("answered, not performed: Pilot performs it on a press in the menu")])
+        }
         let label = target.bare ? " (\(ControlGate.Ask.visible(target.action.label)))" : ""
         let escape = then?.lowercased() == "escape"
         let second = then.map { ", then \(escape ? "Escape (back a view)" : ControlGate.Ask.visible($0)), runs their callbacks" } ?? ", runs its callback"
