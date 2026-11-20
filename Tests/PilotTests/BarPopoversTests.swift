@@ -125,7 +125,7 @@ struct BarPopoversTests {
     func displaysLists() async {
         let (fake, displays, brightness) = await Self.displays()
         let shown = Self.labels(DisplaysPopover(displays: displays, brightness: brightness).pilotTheme())
-        for name in ["Displays", "CU34G4Z", "24G1WG4", "main", "CU34G4Z brightness", "Resolution, 3440 × 1440", "Refresh rate, 100 Hz", "Displays in Pilot"] {
+        for name in ["Displays", "CU34G4Z", "24G1WG4", "main", "CU34G4Z brightness", "Resolution, 3440 × 1440", "Refresh rate, 100 Hz", "Display settings"] {
             #expect(shown.contains(name), "\(name) in \(shown)")
         }
         #expect(!shown.contains("24G1WG4 brightness"), "screen 2 has no route: \(shown)")
@@ -144,7 +144,7 @@ struct BarPopoversTests {
         let brightness = Brightness(hardware: ControlSystemVerbTests.FakeHardware())
         await brightness.refresh([.init(id: 1, appleAllowed: true), .init(id: 2, appleAllowed: true)])
         let shown = Self.labels(DisplaysPopover(displays: displays, brightness: brightness).pilotTheme())
-        for label in ["CU34G4Z", "24G1WG4", "OFF", "Restore All Displays", "CU34G4Z brightness"] {
+        for label in ["CU34G4Z", "24G1WG4", "24G1WG4 connection", "Restore all", "CU34G4Z brightness"] {
             #expect(shown.contains(label), "\(label) in \(shown)")
         }
         #expect(!shown.contains("24G1WG4 brightness"), "OFF keeps no brightness control: \(shown)")
@@ -189,7 +189,7 @@ struct BarPopoversTests {
         let (unknown, failed) = Self.connectionDisplays([Self.connectionScreen(9, "Remembered", "remembered", state: .unknown, supported: false)])
         await failed.refresh()
         let shown = Self.labels(DisplaysPopover(displays: unknown, brightness: nil).pilotTheme())
-        #expect(shown.contains("Remembered") && shown.contains("Restore All Displays"), "\(shown)")
+        #expect(shown.contains("Remembered") && shown.contains("Restore all"), "\(shown)")
     }
 
     @Test("A size picked in Displays waits for Keep, as on System's card", .pilotFocus)
@@ -222,13 +222,23 @@ struct BarPopoversTests {
         let (_, waiting, _) = await Self.displays()
         waiting.start()
         waiting.pick(SetupDisplaysTests.wideLow, for: 1)
+        // Both screens on: the portrait one tested on this macOS build, the wide one waiting for its test (Sven, 2026-11-20).
+        let fake = SetupDisplaysTests.FakeDisplays()
+        fake.modesByDisplay[1]?.append(Self.wide60)
+        fake.rotatable = [1, 2]
+        let connections = DisplayConnections(backend: ConnectionHardware([Self.connectionScreen(1, "CU34G4Z", "wide", main: true),
+                                                                          Self.connectionScreen(2, "24G1WG4", "portrait")]),
+                                             store: ConnectionStore(.init(verifiedIdentities: ["portrait": ProcessInfo.processInfo.operatingSystemVersionString])))
+        let connected = SetupDisplays(system: fake, after: SetupKeepAwakeTests.FakeTime().after, connections: connections)
+        await connections.refresh()
         for (style, theme) in [(PilotStyle.instrument, "nightwatch")] {
             look.style = style
             look.themeID = theme
             let tokens = StyleTokens.of(style, theme: look.theme)
             let popovers: [(String, AnyView)] = [("sound", AnyView(SoundPopover(sound: sound))), ("keyboard", AnyView(KeyboardPopover(look: layouts))),
                                                  ("displays", AnyView(DisplaysPopover(displays: displays, brightness: brightness))),
-                                                 ("displays-waiting", AnyView(DisplaysPopover(displays: waiting, brightness: brightness)))]
+                                                 ("displays-waiting", AnyView(DisplaysPopover(displays: waiting, brightness: brightness))),
+                                                 ("displays-connections", AnyView(DisplaysPopover(displays: connected, brightness: brightness)))]
             for (name, popover) in popovers {
                 try writeRender(popover.styled(.barPopovers, look: look).pilotTheme(look: look).padding(24).background(Color(tokens.colors.canvas)),
                                 to: dir.appendingPathComponent("\(style.rawValue)-\(name).png"), wait: 0.5)

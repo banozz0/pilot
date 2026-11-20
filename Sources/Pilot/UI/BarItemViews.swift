@@ -3,22 +3,49 @@ import PilotCore
 import SwiftUI
 
 /// A personal name changes only after Save. The row owns its draft; changing physical UUID replaces the editor.
-struct DisplayNicknameEditor: View {
+/// System's page shows a Rename button; the Displays popover passes its `row`, which gets the name to place, and Rename is
+/// a double-click on that name or its right-click menu (Sven, 2026-11-20); the editor takes the row's place while open.
+struct DisplayNicknameEditor<Row: View>: View {
     let systemName: String
     let displayUUID: String?
     let nicknames: DisplayNicknames
     var identityIsUnique = true
+    private let row: ((AnyView) -> Row)?
     @State private var editing = false
     @State private var draft = ""
     @State private var problem: String?
     @FocusState private var focused: Bool
 
+    init(systemName: String, displayUUID: String?, nicknames: DisplayNicknames, identityIsUnique: Bool = true,
+         @ViewBuilder row: @escaping (_ name: AnyView) -> Row) {
+        (self.systemName, self.displayUUID, self.nicknames, self.identityIsUnique, self.row) = (systemName, displayUUID, nicknames, identityIsUnique, row)
+    }
+
     private var label: String { nicknames.label(systemName: systemName, displayUUID: identityIsUnique ? displayUUID : nil) }
     private var identified: Bool { identityIsUnique && displayUUID.flatMap(UUID.init(uuidString:)) != nil }
+    private var renameID: String { "display-rename-\(displayUUID ?? systemName)" }
+
+    private func begin() { draft = nicknames.nickname(for: displayUUID) ?? ""; problem = nil; editing = true }
+
+    /// The popover's name: a double-click or its right-click menu renames; assistive apps press it.
+    @ViewBuilder private var name: some View {
+        let text = Text(label).fontWeight(.semibold).lineLimit(1)
+        if identified {
+            text.help("\(label): double-click to rename")
+                .onTapGesture(count: 2, perform: begin)
+                .contextMenu { Button("Rename", action: begin) }
+                .accessibilityAddTraits(.isButton).accessibilityHint("Rename").accessibilityAction { begin() }
+                .accessibilityIdentifier(renameID)
+        } else {
+            text.help(label)
+        }
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            if editing {
+            if !editing, let row {
+                row(AnyView(name))
+            } else if editing {
                 TextField("Name", text: $draft, prompt: Text(systemName))
                     .pilotField().accessibilityLabel("Name for \(label)")
                     .focused($focused)
@@ -33,9 +60,9 @@ struct DisplayNicknameEditor: View {
                 }
                 if let problem { Text(problem).font(.caption).foregroundStyle(Theme.red).fixedSize(horizontal: false, vertical: true) }
             } else {
-                Button("Rename") { draft = nicknames.nickname(for: displayUUID) ?? ""; problem = nil; editing = true }
+                Button("Rename", action: begin)
                     .buttonStyle(.pilot).accessibilityLabel("Rename \(label)")
-                    .accessibilityIdentifier("display-rename-\(displayUUID ?? systemName)")
+                    .accessibilityIdentifier(renameID)
                     .disabled(!identified)
                     .help(identified ? "Name this display only in Pilot" : "This display has no unique physical identity for a personal name")
             }
@@ -48,6 +75,13 @@ struct DisplayNicknameEditor: View {
         guard identified, let displayUUID else { problem = "This display no longer has a unique physical identity"; return }
         do { try nicknames.set(draft, for: displayUUID); editing = false; problem = nil }
         catch { problem = String(describing: error) }
+    }
+}
+
+extension DisplayNicknameEditor where Row == Never {
+    /// System's page: the name above, a Rename button here.
+    init(systemName: String, displayUUID: String?, nicknames: DisplayNicknames, identityIsUnique: Bool = true) {
+        (self.systemName, self.displayUUID, self.nicknames, self.identityIsUnique, self.row) = (systemName, displayUUID, nicknames, identityIsUnique, nil)
     }
 }
 
@@ -509,7 +543,8 @@ private struct BarChoiceRow: View {
 
 /// The Displays item's popover (Sven 2026-10-12): each screen's name, its brightness where Pilot reaches it (Apple's call
 /// or DDC; none, no slider), its resolution and refresh rate, from System's Displays card's models, so a mode picked here
-/// goes back by itself after 15 s unless kept, as there.
+/// goes back by itself after 15 s unless kept, as there. Each screen is one block (Sven, 2026-11-20, "too many stuff going
+/// on"): its name and switch, its brightness, then its resolution, rate and rotation on one line; a hairline between screens.
 struct DisplaysPopover: View {
     @Environment(\.style) private var style
     let displays: SetupDisplays
@@ -522,20 +557,26 @@ struct DisplaysPopover: View {
             if let connections = displays.connections {
                 // An off screen may hide (spec hide-rows); one that is on is in use.
                 HidingList(list: .displays, items: connections.screens, id: \.displayUUID,
-                           name: { displays.nicknames.label(systemName: $0.name, displayUUID: $0.displayUUID) }, inUse: { $0.state == .on }, slot: true) { connection, _ in
-                    connectionScreen(connection, ink, connections)
+                           name: { displays.nicknames.label(systemName: $0.name, displayUUID: $0.displayUUID) }, inUse: { $0.state == .on }, slot: true) { connection, first in
+                    connectionScreen(connection, first: first, ink, connections)
                 }
-                Button("Restore All Displays") { Task { await connections.restoreAll() } }
-                    .barButton().disabled(connections.busy)
                 if let problem = connections.problem {
                     Text(problem).font(ink.words).foregroundStyle(Theme.red).fixedSize(horizontal: false, vertical: true)
                     Button("Retry") { Task { await connections.refresh() } }.barButton()
                 }
             } else {
-                ForEach(displays.displays, id: \.id) { display in screen(display, ink) }
+                ForEach(Array(displays.displays.enumerated()), id: \.element.id) { i, display in screen(display, first: i == 0, ink) }
             }
             if let problem = displays.problem { Text(problem).font(ink.words).foregroundStyle(Theme.red).fixedSize(horizontal: false, vertical: true) }
-            Button("Displays in Pilot") { AppWindowController.shared.open(.system, setup: .displays) }.barButton()
+            HStack(spacing: 6) {
+                if let connections = displays.connections {
+                    Button("Restore all") { Task { await connections.restoreAll() } }
+                        .barButton().disabled(connections.busy).help("Turn every display back on in its saved arrangement")
+                }
+                Button("Display settings") { AppWindowController.shared.open(.system, setup: .displays) }.barButton()
+                Spacer(minLength: 0)
+            }
+            .padding(.top, 2)
         }
         .barPopover(width: 300)
         .onAppear {
@@ -544,75 +585,102 @@ struct DisplaysPopover: View {
         }
     }
 
-    @ViewBuilder private func connectionScreen(_ connection: ConnectionScreen, _ ink: BarInk, _ connections: DisplayConnections) -> some View {
+    private func connectionScreen(_ connection: ConnectionScreen, first: Bool, _ ink: BarInk, _ connections: DisplayConnections) -> some View {
         let unique = connections.screens.filter { $0.displayUUID == connection.displayUUID }.count == 1
         let label = displays.nicknames.label(systemName: connection.name, displayUUID: unique ? connection.displayUUID : nil)
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: 8) {
-                Image(systemName: "display").foregroundStyle(ink.muted).accessibilityHidden(true)
-                Text(label).fontWeight(.semibold).lineLimit(1).help(label)
-                if connection.main { Text("main").font(ink.words).foregroundStyle(ink.muted) }
-                Spacer()
-                Text(connection.state.rawValue.uppercased()).font(ink.words).foregroundStyle(ink.muted)
-            }
+        return block(first: first, ink) {
             DisplayNicknameEditor(systemName: connection.name, displayUUID: connection.displayUUID, nicknames: displays.nicknames,
-                                  identityIsUnique: unique)
-                .id(connection.displayUUID)
-            Toggle("\(label) connection", isOn: Binding(get: { connection.state == .on }, set: { on in
-                Task { await connections.setConnected(on, id: connection.id, binding: connection.binding) }
-            }))
-            .toggleStyle(.pilotSwitch)
-            .disabled(connections.busy || connection.asleep || !connection.supported || ![.on, .off].contains(connection.state) || (connection.state == .on && (!connections.canDisconnect(connection) || connections.validationNeeded(connection))))
-            if connection.state == .on && connections.validationNeeded(connection) {
-                Text("Test connection briefly disconnects, then reconnects this display.").font(ink.words).foregroundStyle(ink.muted)
-                Button("Test connection") { Task { await connections.validateConnection(id: connection.id, binding: connection.binding) } }
-                    .barButton().accessibilityLabel("Test connection \(label)").disabled(connections.busy || !connections.canDisconnect(connection))
+                                  identityIsUnique: unique) { name in
+                header(name, main: connection.main, ink) { connectionControl(connection, label, connections) }
             }
+            .id(connection.displayUUID)
             if connection.state == .on, let display = displays.displays.first(where: { $0.id == connection.id }) {
                 screenControls(display, ink)
             }
         }
     }
 
-    private func screen(_ display: DisplayInfo, _ ink: BarInk) -> some View {
+    /// The off switch; in its place a Test button while this macOS build has not seen this display go off and come back
+    /// (DisplayConnections.validationNeeded), so the one step it waits for is right there. The last awake display keeps its
+    /// switch, off: it is never disconnected, so never tested.
+    @ViewBuilder private func connectionControl(_ connection: ConnectionScreen, _ label: String, _ connections: DisplayConnections) -> some View {
+        let needsTest = connection.state == .on && connections.validationNeeded(connection)
+        if needsTest && connections.canDisconnect(connection) {
+            Button("Test") { Task { await connections.validateConnection(id: connection.id, binding: connection.binding) } }
+                .barButton().accessibilityLabel("Test connection \(label)").disabled(connections.busy)
+                .help("Briefly disconnects, then reconnects this display. Needed once per macOS update before it can be turned off.")
+        } else {
+            Toggle("\(label) connection", isOn: Binding(get: { connection.state == .on }, set: { on in
+                Task { await connections.setConnected(on, id: connection.id, binding: connection.binding) }
+            }))
+            .toggleStyle(.pilotSwitch)
+            .disabled(connections.busy || connection.asleep || !connection.supported || ![.on, .off].contains(connection.state) || (connection.state == .on && (!connections.canDisconnect(connection) || needsTest)))
+        }
+    }
+
+    private func screen(_ display: DisplayInfo, first: Bool, _ ink: BarInk) -> some View {
         let unique = displays.displays.filter { $0.displayUUID == display.displayUUID }.count == 1
-        let label = displays.nicknames.label(systemName: display.name, displayUUID: unique ? display.displayUUID : nil)
-        return VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: 8) {
-                Image(systemName: "display").foregroundStyle(ink.muted).accessibilityHidden(true)
-                Text(label).fontWeight(.semibold).lineLimit(1).help(label)
-                if display.main { Text("main").font(ink.words).foregroundStyle(ink.muted) }
-                Spacer()
-            }
+        return block(first: first, ink) {
             DisplayNicknameEditor(systemName: display.name, displayUUID: display.displayUUID, nicknames: displays.nicknames,
-                                  identityIsUnique: unique)
-                .id(display.displayUUID)
+                                  identityIsUnique: unique) { name in
+                header(name, main: display.main, ink) { EmptyView() }
+            }
+            .id(display.displayUUID)
             screenControls(display, ink)
         }
+    }
+
+    /// One screen's block, under a hairline unless it is the first.
+    private func block(first: Bool, _ ink: BarInk, @ViewBuilder _ content: () -> some View) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            if !first { ink.rule.frame(height: 1).padding(.bottom, 2) }
+            content()
+        }
+    }
+
+    /// Row 1: the screen's icon, its name, a small main tag, and its control at the trailing edge.
+    private func header(_ name: AnyView, main: Bool, _ ink: BarInk, @ViewBuilder trailing: () -> some View) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: "display").foregroundStyle(ink.muted).accessibilityHidden(true)
+            name
+            if main {
+                Text("main").font(ink.words).foregroundStyle(ink.muted)
+                    .padding(.horizontal, 5).padding(.vertical, 1)
+                    .overlay { Capsule().strokeBorder(ink.rule) }
+            }
+            Spacer(minLength: 8)
+            trailing()
+        }
+        .frame(minHeight: 24)
     }
 
     @ViewBuilder private func screenControls(_ display: DisplayInfo, _ ink: BarInk) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             if let read = brightness?.screens[display.id], let level = read.level {
+                // Row 2: the slider and its percent; how Pilot reaches the screen is its tooltip.
                 HStack {
                     Image(systemName: "sun.max.fill").foregroundStyle(ink.muted).accessibilityHidden(true)
                     Slider(value: Binding(get: { level }, set: { brightness?.set(display.id, $0) }), in: 0...1)
-                        .accessibilityLabel("\(displays.nicknames.label(systemName: display.name, displayUUID: displays.displays.filter { $0.displayUUID == display.displayUUID }.count == 1 ? display.displayUUID : nil)) brightness")
+                        .accessibilityLabel("\(displays.label(display)) brightness")
+                        .help(read.route == .ddc ? "DDC brightness" : "Brightness")
                     Text("\(Int((level * 100).rounded())) %").font(ink.readout(12)).foregroundStyle(ink.muted).frame(width: 40, alignment: .trailing)
                 }
-                if read.route == .ddc { Text("DDC brightness").font(ink.words).foregroundStyle(ink.muted) }
             }
-            if displays.offersPicker(display.id) {
-                let sizes = displays.sizes(for: display.id), rates = displays.rates(for: display.id)
+            // Row 3: resolution, refresh rate and rotation, three small menus on one line.
+            let picks = displays.offersPicker(display.id), turns = displays.canRotate(display.id)
+            if picks || turns {
                 HStack(spacing: 6) {
-                    choice("Resolution", sizes, current: displays.selectedSize(for: display.id) ?? display.mode, on: display.id) { $0.sizeLabel }
-                    if rates.count > 1 {
-                        choice("Refresh rate", rates, current: displays.selectedRate(for: display.id) ?? display.mode, on: display.id) { $0.rate ?? "?" }
+                    if picks {
+                        let rates = displays.rates(for: display.id)
+                        choice("Resolution", displays.sizes(for: display.id), current: displays.selectedSize(for: display.id) ?? display.mode, on: display.id) { $0.sizeLabel }
+                        if rates.count > 1 {
+                            choice("Refresh rate", rates, current: displays.selectedRate(for: display.id) ?? display.mode, on: display.id) { $0.rate ?? "?" }
+                        }
                     }
-                    Spacer()
+                    if turns { rotation(display) }
+                    Spacer(minLength: 0)
                 }
             }
-            if displays.canRotate(display.id) { rotation(display) }
             if let pending = displays.pending, pending.display == display.id {
                 TimelineView(.periodic(from: .now, by: 1)) { context in
                     Text("Keep \(pending.new.label)? Going back in \(pending.secondsLeft(at: context.date)) s").font(ink.words).foregroundStyle(ink.muted)
@@ -644,20 +712,17 @@ struct DisplaysPopover: View {
     /// Rotate › 0°, 90°, 180°, 270° with the one in use ticked (Sven 2026-10-22); a turn stays, and a tip offers Revert
     /// for 15 s (Sven 2026-10-24).
     private func rotation(_ display: DisplayInfo) -> some View {
-        HStack(spacing: 6) {
-            Button {
-                BarMenu.pop(DisplayRotation.degrees.map { degrees in (title: "\(degrees)°", run: { displays.rotate(display.id, to: degrees) }) },
-                            checked: "\(display.rotation)°")
-            } label: {
-                HStack(spacing: 4) {
-                    Image(systemName: "rotate.right")
-                    Text("Rotate \(display.rotation)°")
-                    Image(systemName: "chevron.up.chevron.down").font(.system(size: 9, weight: .semibold))
-                }
+        Button {
+            BarMenu.pop(DisplayRotation.degrees.map { degrees in (title: "\(degrees)°", run: { displays.rotate(display.id, to: degrees) }) },
+                        checked: "\(display.rotation)°")
+        } label: {
+            HStack(spacing: 4) {
+                Image(systemName: "rotate.right")
+                Text("\(display.rotation)°")
+                Image(systemName: "chevron.up.chevron.down").font(.system(size: 9, weight: .semibold))
             }
-            .barButton().accessibilityLabel("Rotate, \(display.rotation)°")
-            Spacer()
         }
+        .barButton().accessibilityLabel("Rotate, \(display.rotation)°").help("Rotate")
     }
 }
 
