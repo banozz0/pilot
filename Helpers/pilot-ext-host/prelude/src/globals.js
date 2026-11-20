@@ -58,6 +58,19 @@ globalThis.clearImmediate = disarm;
 const started = Date.now();
 globalThis.performance = { now: () => Date.now() - started };
 globalThis.global = globalThis;
+// JavaScriptCore leaves SharedArrayBuffer out unless a page is cross-origin isolated; Node always has it. A plain buffer
+// stands in, one thread being all a run has (T28: Todo List makes one at load for Atomics.wait's sleep).
+// Atomics.wait on one is that sleep, at most a second, as nothing else can change it.
+if (typeof globalThis.SharedArrayBuffer === "undefined") {
+  const Shared = class SharedArrayBuffer extends ArrayBuffer {}, wait = Atomics.wait;
+  globalThis.SharedArrayBuffer = Shared;
+  Atomics.wait = (array, index, value, ms) => {
+    if (!(array?.buffer instanceof Shared)) return wait(array, index, value, ms);
+    if (Atomics.load(array, index) !== value) return "not-equal";
+    for (const until = Date.now() + Math.min(Number(ms ?? Infinity) || 0, 1000); Date.now() < until;);
+    return "timed-out";
+  };
+}
 // The child's own environment, which Pilot keeps small (HOME, USER, TMPDIR, PATH, LANG and the extension's id).
 const env = { ...native.env(), NODE_ENV: "production" };
 // No Node ships with Pilot, so execPath is empty (execa reads it as its default nodePath, used only for node scripts) and
