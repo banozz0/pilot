@@ -1,9 +1,9 @@
 import CoreGraphics
 import Foundation
 
-/// The capture box (pilot-ui-redesign S5 B, T23): with Captures › Capture box on, each of the six capture binds opens
-/// the capture overlay as the box, in its own mode, and fixed letters switch the mode inside it (Q257), whatever keys the
-/// user's binds are on. Two choices make a mode: how much of the screen (`How`) and what the capture makes (`What`), with
+/// The capture box (pilot-ui-redesign S5 B, T23; changed by Sven 2026-11-20): Capture tool opens the capture overlay as
+/// the box, and fixed letters pick the mode inside it (Q257), whatever keys the user's binds are on; each specific capture
+/// bind captures at once in its own mode instead. Two choices make a mode: how much of the screen (`How`) and what the capture makes (`What`), with
 /// a timer beside them. Return captures, Esc closes. A dragged area stays held with handles to adjust until Return
 /// (shots 5c-*). This is the box's state and the held area's geometry alone; the overlay keeps them and T24's view draws them.
 public struct CaptureBox: Equatable, Sendable {
@@ -63,8 +63,8 @@ public struct CaptureBox: Equatable, Sendable {
         if how == .scroll, what != .photo { how = .area }
     }
 
-    /// The six capture binds and the mode each opens, in the key sheet's order (S5 B): its left column joins these with
-    /// the user's keys from the bind store, an unset one shown as "no key".
+    /// The six capture binds and the mode each captures in at once, in the key sheet's order (S5 B): its left column joins
+    /// these with the user's keys from the bind store, an unset one shown as "no key".
     public static let binds: [(action: String, opens: CaptureBox)] = [
         ("captures.area", CaptureBox(how: .area)),
         ("captures.activeWindow", CaptureBox(how: .window)),
@@ -74,8 +74,40 @@ public struct CaptureBox: Equatable, Sendable {
         ("captures.screenRecording", CaptureBox(how: .area, what: .record)),
     ]
 
-    /// The mode `action` opens the box in; nil for an action that is not one of the six.
-    public static func opening(_ action: String) -> CaptureBox? { binds.first { $0.action == action }?.opens }
+    // MARK: The bar's parts
+
+    /// What a click on the bar lands on (Sven, 2026-11-20: "select which type from the toolbar and then press return"):
+    /// one of How's or What's choices, the timer, the action button, or Esc's Close.
+    public enum Part: Hashable, Sendable { case how(How), what(What), timer, action, close }
+
+    /// The letter a click on `part` presses, so a click picks as its letter does; nil for a choice already picked (a
+    /// click picks, it never turns one off) and for the action and Close, which act as Return and Esc. Photo has no
+    /// letter: a click on it presses the letter of the Record or Text it goes back from.
+    public func letter(for part: Part) -> Letter? {
+        switch part {
+        case .how(let picked): picked == how ? nil : picked.letter
+        case .what(let picked): picked == what ? nil : picked.letter ?? what.letter
+        case .timer: .timer
+        case .action, .close: nil
+        }
+    }
+
+    // MARK: The bar's place
+
+    /// Where the box's bar of `size` goes in `bounds` (Sven, 2026-11-20): centred just under `area` and kept on the
+    /// display, above it when there is no room below, and inside the display's foot only when neither fits (an area
+    /// that fills the screen's height) or there is no area: Full, Window and an Area not yet dragged. In a flipped view,
+    /// whole points; `gap` clears the area's middle handle.
+    public static func barFrame(_ size: CGSize, under area: CGRect?, within bounds: CGRect, gap: CGFloat = 14,
+                                margin: CGFloat = 8, foot: CGFloat = 26) -> CGRect {
+        let footing = CGRect(x: (bounds.midX - size.width / 2).rounded(), y: bounds.maxY - size.height - foot, width: size.width, height: size.height)
+        guard let area, !area.isEmpty else { return footing }
+        let x = min(max((area.midX - size.width / 2).rounded(), bounds.minX + margin), bounds.maxX - margin - size.width)
+        let below = (area.maxY + gap).rounded(), above = (area.minY - gap - size.height).rounded()
+        if below + size.height <= bounds.maxY - margin { return CGRect(x: x, y: below, width: size.width, height: size.height) }
+        if above >= bounds.minY + margin { return CGRect(x: x, y: above, width: size.width, height: size.height) }
+        return CGRect(x: x, y: footing.minY, width: size.width, height: size.height)
+    }
 
     // MARK: The held area
 
@@ -128,5 +160,28 @@ public struct CaptureBox: Equatable, Sendable {
         let x0 = min(max(min(left, right), bounds.minX), bounds.maxX), x1 = min(max(max(left, right), bounds.minX), bounds.maxX)
         let y0 = min(max(min(top, bottom), bounds.minY), bounds.maxY), y1 = min(max(max(top, bottom), bounds.minY), bounds.maxY)
         return CGRect(x: x0, y: y0, width: x1 - x0, height: y1 - y0).integral
+    }
+}
+
+extension CaptureBox.How {
+    /// The letter that picks it.
+    public var letter: CaptureBox.Letter {
+        switch self {
+        case .area: .area
+        case .window: .window
+        case .full: .full
+        case .scroll: .scroll
+        }
+    }
+}
+
+extension CaptureBox.What {
+    /// The letter that picks it; Photo has none: R or O again goes back to it.
+    public var letter: CaptureBox.Letter? {
+        switch self {
+        case .photo: nil
+        case .record: .record
+        case .text: .text
+        }
     }
 }

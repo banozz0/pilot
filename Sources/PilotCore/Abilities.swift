@@ -266,6 +266,7 @@ public enum Abilities {
         "captures.pickColour": "Freezes the screen under a pixel magnifier; a click copies the colour's hex, Shift-click its RGB.",
         "captures.screenRecording": "Records a screen, an app or an area you pick; the key again stops it.",
         "captures.scrolling": "Captures a page taller than the screen; Pilot scrolls it for you, or you do.",
+        "captures.tool": "Opens the capture box: pick Area, Window, Full screen, Scroll, Record or Text on its bar or by its letter, then press Return.",
         // Drive
         "drive.copy": "Copy in the app in front.",
         "drive.cut": "Cut in the app in front.",

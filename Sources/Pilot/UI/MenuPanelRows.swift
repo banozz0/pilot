@@ -173,7 +173,7 @@ extension MenuEntry {
         "workspaces.rescue": ("lifepreserver", .good), "system.killProcess": ("xmark.circle", .problem),
         "system.activityMenu": ("cpu", .problem),
         "apps.emoji": ("face.smiling", .amber), "apps.clipboard": ("list.clipboard", .good),
-        "captures.area": ("rectangle.dashed", .accent), "captures.activeWindow": ("macwindow.on.rectangle", .third),
+        "captures.tool": ("camera.viewfinder", .accent), "captures.area": ("rectangle.dashed", .accent), "captures.activeWindow": ("macwindow.on.rectangle", .third),
         "captures.fullscreen": ("rectangle.inset.filled", .second), "captures.scrolling": ("arrow.up.and.down.text.horizontal", .good),
         "captures.screenRecording": ("record.circle", .problem), "captures.pauseRecording": ("pause.circle", .problem), "captures.editLast": ("pencil.tip.crop.circle", .accent), "captures.pinLast": ("pin", .accent), "captures.editVideo": ("film", .accent), "captures.restoreThumbnail": ("photo.stack", .accent), "captures.toggleDesktopIcons": ("menubar.dock.rectangle", .second), "captures.repeatArea": ("arrow.counterclockwise.circle", .accent), "captures.delayed": ("timer", .second), "captures.scrollingUp": ("arrow.up.to.line.compact", .good), "captures.ocr": ("text.viewfinder", .amber),
         "captures.subject": ("person.crop.rectangle", .third),

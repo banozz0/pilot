@@ -114,7 +114,7 @@ public enum PilotDefault {
     }()
 
     /// Easy, the new-install default (Q1): letters you can guess, the window keys a Mac with tiling off can use, the
-    /// three capture keys the capture box needs and the two plain combos Q251/Q252 kept. Every key sits on Complex's.
+    /// capture keys (area, window, recording, Capture tool) and the two plain combos Q251/Q252 kept. Every key sits on Complex's.
     public static let easy: [String: Key] = [
         "ai.chat": Key("q"),
         "apps.browser": Key("b"),
@@ -129,6 +129,8 @@ public enum PilotDefault {
         "captures.activeWindow": Key("s", .shift),
         "captures.area": Key("s"),
         "captures.screenRecording": Key("r"),
+        // Capture tool, the capture box (Sven, Q283, 2026-11-20).
+        "captures.tool": Key("s", .ctrl),
         "drive.zoomIn": Key("="),
         "drive.zoomOut": Key("-"),
         "engine.sheet": Key("/"),
@@ -173,6 +175,7 @@ public enum PilotDefault {
             "captures.ocr": Key("x", .shift),
             "captures.screenRecording": Key("r"),
             "captures.scrolling": Key("z"),
+            "captures.tool": Key("s", .ctrl),
             "drive.moveTabLeft": Key("left", [.ctrl, .alt]),
             "drive.moveTabRight": Key("right", [.ctrl, .alt]),
             "drive.nextTab": Key("right", .alt),

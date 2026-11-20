@@ -2,8 +2,8 @@ import Foundation
 import PilotCore
 
 extension SettingsSchema {
-    /// Tools › Captures (spec `capture.html`): the capture box's switch (pilot-ui-redesign T23), Pilot's two folders (empty meaning the
-    /// standard one, `~/Pictures/Pilot`, `~/Movies/Pilot`) and how a recording sounds, counts down and shows clicks.
+    /// Tools › Captures (spec `capture.html`): Pilot's two folders (empty meaning the standard one, `~/Pictures/Pilot`,
+    /// `~/Movies/Pilot`) and how a recording sounds, counts down and shows clicks.
     func registerCaptures(_ store: CaptureSettingsStore) {
         func folder(_ kind: CaptureKind) -> SettingKey {
             .text(kind == .capture ? "capture.folder" : "capture.recordingsFolder", kind == .capture ? "Captures folder" : "Recordings folder",
@@ -14,8 +14,6 @@ extension SettingsSchema {
                   })
         }
         register([
-            .bool("capture.box", "Capture box: each capture key opens it in its own mode", page: "captures", standard: true,
-                  read: { store.box }, write: { store.box = $0 }),
             folder(.capture),
             folder(.recording),
             .choice("capture.audio", "Recording sound", page: "captures", CaptureSettings.Audio.allCases, standard: CaptureSettings.default.audio,
