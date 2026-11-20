@@ -71,6 +71,15 @@ final class ExtensionTools {
 
     static func named(_ ext: Extension) -> String { "\(ext.id) (\(ext.title)\(ext.version.map { " \($0)" } ?? ""))" }
 
+    /// `named` as a question's replaces line shows an installed copy: its title cut to 80 Unicode scalars, its version to 64, title and
+    /// version with every control or hidden scalar written out (ControlGate.Ask.visible), since a folder installed from
+    /// GitHub wrote them.
+    static func shown(_ ext: Extension) -> String {
+        let title = String(String.UnicodeScalarView(ext.title.unicodeScalars.prefix(80)))
+        let version = ext.version.map { String(String.UnicodeScalarView($0.unicodeScalars.prefix(64))) }
+        return "\(ext.id) (\(oneLine(title))\(version.map { " \(oneLine($0))" } ?? ""))"
+    }
+
     // A summary's words (ControlGate.Ask.summed), raw, as the prompt escapes them once, each line kept one line. Pilot
     // speaks in them: an extension is named by its id, which the check holds to a-z, 0-9 and hyphens, and a version only
     // when it reads as one, never by its own title (review 1); and whatever the caller or the extension names, a path or
@@ -106,23 +115,7 @@ final class ExtensionTools {
             file.path + (runs[file.path].map { " (runs \($0.map(\.name).joined(separator: ", ")))" } ?? " (executable)")
         }
         let others = entry.files.filter { runs[$0.path] == nil && !$0.executable }.map(\.path)
-        let replaces: String, headline: String, fromLine: String
-        let from = "From the folder: \(source.path)", version = Self.checked(ext.version) ?? "this copy"
-        do {
-            let old = try ExtensionCheck.replaced(ext.id, in: extensions)
-            replaces = old.isEmpty ? "replaces nothing: no extension \(ext.id) is installed" : "replaces " + old.map { folder in
-                ((try? Extension(folder: folder)).map(Self.named) ?? ext.id) + " at " + folder.path
-            }.joined(separator: " and ") + ", which go\(old.count == 1 ? "es" : "") to the Trash; its data and settings stay"
-            // A folder says what it likes about itself, so a copy in is only ever replaced, never "updated"; the one copy's
-            // version is named, two or more are only counted.
-            let was = old.count == 1 ? (try? Extension(folder: old[0]))?.version : nil
-            headline = old.isEmpty ? "Install extension \(Self.titled(ext.id, ext.version))?" : "Replace extension \(Self.titled(ext.id, was)) with \(version)?"
-            fromLine = old.isEmpty ? from : "\(Self.trashes(old.count)) \(from)"
-        } catch {
-            replaces = ExtensionCatalogue.Problem.reason(error)
-            headline = "Replace what is in place of extension \(ext.id) with \(version)?"
-            fromLine = "Its place in Extensions holds something else; Show details says what. \(from)"
-        }
+        let (replaces, headline, fromLine) = replacing(ext.id, ext.version, from: "From the folder: \(source.path)")
         // Every program the whole names, the ones commands run and every other executable.
         let named = entry.files.filter { runs[$0.path] != nil || $0.executable }.map(\.path)
         // A line each, raw: the question escapes each once and keeps it one line, a break typed in a title or a path only
@@ -135,6 +128,66 @@ final class ExtensionTools {
             "commands, run as you: \(Self.commands(ext))",
             replaces,
         ]).summed(headline, [Self.runs(named, commands: ext.commands.count), fromLine])
+    }
+
+    /// What an install of `id` replaces, in the question's words: the whole's line, the headline, and the summary's
+    /// line ending in `from`.
+    func replacing(_ id: String, _ newVersion: String?, from: String) -> (replaces: String, headline: String, fromLine: String) {
+        let version = Self.checked(newVersion) ?? "this copy"
+        do {
+            let old = try ExtensionCheck.replaced(id, in: extensions)
+            let replaces = old.isEmpty ? "replaces nothing: no extension \(id) is installed" : "replaces " + old.map { folder in
+                ((try? Extension(folder: folder)).map(Self.shown) ?? id) + " at " + folder.path
+            }.joined(separator: " and ") + ", which go\(old.count == 1 ? "es" : "") to the Trash; its data and settings stay"
+            // A folder says what it likes about itself, so a copy in is only ever replaced, never "updated"; the one copy's
+            // version is named, two or more are only counted.
+            let was = old.count == 1 ? (try? Extension(folder: old[0]))?.version : nil
+            return (replaces, old.isEmpty ? "Install extension \(Self.titled(id, newVersion))?" : "Replace extension \(Self.titled(id, was)) with \(version)?",
+                    old.isEmpty ? from : "\(Self.trashes(old.count)) \(from)")
+        } catch {
+            return (ExtensionCatalogue.Problem.reason(error), "Replace what is in place of extension \(id) with \(version)?",
+                    "Its place in Extensions holds something else; Show details says what. \(from)")
+        }
+    }
+
+    /// A GitHub install's question (ADR 0017, T6), asked once its folder is fetched and before anything is downloaded or
+    /// built: where it comes from, its commands and preferences, what is downloaded after Allow and how each is checked,
+    /// and what it replaces. Past what the prompt shows whole (ControlGate.Ask.longest), the commands, preferences and
+    /// packages are counted instead of named, so a big extension is still asked; one still too long (long folder paths)
+    /// is denied unasked, as any question is. Every remote word it shows is held to a rule by the host and again by
+    /// GitHubInstall.fetch before this is asked: the id and command names (the id rule), the modes (Raycast's three), the
+    /// preference names (a letter, then letters, digits, _ and -), the tree (40 hex digits), each package's key, real name
+    /// and version (npm's); the version only when it reads as one (`checked`). The title is the one free text: at most 80
+    /// Unicode scalars, last on its line, escaped here with ControlGate.Ask.visible so the question's text (which the
+    /// gate's denials and the pilot command repeat) never carries a control code; an installed copy's title on the
+    /// replaces line likewise (`shown`).
+    func githubAsk(_ plan: GitHubInstall.Plan, tools: URL, whole: Bool = true) -> (ask: ControlGate.Ask, whole: Bool) {
+        let modes = Dictionary(grouping: plan.commands, by: \.mode).sorted { $0.key < $1.key }.map { "\($0.value.count) \($0.key)" }
+        let commands = whole ? plan.commands.map { "ext.\(plan.id).\($0.name) (\($0.mode))" }.joined(separator: ", ")
+            : "\(plan.commands.count) (\(modes.joined(separator: ", ")))"
+        let preferences = whole ? (plan.preferences.isEmpty ? "none" : plan.preferences.joined(separator: ", ")) : "\(plan.preferences.count)"
+        let esbuild = plan.esbuild == "reuse" ? "esbuild \(plan.esbuildVersion) is already in \(tools.path), reused"
+            : "esbuild \(plan.esbuildVersion) (\(ByteCountFormatter.string(fromByteCount: Int64(plan.esbuildBytes), countStyle: .file)), checked by its pinned sha512) into \(tools.path)"
+        let packages = "\(plan.packages.count) package\(plan.packages.count == 1 ? "" : "s"), each checked by its lockfile's sha512, no install script run"
+            + (whole && !plan.packages.isEmpty ? ": " + plan.packages.map { package in
+                let place = package.key.dropFirst("node_modules/".count), alias = place.components(separatedBy: "/node_modules/").last ?? ""
+                return "\(place)@\(package.version)" + (alias == package.name ? "" : " (\(package.name))")
+            }.joined(separator: ", ") : "")
+        let (replaces, headline, fromLine) = replacing(plan.id, plan.version, from: "From GitHub: \(plan.source)")
+        let ask = ControlGate.Ask.install(.extension, lines: [
+            "\(Self.titled(plan.id, plan.version)) from \(plan.source), tree \(plan.tree.prefix(12)), its title: \(oneLine(plan.title))",
+            "into \(extensions.appending(path: plan.id).path)",
+            "commands, run as you in Pilot's extension host: \(commands)",
+            "preferences: \(preferences)",
+            "fetched to ask this: \(plan.files) files, \(ByteCountFormatter.string(fromByteCount: Int64(plan.bytes), countStyle: .file)) from GitHub, each checked by its git blob hash",
+            "downloads from registry.npmjs.org after Allow: \(esbuild); \(packages)",
+            "built with esbuild on this Mac, then checked as an extension; the temporary folder goes after",
+            replaces,
+        ]).summed(headline, ["Runs its \(plan.commands.count) command\(plan.commands.count == 1 ? "" : "s") as you, built on this Mac. \(fromLine)",
+                             "Downloads \(plan.esbuild == "reuse" ? "" : "esbuild and ")\(plan.packages.count) package\(plan.packages.count == 1 ? "" : "s") from registry.npmjs.org, each hash checked"])
+        let shown = ask.text + "\n" + headline
+        guard whole, shown.unicodeScalars.count > ControlGate.Ask.longest || shown.unicodeScalars.count { $0 == "\n" } > ControlGate.Ask.mostLines else { return (ask, whole) }
+        return githubAsk(plan, tools: tools, whole: false)
     }
 
     /// Read again after Allow: an extension changed or gone while asking denies.
@@ -190,7 +243,7 @@ extension ControlVerbs {
     static let extSubcommands: [(name: String, usage: String, help: String)] = [
         ("new", "ext new <id> [--mode <mode>] [--title <title>] [--dir <folder>]", "Makes an extension folder from a template, outside Pilot's Extensions folder."),
         ("test", "ext test [<folder>] [--check]", "Checks a folder as an extension, then runs each command once after Allow; --check only checks. A folder outside the temporary folders and ~/Downloads is read only after Allow."),
-        ("install", "ext install <folder>", "Copies a checked folder into Pilot's Extensions folder after Allow."),
+        ("install", "ext install <folder> | ext install github:<owner>/<repo>/<folder>", "Copies a checked folder into Pilot's Extensions folder after Allow. A Raycast extension's GitHub folder is fetched (each file checked by its git blob hash) and asked about, then built on this Mac without Node: esbuild downloaded once into Tools and the lockfile's packages from the npm registry, each checked by its sha512, no install script run."),
         ("remove", "ext remove <id>", "Moves an installed extension to the Trash after Allow; its data and settings stay."),
         ("show", "ext show <id>", "An installed extension's card: version, description, examples, what it says it touches, commands, the preferences it still needs."),
         ("broken", "ext broken", "The folders in Extensions that do not read as extensions, each with why."),
@@ -324,6 +377,9 @@ extension ControlVerbs {
     }
 
     private static func installExtension(_ args: ControlArguments, _ tools: ExtensionTools, cwd: String?, peer: ControlPeer?) async throws(ControlError) -> JSONValue {
+        if let github = GitHubInstall(try args.word(1, "folder"), extensions: tools.extensions) {
+            return try await installFromGitHub(github, tools, peer: peer)
+        }
         let folder = ExtensionTools.folder(try args.word(1, "folder"), cwd: cwd)
         // Read once into a copy: the check, the question and the install all read the copy's bytes.
         let staged = try await tools.stage(folder, peer: peer, verb: "installed")
@@ -347,6 +403,56 @@ extension ControlVerbs {
         }
     }
 
+    /// `ext install github:<owner>/<repo>/<folder>` (ADR 0017, T6): the folder fetched and planned, asked about, then
+    /// built and installed as a checked local folder. The workspace goes whatever happens: success, a refusal or a No.
+    /// Answers every request made, with the host it went to and the check it passed.
+    private static func installFromGitHub(_ github: GitHubInstall, _ tools: ExtensionTools, peer: ControlPeer?) async throws(ControlError) -> JSONValue {
+        defer { github.remove() }
+        func refused(_ error: any Error, _ what: String) -> ControlError {
+            ControlError(.badValue, "github:\(oneLine(github.spec)) not \(what): \(oneLine(ExtensionCatalogue.Problem.reason(error)))")
+        }
+        let plan: GitHubInstall.Plan, fetched: [GitHubInstall.Fetched]
+        do { (plan, fetched) = try await github.fetch() } catch { throw refused(error, "fetched, nothing asked") }
+        do { _ = try ExtensionCheck.replaced(plan.id, in: tools.extensions) } catch {
+            throw ControlError(.badValue, oneLine(ExtensionCatalogue.Problem.reason(error)) + " Nothing asked.")
+        }
+        // Built again after Allow, as the local route's is: an extension installed or removed under this id while asking
+        // changes the question, and the gate then denies.
+        return try await tools.gate.allow(tools.githubAsk(plan, tools: github.tools).ask, peer: peer) { () throws(ControlError) in
+            let whole = tools.githubAsk(plan, tools: github.tools).whole
+            // What the question named as replaced, the gate having just read it again; the build takes a while, so it is
+            // read once more after it, and a difference installs nothing.
+            let named: [URL]
+            do { named = try ExtensionCheck.replaced(plan.id, in: tools.extensions) } catch { throw refused(error, "built, nothing installed") }
+            let built: GitHubInstall.Built, more: [GitHubInstall.Fetched]
+            do { (built, more) = try await github.build(plan) } catch { throw refused(error, "built, nothing installed") }
+            let staged: ExtensionCheck.Staged
+            do { staged = try await ExtensionCheck.stage(URL(filePath: built.folder)) } catch { throw refused(error, "installed") }
+            defer { staged.remove() }
+            guard let ext = staged.ext, staged.entry != nil, ext.id == plan.id else {
+                throw ControlError(.badValue, "github:\(oneLine(github.spec)) built, but fails the check, so nothing was installed:\n"
+                                   + (staged.problems.isEmpty ? ["it is not extension \(plan.id)"] : staged.problems).map { "- \(oneLine($0))" }.joined(separator: "\n"))
+            }
+            let old: [URL]
+            do { old = try ExtensionCheck.replaced(ext.id, in: tools.extensions) } catch { throw refused(error, "installed") }
+            guard old.map(\.standardizedFileURL.path) == named.map(\.standardizedFileURL.path) else {
+                throw ControlError(.badValue, "github:\(oneLine(github.spec)) built, but what it replaces changed while building "
+                                   + "(asked: \(named.isEmpty ? "nothing" : named.map(\.path).joined(separator: ", ")); now: "
+                                   + "\(old.isEmpty ? "nothing" : old.map(\.path).joined(separator: ", "))), so nothing was installed")
+            }
+            let done: Extension
+            do { done = try await ExtensionCheck.install(staged, extensions: tools.extensions, trash: tools.trash) } catch { throw refused(error, "installed") }
+            log.notice("ext install: \(done.id, privacy: .public) from github:\(github.spec, privacy: .public), from the pilot command")
+            return .object(["installed": .string(done.id), "folder": .string(done.folder.path), "from": .string(plan.source), "tree": .string(plan.tree),
+                            "commands": .array(done.listed.map { .string($0.actionID) }), "replaced": .array(old.map { .string($0.path) }),
+                            "question": .string(whole ? "whole" : "counted"),
+                            "esbuild": .object(["was": .string(built.esbuild), "version": .string(built.esbuildVersion), "path": .string(built.esbuildPath)]),
+                            "fetched": .array((fetched + more).map { f in
+                                .object(["host": .string(f.host), "what": .string(oneLine(f.what)), "bytes": .number(Double(f.bytes)), "check": .string(f.check)])
+                            })])
+        }
+    }
+
     private static func removeExtension(_ args: ControlArguments, _ tools: ExtensionTools, peer: ControlPeer?) async throws(ControlError) -> JSONValue {
         let id = try args.word(1, "id")
         guard tools.installed(id) != nil else { throw ControlError(.badValue, "no extension \(id) is installed") }
@@ -360,4 +466,10 @@ extension ControlVerbs {
                             "kept": .string(tools.data.appending(path: id).path)])
         }
     }
+}
+
+/// A remote word as one line of T6's output: ControlGate.Ask.visible, its written-out break (⏎ before a real new line) kept as
+/// ⏎ alone, so a word never starts a line of the question, a refusal or the answer.
+private func oneLine(_ text: String) -> String {
+    ControlGate.Ask.visible(text).replacingOccurrences(of: "⏎\n", with: "⏎", options: .literal)
 }

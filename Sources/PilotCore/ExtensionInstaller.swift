@@ -96,3 +96,106 @@ public struct ExtensionInstaller: Sendable {
         return ext.title
     }
 }
+
+/// A Raycast extension's folder from GitHub, built on this Mac without Node (ADR 0017, T6): pilot-ext-host's `--fetch`
+/// lists the folder once and fetches its files into `workspace` (each checked against its git blob hash), and answers
+/// the plan the question is made from; after Allow its `--build` gets esbuild into `tools` once and the lockfile's
+/// tarballs (each checked by its sha512, no install script run) and bundles each command. Pilot then checks and installs
+/// the built folder as a local one. `workspace` is Pilot's alone, made beside the Extensions folder, and gone after.
+public struct GitHubInstall: Sendable {
+    public struct Plan: Codable, Sendable {
+        public struct Command: Codable, Sendable { public let name, title, mode: String }
+        /// `key` is the lockfile's place, the folder Node requires it by; `name` the registry's, different for an alias.
+        public struct Package: Codable, Sendable { public let key, name, version, resolved, integrity: String }
+        public let id, title, source, tree, manifest, esbuild, esbuildVersion: String
+        public let version: String?
+        public let commands: [Command], preferences: [String], packages: [Package]
+        public let files, bytes, esbuildBytes: Int
+    }
+
+    /// One request the host made: its host, what it fetched, its size and the check it passed.
+    public struct Fetched: Codable, Sendable { public let host, what, check: String; public let bytes: Int }
+
+    public let spec: String, workspace: URL, tools: URL
+
+    /// `github:<owner>/<repo>/<folder>` as the host takes it, nil for any other argument.
+    public init?(_ argument: String, extensions: URL) {
+        guard argument.hasPrefix("github:") else { return nil }
+        spec = String(argument.dropFirst("github:".count))
+        let support = extensions.deletingLastPathComponent()
+        workspace = support.appending(path: "\(Self.prefix)\(UUID().uuidString)")
+        tools = support.appending(path: "Tools")
+    }
+
+    static let prefix = ".ext-github-"
+
+    /// The plan, once Pilot holds every remote word the question shows to its own rules too, as the host's plan() does:
+    /// the id and every command name as Extension.isName, Raycast's three modes, each preference name a letter then
+    /// letters, digits, _ and -, the tree 40 lowercase hex digits, each package's key names, real name and version npm's,
+    /// and the title, the one free text, at most 80 Unicode scalars (escaped, never refused: the question and every
+    /// refusal the pilot command echoes pass it through ControlGate.Ask.visible; the version shows only when
+    /// ExtensionCatalogue.Version reads it). A workspace over an
+    /// hour old, left by a run that stopped midway, is swept first.
+    public func fetch() async throws -> (Plan, [Fetched]) {
+        let fm = FileManager.default, support = workspace.deletingLastPathComponent()
+        for name in (try? fm.contentsOfDirectory(atPath: support.path)) ?? [] where name.hasPrefix(Self.prefix) {
+            let old = support.appending(path: name)
+            if let made = (try? fm.attributesOfItem(atPath: old.path))?[.modificationDate] as? Date, made < Date(timeIntervalSinceNow: -3600) {
+                try? fm.removeItem(at: old)
+            }
+        }
+        let (lines, last) = try await host(["--fetch", spec, workspace.path, tools.path], input: Data())
+        let plan = try JSONDecoder().decode(Plan.self, from: last)
+        guard Extension.isName(plan.id), plan.title.unicodeScalars.count <= 80,
+              plan.commands.allSatisfy({ Extension.isName($0.name) && ["view", "no-view", "menu-bar"].contains($0.mode) }) else {
+            throw Refused(errorDescription: "its package.json names it or a command outside Pilot's id rule (a-z, 0-9 and hyphens)")
+        }
+        guard plan.preferences.allSatisfy({ $0.count <= 64 && $0.wholeMatch(of: #/[A-Za-z][A-Za-z0-9_-]*/#) != nil }) else {
+            throw Refused(errorDescription: "its package.json names a preference outside a letter then letters, digits, _ and -")
+        }
+        guard plan.tree.wholeMatch(of: #/[0-9a-f]{40}/#) != nil else { throw Refused(errorDescription: "GitHub's listing named no tree") }
+        guard plan.packages.allSatisfy(Self.npm) else { throw Refused(errorDescription: "its lockfile names a package outside npm's names") }
+        return (plan, lines)
+    }
+
+    /// A package npm could have put there: every name on its key's path and its real name npm's, legacy capitals
+    /// included, and a version of semver's characters. The host's plan() holds them to the same pattern first
+    /// (Installer.npmName in Helpers/pilot-ext-host/Sources/pilot-ext-host/Install.swift, a package of its own): change both together.
+    static func npm(_ package: Plan.Package) -> Bool {
+        let name = #/(@[A-Za-z0-9~-][A-Za-z0-9._~-]*\/)?[A-Za-z0-9~-][A-Za-z0-9._~-]*/#
+        guard package.key.hasPrefix("node_modules/") else { return false }
+        let names = package.key.dropFirst("node_modules/".count).components(separatedBy: "/node_modules/") + [package.name]
+        return names.allSatisfy { $0.count <= 214 && $0.wholeMatch(of: name) != nil }
+            && package.version.count <= 64 && package.version.wholeMatch(of: #/[0-9A-Za-z.+-]+/#) != nil
+    }
+
+    /// What a build answers: its folder, and the esbuild it used, downloaded or reused.
+    public struct Built: Decodable, Sendable { public let folder, esbuild, esbuildPath, esbuildVersion: String }
+
+    /// The build, and each request it made; `plan` is the one asked about.
+    public func build(_ plan: Plan) async throws -> (Built, [Fetched]) {
+        let (lines, last) = try await host(["--build", workspace.path, tools.path], input: try JSONEncoder().encode(plan))
+        return (try JSONDecoder().decode(Built.self, from: last), lines)
+    }
+
+    public func remove() { try? FileManager.default.removeItem(at: workspace) }
+
+    struct Refused: LocalizedError { let errorDescription: String? }
+
+    /// Runs the host in one of its install steps: its `fetch` lines, and its last line, which is `plan` or `built`;
+    /// an `error` line throws its words.
+    private func host(_ arguments: [String], input: Data) async throws -> ([Fetched], Data) {
+        guard let (host, _) = ExtensionRun.host(environment: ProcessInfo.processInfo.environment) else { throw ExtensionRun.NoHost() }
+        try FileManager.default.createDirectory(at: workspace, withIntermediateDirectories: true)
+        let environment = ["PATH": "/usr/bin:/bin:/usr/sbin:/sbin", "TMPDIR": FileManager.default.temporaryDirectory.path]
+        let out = try await ChildProcess.run(host.path, arguments, environment: environment, input: input, directory: workspace,
+                                             timeout: .seconds(600), limit: 4 << 20)
+        let lines = out.split(separator: "\n").map { Data($0.utf8) }
+        struct Line: Decodable { let type: String, text: String? }
+        guard let last = lines.last, let kind = try? JSONDecoder().decode(Line.self, from: last) else { throw Refused(errorDescription: "the extension host answered nothing") }
+        if kind.type == "error" { throw Refused(errorDescription: kind.text ?? "the extension host stopped") }
+        return (lines.compactMap { line in
+            (try? JSONDecoder().decode(Line.self, from: line))?.type == "fetch" ? try? JSONDecoder().decode(Fetched.self, from: line) : nil
+        }, last)
+    }
+}
