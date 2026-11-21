@@ -16,25 +16,40 @@
     else stills.forEach(load);
   }
   const clips = $$('.sbox video[data-src]');
-  if (clips.length && !reduced && !(navigator.connection && navigator.connection.saveData) && 'IntersectionObserver' in window) {
+  const autoplay = !reduced && !(navigator.connection && navigator.connection.saveData) && 'IntersectionObserver' in window;
+  if (clips.length) {
     const src = (v) => { if (v.getAttribute('src')) return; v.muted = true; v.playsInline = true; v.loop = true; v.preload = 'auto'; v.src = v.dataset.src; };
-    const near = new IntersectionObserver((es) => es.forEach(e => { if (e.isIntersecting) { src(e.target); near.unobserve(e.target); } }), { rootMargin: '0px 0px 120px 0px' });
+    const near = autoplay && new IntersectionObserver((es) => es.forEach(e => { if (e.isIntersecting) { src(e.target); near.unobserve(e.target); } }), { rootMargin: '0px 0px 120px 0px' });
     /* A clip starts muted (browsers autoplay only that); a take's sound button, after its pause button, unmutes it and
        mutes any other (Sven, 2026-11-18). A browser that refuses the unmuted play (Safari, scrolling back) gets it muted. */
     const snd = (v) => { const b = v.nextElementSibling?.nextElementSibling; return b && b.classList.contains('ssnd') ? b : null; };
     const sound = (v, on) => { v.muted = !on; const b = snd(v); if (!b) return; b.dataset.on = on ? '1' : ''; b.setAttribute('aria-label', b.getAttribute('aria-label').replace(/^(Unmute|Mute)/, on ? 'Mute' : 'Unmute')); };
     const shown = (v) => { v.classList.add('on'); const b = v.nextElementSibling; if (b) b.hidden = false; const s = snd(v); if (s) s.hidden = false; };
     const run = (v) => { if (v.dataset.paused || document.hidden) return; src(v); v.play().then(() => shown(v)).catch(() => { if (!v.muted) { sound(v, false); v.play().then(() => shown(v)).catch(() => {}); } }); };
-    const inView = new IntersectionObserver((es) => es.forEach(e => { const v = e.target; v._in = e.intersectionRatio >= .5; if (v._in) run(v); else v.pause(); }), { threshold: [0, .5] });
+    const inView = autoplay && new IntersectionObserver((es) => es.forEach(e => { const v = e.target; v._in = e.intersectionRatio >= .5; if (v._in) run(v); else if (!v.dataset.fs) v.pause(); }), { threshold: [0, .5] });
     /* No clip is asked for before the page has loaded: the hero's is on screen from the start, and fetching it while the
        poster, fonts and styles are still coming would hold back the first paint (Sven, 2026-11-18). */
     const arm = () => clips.forEach(v => { near.observe(v); inView.observe(v); });
-    if (document.readyState === 'complete') arm(); else addEventListener('load', arm, { once: true });
+    if (autoplay) { if (document.readyState === 'complete') arm(); else addEventListener('load', arm, { once: true }); }
     const paused = (v, off) => { const b = v.nextElementSibling; if (off) { v.dataset.paused = '1'; v.pause(); } else { delete v.dataset.paused; run(v); } if (!b) return; b.setAttribute('aria-label', b.getAttribute('aria-label').replace(/^(Pause|Play)/, off ? 'Play' : 'Pause')); $('path', b).setAttribute('d', off ? 'M5 3v10l8-5z' : 'M4.5 3h2.5v10H4.5zM9 3h2.5v10H9z'); };
     clips.forEach(v => { const b = v.nextElementSibling, s = snd(v);
       b?.addEventListener('click', () => paused(v, !v.dataset.paused));
       s?.addEventListener('click', () => { const on = v.muted; clips.forEach(o => { if (o !== v && !o.muted) sound(o, false); }); sound(v, on); if (on) { if (v.dataset.paused) paused(v, false); else run(v); } }); });
     document.addEventListener('visibilitychange', () => clips.forEach(v => { if (document.hidden) v.pause(); else if (v._in) run(v); }));
+    /* Full screen (Sven, 2026-11-21: "i should be able to do that"): a clip's corner button opens it with the browser's
+       controls and, for a take, its sound (the press is the visitor's, so the unmuted play is allowed), muting any other.
+       Esc, the browser's button or the system gesture brings it back where it was, muted and looping again (paused under
+       reduced motion or Save-Data, its poster back). An iPhone has no element full screen, only the video's own player. */
+    const fsOn = (v) => { v.dataset.fs = v.muted ? 'm' : 'u'; v.controls = true; v.removeAttribute('aria-hidden'); clips.forEach(o => { if (o !== v && !o.muted) sound(o, false); }); if (snd(v)) sound(v, true); };
+    const fsOff = (v) => { if (!v.dataset.fs) return; const was = v.dataset.fs; delete v.dataset.fs; v.controls = false; v.playsInline = true; v.setAttribute('aria-hidden', 'true'); sound(v, was === 'u'); if (autoplay && v._in && !v.dataset.paused) run(v); else v.pause(); };
+    const full = (v) => { src(v); fsOn(v); const go = () => v.play().catch(() => {});
+      if (v.requestFullscreen && document.fullscreenEnabled) { go(); v.requestFullscreen().catch(() => fsOff(v)); }
+      else if (v.webkitEnterFullscreen && v.readyState) { go(); v.webkitEnterFullscreen(); }
+      else if (v.webkitEnterFullscreen) { v.playsInline = false; go(); }   /* no metadata yet: an inline-less play opens the player */
+      else fsOff(v); };
+    clips.forEach(v => { const f = $('.sfs', v.parentElement); if (!f) return; f.hidden = false; f.addEventListener('click', () => full(v));
+      v.addEventListener('webkitendfullscreen', () => fsOff(v)); });
+    document.addEventListener('fullscreenchange', () => { if (!document.fullscreenElement) clips.forEach(fsOff); });
   }
 
   /* ------------------------------------------------ the hero: strike, film */
