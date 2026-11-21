@@ -116,13 +116,15 @@ final class AppWindowModel {
     func shows(_ page: AppPage) -> Bool { page == self.page && extensionPage == nil }
 
     /// The name over the page: an extension page's emoji and title, else the page's.
-    var title: String {
+    var title: String { Self.title(page, extensionPage: extensionPage) }
+    static func title(_ page: AppPage, extensionPage: String?) -> String {
         guard let id = extensionPage else { return page.title }
         return ExtensionPages.shared.entries.first { $0.id == id }?.label ?? id
     }
 
     /// The page's tabs; an extension page has none.
-    var tabs: [(value: AppSection?, title: String)] { extensionPage == nil ? page.tabs : [] }
+    var tabs: [(value: AppSection?, title: String)] { Self.tabs(page, extensionPage: extensionPage) }
+    static func tabs(_ page: AppPage, extensionPage: String?) -> [(value: AppSection?, title: String)] { extensionPage == nil ? page.tabs : [] }
 
     /// Shows extension `id`'s page (story 161), under the Extensions page in the sidebar.
     func goExtensionPage(_ id: String) {

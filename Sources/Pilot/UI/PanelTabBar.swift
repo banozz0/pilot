@@ -12,10 +12,9 @@ struct PanelTabBar: View {
     @Environment(\.style) private var style
     @Bindable var model: AppWindowModel
     let more: PanelMore
-    /// The bar's width and each label's, as drawn: a tab's by its area, More's by the name it carries.
+    /// The bar's width and each label's, as drawn (PanelTabMeasures).
     @State private var width: CGFloat = 0
-    @State private var tabWidths: [AppArea: CGFloat] = [:]
-    @State private var moreWidths: [String: CGFloat] = [:]
+    @State private var widths = PanelTabWidths()
 
     static let height: CGFloat = 64
     /// The traffic lights' inset at the left, as drawn.
@@ -39,7 +38,7 @@ struct PanelTabBar: View {
         .frame(height: Self.height)
         // The window's width, not the strip's: a strip too wide for it would overflow and read as room.
         .frame(minWidth: 0, maxWidth: .infinity)
-        .background { measures(shown) }
+        .background { PanelTabMeasures(shown: shown, widths: widths) }
         .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
         .onChange(of: split.tabs.count, initial: true) { _, count in
             PanelTabs.count = count; more.tabs = count
@@ -51,6 +50,7 @@ struct PanelTabBar: View {
 
     /// The tabs that fit the bar now; `AppArea.tabCount` until every label is measured.
     private func count(_ shown: [AppArea]) -> Int {
+        let tabWidths = self.widths.tabs, moreWidths = self.widths.more
         let widths = shown.compactMap { tabWidths[$0] }, titles = ["More"] + shown.map(\.title)
         guard width > 0, widths.count == shown.count, titles.allSatisfy({ moreWidths[$0] != nil }) else { return AppArea.tabCount }
         // More holding areas i... is as wide as the widest name among them, or "More".
@@ -58,17 +58,30 @@ struct PanelTabBar: View {
         return AppArea.tabsThatFit(widths: widths.map(Double.init), more: more.map(Double.init), spacing: PanelTabStrip.spacing,
                                    room: Double(Self.room(width)))
     }
+}
 
-    /// Every tab and every More name the bar could draw, each alone, hidden: what `count` reads.
-    private func measures(_ shown: [AppArea]) -> some View {
+/// Each tab's label and each More name's, as drawn: a tab's by its area, More's by the name it carries.
+@MainActor @Observable final class PanelTabWidths {
+    var tabs: [AppArea: CGFloat] = [:]
+    var more: [String: CGFloat] = [:]
+}
+
+/// Every tab and every More name the bar could draw, each alone, hidden: what the bar's count reads. A view of its own
+/// whose inputs are the areas alone, never the page open, so a page switch, which redraws the bar, leaves these strips
+/// as they are (page-switch-4).
+private struct PanelTabMeasures: View {
+    let shown: [AppArea]
+    let widths: PanelTabWidths
+
+    var body: some View {
         ZStack {
             ForEach(shown, id: \.self) { area in
                 PanelTabStrip(tabs: [area], open: area, moreTitle: "", moreOn: false, moreShown: false)
-                    .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { tabWidths[area] = $0 }
+                    .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { widths.tabs[area] = $0 }
             }
             ForEach(["More"] + shown.map(\.title), id: \.self) { title in
                 PanelTabStrip(tabs: [], open: .home, moreTitle: title, moreOn: true)
-                    .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { moreWidths[title] = $0 }
+                    .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { widths.more[title] = $0 }
             }
         }
         .hidden().accessibilityHidden(true)
