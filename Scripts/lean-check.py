@@ -6,7 +6,6 @@
     Scripts/lean-check.py launch [--runs 3]    quits and reopens Pilot (lane 1 only)
     Scripts/lean-check.py menu [--days 7]      Hyper+Space to the menu's first frame, from Pilot's log (anyone)
     Scripts/lean-check.py all                  size, then launch, then idle, then menu (lane 1 only)
-    Scripts/lean-check.py ext [--window 60]    every running extension host's memory while its view is open (anyone)
 
 Budgets: Scripts/lean-budgets.json (or --budgets FILE). Exit 1 when anything is over, 2 when a reading is missing.
 Launch times run from `open` to Pilot's log line "tap installed" (binds); run 1 is the build's first launch (as cold as it
@@ -39,11 +38,6 @@ menuOpenMs is set). From 20, a
 missing menuOpenMs is set to that p75 plus ratchetMarginPercent, never above the 100 ms line (canon: a timing budget
 never sits above its line), and written into lean-budgets.json; the newest build's p75 is checked against it, and feeds
 the ratchet once that build has 20 presses.
-Ext (ADR 0017, raycast-extensions T4; Sven Q1, 2026-11-19): reads the footprint of every running pilot-ext-host (Pilot's
-and any sandbox's) every 0.25 s over --window seconds, as Pilot's own memory stop reads it (proc_pid_rusage), and checks
-the p90 (nearest rank) of all readings against extHostOpenMB. A host runs only while an extension view is open, so open
-one first (the top-20 harness does); with none running it prints so and fails nothing. Never in `all`, never ratcheted:
-fixture readings would lower the line below what real extensions need. Pilot itself kills a host past 512 MB.
 """
 import argparse, ctypes, datetime, json, math, os, plistlib, re, select, subprocess, sys, time
 
@@ -219,7 +213,7 @@ def write_budgets(path, budgets):
 
 # Sven Q236 (2026-11-18): the web widgets' idle RAM stays at 60 MB. Its readings came from one WebKit process, and a
 # second web widget would break a budget lowered from them.
-NO_RATCHET = {"widgetsWebIdleMB", "extHostOpenMB"}
+NO_RATCHET = {"widgetsWebIdleMB"}
 
 
 def ratchet(budgets, report, path, readings_path):
@@ -408,41 +402,6 @@ def launch(report, app, runs):
             report.check(name, seen.get("files"), "launchFilesSeconds", "s")
 
 
-RUSAGE_INFO_V2, FOOTPRINT_OFFSET = 2, 72  # rusage_info_v2: a 16-byte uuid, then uint64s; ri_phys_footprint is the 8th
-
-
-def rusage_footprint_mb(pid):
-    """ri_phys_footprint from proc_pid_rusage, the number Pilot's memory stop reads (ExtensionRun.footprint); None once gone."""
-    buffer = ctypes.create_string_buffer(512)  # rusage_info_v2 is 152 bytes; room for the kernel's newer layouts
-    if ctypes.CDLL(None).proc_pid_rusage(ctypes.c_int(pid), ctypes.c_int(RUSAGE_INFO_V2), buffer) != 0:
-        return None
-    return int.from_bytes(buffer.raw[FOOTPRINT_OFFSET:FOOTPRINT_OFFSET + 8], "little") / MIB
-
-
-def p90(values):
-    """Nearest rank: the reading 9 in 10 are at or under."""
-    ordered = sorted(values)
-    return ordered[math.ceil(0.9 * len(ordered)) - 1]
-
-
-def ext_hosts(report, window):
-    name = "extension host while open, p90"
-    readings, hosts, end = [], set(), time.monotonic() + window
-    while time.monotonic() < end:
-        out = subprocess.run(["pgrep", "-x", "pilot-ext-host"], capture_output=True, text=True).stdout
-        for pid in map(int, out.split()):
-            mb = rusage_footprint_mb(pid)
-            if mb is not None:
-                readings.append(mb)
-                hosts.add(pid)
-        time.sleep(0.25)
-    if not readings:
-        return print(f"info {name}: no pilot-ext-host ran in the {window} s window; open an extension view and rerun")
-    print(f"info {name}: {len(readings)} readings from {len(hosts)} hosts, median {sorted(readings)[len(readings) // 2]:.2f} MB, "
-          f"peak {max(readings):.2f} MB")
-    report.check(name, p90(readings), "extHostOpenMB", "MB")
-
-
 def menu_presses(text):
     """The menu timings in `log show` compact lines, oldest first: (when, ms, build)."""
     return [(line[:19], int(m[1]), m[2]) for line in text.splitlines() if (m := MENU_OPEN.search(line))]
@@ -484,7 +443,7 @@ def menu(report, budgets_path, days):
 
 def main():
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    p.add_argument("check", nargs="?", choices=["size", "idle", "launch", "menu", "all", "ext"], default="size")
+    p.add_argument("check", nargs="?", choices=["size", "idle", "launch", "menu", "all"], default="size")
     p.add_argument("--app", default=os.path.join(ROOT, "build", "Pilot.app"))
     p.add_argument("--budgets", default=os.path.join(ROOT, "Scripts", "lean-budgets.json"))
     p.add_argument("--runs", type=int, default=3)
@@ -504,8 +463,6 @@ def main():
         idle(report, a.settle, a.window)
     if a.check in ("all", "menu"):
         menu(report, a.budgets, a.days)
-    if a.check == "ext":
-        ext_hosts(report, a.window)
     ratchet(budgets, report, a.budgets, a.readings)
     sys.exit(report.code)
 

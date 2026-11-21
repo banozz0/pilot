@@ -9,9 +9,6 @@ public struct Extension: Equatable, Sendable {
     /// detail, markdown with facts beside it (detail, card agent-bo-95423245).
     public enum Mode: String, Equatable, Sendable { case noView = "no-view", list, detail }
 
-    /// A program speaking JSON lines (ADR 0010), or a Raycast-format bundle the extension host runs (ADR 0017).
-    public enum Runtime: Equatable, Sendable { case process, raycast }
-
     public struct Command: Equatable, Sendable {
         public let id: CommandID, title: String, icon: String?, mode: Mode
         /// Who narrows a list command's rows; Pilot for a no-view one, which has none.
@@ -27,10 +24,6 @@ public struct Extension: Equatable, Sendable {
         /// A no-view command's word at the root (`"keyword": "todo"`, 2026-10-10): "todo buy milk" answers with a row
         /// whose Return runs it, the rest of the search its `input`. It reaches a hidden command too; nil when it has none.
         public let keyword: String?
-        /// What runs it: its own program, or pilot-ext-host for a Raycast-format command, whose program is its bundle (ADR 0017).
-        public internal(set) var runtime: Runtime = .process
-        /// A Raycast-format command's icon file, its own or its extension's (T25); nil for an extension.json one.
-        public internal(set) var picture: String?
 
         public var name: String { id.command }
         public var actionID: String { id.actionID }
@@ -67,21 +60,10 @@ public struct Extension: Equatable, Sendable {
         }
 
         public let name: String, title: String, kind: Kind, required: Bool, `default`: JSONValue?, description: String?
-        /// The commands that declare it, a Raycast command's own preference (T28); nil for the whole extension's, which every
-        /// command needs. A required one stops only these commands.
-        public var commands: Set<String>?
 
-        public init(name: String, title: String, kind: Kind, required: Bool = false, default: JSONValue? = nil, description: String? = nil,
-                    commands: Set<String>? = nil) {
+        public init(name: String, title: String, kind: Kind, required: Bool = false, default: JSONValue? = nil, description: String? = nil) {
             self.name = name; self.title = title; self.kind = kind; self.required = required; self.default = `default`
-            self.description = description; self.commands = commands
-        }
-
-        /// Whether a run of `command` needs it: the extension's always, a command's own only for that command; with no
-        /// command (an action outliving its run, whose command already started) only the extension's.
-        public func applies(to command: Command?) -> Bool {
-            guard let commands else { return true }
-            return command.map { commands.contains($0.name) } ?? false
+            self.description = description
         }
 
         /// What the manifest says, checked by `init(_:)`.
@@ -115,7 +97,7 @@ public struct Extension: Equatable, Sendable {
             saved.flatMap { fits($0) ? $0 : nil } ?? `default` ?? (kind == .checkbox ? .bool(false) : nil)
         }
 
-        /// A required preference without `value`, an empty string counting as none: the commands it applies to do not run.
+        /// A required preference without `value`, an empty string counting as none: its commands do not run.
         public func isMissing(_ value: JSONValue?) -> Bool { required && (value == nil || value == .string("")) }
 
         /// Whether `value` is one this preference takes: a boolean for a checkbox, one of its options for a dropdown, a string otherwise.
@@ -132,7 +114,7 @@ public struct Extension: Equatable, Sendable {
 
     /// Why a folder is not an extension, said in the log and, later, on the Extensions page.
     public enum Problem: Error, Equatable, Sendable {
-        case noManifest, unreadable(String), badID(String), unknownRuntime(String), noCommands, badCommandName(String),
+        case noManifest, raycastFormat, unreadable(String), badID(String), unknownRuntime(String), noCommands, badCommandName(String),
              duplicateCommand(String), unknownMode(command: String, mode: String), missingProgram(command: String, run: String),
              duplicateID(String), unknownFilter(command: String, filter: String), sessionNeedsOwnList(command: String),
              unknownPreferenceType(preference: String, type: String), noOptions(preference: String), duplicatePreference(String),
@@ -141,6 +123,7 @@ public struct Extension: Equatable, Sendable {
         public var reason: String {
             switch self {
             case .noManifest: "no extension.json"
+            case .raycastFormat: "a Raycast extension (package.json), which Pilot does not run: its own extensions are extension.json folders"
             case .unreadable(let why): "extension.json does not read: \(why)"
             case .badID(let id): "id \"\(id)\" must be lowercase letters, digits and hyphens"
             case .unknownRuntime(let r): "runtime \"\(r)\" is not one Pilot runs (process)"
@@ -170,10 +153,6 @@ public struct Extension: Equatable, Sendable {
 
     public let id: String, title: String, icon: String?, permissions: Permissions, preferences: [Preference], commands: [Command]
     public let folder: URL
-    /// A Raycast-format extension's icon file in its `assets/` (T25); nil for an extension.json one, whose icon is an emoji.
-    public internal(set) var picture: String?
-    /// Raycast-format (ADR 0017), not one of Pilot's own extension.json extensions, which T25 sets aside.
-    public var isRaycast: Bool { commands.contains { $0.runtime == .raycast } }
     /// The manifest's `"version"`, read only by the extension catalogue to tell an update (2026-10-10); nil when it has
     /// none or it is not a string.
     public let version: String?
@@ -183,9 +162,6 @@ public struct Extension: Equatable, Sendable {
     /// Its page in the app window and its top-bar item, each a command Pilot asks again on its pace (story 161); nil
     /// when the manifest declares none. The menu branch needs no declaring: every extension has one.
     public let page: Surface?, bar: Surface?
-    /// Every top-bar item it has, `bar` first: an extension.json declares one at most, a Raycast extension one per
-    /// `menu-bar` command (T12).
-    public let bars: [Surface]
 
     /// At most this many examples are shown.
     public static let mostExamples = 2
@@ -208,9 +184,11 @@ public struct Extension: Equatable, Sendable {
 
     /// The extension `folder` holds; throws its Problem when it is not one.
     public init(folder: URL) throws {
-        if RaycastManifest.holds(folder) { self = try Extension(raycast: folder); return }
         let data: Data
-        do { data = try Data(contentsOf: folder.appending(path: Self.manifestName)) } catch { throw Problem.noManifest }
+        do { data = try Data(contentsOf: folder.appending(path: Self.manifestName)) } catch {
+            // A Raycast install an earlier test build left (raycast-archive branch): skipped, said so, never read.
+            throw FileManager.default.fileExists(atPath: folder.appending(path: "package.json").path) ? Problem.raycastFormat : Problem.noManifest
+        }
         let manifest: Manifest
         do { manifest = try JSONDecoder().decode(Manifest.self, from: data) } catch { throw Problem.unreadable(Self.describe(error)) }
         guard Self.isName(manifest.id) else { throw Problem.badID(manifest.id) }
@@ -246,7 +224,6 @@ public struct Extension: Equatable, Sendable {
         description = if case .string(let d)? = manifest.description { d.trimmingCharacters(in: .whitespacesAndNewlines) } else { "" }
         examples = Self.examples(manifest.examples)
         (page, bar) = try Self.surfaces(manifest.surfaces, commands: commands)
-        bars = bar.map { [$0] } ?? []
     }
 
     /// The manifest's or the catalogue's `examples`: its non-empty strings, at most `mostExamples`.
@@ -312,7 +289,7 @@ public struct Extension: Equatable, Sendable {
     public static func command(inAction id: String) -> CommandID? {
         guard id.hasPrefix(prefix) else { return nil }
         let parts = id.dropFirst(prefix.count).prefix { $0 != "/" }.split(separator: ".", omittingEmptySubsequences: false)
-        guard parts.count == 2, isName(String(parts[0])), isCommandName(String(parts[1])) else { return nil }
+        guard parts.count == 2, parts.allSatisfy({ isName(String($0)) }) else { return nil }
         return CommandID(extension: String(parts[0]), command: String(parts[1]))
     }
 
@@ -372,28 +349,7 @@ public struct Extension: Equatable, Sendable {
 
     /// Its listed commands as menu and Binds rows: each wears its icon and is found by its extension's title.
     var actionInfos: [BindsPage.ActionInfo] {
-        listed.map { BindsPage.ActionInfo(id: $0.actionID, label: $0.title, module: Module.drive.rawValue, icon: Self.icon($0.icon, $0.picture), keywords: title) }
-    }
-
-    /// An emoji's icon, or a Raycast extension's picture over the same glyph (T25).
-    static func icon(_ emoji: String?, _ picture: String?) -> MenuIcon {
-        var icon = MenuIcon.command(emoji: emoji)
-        icon.file = picture
-        return icon
-    }
-
-    /// The menu's rows with each Raycast-format command read as what it is (T25): the Extension kind, its extension's
-    /// title beside it, its own icon. Its Return runs it, opening its view, as before; only the words and icon change.
-    public static func dressed(_ rows: [MenuEntry], with extensions: [Extension]) -> [MenuEntry] {
-        let owners = Dictionary(extensions.filter(\.isRaycast).flatMap { ext in ext.listed.map { ($0.actionID, ext) } }) { a, _ in a }
-        guard !owners.isEmpty else { return rows }
-        return rows.map { row in
-            guard case .action(let id) = row.target, let ext = owners[id] else { return row }
-            var row = row
-            row.ownKind = .extension
-            row.subtitle = ext.title
-            return row
-        }
+        listed.map { BindsPage.ActionInfo(id: $0.actionID, label: $0.title, module: Module.drive.rawValue, icon: .command(emoji: $0.icon), keywords: title) }
     }
 
     /// Hyper+Space's Extensions branch (story 158): a sub-branch per extension with a listed command, titled after it,
@@ -404,10 +360,8 @@ public struct Extension: Equatable, Sendable {
         for ext in extensions {
             let sub = MenuLayout.extensionBranch(ext.title), commands = ext.actionInfos
             guard !commands.isEmpty, extras[sub] == nil else { continue }   // of two with one title, the first's
-            // A Raycast extension's commands are found as themselves (T25), so its branch row is listed only in Extensions:
-            // a search showed both "Kill Process · Action" and "Go to Kill Process" for its one command.
-            var row = MenuEntry(title: ext.title, target: .branch(sub), home: .extensions, inSearch: !ext.isRaycast, keywords: ext.id,
-                                subtitle: ext.description.isEmpty ? nil : ext.description, icon: Self.icon(ext.icon, ext.picture))
+            var row = MenuEntry(title: ext.title, target: .branch(sub), home: .extensions, keywords: ext.id,
+                                subtitle: ext.description.isEmpty ? nil : ext.description, icon: .command(emoji: ext.icon))
             row.extensionID = ext.id
             rows.append(row)
             extras[sub] = commands
@@ -419,12 +373,6 @@ public struct Extension: Equatable, Sendable {
 
     /// An id or a command name: lowercase letters, digits and hyphens, so `ext.<id>.<command>` splits one way.
     static func isName(_ s: String) -> Bool { s.wholeMatch(of: /[a-z0-9][a-z0-9-]*/) != nil }
-
-    /// A Raycast-format command's name (ADR 0017): Raycast's own spelling, capitals kept (`searchNoteCommand`), still only
-    /// letters, digits, hyphens and underscores (Todo List's `menu_bar`, T28), so the id splits one way and a question shows
-    /// no space or punctuation (T6's review 1); an extension.json command keeps `isName`. Install.swift's `plan()` holds a
-    /// fetched manifest to the same rule.
-    static func isCommandName(_ s: String) -> Bool { s.count <= 64 && s.wholeMatch(of: /[A-Za-z0-9][A-Za-z0-9_-]*/) != nil }
 
     /// `icon` when it is one emoji, the only icon Pilot draws for now.
     private static func emoji(_ icon: String?) -> String? { icon.flatMap { ScriptCommand.isEmoji($0) ? $0 : nil } }

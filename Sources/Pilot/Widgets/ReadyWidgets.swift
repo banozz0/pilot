@@ -6,8 +6,6 @@ import PilotCore
 /// - This Mac, the clock and calendar, a note, Mac upkeep, the Launcher, Notes, Repos, GitHub and Now playing live in
 ///   code under ids that start `pilot-`, fed by Pilot's readings, settings, notes, repo reads, gh reads and media
 ///   helper alone, so they need no trust and run nothing of their own.
-/// - Extension shows a top bar item an installed extension gives (a Raycast MenuBarExtra, T14), the item its setting
-///   names, as the bar's own tick last answered: it starts no extension of its own.
 /// - The desk widgets (Q694) are the designer's HTML folders on the look kit, bundled in Resources/widgets as `desk-*`:
 ///   Pilot's own, so trusted without a Trust step (WidgetStore.trust), their feeds run and their pages draw. No folder in
 ///   Widgets may take one's id.
@@ -18,7 +16,6 @@ enum ReadyWidgets {
     static let nowPlaying = "pilot-now-playing"
     static let folder = "pilot-folder"
     static let markets = "pilot-markets"
-    static let extensionItem = "pilot-extension"
 
     /// Each one's widget.json, as Duplicate to edit writes it out.
     private static let manifests: [String: String] = [
@@ -87,14 +84,6 @@ enum ReadyWidgets {
                            "default": ["pair:BITSTAMP:BTCUSD", "pair:BITSTAMP:ETHUSD", "stock:NASDAQ:NVDA", "stock:NASDAQ:AAPL", "pair:FX:EURUSD"]},
                           {"name": "range", "label": "Chart opens on", "type": "choice", "choices": ["1D", "1W", "1M", "1Y"], "default": "1D"}]}
             """,
-        // A top bar item's answer, fed by ExtensionBar's one tick for it (T14): the bar item, the dock face and this
-        // widget share one host run, 60 s at the most often.
-        extensionItem: """
-            {"id": "pilot-extension", "title": "Extension", "icon": "🧩", "version": "1.0",
-             "description": "An installed extension's top bar item, as the top bar shows it: its title, then its menu's rows. Its item is an id pilot list bar-extensions lists.",
-             "draw": "blocks", "data": {"barItem": "item"}, "size": {"width": 260, "height": 200},
-             "settings": [{"name": "item", "label": "Top bar item", "type": "text", "default": ""}]}
-            """,
         note: """
             {"id": "pilot-note", "title": "Note", "icon": "📝", "version": "1.0",
              "description": "A note on the desktop: its text is this widget's setting.",
@@ -103,7 +92,7 @@ enum ReadyWidgets {
             """,
     ]
 
-    static let ids = [thisMac, clock, note, upkeep, launcher, notes, repos, github, nowPlaying, folder, markets, extensionItem]
+    static let ids = [thisMac, clock, note, upkeep, launcher, notes, repos, github, nowPlaying, folder, markets]
 
     /// The desk widgets' folder in the app, `desk-*` folders beside the kit; nil in a test bundle without PILOT_RESOURCES.
     static let deskFolder = BundledJSON.folder("widgets")

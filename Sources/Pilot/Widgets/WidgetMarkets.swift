@@ -187,7 +187,7 @@ enum WidgetMarkets {
             return nil
         }
         var said: String?
-        guard let inputs = await ExtensionsModule.inputs(for: ext, command: command, storage: ExtensionStorage(), hud: { said = $0 }) else {
+        guard let inputs = await ExtensionsModule.inputs(for: ext, storage: ExtensionStorage(), hud: { said = $0 }) else {
             problem = said ?? "Markets did not start"
             return nil
         }

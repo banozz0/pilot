@@ -31,11 +31,9 @@ public struct Widget: Equatable, Sendable {
     /// page, whose blocks it draws at the page's own pace (Q697), Pilot's notes as its `note` setting picks them (all by
     /// title, or one in full), drawn by Pilot alone, ~/code's repos with work not yet committed or pushed, drawn by Pilot
     /// alone (Q725), the market symbols its text setting names, priced by the Markets extension (Pilot's own Markets
-    /// widget's alone, P83), the top bar item its text setting names, as the bar's own tick last answered (Pilot's own
-    /// Extension widget's alone, T14), or none.
+    /// widget's alone, P83), or none.
     public enum Source: Equatable, Sendable {
         case reading([Reading]), command([String], every: Int), setting(String), extensionPage(String), notes(String), repos, markets(String), none
-        case barItem(String)
         /// A GitHub user's contribution calendar, read by gh, drawn by Pilot alone (P82).
         case github
         /// What the Mac plays, its cover and its controls, drawn by Pilot alone (Q726).
@@ -53,7 +51,6 @@ public struct Widget: Equatable, Sendable {
             case .github: "your GitHub contributions"
             case .nowPlaying: "what is playing"
             case .markets: "your market symbols"
-            case .barItem: "an extension's top bar item"
             case .none: "none"
             }
         }
@@ -171,10 +168,6 @@ public struct Widget: Equatable, Sendable {
         // It runs the Markets extension unasked: Pilot's own Markets widget's (a reserved id), never a folder's.
         if case .markets(let name) = source, !Self.isReserved(id) || draw != .blocks || !settings.contains(where: { $0.name == name && $0.kind == .text }) {
             problems.append("data.markets is Pilot's own Markets widget's: a blocks widget naming one of its text settings")
-        }
-        // It reads the bar's own answers, which run as the extension: Pilot's own Extension widget's, never a folder's.
-        if case .barItem(let name) = source, !Self.isReserved(id) || draw != .blocks || !settings.contains(where: { $0.name == name && $0.kind == .text }) {
-            problems.append("data.barItem is Pilot's own Extension widget's: a blocks widget naming one of its text settings")
         }
         if case .notes(let name) = source {
             if draw != .blocks { problems.append("data.notes draws Pilot's blocks: draw must be blocks") }
@@ -404,14 +397,6 @@ public struct Widget: Equatable, Sendable {
                 }
                 return .markets(name)
             }
-            // A top bar item, by the text setting holding its id (`menu-bar`, `menu-bar/dot`): Pilot's own Extension widget's.
-            if let named = d["barItem"] {
-                guard case .string(let name) = named, d.count == 1 else {
-                    problems.append("data.barItem must name its item setting, alone: the widget shows that top bar item")
-                    return .none
-                }
-                return .barItem(name)
-            }
             // An installed extension's page, by the extension's id: the blocks its page shows, which Pilot asks for as the
             // page does, at the page's pace, with nothing of the widget's (Q697).
             if let named = d["extension"] {
@@ -521,23 +506,6 @@ public struct Widget: Equatable, Sendable {
     static func isRegularFile(_ url: URL) -> Bool {
         var info = stat()
         return lstat(url.path, &info) == 0 && info.st_mode & S_IFMT == S_IFREG
-    }
-}
-
-// MARK: - A top bar item
-
-extension Widget {
-    /// What the Extension widget draws of a top bar item's answer (T14): its text as a hero (beside its emoji icon; a
-    /// hero's glyph is never an SF Symbol's name, which it would print as words), then its menu's rows, a Raycast MenuBarExtra's display-only list (T12). The tile fits them to its class (DeskKitBlocks): a
-    /// strip the text on one line, a square the hero alone, wide and large the hero beside or over the rows. Every
-    /// placement reads the one answer the bar's tick gave, so no size reaches the extension. Empty: it shows nothing.
-    public static func barItemBlocks(_ answer: Extension.BarAnswer) -> [Extension.Block] {
-        let text = answer.text.trimmingCharacters(in: .whitespaces), plain = DockFaces.plain(text)
-        // A leading emoji (a MenuBarExtra's emoji icon) is the hero's glyph.
-        let emoji = plain == text ? nil : String(text.prefix { $0 != " " })
-        let hero: [Extension.Block] = text.isEmpty ? [] : [.hero(.init(glyph: emoji, value: plain, tone: answer.tone))]
-        let rows = DockFaces.rows(answer.blocks)
-        return hero + (rows.isEmpty ? [] : [.list(title: nil, items: rows)])
     }
 }
 

@@ -686,7 +686,6 @@ private struct DeskKitMarkdown: View {
                     }
                 case .rule: kit.edge.frame(height: 1)
                 case .code(let code): Text(code).font(kit.mono(11)).foregroundStyle(kit.text2)
-                case .image(let alt, let source): MarkdownImage(alt: alt, source: source)
                 }
             }
         }

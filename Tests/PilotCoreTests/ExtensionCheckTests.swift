@@ -4,8 +4,7 @@ import Testing
 
 /// AI helper T10: `pilot ext test`'s check is the catalogue's scripts/check.py in Swift, and its runs are Pilot's own.
 /// The catalogue (the repo's catalogue/) is only read: check.py runs with -B, so it writes no __pycache__ there, and
-/// every broken manifest is a copy in a temporary folder. Only the JSON-lines fixtures' commands run. The templates are
-/// Raycast extensions' source since T32, checked by ExtensionCheck.source; building and running them is the host's.
+/// every broken manifest is a copy in a temporary folder. Only the templates' commands run.
 @Suite("Extension check")
 struct ExtensionCheckTests {
     static let catalogue = URL(filePath: #filePath).deletingLastPathComponent().appending(path: "../../catalogue").standardizedFileURL
@@ -30,35 +29,11 @@ struct ExtensionCheckTests {
         return try output.split(separator: "\n").map { try JSONDecoder().decode([String].self, from: Data($0.utf8)) }
     }
 
-    /// The old format's extensions (ADR 0010, JSON lines), Pilot's templates until T32, kept for its check until T23 retires it.
-    static let jsonLines = URL(filePath: #filePath).deletingLastPathComponent().appending(path: "../Fixtures/json-lines-extension").standardizedFileURL
-
-    /// A temporary folder holding the `kind` fixture (list or bar) as extension `id`, titled from it; each test removes
-    /// `parent` when it ends.
-    static func made(_ kind: String = "list", id: String = "demo") throws -> (folder: URL, parent: URL) {
+    /// A temporary folder holding `mode`'s template as extension `id`; each test removes `parent` when it ends.
+    static func made(_ mode: ExtensionTemplate = .list, id: String = "demo") throws -> (folder: URL, parent: URL) {
         let parent = FileManager.default.temporaryDirectory.appending(path: "pilot-ext-check-\(UUID().uuidString)").resolvingSymlinksInPath()
         try FileManager.default.createDirectory(at: parent, withIntermediateDirectories: true)
-        let folder = parent.appending(path: id), manifest = folder.appending(path: Extension.manifestName)
-        try FileManager.default.copyItem(at: jsonLines.appending(path: kind), to: folder)
-        let text = try String(contentsOf: manifest, encoding: .utf8).replacing(#""id": "example""#, with: "\"id\": \"\(id)\"")
-            .replacing(#""title": "Example"#, with: "\"title\": \"\(ScriptCommand.title(file: id))")
-        try text.write(to: manifest, atomically: true, encoding: .utf8)
-        return (folder, parent)
-    }
-
-    /// A temporary folder for a template's copy; each test removes it when it ends.
-    static func parent() throws -> URL {
-        let parent = FileManager.default.temporaryDirectory.appending(path: "pilot-ext-check-\(UUID().uuidString)").resolvingSymlinksInPath()
-        try FileManager.default.createDirectory(at: parent, withIntermediateDirectories: true)
-        return parent
-    }
-
-    /// A made template's package.json.
-    static func raycast(_ folder: URL) throws -> [String: JSONValue] {
-        guard case .object(let m) = try JSONDecoder().decode(JSONValue.self, from: Data(contentsOf: folder.appending(path: RaycastManifest.name))) else {
-            throw CocoaError(.fileReadCorruptFile)
-        }
-        return m
+        return (try mode.make(id: id, templates: templates, in: parent), parent)
     }
 
     static func remove(_ parent: URL) { try? FileManager.default.removeItem(at: parent) }
@@ -146,39 +121,39 @@ struct ExtensionCheckTests {
         }
     }
 
-    @Test("Every template, made as demo, is a Raycast extension's source: Raycast's manifest, src/index.tsx and its icon, passing ExtensionCheck.source")
-    func templates() throws {
-        let modes: [ExtensionTemplate: String] = [.list: "view", .detail: "view", .form: "view", .noView: "no-view", .menuBar: "menu-bar"]
-        #expect(Set(ExtensionTemplate.allCases) == Set(modes.keys))
+    @Test("Every template, made as demo, passes the check and check.py, compiles on macOS's Python 3.9, and each command answers")
+    func templates() async throws {
         for mode in ExtensionTemplate.allCases {
-            let parent = try Self.parent()
+            let (folder, parent) = try Self.made(mode)
             defer { Self.remove(parent) }
-            let folder = try mode.make(id: "demo", templates: Self.templates, in: parent)
-            #expect(ExtensionCheck.source(folder) == [], "\(mode)")
-            #expect(ExtensionCheck.isRaycastSource(folder) && RaycastManifest.holds(folder), "\(mode)")
-            #expect(ExtensionCheck.listing(folder).map(\.path) == ["assets/extension-icon.png", "package.json", "src/index.tsx", "tsconfig.json"], "\(mode)")
-            let manifest = try Self.raycast(folder)
-            #expect(manifest["name"] == .string("demo") && manifest["title"] == .string("Demo"), "\(mode)")
-            #expect(manifest["dependencies"] == .object(["@raycast/api": .string("^2.13.1")]), "\(mode): @raycast/api alone, so the build fetches nothing")
-            guard case .array(let commands)? = manifest["commands"], case .object(let command)? = commands.first else { Issue.record("\(mode): no command"); continue }
-            #expect(commands.count == 1 && command["name"] == .string("index") && command["title"] == .string("Demo"), "\(mode)")
-            #expect(command["mode"] == .string(modes[mode]!), "\(mode)")
-            // Until it is built it has no bundle, so Pilot never reads it as an installed extension.
-            #expect(throws: Extension.Problem.missingProgram(command: "index", run: "index.js")) { try Extension(folder: folder) }
-            try FileManager.default.removeItem(at: folder.appending(path: "src/index.tsx"))
-            #expect(ExtensionCheck.source(folder) == ["command index has no src/index.tsx"], "\(mode)")
+            #expect(ExtensionCheck.problems(in: folder) == [], "\(mode)")
+            let ext = try Extension(folder: folder)
+            #expect(ext.id == "demo" && ext.title == "Demo", "\(mode)")
+            #expect(ext.commands.allSatisfy { FileManager.default.isExecutableFile(atPath: $0.program.path) })
+            _ = try await ChildProcess.run("/usr/bin/python3", ["-I", "-B", "-c", "import ast, sys; ast.parse(open(sys.argv[1]).read())",
+                                                                folder.appending(path: "main.py").path], timeout: .seconds(10))
+            if Self.hasCatalogue { #expect(try await Self.python([folder]) == [[]], "\(mode)") }
+            let runs = await ExtensionCheck.runs(ext)
+            #expect(runs.count == ext.commands.count)
+            for run in runs { #expect(run.ok && run.why == nil, "\(mode) \(run.command): \(run.why ?? "") \(run.first)") }
+            let first = runs.map(\.first).joined()
+            switch mode {
+            case .list: #expect(runs.map(\.ranAs) == ["list"] && first.contains(#""type": "list""#))
+            case .noView: #expect(runs.map(\.ranAs) == ["no-view"] && first.contains("Hello from demo"))
+            case .detail: #expect(runs.map(\.ranAs) == ["detail"] && first.contains(#""type": "detail""#))
+            case .bar: #expect(runs.map(\.ranAs) == ["no-view", "bar"] && runs[1].first.contains(#""type": "bar""#))
+            }
         }
     }
 
     @Test("A title may be given, and a taken folder or a bad id makes nothing")
     func making() throws {
-        let parent = try Self.parent()
+        let (folder, parent) = try Self.made()
         defer { Self.remove(parent) }
-        let folder = try ExtensionTemplate.list.make(id: "demo", templates: Self.templates, in: parent)
         let titled = try ExtensionTemplate.detail.make(id: "dash-board", title: #"My "Board""#, templates: Self.templates, in: parent)
-        #expect(try Self.raycast(titled)["title"] == .string(#"My "Board""#))
-        #expect(try ExtensionTemplate.menuBar.make(id: "two-words", templates: Self.templates, in: parent).lastPathComponent == "two-words")
-        #expect(try Self.raycast(parent.appending(path: "two-words"))["title"] == .string("Two words"))
+        #expect(try Extension(folder: titled).title == #"My "Board""#)
+        #expect(try ExtensionTemplate.bar.make(id: "two-words", templates: Self.templates, in: parent).lastPathComponent == "two-words")
+        #expect(try Extension(folder: parent.appending(path: "two-words")).title == "Two words")
         #expect(throws: (any Error).self) { try ExtensionTemplate.list.make(id: "demo", templates: Self.templates, in: parent) }
         #expect(throws: Extension.Problem.badID("Bad")) { try ExtensionTemplate.list.make(id: "Bad", templates: Self.templates, in: parent) }
         #expect(!FileManager.default.fileExists(atPath: parent.appending(path: "Bad").path))
@@ -208,7 +183,7 @@ struct ExtensionCheckTests {
 
     @Test("A required preference with no default runs nothing, and every command fails")
     func unsetPreference() async throws {
-        let (folder, parent) = try Self.made("bar")
+        let (folder, parent) = try Self.made(.bar)
         defer { Self.remove(parent) }
         try Self.manifest(folder) { $0["preferences"] = .array([.object(["name": .string("token"), "title": .string("Token"), "type": .string("text"), "required": .bool(true)])]) }
         let runs = await ExtensionCheck.runs(try Extension(folder: folder))

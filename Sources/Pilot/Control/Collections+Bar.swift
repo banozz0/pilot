@@ -183,7 +183,7 @@ extension ControlVerbs {
     /// carry no answer text: an extension's output stays in the bar (W6's rule for run).
     private func registerBarExtensions(_ bar: @escaping @Sendable @MainActor () -> BarItemsStore, _ reach: BarReach) {
         register(ControlCollection(
-            "bar-extensions", help: "The extensions' bar items (Menu bar › Extensions): one never placed is on in the macOS menu bar. add puts it in --placement's bar (menuBar unless given) and keeps the other; in the top bar each is its own item, first put last on the right, and --side and --index move it as bar-items' do. remove takes it out of --placement's bar alone, or off both. Rows give each one's side and index in the top bar, as pilot bar's topBar lists them, whether its last ask answered, the parts it draws (never what they say), and a Raycast item's command and pace in seconds; a Raycast extension's later items are <id>/<command>.",
+            "bar-extensions", help: "The extensions' bar items (Menu bar › Extensions): one never placed is on in the macOS menu bar. add puts it in --placement's bar (menuBar unless given) and keeps the other; in the top bar each is its own item, first put last on the right, and --side and --index move it as bar-items' do. remove takes it out of --placement's bar alone, or off both. Rows give each one's side and index in the top bar, as pilot bar's topBar lists them.",
             fields: [.init("id", help: "the extension's id, as pilot list bar-extensions names it"),
                      .init("placement", help: "the bar it joins: \(Self.cases(BarPlacement.self)) (menuBar)", required: false),
                      .init("side", help: "the top bar's side: \(Self.cases(TopBarSide.self)) (its own)", required: false),
@@ -370,21 +370,10 @@ extension ControlVerbs {
         return extensionRow(item, store.settings)
     }
 
-    /// An item's row. T12 adds whether its last ask answered or had a problem, and with an answer the parts it draws
-    /// (an icon, text, gauges), never what they say (W6); and a Raycast item's command and pace in seconds.
     private static func extensionRow(_ item: ExtensionBar.Item, _ s: BarSettings) -> JSONValue {
         let entry = s.extensionEntry(item.id), at = s.topBarPlace(.extension(item.id))
-        var row: [String: JSONValue] = ["id": .string(item.id), "title": .string(item.title), "on": .bool(entry.on), "placement": .string(entry.placement.rawValue),
-                                        "side": at.map { .string($0.side.rawValue) } ?? .null, "index": at.map { .number(Double($0.index)) } ?? .null,
-                                        "answered": .bool(item.answer != nil), "problem": .bool(item.problem != nil)]
-        if let answer = item.answer {
-            let parts = [answer.symbol != nil ? "symbol" : nil, answer.image != nil ? "image" : nil, answer.text.isEmpty ? nil : "text",
-                         answer.gauges.isEmpty ? nil : "gauges"]
-            row["draws"] = .array(parts.compactMap { $0.map(JSONValue.string) })
-        }
-        if !item.command.isEmpty { row["command"] = .string(item.command) }
-        if item.every > 0 { row["every"] = .number(Double(item.every)) }
-        return .object(row)
+        return .object(["id": .string(item.id), "title": .string(item.title), "on": .bool(entry.on), "placement": .string(entry.placement.rawValue),
+                        "side": at.map { .string($0.side.rawValue) } ?? .null, "index": at.map { .number(Double($0.index)) } ?? .null])
     }
 
 

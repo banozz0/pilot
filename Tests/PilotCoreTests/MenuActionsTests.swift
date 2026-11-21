@@ -41,8 +41,8 @@ struct MenuActionsTests {
         #expect(nav.matched[1] == Self.search)
         // The app's actions sit right under it (Sven Q831), then Ask AI, Search the web and Search files (Q174, Q182).
         #expect(nav.rows[1...3].map(\.title).allSatisfy { $0.hasPrefix("Bitwarden: ") })
-        #expect(nav.rows[4...7].map(\.target) == [.ask("bitwa"), .searchWeb("bitwa"), .searchStore("bitwa"), .searchFiles])
-        #expect(nav.rows[7].title == "Search files for \"bitwa\"")
+        #expect(nav.rows[4...6].map(\.target) == [.ask("bitwa"), .searchWeb("bitwa"), .searchFiles])
+        #expect(nav.rows[6].title == "Search files for \"bitwa\"")
         #expect(nav.rows.contains(Self.window) && nav.rows.contains(Self.cask))
     }
 
@@ -51,16 +51,16 @@ struct MenuActionsTests {
         var nav = Self.navigator()
         nav.query = "raycast"
         // Ask AI and Search the web lead (Sven 2026-10-16), then the install offer.
-        #expect(nav.rows.map(\.target) == [.ask("raycast"), .searchWeb("raycast"), .searchStore("raycast"), .searchInstall("raycast"), .searchFiles])
-        #expect(nav.rows[3].title == "Search to install \"raycast\"" && nav.rows[3].returnLabel == "Open")
+        #expect(nav.rows.map(\.target) == [.ask("raycast"), .searchWeb("raycast"), .searchInstall("raycast"), .searchFiles])
+        #expect(nav.rows[2].title == "Search to install \"raycast\"" && nav.rows[2].returnLabel == "Open")
         // Return on it opens Search packages searching the text.
-        _ = nav.handle(.down); _ = nav.handle(.down); _ = nav.handle(.down)
+        _ = nav.handle(.down); _ = nav.handle(.down)
         #expect(nav.handle(.return) == .handled)
         #expect(nav.branch == .homebrew && nav.query == "raycast")
         // A file's name puts Search files first.
         nav = Self.navigator()
         nav.query = "budget.xlsx"
-        #expect(nav.rows.map(\.target) == [.ask("budget.xlsx"), .searchWeb("budget.xlsx"), .searchStore("budget.xlsx"), .searchFiles, .searchInstall("budget.xlsx")])
+        #expect(nav.rows.map(\.target) == [.ask("budget.xlsx"), .searchWeb("budget.xlsx"), .searchFiles, .searchInstall("budget.xlsx")])
         // Something matched but no app: an app's name is still offered to install, after Search files (Sven, 1.0.1,
         // "videorc"); an app on this Mac leading, a narrowed kind or one letter: no install row.
         nav.query = "vault"

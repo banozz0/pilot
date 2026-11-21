@@ -25,13 +25,6 @@ public struct MenuIcon: Hashable, Sendable {
     /// A picture on the network an Install search found (App Store artwork, a repo owner's avatar, a site's icon), worn
     /// once it arrives (N9).
     public var remote: String?
-    /// An icon file on disk drawn as it is: a Raycast extension's or store folder's (raycast-extensions T25).
-    public var file: String?
-    /// A row's own picture, PNG or JPEG bytes the extension host sent (a Raycast row's icon, raycast-extensions T28).
-    public var image: Data?
-    /// Its tint is the row's own word, not decoration (T31: a Raycast row's colour, Todo List's red circles): drawn even
-    /// where Instrument draws every glyph in its one ink.
-    public var ownTint = false
 
     public init(appPath: String? = nil, bundle: String? = nil, symbol: String, tint: Tint, emoji: String? = nil, bundled: String? = nil,
                 picture: String? = nil, remote: String? = nil) {

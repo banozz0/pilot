@@ -56,15 +56,8 @@ struct MenuBody: View {
                 TranslatePanes(model: model).overlay(alignment: .bottomTrailing) { rowActions }
             } else if nav.rows.isEmpty {
                 empty
-            } else if nav.emptyView?.item != nil {
-                // A Raycast empty view's actions ride its one row, kept behind the look (T28): Return and Cmd+K press them,
-                // and the foot names Return's.
-                empty.overlay(alignment: .bottomTrailing) { rowActions }
             } else if model.hasLineChips, nav.branch == .emoji {
                 EmojiGridView(model: model, pointer: pointer).overlay(alignment: .bottomTrailing) { rowActions }
-            } else if nav.isRaycast, nav.chrome?.showsDetail == true {
-                // A Raycast List that shows details (T31): the list at Raycast's share, the selected row's detail beside it.
-                RaycastListWithDetail(detail: nav.selected?.sideDetail) { list }.overlay(alignment: .bottomTrailing) { rowActions }
             } else {
                 list.overlay(alignment: .bottomTrailing) { rowActions }
             }
@@ -94,8 +87,7 @@ struct MenuBody: View {
         let typed = searching && !nav.query.isEmpty
         // A list whose rows would all wear one glyph (Kill a process, a repo picker) wears none: it would say nothing. The
         // icon column goes too when no row has a picture of its own to keep it.
-        // A Raycast list keeps every row's icon, as Raycast draws them (T31).
-        let shared = nav.isRaycast ? nil : InstrumentRowIcon.shared(rows)
+        let shared = InstrumentRowIcon.shared(rows)
         let bare = shared != nil && rows.allSatisfy { InstrumentRowIcon.glyph($0) == shared }
         let height = rowHeight ?? (quiet ? MenuPanelSize.instrumentRow : MenuPanelSize.instrumentWideRow)
         return ScrollViewReader { proxy in
@@ -106,12 +98,7 @@ struct MenuBody: View {
                         // An answer that copies a result draws as its card in the top slot, the same row (T7).
                         let card = model.answerCard(row, at: index)
                         VStack(alignment: .leading, spacing: 0) {
-                            if nav.isRaycast, card == nil, let section = row.section, headings[index] != nil {
-                                // A Raycast section's heading as Raycast's: its title as written, its subtitle beside it (T31).
-                                RaycastSectionHeader(title: section, subtitle: row.sectionSubtitle)
-                                    .padding(.horizontal, 12).padding(.bottom, 6)
-                                    .frame(maxWidth: .infinity, minHeight: MenuPanelSize.instrumentHeading, alignment: .bottomLeading)
-                            } else if let heading = card?.eyebrow ?? headings[index]?.title(goTo: true) {
+                            if let heading = card?.eyebrow ?? headings[index]?.title(goTo: true) {
                                 InstrumentEyebrow(text: heading)
                                     .padding(.horizontal, 12).padding(.bottom, 6)
                                     .frame(maxWidth: .infinity, minHeight: MenuPanelSize.instrumentHeading, alignment: .bottomLeading)
@@ -150,13 +137,8 @@ struct MenuBody: View {
     }
 
     /// Nothing to list: the first sentence as the line, the rest under it, centred in the list's room under a glyph
-    /// that says why (a spinner while a list is read). A Raycast list's empty view (T26) fills the same look with its own
-    /// title, description and icon; when it offers actions (T28) the foot names Return's, as a row's.
-    @ViewBuilder private var empty: some View {
-        if let view = nav.emptyView { RaycastEmptyView(view: view) } else { emptyLine }
-    }
-
-    private var emptyLine: some View {
+    /// that says why (a spinner while a list is read).
+    private var empty: some View {
         let text = model.emptyText
         let cut = text.range(of: ". ")
         return VStack(spacing: 6) {
@@ -328,9 +310,6 @@ struct InstrumentMenuRow: View {
             let words = [row.hint, row.detailIsKey ? "" : row.detail ?? ""].filter { !$0.isEmpty }
             if on, !words.isEmpty { Text(words.joined(separator: " · ")).styleText(\.caption).foregroundStyle(style.color(\.text3)) }
             if on, row.detailIsKey, let detail = row.detail { InstrumentBindKeys(label: detail, layerKeys: layerKeys) }
-        } else if let accessories = row.accessories {
-            // A Raycast row's accessories in its order, each its icon and text, a tag a tinted pill (T31).
-            RaycastAccessories(accessories: accessories)
         } else {
             if let detail = row.detail, !row.detailIsKey, !file, !window {
                 // Numbers, versions, paths and commands in mono (NOTES: every changing number is a readout); words in the
@@ -394,10 +373,8 @@ struct InstrumentRowIcon: View {
                     let icon = ArtImage(image: image).frame(width: side, height: side)
                     if let badge { icon.modifier(InstrumentBadge(symbol: badge)) } else { icon }
                 } else if let symbol = Self.glyph(row) ?? (row.kind == .app ? MenuIcon.app.symbol : nil), symbol != hidden {
-                    // An app whose icon the Mac lacks still says it is an app. A Raycast row's symbol wears its own tint (T31).
-                    let tint = Self.extensionTint(row)
-                    Image(systemName: symbol).font(style.font(\.icon))
-                        .foregroundStyle(tint.map { raycastInk($0, style) } ?? style.color(on ? \.text : \.text2))
+                    // An app whose icon the Mac lacks still says it is an app.
+                    Image(systemName: symbol).font(style.font(\.icon)).foregroundStyle(style.color(on ? \.text : \.text2))
                 }
             }
         }
@@ -407,13 +384,6 @@ struct InstrumentRowIcon: View {
 }
 
 extension InstrumentRowIcon {
-    /// A row's own tint, one its source gave it (T31: a Raycast row's colour, Todo List's circles); nil for every other
-    /// row, whose glyph Instrument's one ink draws.
-    static func extensionTint(_ row: MenuEntry) -> MenuIcon.Tint? {
-        guard let icon = row.icon, icon.ownTint else { return nil }
-        return icon.tint
-    }
-
     /// The row's art (MenuEntry.art), with a branch's glyph as Instrument draws it unless the row brings its own icon
     /// (Remove's and Update's categories).
     @MainActor static func art(_ row: MenuEntry) -> MenuEntry.Art? {
