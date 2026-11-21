@@ -145,6 +145,17 @@ struct InstrumentMenuRenders {
         states.append(("12-update-reading", model(MenuNavigator(entries: [], branch: .update))))
         states.append(("12-snippets-empty", model(MenuNavigator(entries: built, branch: .snippets))))
         states.append(("12-clean-waiting", model(MenuNavigator(entries: [], branch: .clean))))
+        let clean = Self.cleanPreview(home: home)
+        // Two of User essentials' paths unticked, so Clean ticked, the part and the paths show it.
+        let off: Set = [clean.list.rows[1].id, clean.list.rows[4].id]
+        states.append(("14-clean", model(MenuNavigator(entries: CleanMenu.entries(clean, mole: true, unticked: off, home: home), branch: .clean))))
+        var part = MenuNavigator(entries: CleanMenu.entries(clean, mole: true, unticked: off, home: home), branch: .clean)
+        while part.selected?.target != .branch(CleanMenu.part("User essentials")) { _ = part.handle(.down) }
+        _ = part.handle(.right)
+        states.append(("14-clean-part", model(part)))
+        var unlisted = MenuNavigator(entries: CleanMenu.entries(clean, mole: true, home: home), branch: CleanMenu.part("Developer tools"))
+        _ = unlisted.handle(.down)
+        states.append(("14-clean-unlisted", model(unlisted)))
         states.append(("12-remove-reading", model(MenuNavigator(entries: [], branch: .remove))))
         states.append(("12-install-searching", model(MenuBrowseRenders.installSearching())))
         let kill = Activity.entries(Activity.Snapshot(apps: [], background: [
@@ -154,6 +165,49 @@ struct InstrumentMenuRenders {
         states.append(("13-picker", model(MenuNavigator(list: kill, title: "Kill a process",
                                                          back: MenuNavigator.Spot(branch: MenuLayout.system("Fix it"), row: .action("system.killProcess"))))))
         return states
+    }
+
+    /// Clean's preview as Sven's Mac showed it (2026-11-21): Mole 1.72's lines and its file list, with `home`'s paths.
+    static func cleanPreview(home: String) -> CleanPreview {
+        var preview = CleanPreview.parse("""
+        ➤ User essentials
+          ○ User app cache · 28 items, 3.44GB dry
+          ○ User app logs · 86 items, 6.5MB dry
+          ○ Trash · would empty, 27 items
+
+        ➤ App caches
+          ○ Siri suggestions cache · 10 items, 541KB dry
+          ○ Maps geo tile cache · 7 items, 57.9MB dry
+
+        ➤ Browsers
+          ○ Chrome Service Worker, would clean 367.1MB, 0 protected
+
+        ➤ Developer tools
+          ○ npm cache · would clean
+
+        Potential space: 3.88GB · 160 items
+        """)
+        preview.list = CleanList.parse("""
+        === User essentials ===
+        \(home)/Library/Caches/com.spotify.client  # 1.9GB, 812 items
+        \(home)/Library/Caches/Google  # 1.2GB, 2041 items
+        \(home)/Library/Caches/com.apple.Safari  # 210.4MB, 96 items
+        \(home)/Library/Caches/Homebrew  # 120.3MB, 40 items
+        \(home)/Library/Caches/pip  # 9.8MB, 300 items
+        \(home)/Library/Caches/com.figma.Desktop  # size unknown
+        \(home)/Library/Logs/DiagnosticReports  # 4.1MB, 61 items
+        \(home)/Library/Logs/Ghostty  # 2.0MB, 12 items
+        \(home)/Library/Logs/zoom.us  # 400KB, 13 items
+        \(home)/.Trash/old.zip  # 4KB
+
+        === App caches ===
+        \(home)/Library/Containers/com.apple.geod/Data/Library/Caches/com.apple.geod  # 57.9MB, 7 items
+        \(home)/Library/Containers/com.apple.siri.media-indexer/Data/Library/Caches  # 541KB, 10 items
+
+        === Browsers ===
+        \(home)/Library/Application Support/Google/Chrome/Default/Service Worker/CacheStorage  # 367.1MB
+        """, home: home)
+        return preview
     }
 
     /// The panel as HUD.makePanel builds it for the menu, its content drawn at Retina scale with the clear margins kept.

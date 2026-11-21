@@ -66,6 +66,7 @@ enum CleanModule {
     }
 
     /// Return on a Clean row: the clean asks with its exact command and stays open when done, so Mole's summary is read;
+    /// Clean ticked asks, then moves only the ticked paths to the Trash;
     /// Disk usage opens Mole's explorer; Install Mole is Install's own confirm step, with Homebrew's installer before it
     /// when Homebrew is missing too (Q557); an item or a note only says how
     /// Mole cleans; Reports opens Update & Clean at its Reports, where every clean is kept (story 153).
@@ -82,8 +83,19 @@ enum CleanModule {
             VisibleTerminal.run(Mole.analyze, title: "Disk usage", onSuccess: "true")
         case .install:
             if Helper.homebrew.path() == nil { InstallModule.installWithHomebrew(.mole) } else { InstallModule.install(.mole) }
+        case .ticked:
+            // Only the ticked paths of the kept list, through trash (Q310); Clean all stays Mole's own clean (Q311).
+            let ids = previewer.ticked
+            guard let list = previewer.ready?.list, !ids.isEmpty else { return HUD.tip("Clean's list ran out; open Clean again") }
+            InstallModule.confirm("Clean ticked", "\(ids.count) paths, \(RemoveList.size(CleanList.bytes(list.rows(ids)))), to the Trash") {
+                Task { HUD.tip(await trash(ids, store: .standard)?.summary ?? "Clean's list ran out; open Clean again") }
+            }
         case .note:
             HUD.tip("Mole cleans these together; Clean asks first")
+        case .unlisted:
+            HUD.tip("Mole cleans these itself; only Clean all reaches them")
+        case .path:
+            return  // a tick: the menu flips it in place (MenuPanel)
         case .reports:
             AppWindowController.shared.open(AppPlace(.reports))
         }

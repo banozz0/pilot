@@ -1078,7 +1078,8 @@ final class PilotMenu {
     }
 
     private func showClean(_ preview: CleanPreview?, mole: Bool, homebrew: Bool = true) {
-        model?.nav.provide(.action, home: .clean, CleanMenu.entries(preview, mole: mole, homebrew: homebrew))
+        model?.nav.provide(.action, home: .clean, CleanMenu.entries(preview, mole: mole, homebrew: homebrew,
+                                                                    unticked: CleanModule.previewer.unticked, home: CleanModule.home))
     }
 
     private func showRemove() {
@@ -1515,8 +1516,12 @@ final class PilotMenu {
             InstallModule.remove(row)
         case .update(let pick):
             update(pick)
+        case .clean(.path(let id)):
+            // A tick flips in place; the part, Clean ticked and its size follow.
+            CleanModule.previewer.toggle(id)
+            showClean(CleanModule.previewer.ready, mole: true)
         case .clean(let pick):
-            if case .note = pick {} else { close(restoreFocus: false) }
+            if !pick.staysOpen { close(restoreFocus: false) }
             CleanModule.pick(pick)
         case .package(let key):
             close(restoreFocus: false)
@@ -1958,7 +1963,7 @@ final class MenuModel {
     var scan: MenuScan? {
         guard loadFailed == nil, nav.actions == nil, nav.shownDetail == nil, !nav.isList else { return nil }
         if nav.rows.isEmpty, nav.query.isEmpty {
-            if nav.branch == .clean { return .clean(CleanMenu.waiting(CleanModule.previewer.progress)) }
+            if nav.branch?.browsed == .clean { return .clean(CleanMenu.waiting(CleanModule.previewer.progress)) }
             if nav.branch?.browsed == .update { return .update }
             if nav.branch?.browsed == .remove { return .remove }
         }
@@ -1988,7 +1993,7 @@ final class MenuModel {
         if nav.branch == .snippets, nav.query.isEmpty { return "No snippets yet. Add one on the Snippets page." }
         if nav.branch == .activity { return activityRead ? "Nothing running matches." : "Reading what runs on this Mac…" }
         if nav.branch == .reminders, nav.query.isEmpty { return "No reminders pending. Type “20m stretch” at the root to set one." }
-        if nav.branch == .clean, nav.query.isEmpty { return CleanMenu.waiting(CleanModule.previewer.progress) }
+        if nav.branch?.browsed == .clean, nav.query.isEmpty { return CleanMenu.waiting(CleanModule.previewer.progress) }
         if nav.branch == .emoji {
             let typed = nav.query.trimmingCharacters(in: .whitespaces)
             if typed.count < MenuNavigator.minimumQuery { return emojiCategory == EmojiGrid.mostUsed ? "No emoji picked yet. The ones you paste or copy show here." : "Nothing matches." }
@@ -2115,7 +2120,11 @@ extension MenuModel {
         if nav.branch == nil { return [("↵", "open")] }
         if nav.branch == .apps { return [("↵", "open, or focus if already open"), ("⌘↵", "show in Finder"), ("Esc", "back")] }
         if nav.branch?.browsed == .update { return [("↵", "update, asks first"), ("Esc", "back")] }
-        if nav.branch == .clean { return [("↵", "on Clean asks first"), ("Esc", "back")] }
+        if nav.branch == .clean { return [("↵", "on Clean asks first"), ("→", "open a part"), ("Esc", "back")] }
+        if nav.branch?.browsed == .clean {
+            guard case .clean(.path)? = nav.selected?.target else { return [("Esc", "back")] }
+            return [("↵", "tick or untick"), ("Esc", "back")]
+        }
         if nav.branch?.browsed == .remove {
             return [("↵", nav.branch == .remove ? "open" : "remove, asks first"), ("Tab", "sort: \(removeOrder.title)"), ("Esc", "back")]
         }
