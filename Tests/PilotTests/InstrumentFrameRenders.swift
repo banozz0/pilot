@@ -9,6 +9,7 @@ import Testing
 /// Pages not yet restyled inside Instrument's frame (card agent-bo-95423181), opt-in like the other renders: Look,
 /// Workspaces, Setup, Stats, Install and Clipboard in the whole window at 1440, 1000 and 760 by 900, Instrument dark and
 /// light. Seeded as Home's renders are, in a moved home.
+/// The top bar's search, empty and with results, on Menu bar (topBarSearch).
 /// `CFFIXED_USER_HOME=<fresh dir> PILOT_RENDER_DIR=<fresh dir> swift test --filter InstrumentFrameRenders`
 extension SharedLook {
 @MainActor
@@ -42,6 +43,31 @@ struct InstrumentFrameRenders {
                 let rep = try #require(snapshot(frame, scale: 2))
                 try #require(rep.representation(using: .png, properties: [:])).write(to: dir.appendingPathComponent("\(file).png"))
             } }
+        }
+    }
+
+    @Test("The top bar's search on Menu bar, empty and with its results dropped under it (Sven, 2026-11-21)",
+          .enabled(if: env["PILOT_RENDER_DIR"] != nil && env["CFFIXED_USER_HOME"] != nil))
+    func topBarSearch() throws {
+        let engine = try BindEditorRenders.engine()
+        let dir = URL(fileURLWithPath: try #require(Self.env["PILOT_RENDER_DIR"])).appendingPathComponent("topbar-search")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let model = AppWindowModel(defaults: UserDefaults(suiteName: "pilot.renders.topbar.search")!)
+        let window = AppWindowController.makeWindow(content: NSHostingView(rootView: AppWindowView(model: model).environment(engine)))
+        defer { window.close() }
+        let frame = try #require(window.contentView?.superview)
+        Look.shared.themeID = "nightwatch"
+        Look.shared.style = .instrument
+        defer { Look.shared.themeID = PilotTheme.defaultID; Look.shared.style = .instrument }
+        AppWindowController.applyLook(.shared, to: window)
+        window.setContentSize(AppWindowController.size)
+        for (name, words) in [("empty", ""), ("results", "dock")] {
+            model.go(AppPlace(.menuBar))
+            model.query = words
+            RunLoop.main.run(until: Date().addingTimeInterval(0.9))
+            frame.layoutSubtreeIfNeeded()
+            let rep = try #require(snapshot(frame, scale: 2))
+            try #require(rep.representation(using: .png, properties: [:])).write(to: dir.appendingPathComponent("\(name).png"))
         }
     }
 }

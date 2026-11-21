@@ -2,7 +2,7 @@ import PilotCore
 import SwiftUI
 
 /// The panel's tab bar (pilot-ui-redesign T3, round 2's shot 7c): the traffic lights' inset, then `tabOrder`'s areas as
-/// named tabs, an icon over each name, and More last; the Hyper key's cap at the right. A name never drops or shrinks
+/// named tabs, an icon over each name, and More last; the window's search, then the Hyper key's cap at the right. A name never drops or shrinks
 /// (S3 A's rule): the count follows the window's width (ADR 0018, Sven 2026-11-20), every area that fits a tab in the
 /// fixed order, the rest in More, and no More once all fit; More is sized for the widest name it can take. Each tab is
 /// measured in place, off screen, so the count is the drawn names' own. The open tab is raised with a hairline and no
@@ -19,8 +19,13 @@ struct PanelTabBar: View {
     static let height: CGFloat = 64
     /// The traffic lights' inset at the left, as drawn.
     static let lights: CGFloat = 92
-    /// Room the tabs have: the panel's width less the lights, the Hyper cap (28 pt and 12 pt before it) and the 14 pt edge.
-    static func room(_ width: CGFloat) -> CGFloat { width - lights - 28 - 12 - 14 }
+    /// The search field's width, as drawn, and the gap before it.
+    static let search: CGFloat = 180, searchGap: CGFloat = 12
+    /// Room the tabs have: the panel's width less the lights, the search, the Hyper cap (28 pt and 12 pt before it) and
+    /// the 14 pt edge.
+    static func room(_ width: CGFloat) -> CGFloat { width - lights - searchGap - search - 28 - 12 - 14 }
+    /// The search field's right edge from the window's: the Hyper cap, its gap and the edge.
+    static let searchTrailing: CGFloat = 14 + 28 + 12
 
     var body: some View {
         let shown = AppArea.tabs(count: .max, developer: DeveloperPages.on).tabs
@@ -32,6 +37,9 @@ struct PanelTabBar: View {
                           moreOn: split.more.contains(open) || more.open, moreShown: !split.more.isEmpty,
                           pick: { model.go(AppPlace($0.pages[0])) }, toggleMore: { more.open.toggle() })
             Spacer(minLength: 0)
+            // The window's search on every page (Sven, 2026-11-21): Home's own search, its words and results. Cmd+F
+            // focuses it on every page but Home, whose larger field takes it.
+            InstrumentSearchField(model: model, takesKey: model.page != .home).frame(width: Self.search).padding(.leading, Self.searchGap)
             InstrumentHyperCap(side: 28).padding(.leading, 12)
         }
         .padding(.trailing, 14)
