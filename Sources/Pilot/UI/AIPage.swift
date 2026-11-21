@@ -688,7 +688,7 @@ struct AICommandsBlock: View {
 
     var body: some View {
         let commands = book.commands
-        KitBlock(title: "Commands", symbol: "sparkles", note: Self.note, trailing: {
+        KitBlock(title: AppSection.aiCommands.title, symbol: "sparkles", note: Self.note, trailing: {
             AccentLink(title: "Add command", chevron: "plus", action: add)
         }) {
             if commands.isEmpty && draft == nil {

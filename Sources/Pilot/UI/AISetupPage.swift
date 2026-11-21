@@ -190,6 +190,7 @@ private struct AISetupMore: View {
     var body: some View {
         fallback.id(AppSection.aiFallback)
         keys.id(AppSection.aiKeys)
+        AICommandsBlock().id(AppSection.aiCommands)
         chat.id(AppSection.aiNewChat)
     }
 
