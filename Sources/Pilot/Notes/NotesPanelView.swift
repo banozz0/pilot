@@ -588,6 +588,8 @@ enum NotesText {
     static let trashKeys: [KeyHint] = [("↵", "Move to Trash"), ("esc", "Keep it")]
 
     static let scratchStays = "Scratch stays on top, empty, and never goes to the Trash"
+    /// ⌘P on Scratch: it is never pinned; what is written in it becomes a note ⌘P pins.
+    static let scratchUnpinned = "Scratch stays on top: write in it, then ⌘P pins it as a note"
 
     /// "1 word", "49 words".
     static func count(_ words: Int) -> String { "\(words) \(words == 1 ? "word" : "words")" }

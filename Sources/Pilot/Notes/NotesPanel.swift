@@ -261,9 +261,13 @@ final class NotesModel {
         return note
     }
 
-    /// Cmd+P (Q116, Sven 2026-10-15): pins or unpins the open note, or the highlighted one while the list has the keyboard.
+    /// Cmd+P (Q116, Sven 2026-10-15): pins or unpins the open note, the highlighted one while the list has the keyboard,
+    /// or the one Cmd+K is open on (it closes). Scratch says it stays, rather than do nothing (Sven, 2026-11-21).
     func togglePin() {
-        guard let note = selectedNote ?? note else { return }
+        let id = actions?.note ?? selectedNote?.id ?? current
+        actions = nil
+        guard let note = notes.first(where: { $0.id == id }) else { return }
+        guard !note.isScratch else { return tip(NotesText.scratchUnpinned) }
         pin(note.id, !note.pinned)
     }
 
@@ -743,7 +747,7 @@ final class NotesPanel {
 /// the question or opens the highlighted note; ↑↓ move through the list; Cmd+P pins, Cmd+N makes a note, Cmd+Backspace
 /// asks before the Trash from the list, or deletes a note with no words in it, and is the editor's delete to the line's
 /// start otherwise (P56, Sven build 68); Cmd+K opens the actions, which then hold every key: what is typed searches
-/// them, ↑↓ choose, Return runs, Escape or Cmd+K close. Nil: the key goes on to the editor or the list's field. `key` is
+/// them, ↑↓ choose, Return runs, Cmd+P pins their note, Escape or Cmd+K close. Nil: the key goes on to the editor or the list's field. `key` is
 /// the key's characters, modifiers aside (NSEvent's charactersIgnoringModifiers).
 enum NotesKey: Equatable {
     case hide, list, keep, confirmTrash, open, step(Int), new, pin, askTrash, actions, closeActions, stepActions(Int), runAction
@@ -761,6 +765,8 @@ enum NotesKey: Equatable {
         if actions {
             switch (code, flags, key) {
             case (53, _, _), (_, [.command], "k"): self = .closeActions
+            // Its Pin row shows ⌘P, so ⌘P pins its note there too.
+            case (_, [.command], "p"): self = .pin
             case (36, [], _), (76, [], _): self = .runAction
             case (126, [], _): self = .stepActions(-1)
             case (125, [], _): self = .stepActions(1)
@@ -827,6 +833,7 @@ enum NoteAction: Equatable {
     /// The key that does it without Cmd+K, as its row shows it.
     var key: String? {
         switch self {
+        case .pin, .unpin: "⌘P"
         case .new: "⌘N"
         case .trash: "⌘⌫"
         case .format(let format): format.key

@@ -234,7 +234,7 @@ struct NotesPanelTests {
         #expect(!model.confirmingTrash && model.note?.title == "Alpha" && !model.listFocused)
     }
 
-    @Test("Cmd+P pins and unpins the open note (the highlighted one while the list has the keyboard); Shift+Cmd+P does nothing; Scratch is never pinned")
+    @Test("Cmd+P pins and unpins the open note (the highlighted one while the list has the keyboard, Cmd+K's while it is open), in the panel and on the Notes page; Shift+Cmd+P does nothing; Scratch is never pinned and says so")
     func cmdPPins() throws {
         let model = NotesModel(store: NoteStore(folder: folder), defaults: defaults)
         model.reload()
@@ -257,8 +257,24 @@ struct NotesPanelTests {
         #expect(model.notes.first { $0.id == alpha }?.pinned == true && model.notes.first { $0.id == beta }?.pinned == false)
         #expect(model.current == beta)
         model.open(NoteStore.scratch)
+        var tips: [String] = []
+        model.tip = { tips.append($0) }
         model.perform(.pin)
-        #expect(model.notes.first { $0.id == NoteStore.scratch }?.pinned == false)
+        #expect(model.notes.first { $0.id == NoteStore.scratch }?.pinned == false && tips == [NotesText.scratchUnpinned])
+        // The editor holding the keyboard, in the panel and on the Notes page alike, the pinned note goes to Pinned.
+        model.open(beta)
+        let editor = NotesTextView(usingTextLayoutManager: false)
+        #expect(NotesKey.pressed(35, .command, "p", model: model, responder: editor) == .pin)
+        let page = try #require(NotesPageKeys.key(35, .command, "p", model: model, responder: editor))
+        NotesPage.perform(page, on: model)
+        #expect(model.notes.first { $0.id == beta }?.pinned == true && model.groups.first { $0.section == .pinned }?.notes.map(\.id).contains(beta) == true)
+        // Cmd+K's Pin row shows ⌘P, and ⌘P with Cmd+K open pins its note and closes it.
+        model.openActions()
+        #expect(model.actions?.choices.first == .unpin && NoteAction.unpin.key == "⌘P" && NoteAction.pin.key == "⌘P")
+        let held = try #require(NotesKey.pressed(35, .command, "p", model: model, responder: editor))
+        #expect(held == .pin)
+        model.perform(held)
+        #expect(model.actions == nil && model.notes.first { $0.id == beta }?.pinned == false)
     }
 
     @Test("A press and release in one place outside the panel is a click that hides it; one dragged away (a picture from Finder) is not")
@@ -359,14 +375,14 @@ struct NotesPanelTests {
         model.perform(.actions)
         #expect(model.actions?.choices.map(\.title) == ["Pin", "Rename", "Duplicate", "Copy as Markdown", "Reveal in Finder",
                                                        "Title", "Heading", "Subheading", "Body", "Bulleted List", "Dashed List", "Numbered List",
-                                                       "Bold", "Italic", "Underline", "Code", "Checklist", "Edit link…", "New note", "Move to Trash"])
-        #expect(model.actions?.choices.compactMap(\.key) == ["⌘⇧T", "⌘⇧H", "⌘⇧J", "⌘⇧B", "⌘⇧7", "⌘⇧8", "⌘⇧9", "⌘B", "⌘I", "⌘U", "⌘E", "⌘⇧L", "⌘N", "⌘⌫"])
+                                                       "Bold", "Italic", "Underline", "Code", "Checklist", "Toggle", "Edit link…", "New note", "Move to Trash"])
+        #expect(model.actions?.choices.compactMap(\.key) == ["⌘P", "⌘⇧T", "⌘⇧H", "⌘⇧J", "⌘⇧B", "⌘⇧7", "⌘⇧8", "⌘⇧9", "⌘B", "⌘I", "⌘U", "⌘E", "⌘⇧L", "⌘⇧D", "⌘N", "⌘⌫"])
         #expect(key(125) == .stepActions(1) && key(36) == .runAction && key(53) == .closeActions && key(1, .command, "s") == .held)
         // Typing searches: "bol" leaves Bold; Backspace takes a letter off.
         model.perform(try #require(key(11, [], "b"))); model.perform(try #require(key(31, [], "o"))); model.perform(try #require(key(37, [], "l")))
         #expect(model.actions?.visible == [.format(.bold)] && model.actions?.index == 0)
         model.perform(try #require(key(51))); model.perform(try #require(key(51))); model.perform(try #require(key(51)))
-        #expect(model.actions?.query == "" && model.actions?.visible.count == 20)
+        #expect(model.actions?.query == "" && model.actions?.visible.count == 21)
         model.perform(.stepActions(3))
         model.perform(.runAction)
         #expect(model.actions == nil && board.string(forType: .string) == "# Plan\nship it" && tips == ["Copied “Plan” as Markdown"])
