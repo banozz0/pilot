@@ -1,3 +1,4 @@
+import Foundation
 import PilotCore
 
 extension ControlVerbs {
@@ -7,18 +8,26 @@ extension ControlVerbs {
     /// from the entries, picks, favourites, aliases and root PilotMenu's toggleNow hands MenuNavigator, plus the settings
     /// rows its search provides and the browsers' bookmarks and `hist` pages (T9); the rows that arrive after a keystroke from elsewhere (windows, files, app menu items,
     /// Install, emoji, answers, Translate, Define) are left out, and Search the web names no browser (webVia unread).
+    /// `--selection-text` and `--selection-files` stand in for what the menu opened over (T11): the rows SelectionActions
+    /// gives the panel, the real selection never read; `menu send` shows what Send to an app would run, and runs nothing.
     func registerMenu() {
-        let flags: [ControlVerb.Flag] = [.init("size", help: "also the face size the panel would take for these rows (MenuPanelSize, Line)", takesValue: false)]
+        let flags: [ControlVerb.Flag] = [.init("size", help: "also the face size the panel would take for these rows (MenuPanelSize, Line)", takesValue: false),
+                                         .init("selection-text", help: "the menu opened over this selected text: its actions lead the root"),
+                                         .init("selection-files", help: "the menu opened over these files selected in Finder, comma-separated paths")]
         register(ControlVerb("menu", help: "What the Hyper+Space menu lists for a search, in its order, read without drawing it; pick records a pick "
-                             + "of a listed row for that search, as Return does, without running it (learned abbreviations), after Allow.",
-                             usage: "pilot menu search <words> [--size] | pilot menu pick <words> <row>", flags: flags) { call throws(ControlError) in
+                             + "of a listed row for that search, as Return does, without running it (learned abbreviations), after Allow; "
+                             + "send shows what Send to an app would run for a selection, and runs nothing.",
+                             usage: "pilot menu search <words> [--size] [--selection-text <text> | --selection-files <paths>] | pilot menu pick <words> <row> | "
+                             + "pilot menu send <app> --selection-text <text> | --selection-files <paths>", flags: flags) { call throws(ControlError) in
             let args = call.arguments()
-            guard let word = args.positional.first, word == "search" || word == "pick" else {
-                throw ControlError(.badValue, "pilot menu takes search or pick: pilot menu search <words>, pilot menu pick <words> <row>")
+            guard let word = args.positional.first, ["search", "pick", "send"].contains(word) else {
+                throw ControlError(.badValue, "pilot menu takes search, pick or send: pilot menu search <words>, pilot menu pick <words> <row>, pilot menu send <app> --selection-text <text>")
             }
             if word == "pick" { return try await Self.pick(Array(args.positional.dropFirst()), peer: call.peer) }
+            let held = try Self.held(args)
+            if word == "send" { return try await Self.send(args.positional.dropFirst().joined(separator: " "), held) }
             let query = args.positional.dropFirst().joined(separator: " ")
-            let nav = try await Self.navigator(query)
+            let nav = try await Self.navigator(query, held: held)
             let headings = MenuGroups.headings(nav.rows, searching: !query.isEmpty)
             let rows: [JSONValue] = nav.rows.enumerated().map { index, row in
                 let favourite = row.frecencyKey.map(nav.favourites.contains) ?? false
@@ -47,8 +56,34 @@ extension ControlVerbs {
         })
     }
 
-    /// The navigator the menu would open with `query` typed at its root.
-    private static func navigator(_ query: String) async throws(ControlError) -> MenuNavigator {
+    /// The selection `--selection-text` or `--selection-files` stands in for; nil without either.
+    private static func held(_ args: ControlArguments) throws(ControlError) -> SelectionActions.Held? {
+        if let text = args.value("selection-text") {
+            guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { throw ControlError(.badValue, "--selection-text: some words") }
+            return .text(text)
+        }
+        guard let paths = args.value("selection-files") else { return nil }
+        let urls = paths.split(separator: ",").map { URL(filePath: String($0).trimmingCharacters(in: .whitespaces)) }
+        guard !urls.isEmpty, urls.allSatisfy({ FileManager.default.fileExists(atPath: $0.path) }) else {
+            throw ControlError(.badValue, "--selection-files: paths that exist, comma-separated")
+        }
+        return .files(urls)
+    }
+
+    /// `menu send <app>`: the command Send to an app would run for the selection given, and whether the app is one Send
+    /// to lists for it; nothing is written or run.
+    private static func send(_ word: String, _ held: SelectionActions.Held?) async throws(ControlError) -> JSONValue {
+        guard let held else { throw ControlError(.badValue, "pilot menu send <app> --selection-text <text> | --selection-files <paths>") }
+        guard !word.isEmpty, let app = SelectionActions.app(word) else { throw ControlError(.badValue, "no app \(word): a name, a bundle id or an .app path") }
+        let listed = await Task.detached(priority: .userInitiated) { SelectionActions.receivers(held) }.value
+        let plan = SelectionActions.plan(held, to: app, folder: SelectionActions.sendFolder())
+        return .object(["app": .string(app.path), "listed": .bool(listed.contains { $0.standardizedFileURL == app.standardizedFileURL }),
+                        "command": .array(plan.command.map(JSONValue.string)), "textFile": plan.textFile.map { .string($0.path) } ?? .null,
+                        "ran": .bool(false)])
+    }
+
+    /// The navigator the menu would open with `query` typed at its root, over `held` when given.
+    private static func navigator(_ query: String, held: SelectionActions.Held? = nil) async throws(ControlError) -> MenuNavigator {
         guard let engine = Engine.shared else { throw ControlError(.notReady, "the key engine is not up yet") }
         let scripts = ScriptCommand.find(), extensions = Extension.find().extensions
         await DockCalendar.shared.readCalls(now: .now) // As the menu's open reads it, the call to join (T5).
@@ -57,6 +92,10 @@ extension ControlVerbs {
                                 aliases: AliasBook.shared.aliases, root: MenuRootSettings.shared.root.listed)
         // As the menu's open and its `hist` search read them (T9): bookmarks while on, history pages (or the off row).
         if BrowserSettings.shared.bookmarks { nav.provide(.bookmark, await BrowserReader.shared.bookmarks()) }
+        if let held {
+            let commands = AICommandBook.shared.commands.map { (id: $0.id, title: $0.title) }
+            nav.provide(.selection, SelectionActions.rows(held, buffer: [], commands: commands))
+        }
         nav.query = query
         if let words = BrowserBookmarks.historyWords(query) {
             nav.provide(.history, await BrowserReader.shared.history(words, on: BrowserSettings.shared.history))

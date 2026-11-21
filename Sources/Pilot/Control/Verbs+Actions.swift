@@ -47,7 +47,7 @@ final class ControlActions {
         var kinds: [String: OnScreen] = [
             "apps.launcher": .menu, "apps.appsMenu": .menu, "apps.update": .menu, "apps.clean": .menu, "system.menu": .menu, "captures.menu": .menu, "engine.sheet": .menu,
             "system.killProcess": .picker, "system.rotateDisplay": .picker, "system.bluetooth": .picker, "apps.emoji": .picker, "apps.lazygit": .picker,
-            "apps.bitwardenFill": .picker, ExtensionCatalogueMenu.actionID: .picker,
+            "apps.bitwardenFill": .picker, ExtensionCatalogueMenu.actionID: .picker, "apps.selectionActions": .picker,
             "apps.clipboard": .panel, "apps.clipboardOptionV": .panel, NotesPanel.toggleID: .panel, QuickAIActions.askID: .panel,
             AIChatPanel.chatID: .panel,
             "engine.openWindow": .window, "apps.webApp": .window, "apps.reports": .window, "apps.install": .window, "apps.themeCatalogue": .window,

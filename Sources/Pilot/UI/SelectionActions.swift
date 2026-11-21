@@ -25,7 +25,7 @@ enum SelectionActions {
 
     nonisolated static let prefix = "selection."
     /// Each row's id after the prefix; an AI command's is `ai:<its id>`.
-    enum Verb: String, CaseIterable, Sendable {
+    enum Verb: String, Sendable {
         case translate, ask, more, web, send, copy, files, bufferAdd = "buffer.add", bufferAct = "buffer.act", bufferClear = "buffer.clear"
     }
     nonisolated static let command = "ai:"
@@ -116,12 +116,7 @@ enum SelectionActions {
         switch (verb, held) {
         case (.translate, .text(let text)?): PilotMenu.shared.open(typing: text, in: .translate)
         case (.ask, .text(let text)?): SelectionBox.shared.open(service: text)
-        case (.more, .text(let text)?):
-            let commands = AICommandBook.shared.commands.map { (id: $0.id, title: $0.title) }
-            PilotMenu.shared.pick(textActions(text, commands: commands), title: "Selection", logTitles: false) { row in
-                guard case .action(let picked) = row.target else { return }
-                frontmost { run(picked, web: web, frontmost: frontmost) }
-            }
+        case (.more, .text(let text)?): offerText(text, web: web, frontmost: frontmost)
         case (.web, .text(let text)?): web(text)
         case (.copy, .text(let text)?): SystemModule.copy(text, tip: "Copied as plain text")
         case (.send, let held?): offerSend(held)
@@ -133,6 +128,35 @@ enum SelectionActions {
             HUD.tip("The file buffer is empty")
         default: sellog.notice("selection: \(word, privacy: .public) has nothing selected to act on")
         }
+    }
+
+    /// Act on the selection (`apps.selectionActions`, no default key: Hyper+A is Capture full screen): the actions for
+    /// what is selected in the app in front, read as Hyper+Space reads it, as a picker; the buffer's when nothing is.
+    static func open() {
+        let front = NSWorkspace.shared.frontmostApplication
+        Task {
+            let read = await read(front: front)
+            held = read.held
+            switch read.held {
+            case .text(let text)?: offerText(text, web: searchWeb, frontmost: { $0() })
+            case .files(let urls)?: offerFiles(urls, buffered: false)
+            case nil: if buffer.isEmpty { HUD.tip(SelectionBox.nothingSelected) } else { offerFiles(buffer, buffered: true) }
+            }
+        }
+    }
+
+    /// Every action on selected text as a picker titled Selection; the one picked runs once the app is in front.
+    private static func offerText(_ text: String, web: @escaping (String) -> Void, frontmost: @escaping (@escaping () -> Void) -> Void) {
+        let commands = AICommandBook.shared.commands.map { (id: $0.id, title: $0.title) }
+        PilotMenu.shared.pick(textActions(text, commands: commands), title: "Selection", logTitles: false) { row in
+            guard case .action(let picked) = row.target else { return }
+            frontmost { run(picked, web: web, frontmost: frontmost) }
+        }
+    }
+
+    /// Search the web for `text` with the default browser's engine, as the menu's Search the web row does.
+    private static func searchWeb(_ text: String) {
+        WebSearchReader.open(text, with: WebSearchReader.read(browser: WebSearchReader.defaultBrowser(), fullDiskAccess: FileIndex.hasFullDiskAccess()))
     }
 
     /// Pilot's file actions on `urls` (FileActionsMenu) with the selection's own rows after them; an action picked on the
@@ -165,15 +189,25 @@ enum SelectionActions {
         Task {
             let apps = await Task.detached(priority: .userInitiated) { receivers(held) }.value
             guard !apps.isEmpty else { return HUD.tip("No app opens that") }
-            let rows = apps.compactMap { url -> MenuEntry? in
-                guard let bundle = Bundle(url: url)?.bundleIdentifier else { return nil }
-                return MenuEntry(title: FileManager.default.displayName(atPath: url.path).replacing(".app", with: ""), target: .app(bundle))
-            }
+            let byBundle = apps.compactMap { url in Bundle(url: url)?.bundleIdentifier.map { ($0, url) } }
+            let urls = Dictionary(byBundle) { first, _ in first }
+            let rows = byBundle.map { MenuEntry(title: name(of: $0.1), target: .app($0.0)) }
             PilotMenu.shared.pick(rows, title: "Send to", logTitles: false) { row in
-                guard case .app(let bundle) = row.target, let app = apps.first(where: { Bundle(url: $0)?.bundleIdentifier == bundle }) else { return }
+                guard case .app(let bundle) = row.target, let app = urls[bundle] else { return }
                 send(held, to: app)
             }
         }
+    }
+
+    /// An app's name as Finder shows it, without `.app`.
+    private nonisolated static func name(of app: URL) -> String { FileManager.default.displayName(atPath: app.path).replacing(".app", with: "") }
+
+    /// The app `word` names, as `pilot menu send` takes it: a bundle id, an app's path, or an installed app's name.
+    static func app(_ word: String) -> URL? {
+        if word.hasSuffix(".app"), FileManager.default.fileExists(atPath: word) { return URL(filePath: word) }
+        if let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: word) { return url }
+        let named = AppsModule.installedApps().first { $0.name.caseInsensitiveCompare(word) == .orderedSame }
+        return named.flatMap { NSWorkspace.shared.urlForApplication(withBundleIdentifier: $0.bundle) }
     }
 
     /// The apps Launch Services says open what is held: for text, plain text's; for files, the ones every file names.
@@ -204,10 +238,13 @@ enum SelectionActions {
     }
 
     /// Sends what is held to `app` as the plan says, its text written first; a refusal says so in a tip.
+    /// A folder of its own for one send's text file.
+    nonisolated static func sendFolder() -> URL { FileManager.default.temporaryDirectory.appending(path: "Pilot selection \(UUID().uuidString)") }
+
     static func send(_ held: Held, to app: URL) {
-        let folder = FileManager.default.temporaryDirectory.appending(path: "Pilot selection \(UUID().uuidString)")
+        let folder = sendFolder()
         let planned = plan(held, to: app, folder: folder)
-        let name = FileManager.default.displayName(atPath: app.path).replacing(".app", with: "")
+        let name = name(of: app)
         do {
             if case .text(let text) = held, let file = planned.textFile {
                 try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
