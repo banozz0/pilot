@@ -141,7 +141,10 @@ private struct PagePart: View {
                 // Back from System (Sven's round 3 notes on build 2300): the blocks carry the page's intro.
                 KitPage { MouseButtonsBlocks() }
             } else {
-                HeldSearch(model: model) { BindsKeyboardPage(search: $0, startOnPlain: section == .plainCombos, editBind: $model.editBind) { model.go($0) } }
+                HeldSearch(model: model) {
+                    BindsKeyboardPage(search: $0, startOnPlain: section == .plainCombos, editBind: model.editBind, tookEdit: { model.editBind = nil }) { model.go($0) }
+                        .equatable()
+                }
             }
         case .menu:
             if section == .rings {
@@ -262,6 +265,12 @@ struct KeptPages<Content: View>: NSViewRepresentable {
     @ViewBuilder var content: () -> Content
 
     func makeNSView(context: Context) -> PageDeck { PageDeck() }
+
+    /// The deck takes what it is offered. Asked its fitting size instead, AppKit fills a layout engine with every kept
+    /// page's constraints to answer, on every switch and again as it resumes (page-switch-4: 15 % of a switch).
+    func sizeThatFits(_ proposal: ProposedViewSize, nsView: PageDeck, context: Context) -> CGSize? {
+        proposal.replacingUnspecifiedDimensions()
+    }
     func updateNSView(_ deck: PageDeck, context: Context) {
         deck.show(key, AnyView(content().frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading).ignoresSafeArea()))
     }

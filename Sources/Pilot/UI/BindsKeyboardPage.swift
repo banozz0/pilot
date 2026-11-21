@@ -12,18 +12,21 @@ struct BindsKeyboardPage: View {
     let search: String
     /// Plain combos asked for by a link or the window's search.
     let startOnPlain: Bool
-    /// An action whose bind editor opens at once (the menu's Set Hyper bind), cleared as it opens.
-    let editBind: Binding<String?>
+    /// An action whose bind editor opens at once (the menu's Set Hyper bind); `tookEdit` clears it as it opens. A value
+    /// and a closure, not a binding (page-switch-4: a binding made again with its page never compares equal).
+    let editBind: String?
+    let tookEdit: () -> Void
     let go: (AppPlace) -> Void
 
     /// The layer the keyboard and its lists show, the one asked for from the first frame, so the tabs open on it rather
     /// than slide to it.
     @State private var layer: BindsKeyboard.Layer
 
-    init(search: String, startOnPlain: Bool = false, editBind: Binding<String?> = .constant(nil), go: @escaping (AppPlace) -> Void) {
+    init(search: String, startOnPlain: Bool = false, editBind: String? = nil, tookEdit: @escaping () -> Void = {}, go: @escaping (AppPlace) -> Void) {
         self.search = search
         self.startOnPlain = startOnPlain
         self.editBind = editBind
+        self.tookEdit = tookEdit
         self.go = go
         _layer = State(initialValue: startOnPlain ? .plain : .hyper)
     }
@@ -54,10 +57,10 @@ struct BindsKeyboardPage: View {
             }
         } }
         .onChange(of: startOnPlain) { if startOnPlain { layer = .plain } }
-        .onChange(of: editBind.wrappedValue, initial: true) {
-            guard let action = editBind.wrappedValue else { return }
+        .onChange(of: editBind, initial: true) {
+            guard let action = editBind else { return }
             editing = .init(action: action)
-            editBind.wrappedValue = nil
+            tookEdit()
         }
         // A Hyper press picks its key while the board shows in the window in front (card agent-bo-95422993, G5).
         .modifier(PicksKeys(when: !listed && editing == nil, engine: engine, pick: pick))
@@ -160,6 +163,16 @@ struct BindsKeyboardPage: View {
 
     private func reset(_ action: String) {
         do { try engine.binds.reset(action); refusal = nil } catch { refusal = BindsPage.refusal(error, actions: engine.bindActions) }
+    }
+}
+
+/// Equal on what it shows from: `go` and `tookEdit` do the same each time the window's page makes them, but as closures
+/// made again they never compare equal, so the whole board was built again on every switch to or from Binds and as
+/// it was hidden or shown (page-switch-4: 21 builds in 20 switches, now 2; the resume 24 -> 12 ms). The window's part
+/// shows it `.equatable()`.
+extension BindsKeyboardPage: Equatable {
+    nonisolated static func == (a: Self, b: Self) -> Bool {
+        a.search == b.search && a.startOnPlain == b.startOnPlain && a.editBind == b.editBind
     }
 }
 
