@@ -725,10 +725,11 @@ final class NotesPanel {
         }
     }
 
-    /// A click in `key` is in the panel: the panel, a child of it, or the selection pill and its Ask AI bubble, which work
-    /// on the note's selected text.
+    /// A click in `key` is in the panel: the panel, a child of it, the selection pill and its Ask AI bubble, which work
+    /// on the note's selected text, or the image viewer a note's picture opened (NotesPictureClick), so a zoom there
+    /// keeps the note.
     static func keeps(_ key: NSWindow, panel: NSWindow) -> Bool {
-        key === panel || key.parent === panel || key.identifier == SelectionTools.panelID
+        key === panel || key.parent === panel || key.identifier == SelectionTools.panelID || key is ImageViewerPanel
     }
 
     /// A press and its release within 4 points of each other: a click, not a drag.

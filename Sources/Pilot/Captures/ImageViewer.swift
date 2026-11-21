@@ -7,7 +7,8 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 /// Pilot's image viewer (Sven, 2026-11-12, Q158): PNG, JPEG, HEIC, GIF, WebP, TIFF and BMP open here from Finder, Open
-/// With, a default Sven picked, `open -a Pilot`, Pilot Files, `pilot files open` and `pilot://view`. One window an open, on
+/// With, a default Sven picked, `open -a Pilot`, Pilot Files (Space on picked pictures, a click on a grid tile's picture or the
+/// inspector's), a click on a picture in a note, `pilot files open` and `pilot://view`. One window an open, on
 /// a solid ground in the capture editor's look: fitted to the window, zoomed with a pinch, ⌘-scroll, ⌘+ ⌘− ⌘0 or a
 /// double-click (100 %), Left and Right through the pictures opened together (several picked in Finder or Pilot Files: only
 /// those, in the order handed over; one: its folder's), Space or Esc to close; Mark up opens the capture editor on it, whose Done
@@ -41,8 +42,10 @@ enum ImageViewer {
     /// One open of `urls`: ONE viewer, stepping through just these pictures when there are several (their folder's when
     /// one). A part of the same open (within `batchWindow` of it) joins its window; a single picture already shown in a
     /// viewer brings that one forward; any other open gets a window of its own. Nil when none is a picture it reads.
+    /// `closesOnClickOutside`: a look from inside Pilot (a note's picture, Pilot Files; Sven, 2026-11-21) that a click
+    /// anywhere else closes, as Quick Look's does; Finder's opens keep their window.
     @discardableResult
-    static func show(_ urls: [URL], now: Date = .now) -> ImageViewerModel? {
+    static func show(_ urls: [URL], closesOnClickOutside: Bool = false, now: Date = .now) -> ImageViewerModel? {
         var seen = Set<URL>()
         let files = urls.map { $0.standardizedFileURL.resolvingSymlinksInPath() }
             .filter { ViewerImages.viewable($0) && FileManager.default.isReadableFile(atPath: $0.path) && seen.insert($0).inserted }
@@ -61,6 +64,7 @@ enum ImageViewer {
         let screen = NSScreen.screens.first { $0.frame.contains(NSEvent.mouseLocation) } ?? NSScreen.main
         let longest = Int(max(screen?.frame.width ?? 1440, screen?.frame.height ?? 900) * (screen?.backingScaleFactor ?? 2))
         let model = ImageViewerModel(files: files, longest: longest, backing: screen?.backingScaleFactor ?? 2)
+        model.closesOnClickOutside = closesOnClickOutside
         let size = EditorLayout.opening(room: screen?.visibleFrame.size ?? CGSize(width: 1440, height: 900), least: least,
                                         saved: EditorLayout.saved(sizeKey))
         let panel = ImageViewerPanel(contentRect: CGRect(origin: .zero, size: size), styleMask: [.borderless, .nonactivatingPanel, .resizable],
@@ -152,6 +156,9 @@ final class ImageViewerModel {
     @ObservationIgnored let longest: Int
     @ObservationIgnored let backing: CGFloat
     @ObservationIgnored var close: () -> Void = {}
+    /// Closes when its window loses the keyboard (a click outside it, another app); Mark up turns it off, so the editor
+    /// it opens never takes the viewer with it.
+    @ObservationIgnored var closesOnClickOutside = false
     /// The screen-size read of the picture shown, which a zoom back to the fit returns to, letting a sharper read go.
     @ObservationIgnored private var base: CGImage?
     /// Each read's number: a read for a picture stepped past arrives late and is dropped.
@@ -374,6 +381,7 @@ final class ImageViewerModel {
 
     func markUp() {
         let url = file
+        closesOnClickOutside = false
         Task { if await !ImageViewer.markUp(url) { say("Pilot cannot read \(url.lastPathComponent)") } }
     }
 
@@ -475,6 +483,19 @@ final class ImageViewerPanel: NSPanel, BorderedWindow {
         collectionBehavior = [.fullScreenAuxiliary]
         hidesOnDeactivate = false
         isReleasedWhenClosed = false
+    }
+
+    /// A look opened from inside Pilot closes once something else takes the keyboard: on the next turn, so the click
+    /// that did it lands first.
+    override func resignKey() {
+        super.resignKey()
+        DispatchQueue.main.async { [weak self] in
+            MainActor.assumeIsolated {
+                guard let self, !self.isKeyWindow, let model = self.model, model.closesOnClickOutside else { return }
+                ImageViewer.log.notice("viewer: lost the keyboard, closed")
+                model.close()
+            }
+        }
     }
 
     override func sendEvent(_ event: NSEvent) {

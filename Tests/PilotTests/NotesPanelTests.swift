@@ -100,7 +100,7 @@ struct NotesPanelTests {
         #expect(model.notes.first?.isScratch == true && model.notes.first?.pinned == false)
     }
 
-    @Test("A picture pasted into the editor is saved in attachments/, linked on a line of its own and drawn under it")
+    @Test("A picture pasted into the editor is saved in attachments/, linked on a line of its own and drawn under it; a click on it opens the image viewer, the caret kept")
     func pastePicture() throws {
         _ = try NoteStore(folder: folder).load()
         let editor = NotesTextView(usingTextLayoutManager: false)
@@ -124,6 +124,39 @@ struct NotesPanelTests {
         editor.restyle()
         let drawn = try #require(editor.pictureRects().first)
         #expect(drawn.rect.width > 0 && drawn.rect.minY > 30)
+        // A click on the picture (Sven, 2026-11-21): the viewer opens on its file, never on screen, and the caret stays.
+        // The release is handed to the press's tracking, as AppKit's queue would.
+        ImageViewer.onScreen = false
+        defer { ImageViewer.closeAll() }
+        let window = NSWindow(contentRect: editor.frame, styleMask: [.borderless], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        defer { window.close() }
+        window.contentView = editor
+        let file = folder.appending(path: "attachments/\(name)").standardizedFileURL.resolvingSymlinksInPath()
+        func click(_ at: NSPoint, release: NSPoint) throws {
+            func event(_ type: NSEvent.EventType, _ p: NSPoint) throws -> NSEvent {
+                try #require(NSEvent.mouseEvent(with: type, location: editor.convert(p, to: nil), modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
+                                                windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: type == .leftMouseUp ? 0 : 1))
+            }
+            var queued = [try event(.leftMouseUp, release)]
+            NotesTextView.nextPress = { _ in queued.popLast() }
+            defer { NotesTextView.nextPress = { $0.nextEvent(matching: [.leftMouseUp, .leftMouseDragged]) } }
+            editor.mouseDown(with: try event(.leftMouseDown, at))
+        }
+        let caret = editor.selectedRange(), centre = NSPoint(x: drawn.rect.midX, y: drawn.rect.midY)
+        #expect(editor.viewablePicture(at: centre) == file)
+        try click(centre, release: NSPoint(x: centre.x + 1, y: centre.y))
+        let viewer = try #require(ImageViewer.model(showing: file), "a click on the picture opened no viewer")
+        print("NOTES CLICK: viewer on \(viewer.file.lastPathComponent), closes on a click outside \(viewer.closesOnClickOutside), caret \(caret) -> \(editor.selectedRange()), text unchanged \(editor.string == "# Trip\n![](attachments/\(name))\n")")
+        #expect(viewer.closesOnClickOutside && ImageViewer.openCount == 1)
+        #expect(editor.selectedRange() == caret && editor.string == "# Trip\n![](attachments/\(name))\n")
+        ImageViewer.closeAll()
+        // The list's read-only preview opens nothing: a click there picks the note.
+        editor.isEditable = false
+        #expect(editor.viewablePicture(at: centre) == nil)
+        editor.isEditable = true
+        // A drag from the picture goes on to NSTextView's own tracking and still selects (run once: viewers 0, selection
+        // {0, 49}); not kept here, as that tracking pulls from AppKit's queue, which stops the test process's main run loop.
         // Text on the clipboard pastes as text: nothing saved.
         board.clearContents()
         board.setString("just words", forType: .string)
@@ -309,6 +342,9 @@ struct NotesPanelTests {
         pill.identifier = SelectionTools.panelID
         #expect(NotesPanel.keeps(child, panel: panel) && NotesPanel.keeps(pill, panel: panel) && NotesPanel.keeps(panel, panel: panel))
         #expect(!NotesPanel.keeps(other, panel: panel))
+        // The image viewer a note's picture opened: a zoom there keeps the note.
+        let viewer = ImageViewerPanel(contentRect: .zero, styleMask: [.borderless], backing: .buffered, defer: true)
+        #expect(NotesPanel.keeps(viewer, panel: panel))
     }
 
     func file(_ id: String) -> String? { try? String(contentsOf: folder.appending(path: id), encoding: .utf8) }
