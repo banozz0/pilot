@@ -62,6 +62,15 @@ final class MouseDragTap {
 
     private var tap: CFMachPort?
     private var source: CFRunLoopSource?
+    /// The drags, in a tap of their own, on only while this tap holds a press (holdsPress). An active tap makes the window
+    /// server wait for Pilot's main thread before it passes each event on, so with the drags in the press tap every drag in
+    /// the system (a Finder window by its title bar) went at the pace of Pilot's main run loop: 10.7 ms a hop in Pilot 3050
+    /// mid-drag, against 72 us for the window server's own call (move-lag).
+    private var dragTap: CFMachPort?
+    private var dragSource: CFRunLoopSource?
+    private var dragsOn = false
+    /// A press this tap took, or a drag it runs: its drags must come here, so the app never sees them.
+    private var holdsPress: Bool { tracker.session != nil || widgetDown != nil || menuDown || fileClickDown || waiting != nil }
 
     /// Which events the drag keeps from the app, and the drag's session (DragTracker).
     private var tracker = DragTracker()
@@ -90,21 +99,29 @@ final class MouseDragTap {
 
     func start() {
         guard tap == nil else { return }
-        let types: [CGEventType] = [.leftMouseDown, .leftMouseDragged, .leftMouseUp, .rightMouseDown, .rightMouseDragged, .rightMouseUp]
-        let mask = types.reduce(CGEventMask(0)) { $0 | (1 << $1.rawValue) }
+        let presses: [CGEventType] = [.leftMouseDown, .leftMouseUp, .rightMouseDown, .rightMouseUp]
+        let drags: [CGEventType] = [.leftMouseDragged, .rightMouseDragged]
         let me = Unmanaged.passUnretained(self).toOpaque()
         // Session level, so the button state the tiler reads (NSEvent.pressedMouseButtons) should be recorded before this tap
         // drops the press; unverified until the live check.
-        guard let tap = CGEvent.tapCreate(tap: .cgSessionEventTap, place: .headInsertEventTap, options: .defaultTap,
-                                          eventsOfInterest: mask, callback: mouseCallback, userInfo: me) else {
+        func make(_ types: [CGEventType]) -> (CFMachPort, CFRunLoopSource)? {
+            let mask = types.reduce(CGEventMask(0)) { $0 | (1 << $1.rawValue) }
+            guard let tap = CGEvent.tapCreate(tap: .cgSessionEventTap, place: .headInsertEventTap, options: .defaultTap,
+                                              eventsOfInterest: mask, callback: mouseCallback, userInfo: me) else { return nil }
+            let source = CFMachPortCreateRunLoopSource(nil, tap, 0)!
+            CFRunLoopAddSource(CFRunLoopGetMain(), source, .commonModes)
+            return (tap, source)
+        }
+        guard let (tap, source) = make(presses), let (dragTap, dragSource) = make(drags) else {
             return wlog.error("drag: mouse tap not created")
         }
-        let source = CFMachPortCreateRunLoopSource(nil, tap, 0)
-        CFRunLoopAddSource(CFRunLoopGetMain(), source, .commonModes)
         enabled = wanted
         CGEvent.tapEnable(tap: tap, enable: enabled)
+        CGEvent.tapEnable(tap: dragTap, enable: false)
         self.tap = tap
         self.source = source
+        self.dragTap = dragTap
+        self.dragSource = dragSource
         wlog.notice("drag: mouse tap installed")
     }
 
@@ -124,10 +141,24 @@ final class MouseDragTap {
         }
     }
 
+    /// The drag tap on while a press is held, off once it is let go, after the callback returned (its window server round
+    /// trip waits until then, as `enable`'s). A drag the window server sends before it is on reaches the app, which never
+    /// saw the press: AppKit drops a drag with no press.
+    fileprivate func followDrags() {
+        guard holdsPress != dragsOn else { return }
+        DispatchQueue.main.async { [weak self] in
+            guard let self, let dragTap, holdsPress != dragsOn else { return }
+            dragsOn = holdsPress
+            CGEvent.tapEnable(tap: dragTap, enable: dragsOn)
+        }
+    }
+
     func stop() {
         if let tap { CGEvent.tapEnable(tap: tap, enable: false) }
         if let source { CFRunLoopRemoveSource(CFRunLoopGetMain(), source, .commonModes) }
-        tap = nil; source = nil
+        if let dragTap { CGEvent.tapEnable(tap: dragTap, enable: false) }
+        if let dragSource { CFRunLoopRemoveSource(CFRunLoopGetMain(), dragSource, .commonModes) }
+        tap = nil; source = nil; dragTap = nil; dragSource = nil; dragsOn = false
         fileClickDown = false; enabled = false; waiting = nil; menuDown = false
         if widgetDown != nil { widgetDown = nil; widgets?.drop() }
         end()
@@ -148,6 +179,7 @@ final class MouseDragTap {
         // would race, leaving the tap on while `enabled` says off.
         if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
             if type == .tapDisabledByTimeout, let tap, wanted { CGEvent.tapEnable(tap: tap, enable: true); enabled = true }
+            if type == .tapDisabledByTimeout, let dragTap, dragsOn { CGEvent.tapEnable(tap: dragTap, enable: true) }
             return pass
         }
         // A press of the held button while a widget is still held: that grab's release went by unseen (a tap timeout), so
@@ -241,6 +273,7 @@ final class MouseDragTap {
     private func dropWaiting() {
         waiting = nil
         tracker.end(); pending = nil; counts = (0, 0, .now); generation += 1
+        followDrags()
     }
 
     /// The front window at `point`; the Dock's see-through one over a whole screen is looked through, as a drag does, and
@@ -426,6 +459,7 @@ final class MouseDragTap {
         if tilerHolds { TilerDrag.end(at: releasePoint) }
         tracker.end(); target = nil; pending = nil; counts = (0, 0, .now); generation += 1
         tilerHolds = false; releasePoint = nil
+        followDrags()
     }
 }
 
@@ -434,5 +468,10 @@ private let mouseCallback: CGEventTapCallBack = { _, type, event, userInfo in
     let tap = Unmanaged<MouseDragTap>.fromOpaque(userInfo).takeUnretainedValue()
     // The tap's run loop source lives on the main run loop, so this runs on the main thread.
     nonisolated(unsafe) let event = event
-    return MainActor.assumeIsolated { tap.handle(type: type, event: event) }
+    return MainActor.assumeIsolated {
+        let result = tap.handle(type: type, event: event)
+        // A press taken or let go, a timeout: the drag tap follows. A drag changes nothing it reads.
+        if type != .leftMouseDragged && type != .rightMouseDragged { tap.followDrags() }
+        return result
+    }
 }
