@@ -274,8 +274,10 @@ public enum CleanMenu {
             let on = paths.filter { !unticked.contains($0.id) }
             let state = paths.isEmpty ? "not listed one by one"
                 : "\(on.count) of \(paths.count) ticked, \(RemoveList.size(CleanList.bytes(on)))"
+            // A part opens to its lines and paths, so it wears a folder in its kind's tint, never its first line's own glyph.
+            let kind = MenuIcon.clean(title: lines.first?.element.title ?? section, section: section)
             rows.append(MenuEntry(title: section, target: .branch(branch), home: .clean, detail: named.isEmpty ? state : "\(named) · \(state)",
-                                  inSearch: false, icon: MenuIcon.clean(title: lines.first?.element.title ?? section, section: section)))
+                                  inSearch: false, icon: .glyph("folder", kind.tint)))
             rows += lines.map { i, item in
                 row(item.title, .note(i), item.detail.isEmpty ? nil : item.detail, MenuIcon.clean(title: item.title, section: item.section), in: branch)
             }
