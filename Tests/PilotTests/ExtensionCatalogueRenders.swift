@@ -1,7 +1,7 @@
 #if DEBUG
 import AppKit
 import Foundation
-import PilotCore
+@testable import PilotCore
 import SwiftUI
 import Testing
 @testable import Pilot
@@ -34,6 +34,10 @@ struct ExtensionCatalogueRenders {
         let look = Look.shared
         let saved = (look.themeID, look.style)
         defer { (look.themeID, look.style) = saved }
+        // T31: Raycast views drawn from real host answers, only these shots then (raycastViews).
+        if let answers = Self.env["PILOT_T31_ANSWERS"], let folder = Self.env["PILOT_T31_EXTENSIONS"] {
+            return try await Self.raycastViews(answers: URL(filePath: answers), extensions: URL(filePath: folder), out: out)
+        }
 
         let (loaded, dir) = try ExtensionCatalogueModelTests.model()
         defer { try? FileManager.default.removeItem(at: dir) }
@@ -211,6 +215,60 @@ struct ExtensionCatalogueRenders {
                 .frame(width: 240).padding(.vertical, 8)
         }.styled(.page(.extensions), look: look).pilotTheme(look: look)
         try writeRender(sidebar, to: out.appendingPathComponent("instrument-t29-sidebar.png"), wait: 0.3)
+    }
+
+    /// T31: Speedtest (its dashboard Detail, then its list with each row's detail), Kill Process, Todo List, Weather and
+    /// Pomodoro in Hyper+Space, each drawn from the newest answer pilot-ext-host printed for it: `PILOT_T31_ANSWERS` holds
+    /// `<shot>.jsonl` (captured by running the store install's command in the host), `PILOT_T31_EXTENSIONS` the folder
+    /// they are installed in, `PILOT_T31_TAG` names the shots (`t31-<tag>-<shot>`). The answer goes through the view's own
+    /// session, as the host's newest answer does.
+    static func raycastViews(answers: URL, extensions: URL, out: URL) async throws {
+        let installed = Extension.find(in: extensions).extensions, tag = env["PILOT_T31_TAG"] ?? "after"
+        let scratch = FileManager.default.temporaryDirectory.appending(path: "t31-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: scratch) }
+        let shots = [("speedtest", "speedtest", "index"), ("speedtest-list", "speedtest", "index"), ("kill-process", "kill-process", "index"),
+                     ("todo-list", "todo-list", "index"), ("weather", "raycast-weather", "index"),
+                     ("pomodoro", "raycast-pomodoro", "pomodoro-control-timer")]
+        for (shot, id, name) in shots {
+            let lines = try String(contentsOf: answers.appending(path: "\(shot).jsonl"), encoding: .utf8).split(whereSeparator: \.isNewline)
+            guard let ext = installed.first(where: { $0.id == id }), let command = ext.commands.first(where: { $0.name == name }),
+                  let line = lines.last, case .answer(let outcome, let meta) = ExtensionRun.reply(line) else {
+                Issue.record("T31: no answer or extension for \(shot)")
+                continue
+            }
+            let inputs = ExtensionRun.Inputs(preferences: [:], data: scratch.appending(path: "data"), cache: scratch.appending(path: "cache"))
+            let session = ExtensionListSession(ext, command, inputs: inputs, run: { _, _ in outcome })
+            let model = MenuModel(nav: MenuNavigator(list: [], title: command.title, live: true))
+            session.show = { model.nav.replaceList($0) }
+            session.showEmpty = { model.nav.emptyView = $0 }
+            session.showChrome = { model.nav.chrome = $0 }
+            session.search("")
+            await session.settled()
+            // A one-shot run's answer has no chrome of its own; the host's line does, as the open view's session draws it.
+            var chrome = meta.chrome
+            chrome.icon = model.nav.chrome?.icon
+            model.nav.chrome = chrome
+            print("T31 \(tag) \(shot): \(model.nav.rows.count) rows, first \(model.nav.rows.first?.title ?? "-")")
+            try InstrumentMenuRenders.render(MenuView(model: model), "t31-\(tag)-\(shot)", in: out)
+            session.close()
+            // The same answer on the extension's live page (T30), which draws Raycast's views as Hyper+Space does.
+            guard ["kill-process", "speedtest-list"].contains(shot) else { continue }
+            let page = ExtensionPageModel(id: id, folder: extensions, storage: ExtensionStorage(data: scratch.appending(path: "data"),
+                                          cache: scratch.appending(path: "cache"), keychain: ExtensionsModuleTests.FakeKeychain()))
+            await page.refresh()
+            let live = try #require(page.livePage)
+            live.session = { ext, command, inputs in ExtensionListSession(ext, command, inputs: inputs, run: { _, _ in outcome }) }
+            await live.start()
+            try await Task.sleep(for: .milliseconds(200))
+            var paged = meta.chrome
+            paged.icon = live.nav.chrome?.icon
+            live.nav.chrome = paged
+            let look = Look.shared
+            let view = Ground { ExtensionSurfacePage(id: id, onScreen: true, model: page) { _ in }.frame(width: 900, height: 560) }
+                .styled(.page(.extensions), look: look).pilotTheme(look: look)
+            try writeRender(view, to: out.appendingPathComponent("t31-\(tag)-page-\(shot).png"), wait: 0.8)
+            live.stop()
+        }
     }
 
     /// Kill Process as a store install leaves it (T25): Raycast's package.json, its icon in assets/, its built command.
