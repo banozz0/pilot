@@ -56,9 +56,11 @@ function metadata(owner) {
 
 // Its `actions` are mounted after its rows (T30): Raycast offers them while it has no rows (Todo List's Create Todo).
 export const List = withParts("List");
-List.Item = withParts("List.Item");
-// An item's side detail (`detail` with isShowingDetail) is built but not drawn yet.
-List.Item.Detail = host("List.Item.Detail");
+// An item's side detail (its `detail` prop, a List.Item.Detail) is mounted under it too (T31): host.js sends it while
+// the List's isShowingDetail is on, drawn at the list's right as Raycast draws it.
+List.Item = (props) => createElement("List.Item", props, props.children, props.detail ?? null, props.actions ?? null);
+List.Item.displayName = "List.Item";
+List.Item.Detail = withParts("List.Item.Detail");
 List.Item.Detail.Metadata = metadata("List.Item.Detail");
 List.Section = host("List.Section");
 // Its `actions` are mounted under it (T28), so the empty view offers them: Speedtest's Restart.

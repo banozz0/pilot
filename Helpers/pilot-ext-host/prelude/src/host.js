@@ -98,14 +98,62 @@ function words(value) {
   return undefined;
 }
 
-/** An item's first accessory with text, as the word at its right. */
-function accessory(accessories) {
-  if (!Array.isArray(accessories)) return undefined;
-  for (const a of accessories) {
-    const text = words(a?.text) ?? words(a?.tag) ?? (a?.date instanceof Date ? a.date.toLocaleDateString() : undefined);
-    if (text) return text;
-  }
+/** Whether an accessory, a label or a tag has anything to draw: words or an icon (T31). */
+const shows = (o) => !!(o.text || o.symbol || o.image || o.icon || o.file);
+
+/** A Raycast colour (T31): a Color name as raycast.js's Proxy gives it ("Blue"), a hex or CSS string, or `{ light, dark }`
+ *  (dark taken, as the environment says dark). Pilot draws it in its own theme's colours. */
+function colour(value) {
+  if (typeof value === "string" && value) return value;
+  if (value && typeof value === "object") return colour(value.dark ?? value.light ?? value.color);
   return undefined;
+}
+
+/** A date accessory as Raycast words it, relative to now: "now", "5m", "3h", "2d", "1w", "4mo", "1y" (T31; the exact
+ *  forms are read off Raycast's docs' "now", "1d", the rest unverified). */
+function relative(date) {
+  const seconds = Math.round((Date.now() - date.getTime()) / 1000), ahead = seconds < 0, s = Math.abs(seconds);
+  const steps = [[60, 1, null], [3600, 60, "m"], [86400, 3600, "h"], [604800, 86400, "d"], [2592000, 604800, "w"], [31536000, 2592000, "mo"]];
+  let out = `${Math.floor(s / 31536000)}y`;
+  for (const [below, unit, word] of steps) if (s < below) { out = word ? `${Math.floor(s / unit)}${word}` : "now"; break; }
+  return ahead && out !== "now" ? `in ${out}` : out;
+}
+
+/** An accessory's words: a date relative to now, else its text. */
+const accessoryWords = (v) => (v instanceof Date ? relative(v) : words(v));
+
+/** Each accessory of an item in Raycast's order (T31): its text, a tag (drawn as a tinted pill) or a date, its colour,
+ *  its icon (an Icon name, an asset or URL as a picture, a file's icon) with its tint, and its tooltip. A picture is
+ *  sent once per answer: the accessory names it (`picture`) by its key in `pictures` (Kill Process wears the same two
+ *  icons on ~700 rows). */
+function accessories(list, pictures) {
+  if (!Array.isArray(list)) return undefined;
+  const out = [];
+  for (const a of list) {
+    if (!a || typeof a !== "object") continue;
+    const one = {};
+    const tagged = a.tag !== undefined && a.tag !== null;
+    const shown = tagged ? a.tag : a.text ?? a.date;
+    const boxed = shown && typeof shown === "object" && !(shown instanceof Date);
+    const text = accessoryWords(boxed ? shown.value : shown);
+    if (text) one.text = text;
+    if (tagged) one.tag = true;
+    const tone = boxed ? colour(shown.color) : undefined;
+    if (tone) one.color = tone;
+    if (a.icon != null) {
+      const { image: bytes, ...icon } = picture(a.icon);
+      Object.assign(one, icon);
+      if (bytes) {
+        let key = pictures.get(bytes);
+        if (key === undefined) { key = String(pictures.size + 1); pictures.set(bytes, key); }
+        one.picture = key;
+      }
+    }
+    const tip = words(a.tooltip);
+    if (tip) one.tooltip = tip;
+    if (shows(one) || one.picture) out.push(one);
+  }
+  return out.length ? out : undefined;
 }
 
 /** A typed action (T3) as the ADR 0010 action Pilot performs itself (raycast.js's effects), with Raycast's title. */
@@ -144,22 +192,63 @@ function actions(nodes, handlers, out = []) {
   return out;
 }
 
-/** A Detail's Metadata as Pilot's facts: a label's or link's text, a tag list's tags joined; separators drop. */
-function facts(nodes) {
+/** A Detail's Metadata as Pilot's flat facts (ADR 0010's pairs, kept for `ext run` and older readers), from its
+ *  parts: a label's or link's text, a tag list's tags joined; separators drop. */
+function facts(laid) {
+  const out = [];
+  for (const part of laid) {
+    if ((part.kind === "label" || part.kind === "link") && part.text) out.push({ label: part.title, text: part.text });
+    else if (part.kind === "tags") {
+      const tags = part.tags.map((t) => t.text).filter(Boolean);
+      if (tags.length) out.push({ label: part.title, text: tags.join(", ") });
+    }
+  }
+  return out;
+}
+
+/** A Metadata's parts in order, as Raycast lays them out (T31): a label (title, text, icon), a link (title, text, its
+ *  target), a tag list (title, each tag's text, colour and icon) and a separator. Raycast draws a Detail's in a column
+ *  at its right, each title over its value, and a List.Item.Detail's as rows under its markdown, label left, value right. */
+function parts(nodes) {
   const out = [];
   for (const node of nodes) {
     if (!node.type?.endsWith(".Metadata")) continue;
     for (const part of node.children) {
-      const p = part.props ?? {}, label = words(p.title) ?? "";
-      if (part.type.endsWith(".Label") || part.type.endsWith(".Link")) {
+      const p = part.props ?? {}, title = words(p.title) ?? "";
+      if (part.type.endsWith(".Separator")) out.push({ kind: "separator" });
+      else if (part.type.endsWith(".Label")) {
+        const text = words(p.text), one = { kind: "label", title };
+        if (text) one.text = text;
+        const tone = p.text && typeof p.text === "object" ? colour(p.text.color) : undefined;
+        if (tone) one.color = tone;
+        if (p.icon != null) Object.assign(one, picture(p.icon));
+        if (shows(one)) out.push(one);
+      } else if (part.type.endsWith(".Link")) {
         const text = words(p.text);
-        if (text) out.push({ label, text });
+        if (text) out.push({ kind: "link", title, text, target: typeof p.target === "string" ? p.target : text });
       } else if (part.type.endsWith(".TagList")) {
-        const tags = part.children.map((t) => words(t.props?.text)).filter(Boolean);
-        if (tags.length) out.push({ label, text: tags.join(", ") });
+        const tags = part.children.map((t) => {
+          const q = t.props ?? {}, tag = {}, text = words(q.text);
+          if (text) tag.text = text;
+          const tone = colour(q.color);
+          if (tone) tag.color = tone;
+          if (q.icon != null) Object.assign(tag, picture(q.icon));
+          return tag;
+        }).filter(shows);
+        if (tags.length) out.push({ kind: "tags", title, tags });
       }
     }
   }
+  // Separators only between parts: none first, last or twice.
+  return out.filter((p, i, all) => p.kind !== "separator" || (i > 0 && i < all.length - 1 && all[i - 1].kind !== "separator"));
+}
+
+/** A Detail's or List.Item.Detail's answer: its markdown, its facts (ADR 0010's flat pairs, kept) and its parts (T31). */
+function detailOf(node) {
+  const out = { markdown: typeof node.props.markdown === "string" ? node.props.markdown : "" };
+  const laid = parts(node.children), metadata = facts(laid);
+  if (metadata.length) out.metadata = metadata;
+  if (laid.length) out.parts = laid;
   return out;
 }
 
@@ -199,14 +288,18 @@ function image(source) {
 
 /** A Raycast icon prop as a row's fields: `symbol` for an Icon name, `image` for an asset or URL, else `icon` (Pilot
  *  keeps only an emoji). An object's `source` may be `{ light, dark }` (dark is taken, as the environment says dark) and
- *  its `fallback` stands in while a picture loads or when it fails; tint and mask are not drawn yet. A file of another
+ *  its `fallback` stands in while a picture loads or when it fails; a symbol's tint goes as `tint` (T31), a mask is not
+ *  drawn yet, and `{ fileIcon }` goes as `file`, the path whose icon Pilot draws. A file of another
  *  kind is its fallback or nothing, never its name as text (T28: Weather's bar printed `sun.max.svg`). */
 function picture(prop) {
   const given = prop && typeof prop === "object" ? prop : { source: prop };
+  const tint = colour(given.tintColor);
+  // A file's own icon (Raycast's `{ fileIcon: path }`, Kill Process's apps), which Pilot reads from the Mac (T31).
+  if (typeof given.fileIcon === "string" && given.fileIcon) return { file: given.fileIcon };
   let source = given.source;
   if (source && typeof source === "object") source = source.dark ?? source.light;
   if (typeof source !== "string" || !source) return {};
-  if (symbols[source]) return { symbol: symbols[source] };
+  if (symbols[source]) return tint ? { symbol: symbols[source], tint } : { symbol: symbols[source] };
   if (isPicture(source)) {
     const landed = image(source);
     if (landed) return { image: landed };
@@ -216,7 +309,7 @@ function picture(prop) {
   return { icon: source };
 }
 
-function item(node, section, handlers) {
+function item(node, section, handlers, look) {
   const p = node.props;
   const row = { title: words(p.title) ?? "", actions: actions(node.children, handlers) };
   if (p.id != null) row.id = String(p.id);
@@ -224,18 +317,42 @@ function item(node, section, handlers) {
   if (subtitle) row.subtitle = subtitle;
   if (Array.isArray(p.keywords) && p.keywords.length) row.keywords = p.keywords.filter((k) => typeof k === "string").join(" ");
   Object.assign(row, picture(p.icon));
-  const word = accessory(p.accessories);
-  if (word) row.accessory = word;
+  const all = accessories(p.accessories, look.pictures);
+  if (all) {
+    row.accessories = all;
+    // The first with words, for the places that show one word at a row's right.
+    const word = all.find((a) => a.text)?.text;
+    if (word) row.accessory = word;
+  }
   if (section) row.section = section;
+  // Its side detail, while the List shows one (T31: raycast.js mounts the `detail` prop under the item).
+  if (look.detail) {
+    const side = node.children.find((child) => child.type === "List.Item.Detail");
+    if (side) row.detail = detailOf(side);
+  }
   return row;
 }
 
-function rows(nodes, section, handlers, out) {
+/** `look` (T31): whether the List shows its items' details, each section's subtitle by its title (sent once, as the
+ *  list's `sections`), and the accessories' pictures by their bytes (sent once, as `pictures`). */
+function rows(nodes, section, handlers, out, look) {
   for (const node of nodes) {
-    if (node.type === "List.Item") out.push(item(node, section, handlers));
-    else if (node.type === "List.Section") rows(node.children, words(node.props.title) ?? section, handlers, out);
-    else if (node.children) rows(node.children, section, handlers, out);
+    if (node.type === "List.Item") out.push(item(node, section, handlers, look));
+    else if (node.type === "List.Section") {
+      const title = words(node.props.title) ?? section, note = words(node.props.subtitle);
+      if (title && note) look.notes.set(title, note);
+      rows(node.children, title, handlers, out, look);
+    } else if (node.type !== "List.Item.Detail" && node.children) rows(node.children, section, handlers, out, look);
   }
+  return out;
+}
+
+/** What Raycast draws around a view (T31): its navigation title in the footer, a List's search bar placeholder. */
+function chrome(root, out) {
+  const title = words(root.props.navigationTitle);
+  if (title) out.title = title;
+  const placeholder = words(root.props.searchBarPlaceholder);
+  if (placeholder) out.placeholder = placeholder;
   return out;
 }
 
@@ -267,13 +384,13 @@ function answer(container, handlers, query, message) {
   if (message.mode === "menu-bar") return menuBarAnswer(root?.type === "MenuBarExtra" ? root : null, message.surface, handlers, words, picture);
   if (!root) return null;
   if (root.type === "Form") return formAnswer(root, handlers, actions);
-  if (root.type === "Detail") {
-    const detail = { type: "detail", markdown: typeof root.props.markdown === "string" ? root.props.markdown : "", actions: actions(root.children, handlers) };
-    const metadata = facts(root.children);
-    if (metadata.length) detail.metadata = metadata;
-    return detail;
-  }
-  const list = { type: "list", items: rows(root.children, undefined, handlers, []) };
+  if (root.type === "Detail") return chrome(root, { type: "detail", ...detailOf(root), actions: actions(root.children, handlers) });
+  const showsDetail = root.props.isShowingDetail === true;
+  const look = { detail: showsDetail, notes: new Map(), pictures: new Map() };
+  const list = chrome(root, { type: "list", items: rows(root.children, undefined, handlers, [], look) });
+  if (showsDetail) list.showsDetail = true;
+  if (look.notes.size) list.sections = Object.fromEntries(look.notes);
+  if (look.pictures.size) list.pictures = Object.fromEntries([...look.pictures].map(([bytes, key]) => [key, bytes]));
   if (root.props.isLoading === true) list.isLoading = true;
   // Who filters as Sven types (T30): Raycast does unless the List takes onSearchTextChange, or `filtering` says otherwise.
   // A List that hears its search gets each later text (search below); one that filters itself keeps its own order; a

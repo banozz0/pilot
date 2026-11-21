@@ -21,7 +21,9 @@ export const symbols = {
   CommandSymbol: "command", Compass: "safari", ComputerChip: "cpu", Contrast: "circle.lefthalf.filled", CopyClipboard: "doc.on.doc",
   CreditCard: "creditcard", Crop: "crop", Crown: "crown", Desktop: "desktopcomputer", Document: "doc.text", Dot: "smallcircle.filled.circle",
   Download: "arrow.down.to.line", Droplets: "drop", Duplicate: "plus.square.on.square", EditShape: "square.and.pencil",
-  Eject: "eject", Envelope: "envelope", Eraser: "eraser", ExclamationMark: "exclamationmark", Eye: "eye", EyeDisabled: "eye.slash",
+  Eject: "eject", Envelope: "envelope", Eraser: "eraser", ExclamationMark: "exclamationmark", Exclamationmark: "exclamationmark",
+  // T31: Todo List's priorities.
+  Exclamationmark2: "exclamationmark.2", Exclamationmark3: "exclamationmark.3", Eye: "eye", EyeDisabled: "eye.slash",
   EyeDropper: "eyedropper", FilmStrip: "film", Filter: "line.3.horizontal.decrease", Finder: "folder", Fingerprint: "touchid",
   Flag: "flag", Folder: "folder", Footprints: "shoeprints.fill", Forward: "forward", ForwardFilled: "forward.fill",
   GameController: "gamecontroller", Gauge: "gauge.medium", Gear: "gearshape", Geopin: "mappin", Gift: "gift", Glasses: "eyeglasses",
@@ -45,6 +47,8 @@ export const symbols = {
   Snippets: "text.badge.plus", Snowflake: "snowflake", SpeakerDown: "speaker.wave.1", SpeakerHigh: "speaker.wave.3",
   SpeakerOff: "speaker.slash", SpeakerOn: "speaker.wave.2", SpeakerUp: "speaker.wave.3", SpeechBubble: "bubble.left",
   SpeechBubbleActive: "bubble.left.and.bubble.right", SpeechBubbleImportant: "exclamationmark.bubble", Star: "star",
+  // T31: Speedtest's Ping wears StackedBars2 (bars stacked level, as Raycast draws them).
+  StackedBars1: "line.3.horizontal", StackedBars2: "line.3.horizontal", StackedBars3: "line.3.horizontal", StackedBars4: "line.3.horizontal",
   StarCircle: "star.circle", StarDisabled: "star.slash", Stars: "sparkles", Stop: "stop", StopFilled: "stop.fill", Stopwatch: "stopwatch",
   Store: "storefront", StrikeThrough: "strikethrough", Sun: "sun.max", Sunrise: "sunrise", Swatch: "swatchpalette", Switch: "switch.2",
   Tag: "tag", Temperature: "thermometer.medium", Terminal: "terminal", Text: "textformat", TextCursor: "character.cursor.ibeam",
