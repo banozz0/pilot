@@ -1,7 +1,7 @@
 #if DEBUG
 import AppKit
 import Foundation
-import PilotCore
+@testable import PilotCore
 import SwiftUI
 import Testing
 @testable import Pilot
@@ -34,6 +34,10 @@ struct ExtensionCatalogueRenders {
         let look = Look.shared
         let saved = (look.themeID, look.style)
         defer { (look.themeID, look.style) = saved }
+        // T31: Raycast views drawn from real host answers, only these shots then (raycastViews).
+        if let answers = Self.env["PILOT_T31_ANSWERS"], let folder = Self.env["PILOT_T31_EXTENSIONS"] {
+            return try await Self.raycastViews(answers: URL(filePath: answers), extensions: URL(filePath: folder), out: out)
+        }
 
         let (loaded, dir) = try ExtensionCatalogueModelTests.model()
         defer { try? FileManager.default.removeItem(at: dir) }
@@ -147,6 +151,124 @@ struct ExtensionCatalogueRenders {
                         Extension.Item(title: "Sunday", subtitle: "A symbol, no picture", actions: [], symbol: "cloud.sun")]
         let pictured = MenuNavigator(list: ExtensionList.entries(forecast, of: raycast.commands[0]), title: "Weather", live: true)
         try InstrumentMenuRenders.render(MenuView(model: MenuModel(nav: pictured)), "menu-t28-pictures", in: out)
+        // T30: Kill Process's page runs its view live, its search over its rows, then with Cmd+K's actions open.
+        final class Rows: MenuSource {
+            var show: ([MenuEntry]) -> Void = { _ in }
+            let rows: [MenuEntry]
+            init(_ rows: [MenuEntry]) { self.rows = rows }
+            func search(_ query: String) { show(rows) }
+            func pick(_ row: MenuEntry, action: Int) -> MenuPick { .stay }
+            func close() {}
+        }
+        let processes = [("Safari", "2.4% CPU · 812 MB"), ("pilott30dummy", "0.0% CPU · 1 MB"), ("WindowServer", "9.1% CPU · 310 MB")].map {
+            Extension.Item(title: $0.0, subtitle: $0.1, actions: [.init(kind: .invoke(handler: "1.onAction"), title: "Kill"),
+                                                                  .init(kind: .invoke(handler: "2.onAction"), title: "Force Kill"),
+                                                                  .init(kind: .invoke(handler: "3.onAction"), title: "Reload")])
+        }
+        let livePage = ExtensionPageModel(id: "kill-process", folder: t25.appending(path: "Extensions"),
+                                      storage: ExtensionStorage(data: t25.appending(path: "data"), cache: t25.appending(path: "cache"),
+                                                                keychain: ExtensionsModuleTests.FakeKeychain()))
+        await livePage.refresh()
+        let live = try #require(livePage.livePage)
+        live.session = { (_: Extension, command: Extension.Command, _: ExtensionRun.Inputs) in Rows(ExtensionList.entries(processes, of: command)) }
+        for name in ["page-t30-live", "page-t30-actions"] {
+            // Each shot's page leaving stops the command, as a page Sven leaves does; it starts again for the next.
+            await live.start()
+            if name == "page-t30-actions" { _ = live.handle(.down); _ = live.handle(.commandK) }
+            let view = Ground { ExtensionSurfacePage(id: "kill-process", onScreen: true, model: livePage) { _ in }.frame(width: 900, height: 520) }
+                .styled(.page(.extensions), look: look).pilotTheme(look: look)
+            try writeRender(view, to: out.appendingPathComponent("\(name).png"), wait: 0.8)
+        }
+        live.stop()
+
+        // T29: nothing read before the rows show. The page's All after its rows asked (`want`, what each row's onAppear
+        // calls; an offscreen render runs no onAppear), its reads landed; Hyper+Space's Raycast Store the same from its
+        // rows' shown(); the folders without a package.json keep their name and the plug. Then the sidebar's rows with an
+        // installed extension's own icon.
+        let (fresh, freshDir) = try Self.storeModel()
+        defer { try? FileManager.default.removeItem(at: freshDir) }
+        await fresh.open()
+        var landed = 0
+        for folder in fresh.listing?.folders ?? [] { fresh.want(folder.name) { landed += 1 } }
+        for _ in 0..<40 where landed < 5 { try await Task.sleep(for: .milliseconds(50)) }
+        let t29 = Ground { ExtensionsPageView(onScreen: false, settings: settings, storeModel: fresh, filter: .all).frame(width: 1000, height: 640) }
+            .styled(.page(.extensions), look: look).pilotTheme(look: look)
+        try writeRender(t29, to: out.appendingPathComponent("instrument-t29-all.png"), wait: 0.8)
+        let reads = { (dir: URL) in ((try? String(contentsOf: dir.appending(path: "github/reads.log"), encoding: .utf8)) ?? "").split(separator: "\n") }
+        print("T29 PAGE: \(reads(freshDir).count) reads: " + reads(freshDir).map { $0.split(separator: "/").suffix(2).joined(separator: "/") }.joined(separator: ", "))
+        print("T29 PAGE ROWS: " + (fresh.listing?.folders ?? []).map { "\(fresh.title($0.name)) [\(fresh.iconFile($0.name) == nil ? "plug" : "icon")]" }.joined(separator: " | "))
+        let (menuStore, menuDir) = try Self.storeModel()
+        defer { try? FileManager.default.removeItem(at: menuDir) }
+        await menuStore.open()
+        let picker = RaycastStoreMenu(model: menuStore)
+        var refilled: [MenuEntry]?
+        picker.showKeeping = { refilled = $0 }
+        for row in picker.rows() { picker.shown(row) }
+        for _ in 0..<40 where refilled?.contains(where: { $0.title == "Kill Process" }) != true { try await Task.sleep(for: .milliseconds(50)) }
+        var t29Menu = MenuNavigator(list: [], title: RaycastStoreMenu.title, live: true)
+        t29Menu.replaceList(try #require(refilled))
+        print("T29 PICKER: \(reads(menuDir).count) reads; " + t29Menu.rows.map { "\($0.title)\($0.subtitle.map { " · \($0)" } ?? "") [\($0.icon?.file == nil ? "plug" : "icon")]" }.joined(separator: " | "))
+        try InstrumentMenuRenders.render(MenuView(model: MenuModel(nav: t29Menu)), "menu-t29-store", in: out)
+        let links = ExtensionPages.entries([raycast]) + [ExtensionPages.Link(id: "plain", title: "No icon file", icon: nil, raycast: true)]
+        let sidebar = Ground {
+            VStack(alignment: .leading, spacing: 0) { ForEach(links) { InstrumentExtensionRow(link: $0, on: $0.id == "kill-process", open: {}) } }
+                .frame(width: 240).padding(.vertical, 8)
+        }.styled(.page(.extensions), look: look).pilotTheme(look: look)
+        try writeRender(sidebar, to: out.appendingPathComponent("instrument-t29-sidebar.png"), wait: 0.3)
+    }
+
+    /// T31: Speedtest (its dashboard Detail, then its list with each row's detail), Kill Process, Todo List, Weather and
+    /// Pomodoro in Hyper+Space, each drawn from the newest answer pilot-ext-host printed for it: `PILOT_T31_ANSWERS` holds
+    /// `<shot>.jsonl` (captured by running the store install's command in the host), `PILOT_T31_EXTENSIONS` the folder
+    /// they are installed in, `PILOT_T31_TAG` names the shots (`t31-<tag>-<shot>`). The answer goes through the view's own
+    /// session, as the host's newest answer does.
+    static func raycastViews(answers: URL, extensions: URL, out: URL) async throws {
+        let installed = Extension.find(in: extensions).extensions, tag = env["PILOT_T31_TAG"] ?? "after"
+        let scratch = FileManager.default.temporaryDirectory.appending(path: "t31-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: scratch) }
+        let shots = [("speedtest", "speedtest", "index"), ("speedtest-list", "speedtest", "index"), ("kill-process", "kill-process", "index"),
+                     ("todo-list", "todo-list", "index"), ("weather", "raycast-weather", "index"),
+                     ("pomodoro", "raycast-pomodoro", "pomodoro-control-timer")]
+        for (shot, id, name) in shots {
+            let lines = try String(contentsOf: answers.appending(path: "\(shot).jsonl"), encoding: .utf8).split(whereSeparator: \.isNewline)
+            guard let ext = installed.first(where: { $0.id == id }), let command = ext.commands.first(where: { $0.name == name }),
+                  let line = lines.last, case .answer(let outcome, let meta) = ExtensionRun.reply(line) else {
+                Issue.record("T31: no answer or extension for \(shot)")
+                continue
+            }
+            let inputs = ExtensionRun.Inputs(preferences: [:], data: scratch.appending(path: "data"), cache: scratch.appending(path: "cache"))
+            let session = ExtensionListSession(ext, command, inputs: inputs, run: { _, _ in outcome })
+            let model = MenuModel(nav: MenuNavigator(list: [], title: command.title, live: true))
+            session.show = { model.nav.replaceList($0) }
+            session.showEmpty = { model.nav.emptyView = $0 }
+            session.showChrome = { model.nav.chrome = $0 }
+            session.search("")
+            await session.settled()
+            // A one-shot run's answer has no chrome of its own; the host's line does, as the open view's session draws it.
+            var chrome = meta.chrome
+            chrome.icon = model.nav.chrome?.icon
+            model.nav.chrome = chrome
+            print("T31 \(tag) \(shot): \(model.nav.rows.count) rows, first \(model.nav.rows.first?.title ?? "-")")
+            try InstrumentMenuRenders.render(MenuView(model: model), "t31-\(tag)-\(shot)", in: out)
+            session.close()
+            // The same answer on the extension's live page (T30), which draws Raycast's views as Hyper+Space does.
+            guard ["kill-process", "speedtest-list"].contains(shot) else { continue }
+            let page = ExtensionPageModel(id: id, folder: extensions, storage: ExtensionStorage(data: scratch.appending(path: "data"),
+                                          cache: scratch.appending(path: "cache"), keychain: ExtensionsModuleTests.FakeKeychain()))
+            await page.refresh()
+            let live = try #require(page.livePage)
+            live.session = { ext, command, inputs in ExtensionListSession(ext, command, inputs: inputs, run: { _, _ in outcome }) }
+            await live.start()
+            try await Task.sleep(for: .milliseconds(200))
+            var paged = meta.chrome
+            paged.icon = live.nav.chrome?.icon
+            live.nav.chrome = paged
+            let look = Look.shared
+            let view = Ground { ExtensionSurfacePage(id: id, onScreen: true, model: page) { _ in }.frame(width: 900, height: 560) }
+                .styled(.page(.extensions), look: look).pilotTheme(look: look)
+            try writeRender(view, to: out.appendingPathComponent("t31-\(tag)-page-\(shot).png"), wait: 0.8)
+            live.stop()
+        }
     }
 
     /// Kill Process as a store install leaves it (T25): Raycast's package.json, its icon in assets/, its built command.

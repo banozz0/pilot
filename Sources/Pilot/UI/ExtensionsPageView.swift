@@ -263,7 +263,10 @@ struct ExtensionsPageView: View {
             .padding(.horizontal, 10).padding(.vertical, 6)
         case .loaded:
             eyebrow("Raycast Store · \(listing.total - listing.installedCount)")
-            ForEach(listing.store) { entry in row(entry, current: current) }
+            // Each row's package.json and icon read as it comes on screen (T29), never the whole store.
+            ForEach(listing.store) { entry in
+                row(entry, current: current).onAppear { storeModel.want(entry.id) }.onDisappear { storeModel.unwant(entry.id) }
+            }
             if listing.store.isEmpty {
                 Text("Nothing in Raycast's store matches.").font(ink.ui(12)).foregroundStyle(ink.muted).padding(.horizontal, 10).padding(.vertical, 6)
             }
@@ -710,11 +713,13 @@ struct EmojiTile: View {
         glyph.instrumentTile(size)
     }
 
-    private var picture: NSImage? {
-        guard let file else { return nil }
-        if let kept = Self.pictures.object(forKey: file as NSString) { return kept }
+    private var picture: NSImage? { file.flatMap(Self.image) }
+
+    /// A picture file read once, for any view that draws an extension's icon (the sidebar's rows too, T29).
+    @MainActor static func image(_ file: String) -> NSImage? {
+        if let kept = pictures.object(forKey: file as NSString) { return kept }
         guard let image = NSImage(contentsOfFile: file) else { return nil }
-        Self.pictures.setObject(image, forKey: file as NSString)
+        pictures.setObject(image, forKey: file as NSString)
         return image
     }
 

@@ -26,6 +26,8 @@ final class ExtensionPageModel {
     /// A push to one of its no-view commands (Surfaces v2): that command's view, beside the blocks on a wide page, over
     /// them on a narrow one, with its own back stack.
     var pane: ExtensionPopoverModel?
+    /// A Raycast extension with a view command runs it live in place of the blocks (T30); made once, as it is first read.
+    private(set) var livePage: ExtensionLivePageModel?
     @ObservationIgnored private(set) var inputs: ExtensionRun.Inputs?
     /// When the extension and its settings were last read from its folder.
     @ObservationIgnored private var read: Date?
@@ -100,8 +102,12 @@ final class ExtensionPageModel {
             let (folder, id) = (folder, id)
             let found = await Task.detached { Extension.find(in: folder).extensions.first { $0.id == id } }.value
             ext = found
-            guard let ext = found, ext.shownSurface != nil else { gone = true; return }
+            // A Raycast extension always has a page (T30): its view command live, else its bar item's, else a way to
+            // Hyper+Space.
+            guard let ext = found, ext.shownSurface != nil || ext.isRaycast else { gone = true; return }
             gone = false
+            if ext.isRaycast, livePage == nil { livePage = ExtensionLivePageModel(ext, storage: storage) }
+            if livePage != nil || ext.shownSurface == nil { read = now(); return }
             var why: String?, unset = false
             inputs = await ExtensionsModule.inputs(for: ext, command: ext.shownSurface?.command, storage: storage, hud: { why = $0 }, unset: { _ in unset = true })
             needsSettings = unset
@@ -129,6 +135,8 @@ final class ExtensionPageModel {
             let wait = updated.map { Double(every) - now().timeIntervalSince($0) } ?? 0
             if wait > 0 { guard (try? await sleep(.seconds(wait))) != nil else { return } }
             await refresh()
+            // A live page's host draws as it changes, and a page with nothing to ask has nothing to refresh (T30).
+            if livePage != nil || ext?.shownSurface == nil { return }
             guard (try? await sleep(.seconds(every))) != nil else { return }
         }
     }
@@ -207,6 +215,9 @@ struct ExtensionSurfacePage: View {
     @Environment(\.ink) private var ink
     /// The window shows: the page asks on its pace only then.
     let onScreen: Bool
+    /// The window is on screen, key or not: a live page's command runs only then (T30), so a form's panel or another app
+    /// taking the keyboard never restarts it; nil reads `onScreen`.
+    var shown: Bool?
     @State private var model: ExtensionPageModel
     /// Opens the Extensions list at it: the page of one that is gone says so there.
     let settings: (String) -> Void
@@ -219,8 +230,9 @@ struct ExtensionSurfacePage: View {
     @State private var settingsOpen = false
     static let wideFrom: CGFloat = 720, paneWidth: CGFloat = 380
 
-    init(id: String, onScreen: Bool, model: ExtensionPageModel? = nil, settings: @escaping (String) -> Void) {
+    init(id: String, onScreen: Bool, shown: Bool? = nil, model: ExtensionPageModel? = nil, settings: @escaping (String) -> Void) {
         self.onScreen = onScreen
+        self.shown = shown
         let model = model ?? ExtensionPageModel(id: id)
         _model = State(initialValue: model)
         _prefs = State(initialValue: ExtensionsSettings(folder: model.folder, storage: model.storage))
@@ -233,19 +245,11 @@ struct ExtensionSurfacePage: View {
         VStack(spacing: 0) {
             header
             ink.line.frame(height: 1)
-            KitPage {
-                VStack(alignment: .leading, spacing: 14) {
-                    if settingsOpen, let row, !row.fields.isEmpty {
-                        TitledPanel(title: "Settings") { ExtensionSettingsForm(row: row, settings: prefs, columns: wide ? 2 : 1) }
-                    }
-                    if model.gone {
-                        EmptyState(title: "No page", line: "\(model.id) is not installed, or no longer has a page.", action: ("Open Extensions", { settings(model.id) }))
-                    } else if let blocks = model.blocks {
-                        content(blocks)
-                    }
-                }
-                .padding(.top, 4)
-                .onGeometryChange(for: Bool.self) { $0.size.width >= Self.wideFrom } action: { wide = $0 }
+            // A Raycast view command live (T30) fills the page under the header; Settings opens over it as on any page.
+            if let live = model.livePage, !settingsOpen {
+                ExtensionLivePage(model: live, onScreen: shown ?? onScreen)
+            } else {
+                blocksPage
             }
         }
         // Asked as it shows, then on its pace while the window is on screen; leaving or hiding the page stops it.
@@ -258,13 +262,41 @@ struct ExtensionSurfacePage: View {
         .onDisappear { model.stopLive() }
     }
 
+    private var blocksPage: some View {
+        KitPage {
+            VStack(alignment: .leading, spacing: 14) {
+                if settingsOpen, let row, !row.fields.isEmpty {
+                    TitledPanel(title: "Settings") { ExtensionSettingsForm(row: row, settings: prefs, columns: wide ? 2 : 1) }
+                }
+                if model.gone {
+                    EmptyState(title: "No page", line: "\(model.id) is not installed, or no longer has a page.", action: ("Open Extensions", { settings(model.id) }))
+                } else if let ext = model.ext, ext.shownSurface == nil, model.livePage == nil {
+                    // Nothing a page can run (T30): its commands open in Hyper+Space.
+                    let first = ExtensionLivePageModel.elsewhere(of: ext).first
+                    EmptyState(title: "Runs in Hyper+Space", line: "\(ext.title)'s commands take words or run without a view, so they open in Hyper+Space.",
+                               action: first.map { command in ("Open in Hyper+Space", { openInMenu(command) }) })
+                } else if let blocks = model.blocks {
+                    content(blocks)
+                }
+            }
+            .padding(.top, 4)
+            .onGeometryChange(for: Bool.self) { $0.size.width >= Self.wideFrom } action: { wide = $0 }
+        }
+    }
+
+    /// One of a Raycast extension's commands in Hyper+Space, as its row there runs it (T30).
+    private func openInMenu(_ command: Extension.Command) {
+        let folder = model.folder
+        Task { await ExtensionsModule.perform(command.actionID, in: folder) }
+    }
+
     // MARK: The header
 
     /// Its tile and name over its line; why the last ask has nothing and the next try at the right, then Refresh and
     /// Settings.
     private var header: some View {
         HStack(spacing: 12) {
-            EmojiTile(emoji: model.ext?.icon, size: 32)
+            EmojiTile(emoji: model.ext?.icon, size: 32, file: model.ext?.picture)
             VStack(alignment: .leading, spacing: 2) {
                 Text(model.ext?.title ?? model.id).font(ink.ui(15, .semibold)).foregroundStyle(ink.text).lineLimit(1)
                     .accessibilityAddTraits(.isHeader)
@@ -279,8 +311,21 @@ struct ExtensionSurfacePage: View {
                     .textSelection(.enabled)
                     .help(problem)
             }
-            IconButton(symbol: "arrow.clockwise", label: "Refresh", size: 28, glyph: 12) { Task { await model.refresh(reread: true) } }
-                .disabled(model.asking)
+            if let ext = model.ext, model.livePage != nil || ext.shownSurface == nil {
+                let others = ExtensionLivePageModel.elsewhere(of: ext)
+                if others.count == 1, let only = others.first {
+                    Button("Open \(only.title) in Hyper+Space") { openInMenu(only) }.buttonStyle(.pilot)
+                } else if !others.isEmpty {
+                    Menu("Open in Hyper+Space") { ForEach(others, id: \.name) { c in Button(c.title) { openInMenu(c) } } }.fixedSize()
+                }
+            }
+            // A live page's Refresh runs its command afresh.
+            IconButton(symbol: "arrow.clockwise", label: "Refresh", size: 28, glyph: 12) {
+                Task {
+                    if let live = model.livePage { live.stop(); await live.start() } else { await model.refresh(reread: true) }
+                }
+            }
+            .disabled(model.asking)
             if model.ext?.preferences.isEmpty == false {
                 Button { Task { settingsOpen ? await closeSettings() : await openSettings() } } label: {
                     Label("Settings", systemImage: "slider.horizontal.3")
@@ -294,6 +339,7 @@ struct ExtensionSurfacePage: View {
 
     /// "3.3.3 · every 60 s · asked 14:02"; while the last ask failed, "the answer from 14:02"; "Asking…" before any.
     private var line: String {
+        if let live = model.livePage { return [model.ext?.version, "\(live.command.title), live"].compactMap { $0 }.joined(separator: " · ") }
         let asked = model.updated.map { model.problem == nil ? "asked \(Self.time($0))" : "the answer from \(Self.time($0))" }
             ?? (model.problem == nil ? "Asking…" : nil)
         return [model.ext?.version, "every \(model.every) s", asked].compactMap { $0 }.joined(separator: " · ")

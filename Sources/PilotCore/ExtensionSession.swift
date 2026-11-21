@@ -38,6 +38,10 @@ public final class ExtensionSession: Sendable {
         public let outcome: ListOutcome, loading: Bool
         /// A form's fields whose value on this line was a stale echo, shown as the newest edit instead, with what it said.
         public var stale: [String: JSONValue] = [:]
+        /// Its List's search: heard, filtered by Pilot or by itself, its own text (T30).
+        public var search = ListSearch()
+        /// Its navigation title, search bar placeholder and whether its List shows details (T31).
+        public var chrome = Extension.Chrome()
     }
 
     /// A form field's edits the host has not agreed with: its value before them, each value sent, the last one's number.
@@ -76,6 +80,9 @@ public final class ExtensionSession: Sendable {
 
     /// A Raycast-format command's newest answer; nil before its first.
     public var newest: View? { state.withLock { $0.newest } }
+
+    /// Why the program no longer answers, nil while it runs (or before it started).
+    public var stopped: String? { state.withLock { $0.stopped } }
 
     /// Tells `watcher` of each answer (off the main actor).
     public func watch(_ watcher: @escaping @Sendable () -> Void) { state.withLock { $0.watcher = watcher } }
@@ -237,7 +244,7 @@ public final class ExtensionSession: Sendable {
         let watcher = state.withLock { s -> (@Sendable () -> Void)? in
             if let ack = meta.ack { s.acked = max(s.acked, ack) }
             let (shown, stale) = merged(outcome, &s)
-            let first = s.newest == nil, view = View(outcome: shown, loading: meta.loading, stale: stale)
+            let first = s.newest == nil, view = View(outcome: shown, loading: meta.loading, stale: stale, search: meta.search, chrome: meta.chrome)
             s.newest = view
             if !view.loading { settle(&s) }
             // An error answers everything waiting; an ack every request up to it; the first line the run.

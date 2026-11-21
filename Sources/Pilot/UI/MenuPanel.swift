@@ -40,6 +40,12 @@ final class PilotMenu {
     private var logPicks = true
     /// What fills a live picker while it is open (pick(live:)).
     private var source: (any MenuSource)?
+    /// A Raycast command's views, kept running as the panel closed by Hyper+Space, a click away or an action, until
+    /// Hyper+Space opens them again or `popToRoot` passes (T30, Raycast's Pop to Root Search); nil, with no timer, otherwise.
+    private var kept: (views: [MenuModel.LiveView], expiry: Task<Void, Never>)?
+    /// How long a kept command waits before it ends: Raycast's Pop to Root Search delay, "Immediately, or a delay of up
+    /// to 180 seconds" (manual.raycast.com/settings); its default is not documented, 90 s is the one Pilot takes.
+    static let popToRoot: Duration = .seconds(90)
     /// Install's search for the current text, started once typing pauses (InstallSearcher, N9).
     private var installSearch: Task<Void, Never>?
     /// Search rows are listed, so leaving the search clears them; otherwise a keystroke leaves the model untouched.
@@ -176,6 +182,20 @@ final class PilotMenu {
         self.source = source
         source.show = { [weak model] in model?.nav.replaceList($0) }
         (source as? ExtensionListSession)?.showEmpty = { [weak model] in model?.nav.emptyView = $0 }
+        (source as? ExtensionListSession)?.showSearch = { [weak model] in model?.nav.query = $0 }
+        (source as? ExtensionListSession)?.showChrome = { [weak model] in model?.nav.chrome = $0 }
+        if let opening = (source as? ExtensionListSession)?.openingChrome, model.nav.chrome == nil { model.nav.chrome = opening }
+        // A row on screen is told to its source, and rows the source fills in later keep the row Sven is on (T29).
+        source.showKeeping = { [weak self, weak model, weak source] rows in
+            guard let self, let model, let source, self.source === source, model.nav.actions == nil else { return }
+            let at = model.nav.selection, kept = model.nav.selected?.id
+            model.nav.replaceList(rows)
+            model.nav.point(at: kept.flatMap { t in model.nav.rows.firstIndex { $0.id == t } } ?? min(at, max(model.nav.rows.count - 1, 0)))
+        }
+        model.onRowShown = { [weak model, weak source] index in
+            guard let model, let source, model.nav.rows.indices.contains(index) else { return }
+            source.shown(model.nav.rows[index])
+        }
         model.onQuery = { source.search($0) }
         if search { source.search(model.nav.query) }
     }
@@ -187,12 +207,15 @@ final class PilotMenu {
         case .close(let then):
             // The app Sven was in comes back first, so a paste or a Pilot action lands there (Moody ZLUB3C6kGZU).
             let previous = previousApp
-            close(restoreFocus: true)
+            close(restoreFocus: true, keep: true)
             runWhenFrontmost(previous, "extension action", then)
         case .push(let title, let next):
             guard let model, let current = source else { return next.close() }
             current.show = { _ in }
+            current.showKeeping = nil
             (current as? ExtensionListSession)?.showEmpty = { _ in }
+            (current as? ExtensionListSession)?.showSearch = { _ in }
+            (current as? ExtensionListSession)?.showChrome = { _ in }
             var nav = MenuNavigator(list: [], title: title, live: true)
             nav.query = next.opening
             model.push(nav, over: current)
@@ -229,6 +252,50 @@ final class PilotMenu {
         return true
     }
 
+    // MARK: A kept command (T30)
+
+    /// Keeps `views` running when the bottom one is a Raycast command's whose host still runs, its expiry armed; false
+    /// otherwise, and nothing is kept.
+    private func keepViews(_ views: [MenuModel.LiveView]) -> Bool {
+        guard let bottom = views.first?.source as? ExtensionListSession, bottom.keepsRunning else { return false }
+        endKept()
+        let expiry = Task { [weak self] in
+            guard (try? await Task.sleep(for: Self.popToRoot)) != nil else { return }
+            self?.endKept()
+            mlog.notice("menu: kept \(bottom.command.actionID, privacy: .public) popped to root")
+        }
+        kept = (views, expiry)
+        mlog.notice("menu: kept \(bottom.command.actionID, privacy: .public) running, \(views.count) views")
+        return true
+    }
+
+    /// The kept command's views back on screen as they were, the newest answer drawn; false with none kept, or once its
+    /// host stopped by itself (the root opens instead).
+    private func resumeKept() -> Bool {
+        guard let (views, expiry) = kept else { return false }
+        kept = nil
+        expiry.cancel()
+        guard let shown = views.last, (views.first?.source as? ExtensionListSession)?.keepsRunning == true else {
+            views.forEach { $0.source.close() }
+            return false
+        }
+        show(shown.nav)
+        logPicks = false
+        model?.restore(below: views.dropLast())
+        attach(shown.source, search: false)
+        (shown.source as? ExtensionListSession)?.redraw()
+        mlog.notice("menu: back to kept \(shown.nav.title ?? "", privacy: .public)")
+        return true
+    }
+
+    /// The kept command ends: each of its views stops, its host with the bottom one.
+    private func endKept() {
+        guard let (views, expiry) = kept else { return }
+        kept = nil
+        expiry.cancel()
+        views.reversed().forEach { $0.source.close() }
+    }
+
     /// The menu again where `spot` stood: Escape in a picker or the clipboard panel a menu row opened.
     func reopen(_ spot: MenuNavigator.Spot) {
         if panel != nil { close(restoreFocus: false) }
@@ -239,7 +306,8 @@ final class PilotMenu {
     }
 
     private func toggleNow(branch: MenuBranch?) {
-        if panel != nil { close(restoreFocus: true); return }
+        if panel != nil { close(restoreFocus: true, keep: true); return }
+        if branch == nil, resumeKept() { return }
         guard let engine = Engine.shared else { return }
         scripts = ScriptCommand.find()
         let found = Extension.find()
@@ -319,6 +387,8 @@ final class PilotMenu {
 
     /// `at`: the panel's top left (place(at:)) in place of the menu's own spot.
     private func show(_ nav: MenuNavigator, pick: ((MenuEntry) -> Void)? = nil, at: CGPoint? = nil) {
+        // Raycast keeps one command: anything else the panel shows ends a kept one (resumeKept takes it first).
+        endKept()
         opens += 1
         previousApp = NSWorkspace.shared.frontmostApplication
         onPick = pick
@@ -345,7 +415,7 @@ final class PilotMenu {
         sizer = MenuSizer(panel: p, model: model)
         if let at { place(at: at) }
         resignObserver = NotificationCenter.default.addObserver(forName: NSWindow.didResignKeyNotification, object: p, queue: .main) { [weak self] _ in
-            MainActor.assumeIsolated { self?.close(restoreFocus: false) }
+            MainActor.assumeIsolated { self?.close(restoreFocus: false, keep: true) }
         }
         // While the Cmd+K actions show, their filter keeps the keyboard.
         keyMonitor = HUD.showSearchPanel(p, handle: { [weak self] code, flags, characters in self?.handle(code, flags, characters) == true },
@@ -563,11 +633,31 @@ final class PilotMenu {
     }
 
     /// Up to three of Raycast's store's folders not installed that what was typed finds at the root (T25), from the
-    /// listing held, so a keystroke asks no one.
+    /// listing held, so a keystroke asks no one. Once typing pauses, the rows still named by their folder have their
+    /// package.json and icon read (T29), then the same search's rows are given again with their titles.
     private func provideStore(_ query: String) {
         guard let model else { return }
-        model.nav.provide(.store, model.nav.branch == nil ? RaycastStoreModel.shared.rootRows(query) : [])
+        let store = RaycastStoreModel.shared, rows = model.nav.branch == nil ? store.rootRows(query) : []
+        model.nav.provide(.store, rows)
+        storeReads?.cancel()
+        let unread = rows.compactMap { row -> String? in
+            if case .storeFolder(let name) = row.target, store.infos[name] == nil { name } else { nil }
+        }
+        guard !unread.isEmpty else { return }
+        storeReads = Task { [weak self, weak model] in
+            try? await Task.sleep(for: .milliseconds(300))
+            guard !Task.isCancelled else { return }
+            for name in unread {
+                store.want(name) { [weak self, weak model] in
+                    guard let self, let model, self.model === model, !model.nav.isLive, model.nav.query == query else { return }
+                    self.provideStore(query)
+                }
+            }
+        }
     }
+
+    /// The root's store rows' reads, waiting for typing to pause.
+    private var storeReads: Task<Void, Never>?
 
     /// The default browser's engine for the Search the web row, read off the main thread; the row names it once read.
     private func readWebSearch() {
@@ -1107,7 +1197,9 @@ final class PilotMenu {
         model.nav.provide(.package, home: .remove, RemoveList.entries(RemoveList.sorted(rows, model.removeOrder)))
     }
 
-    private func close(restoreFocus: Bool) {
+    /// `keep`: a Raycast command's views keep running, to come back on the next Hyper+Space (keepViews); Escape, a pick
+    /// that ends the command and another view replacing it pass false, and the views stop with the panel.
+    private func close(restoreFocus: Bool, keep: Bool = false) {
         FileIndex.shared.cancel()
         FileThumbnails.shared.clear()
         translation?.cancel()
@@ -1137,10 +1229,20 @@ final class PilotMenu {
         sizer = nil
         panel?.orderOut(nil)
         panel = nil
-        // A live picker's source and every view waiting under it stop with the panel.
-        source?.close()
+        // A live picker's source and every view waiting under it stop with the panel, unless a Raycast command's are kept.
+        if let model, let source {
+            let views = model.views(shown: source)
+            if keep, keepViews(views) {
+                source.show = { _ in }
+                (source as? ExtensionListSession)?.showEmpty = { _ in }
+                (source as? ExtensionListSession)?.showSearch = { _ in }
+                (source as? ExtensionListSession)?.showChrome = { _ in }
+                model.onQuery = nil
+            } else {
+                views.reversed().forEach { $0.source.close() }
+            }
+        }
         source = nil
-        model?.popAll().forEach { $0.close() }
         model = nil
         // A picker that closes without a pick says so; run(_:) clears this first when a row was picked.
         let cancelled = onCancel
@@ -1757,11 +1859,17 @@ protocol MenuSource: AnyObject {
     func refresh(keeping row: MenuEntry?) async -> MenuEntry.Target?
     /// What the search holds as the view opens: an ask's text to edit.
     var opening: String { get }
+    /// A row of this view came on screen (T29: the Raycast Store reads what its rows show only then).
+    func shown(_ row: MenuEntry)
+    /// Rows filled in after a read, shown with the selected row kept where it is; set by the panel.
+    var showKeeping: (([MenuEntry]) -> Void)? { get set }
 }
 
 extension MenuSource {
     func refresh(keeping row: MenuEntry?) async -> MenuEntry.Target? { nil }
     var opening: String { "" }
+    func shown(_ row: MenuEntry) {}
+    var showKeeping: (([MenuEntry]) -> Void)? { get { nil } set {} }
 }
 
 /// A live picker source's answer to a pick: close the panel then run, push a view with its own source, or nothing.
@@ -1796,11 +1904,18 @@ final class MenuModel {
         return last.source
     }
 
-    /// Every waiting view's source, the stack emptied: the panel closing.
-    func popAll() -> [any MenuSource] {
+    /// A live view and the source that fills it.
+    typealias LiveView = (nav: MenuNavigator, source: any MenuSource)
+
+    /// Every view, the one shown last with `source`, the stack emptied: the panel closing, which stops them or keeps a
+    /// Raycast command's (T30).
+    func views(shown source: any MenuSource) -> [LiveView] {
         defer { below = [] }
-        return below.map(\.source)
+        return below + [(nav, source)]
     }
+
+    /// The views a kept command had under the one shown, back under it.
+    func restore(below views: some Collection<LiveView>) { below = Array(views) }
 
     var nav: MenuNavigator {
         didSet {
@@ -2070,7 +2185,20 @@ extension MenuModel {
         guard found > 0, let only = nav.only else { return nil }
         return "\(found) \(only.rawValue)\(found == 1 ? "" : "s")"
     }
-    var prompt: String { nav.isList || nav.branch != nil ? "Filter…" : "Search or pick…" }
+    var prompt: String {
+        // A Raycast view's search bar as Raycast's (T31): its placeholder with Raycast's ellipsis, else "Search…"; a Detail
+        // has no search bar, so its line says nothing.
+        if nav.isRaycast { return Self.placeholder(nav) }
+        return nav.isList || nav.branch != nil ? "Filter…" : "Search or pick…"
+    }
+
+    /// A Raycast view's search bar placeholder as Raycast shows it (T31): its searchBarPlaceholder with an ellipsis after it
+    /// ("Filter by name…"), "Search…" without one, nothing on a Detail, which has no search bar.
+    static func placeholder(_ nav: MenuNavigator) -> String {
+        guard nav.shownDetail == nil else { return "" }
+        guard let given = nav.chrome?.placeholder?.trimmingCharacters(in: .whitespaces), !given.isEmpty else { return "Search…" }
+        return given.hasSuffix("…") || given.hasSuffix("...") ? given : given + "…"
+    }
 
     /// The list and Cmd+K's actions as the pointer drives them (card agent-bo-95422994): MenuNavigator's seams.
     func pointedRows(_ pointer: PointerTrack) -> PointerList {

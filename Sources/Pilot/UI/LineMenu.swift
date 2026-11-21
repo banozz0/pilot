@@ -39,7 +39,7 @@ struct LineMenu: View {
                             .frame(width: size.width).transition(LineMorph.root(reduce: reduceMotion))
                     } else {
                         MenuBody(model: model, pointer: pointer, actionsFocused: actionsFocused, width: list,
-                                 rowHeight: MenuPanelSize.lineRow, numbered: !model.nav.inFiles)
+                                 rowHeight: MenuPanelSize.lineRow, numbered: !model.nav.inFiles && !model.nav.isRaycast)
                             .frame(width: list).transition(LineMorph.results(reduce: reduceMotion))
                     }
                 }
@@ -138,7 +138,8 @@ private struct LineSearch: View {
         let nav = model.nav
         if let stepped = nav.actions {
             Text("\(stepped.visible.count)").styleText(\.mono).foregroundStyle(style.color(\.text3))
-        } else if let title = nav.title {
+        } else if let title = nav.title, !nav.isRaycast {
+            // A Raycast view's title is in the foot, as Raycast's navigation title (T31).
             InstrumentCrumb(text: title)
         } else if model.atRoot, let own = model.ownKey {
             InstrumentBindKeys(label: own, layerKeys: model.layerKeys)
@@ -245,6 +246,9 @@ private struct LineFoot: View {
         HStack(spacing: 4) {
             if model.searchingRoot {
                 kinds
+            } else if model.nav.isRaycast {
+                // A Raycast view's foot as Raycast's: the command's icon and the view's navigation title (T31).
+                RaycastFootPlace(chrome: model.nav.chrome, title: model.nav.title).padding(.leading, 8)
             } else if model.nav.branch == .activity, let note = model.footerNote {
                 // Activity's refusal, or the force quit waiting for its second ⌘Return, in the place's room (Q399).
                 Text(note).foregroundStyle(style.color(\.accentText)).truncationMode(.tail).padding(.leading, 8)
@@ -266,6 +270,8 @@ private struct LineFoot: View {
     /// The keys. At a root search the kinds already say Tab and the line says what Return does, so neither repeats here
     /// and the kinds keep their whole words.
     private var hints: [KeyHint] {
+        // A Raycast view's right as Raycast's: Return's action, then Actions ⌘K; Escape goes unsaid (T31).
+        if model.nav.isRaycast, model.nav.actions == nil { return Array(model.footerCommands.prefix(4)) }
         let all = model.footer + model.footerTrailing + model.footerCommands
         guard model.searchingRoot else { return Array(all.prefix(4)) }
         return all.filter { !$0.key.contains("Tab") && !$0.key.contains("⇥") && $0.key != "↵" }
