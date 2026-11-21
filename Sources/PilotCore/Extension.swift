@@ -247,17 +247,22 @@ public struct Extension: Equatable, Sendable {
 
     public struct Found: Equatable, Sendable {
         public let extensions: [Extension], broken: [Broken]
-        public init(extensions: [Extension], broken: [Broken]) { self.extensions = extensions; self.broken = broken }
+        /// Old Raycast installs an earlier test build left (package.json, no extension.json), by folder name: never
+        /// listed as broken, only offered to the Trash in one line (Sven, 2026-11-21).
+        public let raycast: [String]
+        public init(extensions: [Extension], broken: [Broken], raycast: [String] = []) {
+            self.extensions = extensions; self.broken = broken; self.raycast = raycast
+        }
     }
 
-    /// The extensions in `folder` by title, read in folder-name order so the first of two with one id wins, and the
-    /// folders that are not, hidden ones and loose files left out; none when it is missing.
+    /// The extensions in `folder` by title, read in folder-name order so the first of two with one id wins, the folders
+    /// that are not, and apart from them the old Raycast ones, hidden ones and loose files left out; none when it is missing.
     public static func find(in folder: URL = folder) -> Found {
         let folders = ((try? FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: [.isDirectoryKey],
                                                                      options: .skipsHiddenFiles)) ?? [])
             .filter { (try? $0.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true }
             .sorted { $0.lastPathComponent.localizedStandardCompare($1.lastPathComponent) == .orderedAscending }
-        var extensions: [Extension] = [], broken: [Broken] = [], ids = Set<String>()
+        var extensions: [Extension] = [], broken: [Broken] = [], raycast: [String] = [], ids = Set<String>()
         for url in folders {
             let name = url.lastPathComponent
             do {
@@ -265,11 +270,14 @@ public struct Extension: Equatable, Sendable {
                 let ext = try Extension(folder: folder.appending(path: name))
                 guard ids.insert(ext.id).inserted else { throw Problem.duplicateID(ext.id) }
                 extensions.append(ext)
+            } catch Problem.raycastFormat {
+                raycast.append(name)
             } catch {
                 broken.append(Broken(folder: name, problem: error as? Problem ?? .unreadable(describe(error))))
             }
         }
-        return Found(extensions: extensions.sorted { $0.title.localizedStandardCompare($1.title) == .orderedAscending }, broken: broken)
+        return Found(extensions: extensions.sorted { $0.title.localizedStandardCompare($1.title) == .orderedAscending }, broken: broken,
+                     raycast: raycast)
     }
 
     /// The extension and command an `ext.` id names.

@@ -105,6 +105,18 @@ public struct ExtensionInstaller: Sendable {
         return folders
     }
 
+    /// Moves the old Raycast folders `names` names (Extension.Found.raycast) to the Trash, never deleting them (Sven,
+    /// 2026-11-21). The folder is read again first and each goes only while it is still one (package.json, no
+    /// extension.json), the check `find` makes; any other is left where it is. One log line says which went.
+    public func trashRaycast(_ names: [String]) {
+        let still = Set(Extension.find(in: extensions).raycast)
+        var moved: [String] = [], kept: [String] = []
+        for name in names {
+            if still.contains(name), (try? trash(extensions.appending(path: name))) != nil { moved.append(name) } else { kept.append(name) }
+        }
+        Self.log.notice("ext: \(moved.count, privacy: .public) old Raycast folders to the Trash (\(moved.joined(separator: ", "), privacy: .public)), \(kept.count, privacy: .public) kept")
+    }
+
     /// Moves the installed extension `id`'s folder to the Trash and returns its title; its data and settings stay.
     @discardableResult
     public func remove(_ id: String) throws -> String {
