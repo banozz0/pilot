@@ -112,11 +112,10 @@ struct DockWidgetSources {
     /// An answer carrying faces for the dock (ADR 0010, 2026-11-13) draws them, whichever widget reads it; one without
     /// goes through the widget's own mapping (`faces`), and an extension slot's through its gauges or text.
     private func answered(_ id: String, waiting: DockFace, _ faces: (Extension.BarAnswer, ExtensionBar.Item) -> DockWidgetBody) -> DockWidgetBody {
-        // A later bar item's Set up goes to its extension's install or settings (T14).
         guard let item = extensionBar.items.first(where: { $0.id == id }) else {
-            return extensionBar.listed ? .setUp(.install(DockSlot.owner(id))) : .faces([waiting])
+            return extensionBar.listed ? .setUp(.install(id)) : .faces([waiting])
         }
-        if item.problem != nil { return .setUp(.settings(DockSlot.owner(id))) }
+        if item.problem != nil { return .setUp(.settings(id)) }
         guard let answer = item.answer else { return .faces([waiting]) }
         return answer.faces.isEmpty ? faces(answer, item) : Self.generic(answer, item)
     }
@@ -127,29 +126,13 @@ struct DockWidgetSources {
 
     private func waiting(_ widget: DockWidget) -> DockFace { DockFace(glyph: .symbol(widget.symbol), label: widget.title, value: "…") }
 
-    /// Of `extensions`, the ones with a top bar item that no built-in widget reads, by title: the Dock page's From
-    /// extensions, and what `pilot add dock-widgets --item extension:<id>` takes.
-    nonisolated static func barExtensions(_ extensions: [Extension]) -> [Extension] {
-        extensions.filter { $0.bar != nil && !DockWidget.extensionIDs.contains($0.id) }
+    /// The installed extensions with a top bar item that no built-in widget reads: the Dock page's From extensions, and
+    /// what `pilot add dock-widgets --item extension:<id>` takes. Read from the manifests, so an extension no bar shows
+    /// is offered too.
+    nonisolated static func barExtensions(in folder: URL = Extension.folder) -> [Extension] {
+        Extension.find(in: folder).extensions.filter { $0.bar != nil && !DockWidget.extensionIDs.contains($0.id) }
             .sorted { $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending }
     }
-
-    /// One top bar item an extension slot can show: an extension's own (its id), or a Raycast extension's later
-    /// `menu-bar` command, `<id>/<command>`, titled as ExtensionBar titles it (T14).
-    struct Offer: Hashable {
-        let id: String, title: String, icon: String?
-    }
-
-    /// Each of `extensions`' bar items, in their order.
-    nonisolated static func offers(_ extensions: [Extension]) -> [Offer] {
-        extensions.flatMap { ext in
-            ExtensionBar.bars(of: ext).map { id, bar in Offer(id: id, title: id == ext.id ? ext.title : "\(ext.title): \(bar.command.title)", icon: ext.icon) }
-        }
-    }
-
-    /// The bar items of the installed `barExtensions`, read from the manifests, so an extension no bar shows is offered
-    /// too: what `pilot add dock-widgets --item extension:<id>` takes, one slot per item.
-    nonisolated static func barItems(in folder: URL = Extension.folder) -> [Offer] { offers(barExtensions(Extension.find(in: folder).extensions)) }
 
     /// Whether extension `id` is installed: its folder holds a manifest.
     nonisolated static func isInstalled(_ id: String) -> Bool {

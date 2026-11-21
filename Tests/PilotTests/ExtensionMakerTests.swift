@@ -58,8 +58,6 @@ struct ExtensionMakerTests {
     }
 
     /// The recorded stream's lines: claude 2.1.296 on Haiku at low effort, its folder's path written as /tmp/pilot-ext/demo.
-    /// Its tool calls were rewritten by hand for T32's Raycast format (package.json, src/index.tsx), each `pilot` answer
-    /// taken from the sandbox E2E with its rows cut to three; a live run (PILOT_LIVE=1) records a fresh one.
     static func recorded() throws -> [String] {
         try String(contentsOf: fixture, encoding: .utf8).split(separator: "\n").map(String.init)
     }

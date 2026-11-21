@@ -49,15 +49,12 @@ public enum BarPart: Equatable, Sendable {
     case extensionItem(ExtensionBarFace)
 }
 
-/// What one extension's bar item draws (Surfaces v2): its gauges and short text in their tones, named by its extension;
-/// a Raycast MenuBarExtra's icon first (T12), an SF Symbol or a picture.
+/// What one extension's bar item draws (Surfaces v2): its gauges and short text in their tones, named by its extension.
 public struct ExtensionBarFace: Equatable, Sendable {
     public let id: String, title: String, text: String, gauges: [Extension.Gauge], tone: Extension.Tone?
-    public let symbol: String?, image: Data?
 
     public init(id: String, title: String, answer: Extension.BarAnswer) {
         self.id = id; self.title = title; text = answer.text; gauges = answer.gauges; tone = answer.tone
-        symbol = answer.symbol; image = answer.image
     }
 }
 

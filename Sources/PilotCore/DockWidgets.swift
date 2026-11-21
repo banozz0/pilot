@@ -105,8 +105,7 @@ public enum DockWidget: String, CaseIterable, Sendable {
 
 /// One place in the dock's widget row (round 4, Sven 2026-11-13: "how can people add their own widgets"): one of the
 /// eleven built-in widgets, or an installed extension's top bar answer drawn as faces (DockFaces.extensionItem). Saved by
-/// name: a widget's raw value, or `extension:<id>`; a Raycast extension's later bar items are `extension:<id>/<command>`,
-/// as ExtensionBar names them (T14).
+/// name: a widget's raw value, or `extension:<id>`.
 public enum DockSlot: Hashable, Sendable, Codable {
     case widget(DockWidget)
     case extensionItem(String)
@@ -126,15 +125,10 @@ public enum DockSlot: Hashable, Sendable, Codable {
     /// What it reads, for the Dock page and `pilot dock-widgets`.
     public var reads: String {
         switch self {
-        case .widget(let widget): return widget.reads
-        case .extensionItem(let id):
-            let parts = id.split(separator: "/", maxSplits: 1)
-            return parts.count == 1 ? "the \(id) extension's top bar item" : "the \(parts[0]) extension's \(parts[1]) top bar item"
+        case .widget(let widget): widget.reads
+        case .extensionItem(let id): "the \(id) extension's top bar item"
         }
     }
-
-    /// The extension a bar item's id belongs to: `menu-bar` for `menu-bar/dot` (its settings, its install).
-    public static func owner(_ id: String) -> String { id.split(separator: "/", maxSplits: 1).first.map(String.init) ?? id }
 
     public var symbol: String { widget?.symbol ?? "puzzlepiece.extension" }
 
@@ -158,15 +152,14 @@ public enum DockSlot: Hashable, Sendable, Codable {
         }
     }
 
-    /// A name as `pilot dock-widgets` takes it: a widget's raw value or title, or `extension:<id>` (or `<id>/<command>`);
-    /// an extension one of the built-in widgets reads is that widget (`extension:markets` is Stocks and crypto).
+    /// A name as `pilot dock-widgets` takes it: a widget's raw value or title, or `extension:<id>`; an extension one of
+    /// the built-in widgets reads is that widget (`extension:markets` is Stocks and crypto).
     public init?(name: String) {
         let word = name.trimmingCharacters(in: .whitespaces)
         if let widget = DockWidget(name: word) ?? DockWidget.legacy(word) { self = .widget(widget); return }
         guard word.hasPrefix(Self.extensionPrefix) else { return nil }
         let id = String(word.dropFirst(Self.extensionPrefix.count))
-        let parts = id.split(separator: "/", omittingEmptySubsequences: false)
-        guard parts.count <= 2, parts.allSatisfy({ ThemePack.validID(String($0)) }) else { return nil }
+        guard ThemePack.validID(id) else { return nil }
         self = DockWidget.allCases.first { $0 != .focus && $0.extensionID == id }.map(DockSlot.widget) ?? .extensionItem(id)
     }
 
@@ -455,17 +448,10 @@ public enum DockFaces {
         return DockTimeline(from: from, to: to, now: at, spans: spans, label: left == 0 ? "Today · clear" : left == 1 ? "Today · 1 left" : "Today · \(left) left")
     }
 
-    /// The largest picture a face draws (Raycast spike, widgets-dock Q4): a bar answer's image past it shows its symbol or
-    /// the extension's icon instead.
-    static let largestFaceImage = 16_384
-
     /// An extension's top bar answer in the dock (round 4): the faces it sends for a dock (ADR 0010, 2026-11-13), else a
     /// face per gauge (its label over its text), else its icon beside its title over its text, the leading emoji gone.
-    /// Its glyph is the answer's own picture or symbol (a Raycast MenuBarExtra's icon, T14), else the extension's icon.
     public static func extensionItem(_ answer: Extension.BarAnswer, title: String, icon: String?) -> [DockFace] {
-        let own: DockFace.Glyph = answer.image.flatMap { $0.count <= largestFaceImage ? DockFace.Glyph.image($0) : nil }
-            ?? answer.symbol.map { .symbol($0) } ?? icon.map(DockFace.Glyph.emoji) ?? .symbol("puzzlepiece.extension")
-        let glyph: (String?) -> DockFace.Glyph = { symbol in symbol.map { .symbol($0) } ?? own }
+        let glyph: (String?) -> DockFace.Glyph = { symbol in symbol.map { .symbol($0) } ?? icon.map(DockFace.Glyph.emoji) ?? .symbol("puzzlepiece.extension") }
         if !answer.faces.isEmpty {
             return answer.faces.map { DockFace(glyph: glyph($0.symbol), label: $0.label, value: $0.value, tone: $0.tone) }
         }

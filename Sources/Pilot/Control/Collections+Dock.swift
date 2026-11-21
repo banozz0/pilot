@@ -5,23 +5,22 @@ extension ControlVerbs {
     /// The dock (spec pilot-dock): `pilot dock` reads its switch, size, room and icons (the pins read from the macOS Dock,
     /// never written, then the running apps); `pilot dock widgets` what each widget shows now, from its real reader;
     /// `dock-widgets` lists, adds (at a place) and removes its widgets, any of round 3's eleven (DockWidget) or an installed
-    /// extension's top bar item (`extension:<id>`, round 4; a Raycast extension's later ones `extension:<id>/<command>`,
-    /// T14); `pilot dock stats` picks what System stats shows.
+    /// extension's top bar item (`extension:<id>`, round 4); `pilot dock stats` picks what System stats shows.
     func registerDock(_ dock: @escaping @Sendable @MainActor () -> DockController? = { Engine.shared?.dock },
                       windows: @escaping @Sendable @MainActor () -> [AeroWindow] = { Engine.shared?.observers.tiler.windows ?? [] }) {
         func rows(_ widgets: [DockSlot]) -> JSONValue {
-            // A bar item's title from its manifest, read once, as the bar may not have listed it yet.
-            let titles = widgets.contains { $0.widget == nil } ? Dictionary(DockWidgetSources.barItems().map { ($0.id, $0.title) }, uniquingKeysWith: { a, _ in a }) : [:]
+            // An extension's title from its manifest, read once, as the bar may not have listed it yet.
+            let titles = widgets.contains { $0.widget == nil } ? Dictionary(DockWidgetSources.barExtensions().map { ($0.id, $0.title) }, uniquingKeysWith: { a, _ in a }) : [:]
             return .array(widgets.map { slot in
                 .object(["item": .string(slot.name), "title": .string(slot.extensionID.flatMap { titles[$0] } ?? DockWidgetView.title(slot)),
                          "reads": .string(slot.reads)])
             })
         }
-        /// A built-in widget, or an installed extension's top bar item that none of them reads.
+        /// A built-in widget, or an installed extension with a top bar item that none of them reads.
         func widget(_ name: String) throws(ControlError) -> DockSlot {
             guard let found = DockSlot(name: name) else { throw ControlError(.badValue, DockWidgetError.unknown(name).description) }
-            if case .extensionItem(let id) = found, !DockWidgetSources.barItems().contains(where: { $0.id == id }) {
-                throw ControlError(.badValue, "no installed extension's top bar item is \(id); pilot dock widgets lists the ones there are")
+            if case .extensionItem(let id) = found, !DockWidgetSources.barExtensions().contains(where: { $0.id == id }) {
+                throw ControlError(.badValue, "no installed extension \(id) with a top bar item; pilot dock widgets lists the ones there are")
             }
             return found
         }
@@ -29,7 +28,7 @@ extension ControlVerbs {
             guard let dock = dock() else { throw ControlError(.notReady, "Pilot's dock is not up yet; ask again in a moment") }
             return dock
         }
-        register(ControlVerb("dock", help: "Pilot's dock: its switch (dock.on), whether its screen is on a fullscreen app's Space now (fullscreen) and the dock is out of sight for it (covered, the visualizer off too), style (dock.style), size (dock.size), magnification (dock.magnify), the auto-hide and reveal delay it saved from the macOS Dock, the room the tiler keeps for it, its widgets, and its icons: the macOS Dock's pins (read, never written) less the ones taken out of Pilot's dock, then the ones kept in it, then the running apps, each with its windows and what a click does. menu lists an app's right-click menu; keep and unpin are its Keep in Dock and Remove from Dock, on Pilot's own pins alone; takenOut names the Dock's pins taken out, which keep brings back. widgets says what each widget shows now (its faces, its timeline, or Set up and why), read from its own reader: the extensions' bar answers, Pilot's timer, the system readings System stats picks, the battery or the power the Mac draws, Calendar (read, never asked), and under fromExtensions the installed extensions' top bar items that could go in (pilot add dock-widgets --item extension:<id>, or extension:<id>/<command> for a Raycast extension's later menu-bar command). stats picks System stats' readings, any the top bar's stats items read; with none it reads them. option reads or sets a widget's own choice (round 5): stats, top-apps (cpu memory), battery-look (text ring gauge dots), battery-devices (on off), clock-look (digital flip analog), zones (up to three time zone ids), sun (on off), toggles (wifi bluetooth dnd mic output), dnd-shortcut (a Shortcut's name), stacks (downloads captures recent). side reads or sets a widget's side of the apps, left or right (the right by default); visualizer reads what the visualizer does now (dock.visualizer, off by default): whether the output device runs, what the now-playing reader says, the gate, the tap, whether the bars move or lie flat, and the bars nearest the pill, after waiting the seconds given (up to 10); placement (dock.placement, attached or floating) and tint (dock.tint, off or theme) are settings; stopwatch starts, pauses or resets Pilot's own stopwatch; files lists what a Recent files stack shows. move is a drag's drop (spec drag-reorder): an app to a place among the apps (its own run, the pins or the running apps, never before Finder), saved as Pilot's own order, the macOS Dock's never written; a widget to a place on a side. Style and magnification are dock.style and dock.magnify.",
+        register(ControlVerb("dock", help: "Pilot's dock: its switch (dock.on), whether its screen is on a fullscreen app's Space now (fullscreen) and the dock is out of sight for it (covered, the visualizer off too), style (dock.style), size (dock.size), magnification (dock.magnify), the auto-hide and reveal delay it saved from the macOS Dock, the room the tiler keeps for it, its widgets, and its icons: the macOS Dock's pins (read, never written) less the ones taken out of Pilot's dock, then the ones kept in it, then the running apps, each with its windows and what a click does. menu lists an app's right-click menu; keep and unpin are its Keep in Dock and Remove from Dock, on Pilot's own pins alone; takenOut names the Dock's pins taken out, which keep brings back. widgets says what each widget shows now (its faces, its timeline, or Set up and why), read from its own reader: the extensions' bar answers, Pilot's timer, the system readings System stats picks, the battery or the power the Mac draws, Calendar (read, never asked), and under fromExtensions the installed extensions with a top bar item that could go in (pilot add dock-widgets --item extension:<id>). stats picks System stats' readings, any the top bar's stats items read; with none it reads them. option reads or sets a widget's own choice (round 5): stats, top-apps (cpu memory), battery-look (text ring gauge dots), battery-devices (on off), clock-look (digital flip analog), zones (up to three time zone ids), sun (on off), toggles (wifi bluetooth dnd mic output), dnd-shortcut (a Shortcut's name), stacks (downloads captures recent). side reads or sets a widget's side of the apps, left or right (the right by default); visualizer reads what the visualizer does now (dock.visualizer, off by default): whether the output device runs, what the now-playing reader says, the gate, the tap, whether the bars move or lie flat, and the bars nearest the pill, after waiting the seconds given (up to 10); placement (dock.placement, attached or floating) and tint (dock.tint, off or theme) are settings; stopwatch starts, pauses or resets Pilot's own stopwatch; files lists what a Recent files stack shows. move is a drag's drop (spec drag-reorder): an app to a place among the apps (its own run, the pins or the running apps, never before Finder), saved as Pilot's own order, the macOS Dock's never written; a widget to a place on a side. Style and magnification are dock.style and dock.magnify.",
                              usage: "pilot dock | pilot dock widgets | pilot dock option [<name> [<value>…]] | pilot dock stats [cpu gpu ram disk sensors network battery bluetooth] | pilot dock side <widget> [left|right] | pilot dock visualizer [<seconds>] | pilot dock stopwatch [start|pause|reset] | pilot dock files <stack> | pilot dock menu <app> | pilot dock keep <app> | pilot dock unpin <app> | pilot dock move <app> --index <n> | pilot dock move <widget> [--side left|right] --index <n>   (<app>: a bundle id or a name)") { call throws(ControlError) in
             // Read for the answer alone: the pill keeps what it shows.
             let dock = try up(), args = call.arguments(), dockPins = dock.readPins(), byApp = Dictionary(grouping: windows(), by: \.bundleId)
@@ -45,8 +44,8 @@ extension ControlVerbs {
                          "right": .array(dock.settings.widgets(on: .right).map { .string($0.name) })])
             }
             if args.positional.first == "widgets" {
-                // And what else could go in: each installed extension's top bar item no widget reads, not in the dock yet.
-                let more = DockWidgetSources.barItems().map { DockSlot.extensionItem($0.id) }.filter { !dock.settings.widgets.contains($0) }
+                // And what else could go in: each installed extension with a top bar item no widget reads, not in the dock yet.
+                let more = DockWidgetSources.barExtensions().map { DockSlot.extensionItem($0.id) }.filter { !dock.settings.widgets.contains($0) }
                 return .object(["widgets": await Self.widgetFaces(dock.settings.widgets, options: dock.settings.options, showing: dock.isOn),
                                 "fromExtensions": .array(more.map { .string($0.name) })])
             }
@@ -161,8 +160,8 @@ extension ControlVerbs {
             ])
         })
         register(ControlCollection(
-            "dock-widgets", help: "The dock's widgets in order (design round 3): " + DockWidget.allCases.map(\.rawValue).joined(separator: ", ") + ", or extension:<id>, an installed extension's top bar item (extension:<id>/<command> for a Raycast extension's later menu-bar command; pilot dock widgets lists them under fromExtensions). Each draws a glyph, a small label over a value; one whose source is not set up shows Set up. add takes --at, its place from 0 (the end without it); remove then add moves one.",
-            fields: [.init("item", help: "a widget: " + DockWidget.allCases.map(\.rawValue).joined(separator: ", ") + ", or extension:<id> (or <id>/<command>)"),
+            "dock-widgets", help: "The dock's widgets in order (design round 3): " + DockWidget.allCases.map(\.rawValue).joined(separator: ", ") + ", or extension:<id>, an installed extension's top bar item (pilot dock widgets lists them under fromExtensions). Each draws a glyph, a small label over a value; one whose source is not set up shows Set up. add takes --at, its place from 0 (the end without it); remove then add moves one.",
+            fields: [.init("item", help: "a widget: " + DockWidget.allCases.map(\.rawValue).joined(separator: ", ") + ", or extension:<id>"),
                      .init("at", help: "its place in the order, from 0; the end without it", required: false)],
             rowKey: "item",
             list: { rows(dock()?.settings.widgets ?? []) },

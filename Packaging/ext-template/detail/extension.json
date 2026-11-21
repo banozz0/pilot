@@ -1,0 +1,14 @@
+{
+  "id": "example",
+  "title": "Example",
+  "icon": "🧩",
+  "version": "0.1.0",
+  "description": "A page of text: markdown with facts beside it, and actions under Cmd+K.",
+  "examples": ["Type its title in Hyper+Space, Return: the page opens; Cmd+K copies its time"],
+  "runtime": "process",
+  "requires": ["python3"],
+  "permissions": { "clipboard": true },
+  "commands": [
+    { "name": "show", "title": "Example", "mode": "detail", "run": "main.py" }
+  ]
+}

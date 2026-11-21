@@ -10,8 +10,6 @@ public enum MenuGroups {
         case bestMatch, apps, windowsAndFiles, actions, menuItems, install, emoji, goTo
         /// Apps' own commands (P38); under the best match's app they head as "Music commands", a section.
         case commands
-        /// Installed Raycast extensions' commands and the store's folders a search found (raycast-extensions T25).
-        case extensions
         /// A root search's offers: Ask AI, Search the web, Search files, and Search to install when nothing matched
         /// (MenuNavigator.fallbacks, Q182).
         case askOrSearch
@@ -22,7 +20,7 @@ public enum MenuGroups {
     /// A table, not a switch, so a kind added later heads with the actions until it has a row here.
     private static let groups: [MenuEntry.Kind: Group] = [
         .app: .apps, .window: .windowsAndFiles, .file: .windowsAndFiles, .action: .actions, .package: .install, .emoji: .emoji, .branch: .goTo,
-        .answer: .bestMatch, .menuItem: .menuItems, .command: .commands, .extension: .extensions, .store: .extensions,
+        .answer: .bestMatch, .menuItem: .menuItems, .command: .commands,
     ]
 
     static func group(_ kind: MenuEntry.Kind) -> Group { groups[kind] ?? .actions }

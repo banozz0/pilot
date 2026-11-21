@@ -284,7 +284,6 @@ public enum Abilities {
         "drive.undo": "Undo in the app in front.",
         "extensions.catalogue": "Lists the extensions in Pilot's catalogue, such as Pomodoro; Return installs or updates one.",
         "extensions.openFolder": "Opens the folder your extensions live in.",
-        "extensions.raycastStore": "Searches Raycast's store on GitHub, such as Kill Process; Return reads one, then installs it after asking.",
         "scripts.openFolder": "Opens the folder your scripts live in; each shows in the menu.",
         // Media
         "media.mute": "Mutes or unmutes the sound.",

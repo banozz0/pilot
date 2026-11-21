@@ -199,7 +199,7 @@ private struct PagePart: View {
         case .voice: VoicePage(more: section == .voiceMore)
         case .extensions:
             if let id = extensionPage {
-                ExtensionSurfacePage(id: id, onScreen: model.live, shown: model.onScreen) { model.extensionFocus = $0; model.go(AppPlace(.extensions)) }.id(id)
+                ExtensionSurfacePage(id: id, onScreen: model.live) { model.extensionFocus = $0; model.go(AppPlace(.extensions)) }.id(id)
             } else {
                 // One list (Q601): a link to the catalogue picks its first row once it is read.
                 ExtensionsPageView(onScreen: model.onScreen, focus: $model.extensionFocus, toCatalogue: section == .extensionCatalogue,

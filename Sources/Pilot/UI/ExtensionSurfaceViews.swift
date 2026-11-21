@@ -580,7 +580,6 @@ struct BlockMarkdown: View, Equatable {
                 case .code(let code):
                     Text(code).font(ink.mono(compact ? 11 : 12)).foregroundStyle(ink.text2)
                         .padding(8).frame(maxWidth: .infinity, alignment: .leading).background(ink.well, in: .rect(cornerRadius: 6))
-                case .image(let alt, let source): MarkdownImage(alt: alt, source: source)
                 }
             }
         }
@@ -613,13 +612,9 @@ final class ExtensionPages {
 
     struct Link: Equatable, Identifiable {
         let id: String, title: String, icon: String?
-        /// A Raycast extension's own icon file in its `assets/` (T29), drawn in the sidebar in place of the emoji.
-        var picture: String?
         /// It has something to show as a page: its page, else its bar item's popover. One with neither opens its card on
         /// Installed.
         var opens = true
-        /// Raycast-format, so the sidebar lists it (T25).
-        var raycast = false
         /// "📊 AI usage".
         var label: String { [icon, title].compactMap { $0 }.joined(separator: " ") }
     }
@@ -648,15 +643,11 @@ final class ExtensionPages {
 
     /// Every installed extension, as the folder lists them.
     nonisolated static func entries(_ extensions: [Extension]) -> [Link] {
-        extensions.map { Link(id: $0.id, title: $0.title, icon: $0.icon, picture: $0.picture, opens: $0.shownSurface != nil || $0.isRaycast, raycast: $0.isRaycast) }
+        extensions.map { Link(id: $0.id, title: $0.title, icon: $0.icon, opens: $0.shownSurface != nil) }
     }
 
-    /// The sidebar's rows (T25): the Raycast extensions; Pilot's own are set aside, their pages still opened from the bar
-    /// and a link.
-    var sidebar: [Link] { entries.filter(\.raycast) }
-
-    /// The entries ⌃Tab steps through: the sidebar's that open as a page.
-    var pageEntries: [Link] { sidebar.filter(\.opens) }
+    /// The entries ⌃Tab steps through: the ones that open as a page.
+    var pageEntries: [Link] { entries.filter(\.opens) }
 }
 
 extension Extension {
@@ -676,7 +667,7 @@ struct ExtensionPageRows<Row: View>: View {
     @ViewBuilder let row: (_ link: ExtensionPages.Link, _ on: Bool, _ open: @escaping () -> Void) -> Row
 
     var body: some View {
-        ForEach(pages.sidebar) { link in
+        ForEach(pages.entries) { link in
             row(link, model.extensionPage == link.id) { link.opens ? model.goExtensionPage(link.id) : model.focusExtension(link.id) }
         }
     }
@@ -764,11 +755,7 @@ struct InstrumentExtensionRow: View {
         let shape = RoundedRectangle(cornerRadius: style.radii.control, style: .continuous)
         Button(action: open) {
             HStack(spacing: 10) {
-                if let image = link.picture.flatMap(EmojiTile.image) {
-                    Image(nsImage: image).resizable().interpolation(.high).aspectRatio(contentMode: .fit).frame(width: 16, height: 16)
-                } else {
-                    Text(link.icon ?? "🧩").font(.system(size: 11 * style.scale)).frame(width: 16)
-                }
+                Text(link.icon ?? "🧩").font(.system(size: 11 * style.scale)).frame(width: 16)
                 Text(link.title).styleText(\.body).foregroundStyle(style.color(on ? \.text : \.text2)).lineLimit(1).truncationMode(.tail)
                 Spacer(minLength: 4)
             }

@@ -6,19 +6,16 @@ import PilotCore
 /// with a tone, its own item in the macOS menu bar or drawn where the top bar's Extensions item sits, as Sven placed it
 /// (BarSettings.extensionItems). Asked only while one shows on a bar and the screen is in use (BarReadings holds and
 /// pauses it), and only the placed ones (and those the pill holds while it shows them): each on its own pace, 60 s at
-/// the most often, one run at a time on the one loop, 2 s each (a Raycast item's render 10 s), so n placed cost at most n short runs a minute, never
+/// the most often, one run at a time on the one loop, 2 s each, so n placed cost at most n short runs a minute, never
 /// two at once; a run of an extension's own command asks its item in a round at once (`ask`). The folder is read again
-/// on each round, so an install or an uninstall is followed within one. A Raycast extension has one item per `menu-bar`
-/// command (T12): its first keeps the extension's id, so the dock, the popover and saved places find it, and each
-/// later one is `<extension>/<command>`.
+/// on each round, so an install or an uninstall is followed within one.
 @Observable @MainActor
 final class ExtensionBar {
     static let shared = ExtensionBar()
 
-    /// One bar item as it last answered: its extension's, or one of a Raycast extension's (`command`, its pace `every`).
+    /// One extension's bar item as it last answered.
     struct Item: Equatable, Identifiable {
         let id: String, title: String, icon: String?
-        var command = "", every = 0
         /// Its page, for the dropdown's Open page.
         let hasPage: Bool
         var answer: Extension.BarAnswer?
@@ -107,10 +104,10 @@ final class ExtensionBar {
         nap?.cancel()
     }
 
-    /// An extension's command just ran (a to-do added): its items are asked in a round now, past their pace, not at their
-    /// next turn (Sven on build 23). Nothing runs while no bar shows; the next start asks them anyway.
+    /// An extension's command just ran (a to-do added): its item is asked in a round now, past its pace, not at its next
+    /// turn (Sven on build 23). Nothing runs while no bar shows; the next start asks it anyway.
     func ask(_ id: String) {
-        asked = asked.filter { item, _ in item != id && !item.hasPrefix(id + "/") }
+        asked[id] = nil
         nudge()
     }
 
@@ -124,42 +121,26 @@ final class ExtensionBar {
     /// The installed extensions that declare a bar item, by title: the order the items are listed and drew in.
     nonisolated static func withBar(in folder: URL) -> [Extension] { Extension.find(in: folder).extensions.filter { $0.bar != nil } }
 
-    /// Each of `ext`'s bar items with its id: the first the extension's own, a later one `<extension>/<command>` (T12).
-    nonisolated static func bars(of ext: Extension) -> [(id: String, bar: Extension.Surface)] {
-        ext.bars.enumerated().map { index, bar in (index == 0 ? ext.id : "\(ext.id)/\(bar.command.name)", bar) }
-    }
-
-    /// The installed extension and bar an item id names, read from `folder`; nil once it is gone.
-    nonisolated static func bar(_ id: String, in folder: URL) -> (ext: Extension, bar: Extension.Surface)? {
-        let name = id.split(separator: "/", maxSplits: 1).first.map(String.init) ?? id
-        guard let ext = Extension.find(in: folder).extensions.first(where: { $0.id == name }) else { return nil }
-        return bars(of: ext).first { $0.id == id }.map { (ext, $0.bar) }
-    }
-
     /// Asks every bar item that is due, one at a time, and says how long until the next is; the folder is read off the
     /// main thread, and the items change once, only when an answer did.
     @discardableResult
     func round() async -> Int {
         let folder = folder
         let extensions = await Task.detached { Self.withBar(in: folder) }.value
-        let bars = extensions.flatMap { ext in Self.bars(of: ext).map { (ext: ext, id: $0.id, bar: $0.bar) } }
         // Every one is listed; every one placed is asked.
-        let shown = Set(bars.map(\.id).filter { shows($0, .menuBar) || shows($0, .topBar) || held.contains($0) })
-        var next = bars.map { ext, id, bar in
-            let last = items.first { $0.id == id }
-            // A later item is titled by its command, after its extension.
-            let title = id == ext.id ? ext.title : "\(ext.title): \(bar.command.title)"
-            return Item(id: id, title: title, icon: ext.icon, command: bar.command.name, every: bar.every, hasPage: ext.page != nil,
-                        answer: last?.answer, problem: last?.problem)
+        let shown = Set(extensions.map(\.id).filter { shows($0, .menuBar) || shows($0, .topBar) || held.contains($0) })
+        var next = extensions.map { ext in
+            let last = items.first { $0.id == ext.id }
+            return Item(id: ext.id, title: ext.title, icon: ext.icon, hasPage: ext.page != nil, answer: last?.answer, problem: last?.problem)
         }
-        asked = asked.filter { id, _ in bars.contains { $0.id == id } }
-        for (index, (ext, id, bar)) in bars.enumerated() {
+        asked = asked.filter { id, _ in extensions.contains { $0.id == id } }
+        for (index, ext) in extensions.enumerated() {
             // An item placed in neither bar is not asked: it keeps what it last said.
-            guard !Task.isCancelled, shown.contains(id) else { continue }
-            if let last = asked[id], now().timeIntervalSince(last) < Double(bar.every) - 1 { continue }
-            asked[id] = now()
+            guard let bar = ext.bar, !Task.isCancelled, shown.contains(ext.id) else { continue }
+            if let last = asked[ext.id], now().timeIntervalSince(last) < Double(bar.every) - 1 { continue }
+            asked[ext.id] = now()
             var why: String?
-            guard let inputs = await ExtensionsModule.inputs(for: ext, command: bar.command, storage: storage, hud: { why = $0 }) else {
+            guard let inputs = await ExtensionsModule.inputs(for: ext, storage: storage, hud: { why = $0 }) else {
                 (next[index].answer, next[index].problem) = (nil, why)
                 continue
             }
@@ -167,16 +148,16 @@ final class ExtensionBar {
             case .bar(let answer): (next[index].answer, next[index].problem) = (answer, nil)
             case .error(let why):
                 (next[index].answer, next[index].problem) = (nil, why)
-                dlog.error("extension bar: \(id, privacy: .public) \(why, privacy: .private)")
+                dlog.error("extension bar: \(ext.id, privacy: .public) \(why, privacy: .private)")
             case .blocks: (next[index].answer, next[index].problem) = (nil, ExtensionRun.unreadable)
             }
         }
         if next != items { items = next }
         if !listed { listed = true }
         // The soonest due, never under the floor.
-        let waits = bars.filter { shown.contains($0.id) }.map { _, id, bar in
-            Int((asked[id].map { Double(bar.every) - now().timeIntervalSince($0) } ?? 0).rounded(.up))
-        }
+        let waits = extensions.filter { shown.contains($0.id) }.compactMap { ext in ext.bar.map { bar in
+            Int((asked[ext.id].map { Double(bar.every) - now().timeIntervalSince($0) } ?? 0).rounded(.up))
+        } }
         return max(waits.min() ?? 120, 60)
     }
 }

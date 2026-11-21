@@ -103,13 +103,13 @@ struct ExtensionDetailViewTests {
         #expect(box.size.width > 0 && box.size.height > 0, "drew nothing: \(box.size)")
         #expect(box.size.width <= room.width && box.size.height <= room.height, "\(box.size) in \(room)")
 
-        // The words' scroll and the facts', side by side across the panel, the facts' at Raycast's share of it (T31).
+        // The words' scroll and the facts', side by side across the panel, the facts' at their column's width.
         let columns = SharedLook.MenuScrollTests.scrollViews(in: host).map { (frame: $0.convert($0.bounds, to: host), scroll: $0) }
             .sorted { $0.frame.minX < $1.frame.minX }
         try #require(columns.count == 2, "\(columns.map(\.frame))")
         let documents = try columns.map { try #require($0.scroll.documentView) }
         let (words, facts) = (columns[0].frame, columns[1].frame)
-        #expect(abs(facts.width - (room.width * RaycastLayout.metadataShare).rounded()) < 0.5, "facts \(facts)")
+        #expect(abs(facts.width - ExtensionDetailView.factsWidth) < 0.5, "facts \(facts)")
         #expect(words.maxX <= facts.minX, "the words \(words) run under the facts \(facts)")
         #expect(words.minX >= 0 && facts.maxX <= room.width + 0.5, "\(words) \(facts) in \(room)")
         for (column, document) in zip(columns, documents) {

@@ -1,6 +1,0 @@
-{
-  "name": "measure-probe",
-  "title": "Measure probe",
-  "description": "The harness check that pilot-ext-host --measure refuses each way out (T7 review 1).",
-  "commands": [{ "name": "index", "title": "Probe", "mode": "view" }]
-}

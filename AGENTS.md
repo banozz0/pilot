@@ -14,7 +14,7 @@ Sven's own agents: the rest of this brief (his Mac, his vault, threads and slots
   The one exception: the designer may add env-gated offscreen `<X>Renders` tests (Sven, 2026-10-17, Q67).
   Prove behaviour end to end through the `pilot` command against a sandbox, output quoted. Acting verbs (`run`, keys, system, wallpaper,
   install, `files`, `model`, `permit`, `ai ask`, `theme apply`, `wifi`/`bluetooth` switching, `workspace move|rule`) act on the Mac they run on, and `set` asks Allow on screen.
-- Once before landing, after the full `swift test`: `Scripts/lean-check.py` (size; `idle` reads Pilot and may only lower a budget (the ratchet), `launch`/`all` relaunch Pilot; `ext` reads running extension hosts against `extHostOpenMB`).
+- Once before landing, after the full `swift test`: `Scripts/lean-check.py` (size; `idle` reads Pilot and may only lower a budget (the ratchet), `launch`/`all` relaunch Pilot).
 - `Scripts/build-app.sh` (release, signed, checks the size budget; a release needs `SPARKLE_ED_KEY` or `PILOT_DEV=1`, which `run.sh` sets; `CONFIG=debug` for debug) once per change, before land, never per edit; `Scripts/run.sh`
   builds, relaunches and streams the log. Rust file helper: `cargo test --manifest-path Helpers/pilot-files/Cargo.toml`.
 
@@ -29,8 +29,7 @@ Sven's own agents: the rest of this brief (his Mac, his vault, threads and slots
   (pilot-1.1 T54); Try it's Allow the rest (GrantWalk) asks them one at a time on its press, each read only once its step comes (T58). Screen Recording's state is read only at a capture press, while Show exact menu bar items is on, while
   Window pictures is Stills (the default) or Live, at Allow the rest's Screen Recording ask and while that step waits after it, or for `pilot status --part onboarding` (ADR 0012); no capture API
   runs before a press but Stills' and Live's. Password fields are blind to the tap: show it, never work around it.
-- Pilot's own code has one automation target, System Events; run AppleScript in a child `osascript`, never `NSAppleScript` on the main thread (it stalls the tap).
-  An extension may run AppleScript once Pilot asks: `pilot-ext-host` asks once per extension before its first `osascript` starts (ADR 0017, `Helpers/pilot-ext-host/prelude/src/automation.js`); macOS then asks per app.
+- System Events is the one automation target; run AppleScript in a child `osascript`, never `NSAppleScript` on the main thread (it stalls the tap).
 - Tiling is Pilot's tiler alone; `~/.aerospace.toml` is an import, never written. Clipboard: no ClipBook or Vicinae code; Maccy (MIT) is the reference.
 - Prove a bind or setting without hands with the `pilot` command first (`pilot help`, `get`, `list`, `actions`; ADR 0013); `pilot://` links
   stay for presses (press, open, alert, …), documented on `application(_:open:)` in `Sources/Pilot/PilotApp.swift`; pages are `AppPage`. Presses,
@@ -43,8 +42,6 @@ ADR 0010 (extensions speak JSON lines, Pilot draws) is the contract, with every 
 A catalogue extension is one self-contained folder. Its programs are Python 3 stdlib only, `#!/usr/bin/env python3`, executable, and run on
 macOS's own `/usr/bin/python3` (3.9); they print only protocol lines on stdout and never log item titles, clipboard text or secrets.
 Licence: ideas only, never code, from Raycast, Vicinae, ClipBook or Alfred extensions.
-`pilot ext new` and the AI chat's /extension make a Raycast extension from Pilot's own templates (`Packaging/ext-template/<mode>` plus `common/`:
-`package.json`, `src/index.tsx` on `@raycast/api` alone); `ext test` and `ext install` build it with the host first. Templates take ideas from Raycast's docs, never its code.
 The catalogue is `catalogue/`: `extensions/<id>/` and `themes/<id>/` (a theme pack), one `index.json`. Each extension's tests are
 `catalogue/tests/test_<id>.py` on its harness, shimming `open`, `pbcopy`, `pbpaste` and `gh`. After a change Pilot should offer, bump the
 extension's `version` and run `python3 catalogue/scripts/build-index.py`. Once before landing: `python3 catalogue/scripts/check.py && python3 -m unittest discover -s catalogue/tests`,

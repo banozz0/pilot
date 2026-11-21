@@ -2,8 +2,7 @@ import PilotCore
 import SwiftUI
 
 /// An extension's detail in the menu's panel, in place of the list (card agent-bo-95423245, ADR 0008's `extensionDetail`
-/// surface), after Raycast's detail: its markdown (its images drawn, T31), its metadata in a column beside it at Raycast's
-/// share of the width, each title over its value (RaycastMetadataColumn). Each
+/// surface), after Raycast's detail: its markdown, its facts in a quiet column beside it, each label over its value. Each
 /// side scrolls on its own and every word can be selected; Return and Cmd+K are its row's, which the panel runs. A live
 /// picker is always the wide panel, so the facts always fit beside the words. Instrument draws its own
 /// (InstrumentExtensionDetail). A detail with blocks (pilot-1-1 T9, Q603) draws them in place of its
@@ -14,6 +13,9 @@ struct ExtensionDetailView: View, Equatable {
 
     /// The same detail draws the same, so a menu redraw (a pointer move, a Cmd+K filter) never splits its markdown again.
     nonisolated static func == (a: Self, b: Self) -> Bool { a.detail == b.detail }
+
+    /// The facts' column; the words take the rest of the panel.
+    static let factsWidth: CGFloat = 208
 
     var body: some View {
         DetailBody(detail: detail, act: act)
@@ -30,11 +32,11 @@ private struct DetailBody: View {
 
     var body: some View {
         // Blocks in place of the markdown when it sends some.
-        let drawn = detail.blocks, blocks = drawn.isEmpty ? DetailBlock.split(detail.markdown) : [], parts = detail.laidOut
-        if blocks.isEmpty, drawn.isEmpty, parts.isEmpty {
+        let drawn = detail.blocks, blocks = drawn.isEmpty ? DetailBlock.split(detail.markdown) : [], facts = detail.metadata
+        if blocks.isEmpty, drawn.isEmpty, facts.isEmpty {
             nothing
         } else {
-            InstrumentExtensionDetail(blocks: blocks, parts: parts, drawn: drawn, act: act)
+            InstrumentExtensionDetail(blocks: blocks, facts: facts, drawn: drawn, act: act)
         }
     }
 
@@ -67,8 +69,6 @@ enum DetailBlock: Equatable {
     case item(marker: String, text: String)
     case rule
     case code(String)
-    /// A line that is only an image, `![alt](source)` (T31: Speedtest's dashboard), drawn as the picture (MarkdownImage).
-    case image(alt: String, source: String)
 
     /// The room over `block` after `above`: a heading more over it than under it, a list's items closer than paragraphs.
     static func gap(_ above: DetailBlock, _ block: DetailBlock) -> CGFloat {
@@ -98,7 +98,7 @@ enum DetailBlock: Equatable {
             let bare = line.trimmingCharacters(in: .whitespaces)
             if bare.isEmpty { close(); continue }
             // A rule before an item, so `* * *` is a rule.
-            if let block = image(bare) ?? heading(bare) ?? rule(bare) ?? item(bare) { close(); blocks.append(block); continue }
+            if let block = heading(bare) ?? rule(bare) ?? item(bare) { close(); blocks.append(block); continue }
             if paragraph.isEmpty, line.first?.isWhitespace == true, case .item(let marker, let text) = blocks.last {
                 blocks[blocks.count - 1] = .item(marker: marker, text: text + " " + bare)
                 continue
@@ -117,19 +117,6 @@ enum DetailBlock: Equatable {
               let hashes = Range(match.range(at: 1), in: line) else { return nil }
         let text = line[hashes.upperBound...].trimmingCharacters(in: .whitespaces).replacing(/\s+#+$/, with: "")
         return text.isEmpty ? nil : .heading(level: line.distance(from: hashes.lowerBound, to: hashes.upperBound), text: text)
-    }
-
-    /// `![alt](source)` alone on its line, an optional `"title"` after the source dropped; a source in `<…>` unwrapped.
-    /// Found by hand, not by a pattern: Speedtest's source is a data URI of many kilobytes, sent many times a second.
-    private static func image(_ line: String) -> DetailBlock? {
-        guard line.hasPrefix("!["), line.hasSuffix(")"), let close = line.range(of: "]("),
-              !line[line.index(line.startIndex, offsetBy: 2)..<close.lowerBound].contains("]") else { return nil }
-        let alt = line[line.index(line.startIndex, offsetBy: 2)..<close.lowerBound]
-        var source = line[close.upperBound..<line.index(before: line.endIndex)].trimmingCharacters(in: .whitespaces)
-        if let space = source.firstIndex(of: " "), source[space...].contains("\"") { source = String(source[..<space]) }
-        if source.hasPrefix("<"), source.hasSuffix(">") { source = String(source.dropFirst().dropLast()) }
-        guard !source.isEmpty, !source.contains(" ") else { return nil }
-        return .image(alt: String(alt), source: source)
     }
 
     /// Three or more of one of `-`, `*` or `_`, spaces between allowed.

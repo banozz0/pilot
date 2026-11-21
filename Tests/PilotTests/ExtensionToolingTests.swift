@@ -12,9 +12,6 @@ import Testing
 @Suite("Extension tooling", .serialized)
 struct ExtensionToolingTests {
     static let templates = URL(filePath: #filePath).deletingLastPathComponent().appending(path: "../../Packaging/ext-template").standardizedFileURL
-    /// The old format's list extension (ADR 0010, JSON lines), the list template until T32: an installable folder needing
-    /// no host or build, kept for the install, check and read-gate tests until T23 retires the format.
-    static let jsonLines = URL(filePath: #filePath).deletingLastPathComponent().appending(path: "../Fixtures/json-lines-extension/list").standardizedFileURL
 
     @MainActor final class Rig {
         let tools = ExtensionTools()
@@ -63,15 +60,6 @@ struct ExtensionToolingTests {
         }
 
         func installedIDs() -> [String] { Extension.find(in: tools.extensions).extensions.map(\.id) }
-
-        /// The JSON-lines list fixture as extension `id` in `parent` (the rig's folder by default), titled from its id.
-        func old(_ id: String = "demo", in parent: URL? = nil) throws {
-            let folder = (parent ?? work).appending(path: id), manifest = folder.appending(path: Extension.manifestName)
-            try FileManager.default.copyItem(at: ExtensionToolingTests.jsonLines, to: folder)
-            try String(contentsOf: manifest, encoding: .utf8).replacing(#""id": "example""#, with: "\"id\": \"\(id)\"")
-                .replacing(#""title": "Example"#, with: "\"title\": \"\(ScriptCommand.title(file: id))")
-                .write(to: manifest, atomically: true, encoding: .utf8)
-        }
 
         /// The extension ids `pilot actions` lists, read as it reads them (ControlActions.menuOffers), on this test's folder:
         /// Extension.find() at the time of asking, so an install shows with no reload.
@@ -133,32 +121,31 @@ struct ExtensionToolingTests {
         if case .object(let o)? = answer.result { o[name] } else { nil }
     }
 
-    @Test("ext new writes a Raycast extension's source per mode; ext test checks its manifest before any build, and builds only with the host")
+    @Test("ext new writes a folder per mode that ext test passes, each command run once after Allow")
     func newThenTest() async throws {
         let rig = try Rig()
         defer { rig.clean() }
-        for mode in ExtensionTemplate.allCases {
-            let id = "demo-\(mode.rawValue)", folder = rig.work.appending(path: id)
-            let made = await rig.ask("ext", "new", id, "--mode", mode.rawValue)
-            #expect(made.ok, "\(mode): \(made.error?.message ?? "")")
-            #expect(Self.field(made, "made") == .string(folder.path) && Self.field(made, "next") == .string("pilot ext test \(folder.path) --check"))
-            #expect(Self.field(made, "files") == .array(["assets/extension-icon.png", "package.json", "src/index.tsx", "tsconfig.json"].map(JSONValue.string)))
+        rig.allow = true
+        let made = await rig.ask("ext", "new", "demo", "--mode", "list")
+        #expect(made.ok, "\(made.error?.message ?? "")")
+        let folder = rig.work.appending(path: "demo")
+        #expect(Self.field(made, "made") == .string(folder.path))
+        let tested = await rig.ask("ext", "test", "demo")
+        #expect(tested.ok, "\(tested.error?.message ?? "")")
+        #expect(Self.field(tested, "check") == .string("passed"))
+        guard case .array(let runs)? = Self.field(tested, "runs"), case .object(let run)? = runs.first else { Issue.record("no runs"); return }
+        #expect(runs.count == 1 && run["command"] == .string("items") && run["as"] == .string("list"))
+        #expect(rig.asked.map(\.title) == ["Test extension"])
+        #expect(rig.asked[0].detail.contains(folder.path) && rig.asked[0].detail.contains("ext.demo.items (list)"))
+
+        for (i, mode) in ["no-view", "detail", "bar"].enumerated() {
+            let id = "demo-\(i)"
+            #expect(await rig.ask("ext", "new", id, "--mode", mode).ok, "\(mode)")
+            let answer = await rig.ask("ext", "test", rig.work.appending(path: id).path)
+            #expect(answer.ok, "\(mode): \(answer.error?.message ?? "")")
         }
-        // The manifest's faults come back before the host reads anything, as the Extensions page would say them.
-        let manifest = rig.work.appending(path: "demo-list/package.json")
-        try String(contentsOf: manifest, encoding: .utf8).replacing(#""mode": "view""#, with: #""mode": "grid""#)
-            .write(to: manifest, atomically: true, encoding: .utf8)
-        let broken = await rig.ask("ext", "test", "demo-list", "--check")
-        #expect(broken.error?.code == .badValue && broken.error?.message.contains("fails the check") == true
-                && broken.error?.message.contains("(Raycast's are view, no-view and menu-bar)") == true, "\(broken.error?.message ?? "")")
-        // Building needs the host, which a test bundle lacks: the sandbox E2E (T32's log) builds, runs and installs.
-        if ProcessInfo.processInfo.environment["PILOT_EXT_HOST"] == nil {
-            let unbuilt = await rig.ask("ext", "test", "demo-detail", "--check")
-            #expect(unbuilt.error?.message.contains("needs the extension host") == true, "\(unbuilt.error?.message ?? "")")
-        }
-        #expect(rig.asked.isEmpty, "a check asks nothing")
-        #expect(await rig.ask("ext", "new", "demo-list").error?.code == .badValue, "a taken folder")
-        #expect(await rig.ask("ext", "new", "other", "--mode", "bar").error?.code == .badValue, "the old bar mode is menu-bar now")
+        #expect(await rig.ask("ext", "new", "demo").error?.code == .badValue, "a taken folder")
+        #expect(await rig.ask("ext", "new", "other", "--mode", "grid").error?.code == .badValue)
         #expect(await rig.ask("ext", "new", "Bad_ID").error?.message.contains("must be lowercase") == true)
     }
 
@@ -206,7 +193,7 @@ struct ExtensionToolingTests {
     func checkOnly() async throws {
         let rig = try Rig()
         defer { rig.clean() }
-        try rig.old()
+        #expect(await rig.ask("ext", "new", "demo").ok)
         let checked = await rig.ask("ext", "test", "demo", "--check")
         #expect(checked.ok && Self.field(checked, "runs") == nil)
         let denied = await rig.ask("ext", "test", "demo")
@@ -227,7 +214,7 @@ struct ExtensionToolingTests {
     func install() async throws {
         let rig = try Rig()
         defer { rig.clean() }
-        try rig.old()
+        #expect(await rig.ask("ext", "new", "demo").ok)
         let source = rig.work.appending(path: "demo")
         let target = rig.tools.extensions.appending(path: "demo")
 
@@ -275,7 +262,7 @@ struct ExtensionToolingTests {
     func changedWhileAsking() async throws {
         let rig = try Rig()
         defer { rig.clean() }
-        try rig.old()
+        #expect(await rig.ask("ext", "new", "demo").ok)
         rig.allow = true
         let source = rig.work.appending(path: "demo")
         let shownMain = try Data(contentsOf: source.appending(path: "main.py")), shownManifest = try Data(contentsOf: source.appending(path: "extension.json"))
@@ -302,7 +289,7 @@ struct ExtensionToolingTests {
     func everyFileNamed() async throws {
         let rig = try Rig()
         defer { rig.clean() }
-        try rig.old()
+        #expect(await rig.ask("ext", "new", "demo").ok)
         let source = rig.work.appending(path: "demo")
         try FileManager.default.createDirectory(at: source.appending(path: "lib"), withIntermediateDirectories: true)
         try Data("def help():\n    return 1\n".utf8).write(to: source.appending(path: "lib/helper.py"))
@@ -355,7 +342,7 @@ struct ExtensionToolingTests {
     func installEntryRules() async throws {
         let rig = try Rig()
         defer { rig.clean() }
-        try rig.old()
+        #expect(await rig.ask("ext", "new", "demo").ok)
         let source = rig.work.appending(path: "demo")
         let secret = rig.work.appending(path: "secret.txt")
         try Data("secret".utf8).write(to: secret)
@@ -377,7 +364,7 @@ struct ExtensionToolingTests {
     func installChecks() async throws {
         let rig = try Rig()
         defer { rig.clean() }
-        try rig.old()
+        #expect(await rig.ask("ext", "new", "demo").ok)
         let manifest = rig.work.appending(path: "demo/extension.json")
         try String(contentsOf: manifest, encoding: .utf8).replacing(#""version": "0.1.0""#, with: #""version": "one""#)
             .write(to: manifest, atomically: true, encoding: .utf8)
@@ -397,7 +384,7 @@ struct ExtensionToolingTests {
     func remove() async throws {
         let rig = try Rig()
         defer { rig.clean() }
-        try rig.old()
+        #expect(await rig.ask("ext", "new", "demo").ok)
         rig.allow = true
         #expect(await rig.ask("ext", "install", "demo").ok)
         let data = rig.tools.data.appending(path: "demo")
@@ -431,7 +418,7 @@ struct ExtensionToolingTests {
     func readGate() async throws {
         let rig = try Rig()
         defer { rig.clean() }
-        try rig.old()
+        #expect(await rig.ask("ext", "new", "demo").ok)
         #expect(await rig.ask("ext", "test", "demo", "--check").ok && rig.asked.isEmpty, "the temporary folder is read without asking")
         rig.tools.readable = []
         let folder = rig.work.appending(path: "demo").path
@@ -456,9 +443,9 @@ struct ExtensionToolingTests {
         let allowed = rig.work.appending(path: "Downloads"), secret = rig.work.appending(path: "secret")
         for dir in [allowed, secret, rig.work.appending(path: "Downloads-evil")] { try fm.createDirectory(at: dir, withIntermediateDirectories: true) }
         rig.tools.readable = [allowed]
-        try rig.old("leaked-id", in: secret)
+        #expect(await rig.ask("ext", "new", "leaked-id", "--dir", secret.path).ok)
         let hidden = secret.appending(path: "leaked-id")
-        try rig.old("evil", in: rig.work.appending(path: "Downloads-evil"))
+        #expect(await rig.ask("ext", "new", "evil", "--dir", rig.work.appending(path: "Downloads-evil").path).ok)
         try fm.createSymbolicLink(at: allowed.appending(path: "link"), withDestinationURL: hidden)
         let asked = rig.asked.count
         for path in [allowed.appending(path: "link").path, allowed.path + "/../secret/leaked-id", rig.work.appending(path: "Downloads-evil/evil").path] {
