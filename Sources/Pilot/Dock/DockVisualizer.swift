@@ -53,6 +53,8 @@ final class DockVisualizer {
     @ObservationIgnored private var wake: Timer?
     /// Settled on the device alone: the tap waits for the device to stop and start again.
     @ObservationIgnored private var waitingForStart = false
+    /// A theme watch waits for its change (followTheme).
+    @ObservationIgnored private var followingTheme = false
 
     init(watch: any DockAudioWatch = CoreAudioWatch(), source: any DockAudioSource = CoreAudioTapSource(), panels: any DockBarsPanels = DockBarsWindow()) {
         self.watch = watch
@@ -82,10 +84,14 @@ final class DockVisualizer {
     }
 
     /// The flat line drawn again in the new accent when the theme changes (the moving bars take it on their next frame).
+    /// One watch at a time: an off and on (each fullscreen Space in and out) while one waits would add a second, which
+    /// never ends, one more per switch (memory-growth: 7 blocks each, and one theme change drew 302 times after 301).
     private func followTheme() {
-        guard on else { return }
+        guard on, !followingTheme else { return }
+        followingTheme = true
         _ = withObservationTracking { Look.shared.theme.accent } onChange: { [weak self] in
             Task { @MainActor in
+                self?.followingTheme = false
                 guard let self, self.on else { return }
                 if !self.drawing { self.drawFlat() }
                 self.followTheme()
