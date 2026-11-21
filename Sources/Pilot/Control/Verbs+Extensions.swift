@@ -193,7 +193,7 @@ extension ControlVerbs {
         ("install", "ext install <folder>", "Copies a checked folder into Pilot's Extensions folder after Allow."),
         ("remove", "ext remove <id>", "Moves an installed extension to the Trash after Allow; its data and settings stay."),
         ("show", "ext show <id>", "An installed extension's card: version, description, examples, what it says it touches, commands, the preferences it still needs."),
-        ("broken", "ext broken", "The folders in Extensions that do not read as extensions, each with why."),
+        ("broken", "ext broken", "The folders in Extensions that do not read as extensions, each with why; old Raycast folders (package.json) are left out, as the page offers them to the Trash in one line."),
         ("open", "ext open <id> [--card]", "Opens its own page in Pilot's window, or its card on the Extensions page."),
         ("run", "ext run <action> [--query <text>] [--input <text>]", "Runs a command once after Allow and answers what it printed (none of its actions performed); nothing is read back while a password preference is set."),
         ("page", "ext page <id>", "Asks its page command once after Allow and answers its blocks, as its page shows them; nothing is read back while a password preference is set."),

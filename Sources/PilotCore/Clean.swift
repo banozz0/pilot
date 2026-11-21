@@ -321,7 +321,8 @@ public final class CleanPreviewer {
     @ObservationIgnored private var generation = 0
     /// How far the run has got; nil when none runs.
     public private(set) var progress: CleanProgress?
-    /// The kept list's paths unticked in the menu, by id: they stay when Clean ticked runs. A new run ticks them all again.
+    /// The kept list's paths unticked, by id, in Hyper+Space or on Update & Clean (one set for both, and `pilot clean`
+    /// lists it): they stay when Clean ticked runs. A new run ticks them all again.
     public private(set) var unticked: Set<String> = []
     /// Each run's end, once, whether or not a menu waits on it: its preview, or nil when it failed.
     @ObservationIgnored public var onFinish: ((CleanPreview?) -> Void)?
@@ -382,8 +383,11 @@ public final class CleanPreviewer {
     }
 
     /// Ticks the path `id` names when it is unticked, else unticks it.
-    public func toggle(_ id: String) {
-        if unticked.remove(id) == nil { unticked.insert(id) }
+    public func toggle(_ id: String) { tick([id], on: unticked.contains(id)) }
+
+    /// Ticks the paths `ids` name when `on`, else unticks them (a part's tick on Update & Clean).
+    public func tick(_ ids: some Sequence<String>, on: Bool) {
+        if on { unticked.subtract(ids) } else { unticked.formUnion(ids) }
     }
 
     /// The kept list's ticked paths' ids; none when no list is kept.

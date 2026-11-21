@@ -11,8 +11,9 @@ struct CleanListBlock: View {
     var home = CleanModule.home
     /// Moves the ticked rows; nil when the kept list ran out.
     let clean: (Set<String>) async -> CleanOutcome?
-    /// Rows the user unticked.
-    @State var unticked: Set<String> = []
+    /// The ticks, shared with Hyper+Space's Clean (CleanPreviewer.unticked).
+    var previewer = CleanModule.previewer
+    private var unticked: Set<String> { previewer.unticked }
     /// Parts opened to show their rows.
     @State var opened: Set<String> = []
     @State var phase = Phase.ready
@@ -109,6 +110,6 @@ struct CleanListBlock: View {
     private func tick(_ ids: [String], on: Bool) {
         guard phase != .working else { return }
         if phase == .confirming { phase = .ready }
-        if on { unticked.subtract(ids) } else { unticked.formUnion(ids) }
+        previewer.tick(ids, on: on)
     }
 }
