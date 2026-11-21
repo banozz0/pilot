@@ -206,6 +206,7 @@ public enum BrowserBookmarks {
     public static let historyNeedsAccess: MenuEntry = {
         var row = MenuEntries.allowFullDiskAccess(search: "")
         row.title = "Allow Full Disk Access to search browser history"
+        row.subtitle = "macOS keeps your browsers' history from Pilot until you allow it"
         row.keywords = nil
         row.inSearch = false
         row.ownKind = .history

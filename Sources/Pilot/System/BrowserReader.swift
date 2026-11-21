@@ -80,8 +80,10 @@ actor BrowserReader {
     /// Every browser's bookmarks as menu rows, a file read again only when it changed. Each address once per browser (a
     /// row's target is the browser and the address), however many of its profiles keep it, and none whose target a row
     /// in `listed` already has (an `apps.url:` bind of the same page), as the menu keys its rows by target.
-    func bookmarks(listed: Set<MenuEntry.Target> = []) -> [MenuEntry] {
-        guard let home = Self.readableHome() else { kept = [:]; return [] }
+    /// The switch is read first, past the one wait, so a read asked for before it went off and reaching the reader after
+    /// forget() keeps nothing; one already reading finishes before forget() runs.
+    func bookmarks(listed: Set<MenuEntry.Target> = []) async -> [MenuEntry] {
+        guard await MainActor.run(body: { BrowserSettings.shared.bookmarks }), let home = Self.readableHome() else { kept = [:]; return [] }
         var rows: [MenuEntry] = [], paths = Set<String>(), seen = listed
         for browser in BrowserBookmarks.browsers {
             for profile in BrowserBookmarks.profiles(browser, home: home) {
