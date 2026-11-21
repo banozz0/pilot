@@ -572,6 +572,8 @@ public struct MenuEntry: Identifiable, Equatable, Sendable {
         case command
         /// An action on what is selected in the app in front, Finder's folders (P43): its provider never replaces the actions.
         case selection
+        /// A browser's bookmark, and a page from its history behind `hist` (BrowserBookmarks, spec launcher-best T9).
+        case bookmark, history
 
         /// Tab's cycle at the root search, as the wireframe orders it: every kind (nil), then each with a chip; branches,
         /// emoji and answers have none (cards agent-bo-95422931 and agent-bo-95422933).
@@ -591,6 +593,8 @@ public struct MenuEntry: Identifiable, Equatable, Sendable {
             case .branch: "Menu"
             case .menuItem: "Menu item"
             case .setting: "Setting"
+            case .bookmark: "Bookmark"
+            case .history: "History"
             case .file, .answer: nil
             }
         }
@@ -683,7 +687,8 @@ public struct MenuEntry: Identifiable, Equatable, Sendable {
     public var id: Target { target }
     /// The row's id in the frecency store: its target's, except an answer's, which answers one search and is never a pick
     /// (a translation's Download row opens an action, yet picking it says nothing about that action).
-    public var frecencyKey: String? { isAnswer || leadsRoot ? nil : target.key }
+    /// A browser history page (T9) is never one either, so no address visited lands in Pilot's ranking.
+    public var frecencyKey: String? { isAnswer || leadsRoot || ownKind == .history ? nil : target.key }
     /// What a search matches: the title and any keywords.
     public var searchText: String { keywords.map { "\(title) \($0)" } ?? title }
     /// An answer is its own kind (card agent-bo-95422933), so providing answers never replaces the rows of the kind its
@@ -1054,6 +1059,9 @@ public struct MenuNavigator: Sendable {
             }
             // The emoji picker's alias and words ("em funny", T37): the emoji they find as EmojiSearch ordered them, best first.
             if only == nil, emojiWords != nil { rows = entries.filter { $0.kind == .emoji && $0.home == nil }; return }
+            // `hist <words>` (BrowserBookmarks, spec launcher-best T9): only the history pages its provider found, the last
+            // visited first, or the row saying history is off; no offers, as nothing else is searched.
+            if only == nil, BrowserBookmarks.historyWords(query) != nil { rows = entries.filter { $0.kind == .history }; return }
             // An app's alias and words ("bw generate password", T40): that app's actions the words find, best first; none
             // found is today's search, so an alias that is also a word ("am") still searches.
             switch aliasRoute {

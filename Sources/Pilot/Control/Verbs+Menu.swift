@@ -5,7 +5,7 @@ extension ControlVerbs {
     /// Q324), so a launcher change is proved without a press on Sven's screen. Read-only; `menu pick` (T7) writes the ranking
     /// alone, after Allow, and runs no row (AGENTS.md: no acting verb). Built
     /// from the entries, picks, favourites, aliases and root PilotMenu's toggleNow hands MenuNavigator, plus the settings
-    /// rows its search provides; the rows that arrive after a keystroke from elsewhere (windows, files, app menu items,
+    /// rows its search provides and the browsers' bookmarks and `hist` pages (T9); the rows that arrive after a keystroke from elsewhere (windows, files, app menu items,
     /// Install, emoji, answers, Translate, Define) are left out, and Search the web names no browser (webVia unread).
     func registerMenu() {
         let flags: [ControlVerb.Flag] = [.init("size", help: "also the face size the panel would take for these rows (MenuPanelSize, Line)", takesValue: false)]
@@ -55,7 +55,12 @@ extension ControlVerbs {
         let entries = PilotMenu.entries(engine, scripts: scripts, extensions: extensions)
         var nav = MenuNavigator(entries: entries, frecency: PilotMenu.shared.frecency ?? Frecency(), favourites: FavouriteBook.shared.rows,
                                 aliases: AliasBook.shared.aliases, root: MenuRootSettings.shared.root.listed)
+        // As the menu's open and its `hist` search read them (T9): bookmarks while on, history pages (or the off row).
+        if BrowserSettings.shared.bookmarks { nav.provide(.bookmark, await BrowserReader.shared.bookmarks()) }
         nav.query = query
+        if let words = BrowserBookmarks.historyWords(query) {
+            nav.provide(.history, await BrowserReader.shared.history(words, on: BrowserSettings.shared.history))
+        }
         nav.provideSettings(query, developer: DeveloperPages.on)
         return nav
     }

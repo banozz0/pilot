@@ -64,6 +64,11 @@ extension SettingsSchema {
             .text("menu.fallbacks", "What a search that finds nothing offers, in order: \(MenuFallbacks.builtIn.map(\.id).joined(separator: ", ")), quicklinks.<keyword>, a script's id; default is Pilot's own",
                   page: "menu", standard: "default", read: { settings.fallbacks?.joined(separator: ",") ?? "default" },
                   write: { typed throws(ControlError) in settings.fallbacks = try Self.fallbacks(typed) }),
+            // The browsers (spec launcher-best T9, Q328), on Launcher › More rows: bookmarks on, history off until switched on.
+            .bool("menu.bookmarks", "Hyper+Space search lists your browsers' bookmarks (read with Full Disk Access)", page: "menu", standard: true,
+                  read: { BrowserSettings.shared.bookmarks }, write: { BrowserSettings.shared.bookmarks = $0 }),
+            .bool("menu.browserHistory", "hist <words> in Hyper+Space searches your browsers' history; off until you switch it on", page: "menu",
+                  standard: false, read: { BrowserSettings.shared.history }, write: { BrowserSettings.shared.history = $0 }),
         ])
     }
 

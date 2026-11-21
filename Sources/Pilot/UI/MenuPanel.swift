@@ -49,6 +49,10 @@ final class PilotMenu {
     private var appMenus: [String: [MenuEntry]] = [:]
     private var boundMenuRoutes: Set<String> = []
     private var appMenuRead: Task<Void, Never>?
+    /// The `hist` search in flight (T9); a newer keystroke cancels it.
+    private var historyRead: Task<Void, Never>?
+    /// History rows (or the off row) were provided for this menu, so leaving `hist` drops them.
+    private var historyShown = false
     /// The GIFs folder's pictures, read each time Stickers and GIFs opens.
     private var stickerFiles: [StickerFile] = []
     /// GIPHY in Stickers and GIFs (story 164): its key, read off the main thread as the branch opens; what the last
@@ -245,7 +249,9 @@ final class PilotMenu {
                                 aliases: AliasBook.shared.aliases, root: MenuRootSettings.shared.root.listed)
         nav.fileFilters.hidden = FileSearchSettings.shared.showHidden
         show(nav)
+        historyShown = false
         provideCall()
+        provideBookmarks()
         model?.onFileQuery = { [weak self] in self?.searchFiles($0) }
         model?.onQuery = { [weak self] in
             self?.searchEmoji($0)
@@ -261,6 +267,7 @@ final class PilotMenu {
             self?.translate($0)
             self?.define($0)
             self?.provideSnippets($0)
+            self?.provideHistory($0)
         }
         model?.onBranch = { [weak self] in self?.branchOpened($0) }
         model?.onRowShown = { [weak self] in self?.moreGiphy(near: $0) }
@@ -423,6 +430,41 @@ final class PilotMenu {
             let calls = await DockCalendar.shared.readCalls(now: now)
             guard self?.model === model else { return }
             model.nav.lead(Self.joinRow(calls, now: now))
+        }
+    }
+
+    /// The browsers' bookmarks (T9), read off the main thread as the menu opens while Launcher › More rows has them on;
+    /// a file read again only when it changed (BrowserReader). Counts only in the log, never a title or an address.
+    private func provideBookmarks() {
+        guard let model, BrowserSettings.shared.bookmarks else { return }
+        Task { [weak self] in
+            let rows = await BrowserReader.shared.bookmarks()
+            guard self?.model === model else { return }
+            model.nav.provide(.bookmark, rows)
+            mlog.notice("menu: \(rows.count) bookmarks listed")
+        }
+    }
+
+    /// `hist <words>` at the root (T9): once typing pauses for 0.2 s, the history pages they find, read from copies of the
+    /// browsers' databases; while history is off (Q328) only the row saying so, nothing read. Any other search drops them.
+    private func provideHistory(_ query: String) {
+        historyRead?.cancel()
+        guard let model else { return }
+        guard model.nav.branch == nil, let words = BrowserBookmarks.historyWords(query) else {
+            // Dropped once on leaving `hist`, not on every keystroke (a scan of every entry).
+            if historyShown { historyShown = false; model.nav.provide(.history, []) }
+            return
+        }
+        historyShown = true
+        let on = BrowserSettings.shared.history
+        guard on else { return model.nav.provide(.history, [BrowserBookmarks.historyOff]) }
+        historyRead = Task { [weak self] in
+            try? await Task.sleep(for: .milliseconds(200))
+            guard !Task.isCancelled else { return }
+            let rows = await BrowserReader.shared.history(words, on: true)
+            guard !Task.isCancelled, let self, self.model === model else { return }
+            model.nav.provide(.history, rows)
+            mlog.notice("menu: \(rows.count) history pages listed")
         }
     }
 

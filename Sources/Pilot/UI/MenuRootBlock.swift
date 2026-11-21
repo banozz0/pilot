@@ -228,19 +228,32 @@ struct MenuExtrasBlock: View {
             ForEach(Array(extras.enumerated()), id: \.element.id) { i, extra in
                 BlockRow(first: i == 0) { row(extra) }
             }
+            // The browsers' pages in search (spec launcher-best T9): bookmarks on, history off until you switch it on (Q328).
+            BlockRow { switchRow("Browser bookmarks", "bookmark", Self.bookmarksInfo, isOn: $browsers.bookmarks) }
+            BlockRow { switchRow("Browser history", "clock.arrow.circlepath", Self.historyInfo, isOn: $browsers.history) }
+        }
+    }
+
+    @Bindable var browsers: BrowserSettings = .shared
+
+    static let bookmarksInfo = "A search lists the bookmarks of Safari, Chrome, Brave, Edge, Arc, Vivaldi and Firefox, read as the menu opens while Pilot has Full Disk Access."
+    static let historyInfo = "hist and words search the pages you visited in those browsers, read only then, never saved or logged. Off until you switch it on."
+
+    /// A row's symbol, title, info and switch, muted while off.
+    private func switchRow(_ title: String, _ symbol: String, _ info: String, isOn: Binding<Bool>) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: symbol).font(ink.ui(12.5)).foregroundStyle(isOn.wrappedValue ? ink.text : ink.muted).frame(width: 18)
+            Text(title).foregroundStyle(isOn.wrappedValue ? ink.text : ink.muted)
+            InfoMark(text: info)
+            Spacer()
+            Toggle("Show \(title)", isOn: isOn).labelsHidden().toggleStyle(.pilotSwitch)
         }
     }
 
     private func row(_ extra: MenuRoot.Extra) -> some View {
         let on = settings.root.extras.contains(extra.id)
-        return HStack(spacing: 10) {
-            Image(systemName: extra.symbol).font(ink.ui(12.5)).foregroundStyle(on ? ink.text : ink.muted).frame(width: 18)
-            Text(extra.title).foregroundStyle(on ? ink.text : ink.muted)
-            InfoMark(text: Self.info(extra))
-            Spacer()
-            Toggle("Show \(extra.title)", isOn: Binding(get: { on }, set: { new in withAnimation(Kit.change) { settings.root.show(extra: extra.id, new) } }))
-                .labelsHidden().toggleStyle(.pilotSwitch)
-        }
+        return switchRow(extra.title, extra.symbol, Self.info(extra),
+                         isOn: Binding(get: { on }, set: { new in withAnimation(Kit.change) { settings.root.show(extra: extra.id, new) } }))
     }
 
     /// Where the row lives today, or what it runs.
