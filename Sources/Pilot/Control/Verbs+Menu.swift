@@ -16,6 +16,7 @@ extension ControlVerbs {
             }
             guard let engine = Engine.shared else { throw ControlError(.notReady, "the key engine is not up yet") }
             let scripts = ScriptCommand.find(), extensions = Extension.find().extensions
+            await DockCalendar.shared.readCalls(now: .now) // As the menu's open reads it, the call to join (T5).
             let entries = PilotMenu.entries(engine, scripts: scripts, extensions: extensions)
             var nav = MenuNavigator(entries: entries, frecency: PilotMenu.shared.frecency ?? Frecency(), favourites: FavouriteBook.shared.rows,
                                     aliases: AliasBook.shared.aliases, root: MenuRootSettings.shared.root.listed)
@@ -29,7 +30,7 @@ extension ControlVerbs {
                 let actions = RowAction.list(for: row, favourite: favourite).filter { $0 != .changeLanguages || nav.branch == nil }
                 return .object([
                     "kind": .string(row.kind.rawValue), "title": .string(row.shownTitle),
-                    "frecencyKey": row.frecencyKey.map(JSONValue.string) ?? .null,
+                    "frecencyKey": row.frecencyKey.map(JSONValue.string) ?? .null, "target": row.target.key.map(JSONValue.string) ?? .null,
                     "key": row.detailIsKey ? row.detail.map(JSONValue.string) ?? .null : .null,
                     "detail": row.detailIsKey ? .null : row.detail.map(JSONValue.string) ?? .null,
                     "heading": headings[index].map { .string(Self.heading($0)) } ?? .null,

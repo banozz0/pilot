@@ -245,6 +245,7 @@ final class PilotMenu {
                                 aliases: AliasBook.shared.aliases, root: MenuRootSettings.shared.root.listed)
         nav.fileFilters.hidden = FileSearchSettings.shared.showHidden
         show(nav)
+        provideCall()
         model?.onFileQuery = { [weak self] in self?.searchFiles($0) }
         model?.onQuery = { [weak self] in
             self?.searchEmoji($0)
@@ -403,8 +404,26 @@ final class PilotMenu {
         // Each app's own commands (P38), from the drive catalogue.
         let links = QuicklinkBook.shared.links
         let rows = MenuEntries.commands(built, catalogue: DriveModule.catalogue, installed: Set(apps.map(\.bundle))) + MenuEntries.quicklinks(links)
-        // Your fallbacks ride with the entries, which the navigator sets aside (T4).
-        return rows + MenuFallbacks.templates(MenuRootSettings.shared.fallbacks ?? [], links: links, among: rows)
+        // Your fallbacks ride with the entries, which the navigator sets aside (T4); the call to join, as last read, leads
+        // the root (T5).
+        return rows + MenuFallbacks.templates(MenuRootSettings.shared.fallbacks ?? [], links: links, among: rows) + joinRow(DockCalendar.shared.calls)
+    }
+
+    /// The menu's Join row for the call near now among `calls` (MeetingLink, T5); none when no call is near.
+    static func joinRow(_ calls: [ClockEvent], now: Date = .now) -> [MenuEntry] {
+        MeetingLink.joinable(calls, at: now).flatMap { MeetingLink.row($0, at: now) }.map { [$0] } ?? []
+    }
+
+    /// The call to join (T5): Calendar read off the main thread as the menu opens, never asked; its row leads the root
+    /// once read, as Return's first pick.
+    private func provideCall() {
+        guard let model else { return }
+        Task { [weak self] in
+            let now = Date()
+            let calls = await DockCalendar.shared.readCalls(now: now)
+            guard self?.model === model else { return }
+            model.nav.lead(Self.joinRow(calls, now: now))
+        }
     }
 
     /// Every window on every workspace, read once as the menu opens (the tiler's `list-windows --all`).

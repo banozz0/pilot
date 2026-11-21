@@ -663,6 +663,9 @@ public struct MenuEntry: Identifiable, Equatable, Sendable {
     /// One of your fallbacks (spec launcher-best T4): the navigator keeps it aside from the entries and offers it, with
     /// what was typed, when a root search finds nothing (MenuFallbacks).
     public var isFallback = false
+    /// Leads the root before typing, above its branches, and a search finds it as any row: the call to join (MeetingLink,
+    /// spec launcher-best T5). Never a pick, so frecency, favourites and aliases leave it alone.
+    public var leadsRoot = false
 
     public init(title: String, target: Target, home: MenuBranch? = nil, detail: String? = nil, detailIsKey: Bool = false,
                 running: Bool = false, inSearch: Bool = true, keywords: String? = nil, isAnswer: Bool = false, ownKind: Kind? = nil,
@@ -680,7 +683,7 @@ public struct MenuEntry: Identifiable, Equatable, Sendable {
     public var id: Target { target }
     /// The row's id in the frecency store: its target's, except an answer's, which answers one search and is never a pick
     /// (a translation's Download row opens an action, yet picking it says nothing about that action).
-    public var frecencyKey: String? { isAnswer ? nil : target.key }
+    public var frecencyKey: String? { isAnswer || leadsRoot ? nil : target.key }
     /// What a search matches: the title and any keywords.
     public var searchText: String { keywords.map { "\(title) \($0)" } ?? title }
     /// An answer is its own kind (card agent-bo-95422933), so providing answers never replaces the rows of the kind its
@@ -1005,6 +1008,14 @@ public struct MenuNavigator: Sendable {
         rerank(keeping: nil)
     }
 
+    /// The rows leading the root (MenuEntry.leadsRoot) replaced, as the call to join arrives once Calendar is read after
+    /// the menu opened (T5); a row arrowed onto stays selected, else the first, so Return joins.
+    public mutating func lead(_ rows: [MenuEntry]) {
+        guard entries.filter(\.leadsRoot) != rows else { return }
+        entries = entries.filter { !$0.leadsRoot } + rows
+        rerank(keeping: selection == 0 ? nil : selected?.id)
+    }
+
     /// Ranks again after the entries, picks or favourites changed, keeping `id` selected while it is listed.
     private mutating func rerank(keeping id: MenuEntry.Target?) {
         boost = frecency.boosts(for: entries.compactMap(\.target.key), now: now)
@@ -1023,7 +1034,7 @@ public struct MenuNavigator: Sendable {
             // Nothing typed: the root's branches, or the kind Tab shows (rootKind); the Files view (also when Search inside
             // emptied it) lists nothing until Sven types.
             guard !query.isEmpty else {
-                rows = only.map(rootKind) ?? rootRows
+                rows = only.map(rootKind) ?? entries.filter(\.leadsRoot) + rootRows
                 kindCounts = Dictionary(uniqueKeysWithValues: [.app, .window, .action].map { k in (k, entries.count { Self.listedUntyped($0) && $0.kind.tab == k }) })
                 return
             }
