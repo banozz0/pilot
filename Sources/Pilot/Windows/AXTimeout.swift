@@ -39,3 +39,12 @@ enum AXFront {
         return (window as! AXUIElement)
     }
 }
+
+/// An app that did not answer the border's read of its focused window within `timeout` (kAXErrorCannotComplete):
+/// a busy main thread, or a hang. The read runs on Pilot's main thread, which carries the key tap, so it waits less
+/// than AXTimeout's half second: 0.25 s, so the read's two messages hold the tap under the 0.5 s a held key starts to
+/// feel stuck at, while an app that answers in a loaded moment (7-19 ms idle, 67 ms its first time) keeps its border.
+struct AXBusy: Error {
+    static let timeout: Float = 0.25
+    let pid: pid_t
+}

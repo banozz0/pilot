@@ -103,7 +103,7 @@ struct WindowBorderControllerTests {
     }
 
     @Test("A tiler reflow moves the border: the focused window is re-read when the tiler lands it, not other windows (Sven's test 2026-10-09)")
-    func followsTilerWrites() {
+    func followsTilerWrites() throws {
         let surface = FakeSurface()
         let c = controller(Self.look(), surface)
         let observers = EngineObservers()
@@ -124,6 +124,33 @@ struct WindowBorderControllerTests {
         zen = nil // the focused window went away
         observers.tilerLanded([7])
         #expect(surface.shown == nil)
+        // A busy app (page switch round 3): its focused window answered in a gap, then each message waits the read's
+        // timeout and fails, as AX does. The glide's read gives up at the first, keeps the border and asks nothing more.
+        zen = WindowBorder.Window(frame: CGRect(x: 0, y: 30, width: 1920, height: 1049), subrole: "AXStandardWindow",
+                                  fullScreen: false, minimised: false, windowID: 7)
+        observers.refreshFocusedWindow()
+        var asked = 0, gap = true
+        let busy: (AXUIElement, [String]) -> (AXError, [AnyObject]) = { _, names in
+            asked += 1
+            if gap, names == [kAXFocusedWindowAttribute] { return (.success, [AXUIElementCreateApplication(2)]) }
+            Thread.sleep(forTimeInterval: Double(AXBusy.timeout))
+            return (.cannotComplete, [])
+        }
+        observers.readFocusedWindow = { _ in try EngineObservers.axFocusedWindow(1, ask: busy) }
+        let clock = ContinuousClock()
+        let glide = clock.measure { observers.tilerLanded([7]) }
+        #expect(asked == 2 && surface.shown?.frame == CGRect(x: -2, y: -1, width: 1924, height: 1053))
+        #expect(glide < .milliseconds(2 * 250 + 100))
+        let again = clock.measure { observers.tilerLanded([7]) } // the next glide asks again, once
+        #expect(asked == 4 && surface.shown != nil)
+        // Focus went to another app that does not answer at all: one message, and the old app's border goes
+        let other = try #require(NSWorkspace.shared.runningApplications.first { $0.processIdentifier != getpid() })
+        observers.seed(focusedApp: other)
+        gap = false
+        let focus = clock.measure { observers.refreshFocusedWindow() }
+        #expect(asked == 5 && surface.shown == nil && observers.focusedWindowID == nil)
+        #expect(focus < .milliseconds(250 + 100))
+        print("[border-ax] busy app, main thread per read: glide \(glide), next glide \(again), focus change \(focus); \(asked) messages in 3 reads")
     }
 
     /// Tester bug 9 (Sven on build 2778, 2026-11-19): the border sat at Pilot's settings window's opening frame, centred,
