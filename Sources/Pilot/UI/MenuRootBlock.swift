@@ -220,7 +220,7 @@ struct MenuExtrasBlock: View {
     @Environment(\.ink) private var ink
     @Bindable var settings: MenuRootSettings
 
-    static let note = "Rows Hyper+Space can list too, off until you switch them on. One switched on joins What the menu shows first, to move there."
+    static let note = "Rows Hyper+Space can list too, off until you switch them on; one switched on joins What the menu shows first, to move there. Browser bookmarks and history are found by a search instead: bookmarks start on, history off."
 
     var body: some View {
         let extras = MenuRoot.extraRows
@@ -236,7 +236,8 @@ struct MenuExtrasBlock: View {
 
     @Bindable var browsers: BrowserSettings = .shared
 
-    static let bookmarksInfo = "A search lists the bookmarks of Safari, Chrome, Brave, Edge, Arc, Vivaldi and Firefox, read as the menu opens while Pilot has Full Disk Access."
+    static let bookmarksInfo = "A search lists the bookmarks of " + BrowserBookmarks.browsers.map(\.name).formatted(.list(type: .and))
+        + ", read as the menu opens while Pilot has Full Disk Access."
     static let historyInfo = "hist and words search the pages you visited in those browsers, read only then, never saved or logged. Off until you switch it on."
 
     /// A row's symbol, title, info and switch, muted while off.

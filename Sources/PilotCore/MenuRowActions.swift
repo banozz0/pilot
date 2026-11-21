@@ -56,6 +56,8 @@ public enum RowAction: String, Equatable, Sendable {
             return [.open, .openWith, .convert, .showInFinder, .copyPath] + (folder ? [.searchInside] : []) + [.trash] + aliased
         // The call to join (MeetingLink, T5) is a one-off link: no bind, as it has no favourite or alias.
         case .action where row.leadsRoot: return [.run, .copyID]
+        // A browser history page (T9): no bind and no id to copy, so a visited address is never written to binds.json.
+        case .action where row.ownKind == .history: return [.run]
         case .action: return [.run] + (row.kind == .command ? [.openApp] : []) + [.setBind, .copyID] + aliased
         case .package: return [.install] + aliased
         case .branch: return [.open] + (row.extensionID == nil ? [] : [.uninstall]) + aliased

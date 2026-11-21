@@ -9,7 +9,13 @@ import PilotCore
 final class BrowserSettings {
     static let shared = BrowserSettings()
 
-    var bookmarks: Bool { didSet { defaults.set(bookmarks, forKey: Self.bookmarksKey) } }
+    /// Off, the kept bookmark rows go too, so nothing of them stays in memory.
+    var bookmarks: Bool {
+        didSet {
+            defaults.set(bookmarks, forKey: Self.bookmarksKey)
+            if !bookmarks { Task { await BrowserReader.shared.forget() } }
+        }
+    }
     var history: Bool { didSet { defaults.set(history, forKey: Self.historyKey) } }
     @ObservationIgnored private let defaults: UserDefaults
 
@@ -71,29 +77,36 @@ actor BrowserReader {
     /// Each bookmarks file's rows, by its path, with the date and size it was read at.
     private var kept: [String: (stamp: String, rows: [MenuEntry])] = [:]
 
-    /// Every browser's bookmarks as menu rows, a file read again only when it changed.
-    func bookmarks() -> [MenuEntry] {
+    /// Every browser's bookmarks as menu rows, a file read again only when it changed. Each address once per browser (a
+    /// row's target is the browser and the address), however many of its profiles keep it, and none whose target a row
+    /// in `listed` already has (an `apps.url:` bind of the same page), as the menu keys its rows by target.
+    func bookmarks(listed: Set<MenuEntry.Target> = []) -> [MenuEntry] {
         guard let home = Self.readableHome() else { kept = [:]; return [] }
-        var rows: [MenuEntry] = [], seen = Set<String>()
+        var rows: [MenuEntry] = [], paths = Set<String>(), seen = listed
         for browser in BrowserBookmarks.browsers {
             for profile in BrowserBookmarks.profiles(browser, home: home) {
                 let path = profile.bookmarks.path
                 guard let stamp = Self.stamp(profile.bookmarks) else { kept[path] = nil; continue }
-                seen.insert(path)
+                paths.insert(path)
                 if kept[path]?.stamp != stamp { kept[path] = (stamp, BrowserBookmarks.rows(Self.pages(browser, profile), browser: browser, kind: .bookmark)) }
-                rows += kept[path]?.rows ?? []
+                rows += (kept[path]?.rows ?? []).filter { seen.insert($0.target).inserted }
             }
         }
         // A profile gone since the last read leaves nothing kept.
-        kept = kept.filter { seen.contains($0.key) }
+        kept = kept.filter { paths.contains($0.key) }
         return Array(rows.prefix(BrowserBookmarks.bookmarkCap))
     }
+
+    /// The bookmark rows kept, dropped when the switch goes off.
+    func forget() { kept = [:] }
 
     /// The history pages `words` find in every browser's history, the last visited first; while history is off, only the
     /// row that says so. Read from copies, never kept.
     func history(_ words: [String], on: Bool) -> [MenuEntry] {
         guard on else { return [BrowserBookmarks.historyOff] }
-        guard let home = Self.readableHome() else { return [] }
+        guard let home = Self.home() else { return [] }
+        // Switched on without Full Disk Access: the row that opens its setting, as the Files view's does.
+        guard isIsolatedTestRun || FileIndex.hasFullDiskAccess() else { return [BrowserBookmarks.historyNeedsAccess] }
         var found: [(page: BrowserBookmarks.Page, browser: BrowserBookmarks.Browser)] = []
         for browser in BrowserBookmarks.browsers {
             for profile in BrowserBookmarks.profiles(browser, home: home) {
