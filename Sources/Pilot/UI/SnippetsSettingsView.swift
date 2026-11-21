@@ -240,15 +240,16 @@ struct SnippetsSettingsView: View {
         focus = .text
     }
 
-    /// The text as it pastes: today's date and time, samples for the clipboard and the argument, the caret marked.
+    /// The text as it pastes: today's date and time, samples for the clipboard, the selection and the argument, the caret
+    /// marked.
     private func preview(_ snippet: Snippet) -> some View {
-        let filled = snippet.expanded(now: Date(), clipboard: SnippetsEditor.sampleClipboard, argument: SnippetsEditor.sampleArgument)
-        let samples = snippet.text.contains("{clipboard}") || snippet.needsArgument
+        let filled = snippet.expanded(PlaceholderReads.samples())
+        let samples = !Placeholders.kinds(in: snippet.text).isDisjoint(with: [.clipboard, .selection, .argument])
         return VStack(alignment: .leading, spacing: 5) {
             HStack(alignment: .firstTextBaseline) {
                 fieldLabel("Pastes as")
                 Spacer()
-                if samples { Text("Clipboard and argument are samples").font(ink.ui(11)).foregroundStyle(ink.muted) }
+                if samples { Text("Clipboard, selection and argument are samples").font(ink.ui(11)).foregroundStyle(ink.muted) }
             }
             Group {
                 if filled.text.isEmpty {
@@ -299,8 +300,11 @@ final class SnippetsEditor {
     let library: SnippetLibrary
     var selected: UUID?
 
-    /// What the preview fills {clipboard} and {argument} with: never the real pasteboard.
+    /// What the preview fills {clipboard}, {clipboard N}, {selection} and {argument} with: never the real pasteboard or
+    /// another app's text.
     static let sampleClipboard = "copied text"
+    static let sampleEarlierClip = "an earlier copy"
+    static let sampleSelection = "selected text"
     static let sampleArgument = "argument"
 
     init(library: SnippetLibrary, selected: UUID? = nil) {
@@ -386,14 +390,18 @@ final class SnippetsEditor {
         let line: String
     }
 
-    /// The five placeholders, the date and time shown as they would paste `now`.
+    /// The placeholders (Placeholders), the dates and time shown as they would paste `now`.
     static func placeholders(now: Date) -> [Placeholder] {
         func filled(_ token: String) -> String { Snippet(name: "", keyword: "", text: token).expanded(now: now, clipboard: nil).text }
         return [
             Placeholder(token: "{date}", line: "Today’s date, e.g. \(filled("{date}"))"),
-            Placeholder(token: "{time}", line: "The time, e.g. \(filled("{time}"))"),
-            Placeholder(token: "{clipboard}", line: "What you copied last"),
+            Placeholder(token: "{date +7d}", line: "A week on, e.g. \(filled("{date +7d}")); -2w, +1mo, format=\"d MMM\""),
+            Placeholder(token: "{time}", line: "The time, e.g. \(filled("{time}")); +3h, +30m too"),
+            Placeholder(token: "{clipboard}", line: "What you copied last; | uppercase, lowercase, trim, encode"),
+            Placeholder(token: "{clipboard 1}", line: "The copy before it, from the clipboard history"),
+            Placeholder(token: "{selection}", line: "The text selected in the app you were in"),
             Placeholder(token: "{argument}", line: "Asked for as it pastes"),
+            Placeholder(token: "{argument name}", line: "One of several, typed apart with commas"),
             Placeholder(token: "{cursor}", line: "Where the caret ends up"),
         ]
     }
@@ -403,8 +411,8 @@ final class SnippetsEditor {
 private struct PlaceholderToken: View {
     @Environment(\.ink) private var ink
     let token: String
-    /// The tokens' column, {clipboard} the widest, so the lines beside them start on one edge.
-    static let column: CGFloat = 92
+    /// The tokens' column, {argument name} the widest, so the lines beside them start on one edge.
+    static let column: CGFloat = 124
 
     var body: some View {
         if ink.isInstrument {

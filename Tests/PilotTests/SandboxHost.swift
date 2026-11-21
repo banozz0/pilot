@@ -64,6 +64,13 @@ struct SandboxHost {
         // PILOT_SANDBOX_SECURE=1: a password field holds secure input (no app named), so `status --part problems` shows
         // what the dropdown offers there.
         if ProcessInfo.processInfo.environment["PILOT_SANDBOX_SECURE"] == "1" { engine.secureInput.seed(active: true) }
+        // PILOT_SANDBOX_NOW=<ISO 8601 time>: the placeholders' clock ({date +7d} in `pilot list snippets`' preview), else now.
+        // PILOT_SANDBOX_SELECTION=<text>: the selection {selection} reads, never the front app's (launcher-best T6).
+        if let at = ProcessInfo.processInfo.environment["PILOT_SANDBOX_NOW"] {
+            guard let now = try? Date(at, strategy: .iso8601) else { throw CocoaError(.formatting) }
+            PlaceholderReads.now = { now }
+        }
+        if let selection = ProcessInfo.processInfo.environment["PILOT_SANDBOX_SELECTION"] { PlaceholderReads.selectionStandIn = selection }
         // PILOT_SANDBOX_DOCK=<folder>: a fake macOS Dock (DockFixture); without it every dock switch refuses, and the dock never draws.
         DockFixture.install(ProcessInfo.processInfo.environment["PILOT_SANDBOX_DOCK"], on: engine.dock)
         // PILOT_SANDBOX_BINDS=<file>: a copy of a bind file as this run's bind file, loaded again so the engine's load (and
