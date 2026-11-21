@@ -5,7 +5,7 @@ import UniformTypeIdentifiers
 
 /// The format bar over a selection (UI redesign T26, S6 A, round 1 shot 6a; Apple Notes' styles, Sven 2026-11-20): Aa
 /// opens the paragraph styles (NotesStylesMenu), then bold, italic, underline and strikethrough, then code, the bulleted
-/// list, the checklist and the link, each typing its Markdown (MarkdownFormat, with its key). A format the selection
+/// list, the checklist, the toggle and the link, each typing its Markdown (MarkdownFormat, with its key). A format the selection
 /// already has is lit.
 struct NotesFormatBar: View {
     @Environment(\.style) var style
@@ -22,12 +22,12 @@ struct NotesFormatBar: View {
     @State var hovered: MarkdownFormat?
     @State var aaHovered = false
 
-    /// Its size, to keep it inside the note (NotesEditor): 3 pt round the Aa button (40), two rules (7 each) and eight
+    /// Its size, to keep it inside the note (NotesEditor): 3 pt round the Aa button (40), two rules (7 each) and nine
     /// buttons (28 each).
-    static let size = CGSize(width: 3 + 40 + 7 + 4 * 28 + 7 + 4 * 28 + 3, height: 32)
+    static let size = CGSize(width: 3 + 40 + 7 + 4 * 28 + 7 + 5 * 28 + 3, height: 32)
 
     /// The bar's groups after Aa, in order: the inline marks, then code, the line formats and the link.
-    static let groups: [[MarkdownFormat]] = [[.bold, .italic, .underline, .strike], [.code, .bullets, .checklist, .link]]
+    static let groups: [[MarkdownFormat]] = [[.bold, .italic, .underline, .strike], [.code, .bullets, .checklist, .toggle, .link]]
 
     var body: some View { bar }
 
@@ -99,9 +99,9 @@ struct NotesFormatBar: View {
         guard sel.location <= s.length else { return [] }
         let line = s.lineRange(for: NSRange(location: sel.location, length: 0))
         var out = Set<MarkdownFormat>()
-        // The line's kind, as Aa ticks it: the bar's bulleted list or checklist.
+        // The line's kind, as Aa ticks it: the bar's bulleted list, checklist or toggle.
         let kind = MarkdownFormat.lineStyle(s.substring(with: line))
-        if kind == .bullets || kind == .checklist { out.insert(kind) }
+        if [.bullets, .checklist, .toggle].contains(kind) { out.insert(kind) }
         // An inline span holds the selection when it covers every picked character, or the caret strictly inside it.
         let words = MarkdownFormat.words(s, sel)
         func around(_ mark: NSRegularExpression) -> Bool {
@@ -242,13 +242,14 @@ struct NotesStylesMenu: View {
 /// What the note head's + puts in a note (round 2 shot 6c-insert; Open question 9: the drawn keys, Table left out; the
 /// sketch removed, Sven 2026-11-20).
 enum NotesInsert: String, CaseIterable, Identifiable {
-    case checklist, picture
+    case checklist, toggle, picture
 
     var id: String { rawValue }
 
     var title: String {
         switch self {
         case .checklist: "Checklist"
+        case .toggle: "Toggle"
         case .picture: "Picture…"
         }
     }
@@ -256,14 +257,16 @@ enum NotesInsert: String, CaseIterable, Identifiable {
     var symbol: String {
         switch self {
         case .checklist: MarkdownFormat.checklist.symbol
+        case .toggle: MarkdownFormat.toggle.symbol
         case .picture: "photo"
         }
     }
 
-    /// Its key as the row shows it: the checklist's is MarkdownFormat's ⌘⇧L; Picture has none.
+    /// Its key as the row shows it: the checklist's and the toggle's are MarkdownFormat's ⌘⇧L and ⌘⇧D; Picture has none.
     var key: String? {
         switch self {
         case .checklist: MarkdownFormat.checklist.key
+        case .toggle: MarkdownFormat.toggle.key
         case .picture: nil
         }
     }
@@ -272,6 +275,7 @@ enum NotesInsert: String, CaseIterable, Identifiable {
     @MainActor func perform(_ handle: NotesEditorHandle) {
         switch self {
         case .checklist: handle.apply(.checklist)
+        case .toggle: handle.apply(.toggle)
         case .picture: Self.choosePictures(handle)
         }
     }

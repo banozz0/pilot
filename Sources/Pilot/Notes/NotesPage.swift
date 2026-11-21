@@ -4,7 +4,7 @@ import SwiftUI
 
 /// Notes in the app window (task N1, Sven 2026-10-09: "notes should be accessible from inside the app as well"), direction
 /// B (P60, 2026-10-18): the window has room, so the panel's list stays docked on the left, the folder one line under it;
-/// the note beside it keeps the panel's head, a 620 pt measure and the panel's keys (Escape into the list, ⌘K, ⌘N, ⌘P,
+/// the note beside it keeps the panel's head, a 620 pt measure and the panel's keys (Escape into the list, ⌘K, ⌘N, ⌘⇧P,
 /// ⌘⌫), through a key monitor while the page is on screen (NotesPageKeys). The page and the Hyper+Shift+N panel share
 /// one model (NotesPanel.currentModel), so an edit in one shows in the other as it is typed.
 struct NotesPage: View {
@@ -102,8 +102,11 @@ final class NotesPageKeys {
     /// list's own field has it (the editor's outranking a list the model still thinks open, NotesKey.pressed); nil (the
     /// key goes on) for any other field.
     static func key(_ code: UInt16, _ flags: NSEvent.ModifierFlags, _ characters: String?, model: NotesModel, responder: NSResponder?) -> NotesKey? {
-        guard responder is NotesTextView || NotesField.holds(responder) else { return nil }
-        return NotesKey.pressed(code, flags, characters, model: model, responder: responder)
+        guard responder is NotesTextView || NotesField.holds(responder),
+              let key = NotesKey.pressed(code, flags, characters, model: model, responder: responder) else { return nil }
+        // Cmd+P pins the panel on screen (Q317), which the page is not: it goes on, held while Cmd+K is open.
+        guard key == .pinOnScreen else { return key }
+        return model.actions != nil ? .held : nil
     }
 
     func stop() {

@@ -75,7 +75,7 @@ struct NotesMarkdownTests {
         #expect(struck.text == "ship the ~~notes~~ panel" && apply(.strike, struck.text, NSRange(location: 11, length: 5)).text == text)
     }
 
-    @Test("Link wraps words with the address picked to type over; Apple Notes' paragraph styles convert the picked lines and toggle back to Body; checklists toggle per line")
+    @Test("Link wraps words with the address picked to type over; Apple Notes' paragraph styles convert the picked lines and toggle back to Body; checklists and toggles toggle per line")
     func lines() {
         let link = apply(.link, "see docs", NSRange(location: 4, length: 4))
         #expect(link.text == "see [docs](https://)" && (link.text as NSString).substring(with: link.selection) == "https://")
@@ -112,6 +112,13 @@ struct NotesMarkdownTests {
         #expect(apply(.checklist, check.text, NSRange(location: 0, length: 5)).text == "milk\n  - [ ] eggs")
         let caret = apply(.checklist, "", NSRange(location: 0, length: 0))
         #expect(caret.text == "- [ ] " && caret.selection == NSRange(location: 6, length: 0))
+        // A toggle (⌘⇧D) opens unfolded; again, folded or not, it is Body; Bold goes round its words, never its triangle.
+        #expect(MarkdownFormat.keyed("d", command: true, shift: true) == .toggle)
+        let toggle = apply(.toggle, "- Ideas", NSRange(location: 3, length: 0))
+        #expect(toggle.text == "- ▾ Ideas" && MarkdownFormat.style(of: toggle.text, selection: toggle.selection) == .toggle)
+        #expect(apply(.toggle, "- ▸ Ideas", NSRange(location: 5, length: 0)).text == "Ideas")
+        #expect(apply(.bold, "- ▸ Ideas", NSRange(location: 4, length: 5)).text == "- ▸ **Ideas**")
+        #expect(NotesFormatBar.lit("- ▾ Ideas", selection: NSRange(location: 5, length: 0)).contains(.toggle))
     }
 
     func editor(_ text: String) -> NotesTextView {
@@ -161,6 +168,52 @@ struct NotesMarkdownTests {
         // Inside a code block nothing is Markdown.
         #expect(MarkdownBlocks.fences(editor.string as NSString).count == 1)
         #expect(MarkdownBlocks.tables(editor.string as NSString).first?.rows.count == 5)
+
+        // A toggle (Sven, 2026-11-21): a click on its triangle folds it, its ten indented lines (a box and a dot among
+        // them) hidden, drawing nothing and taking no height; the triangle is the only change, saved and read back.
+        let lines = (1...8).map { "  line \($0)" }.joined(separator: "\n")
+        let open = "# Toggles\n- ▾ Ideas\n  - [ ] buy oat milk\n  - a dot\n\(lines)\nAfter\n"
+        model.new(); model.text = open; model.flush()
+        let toggled = self.editor(open), toggleFile = folder.appending(path: model.current)
+        #expect(toggled.disclosures().map(\.folded) == [false] && toggled.checkboxes().count == 1 && toggled.bullets().count == 1)
+        let mark = (open as NSString).range(of: "- ▾").location
+        #expect(toggled.textStorage?.attribute(.notesToggle, at: mark, effectiveRange: nil) as? Bool == false && !hidden(toggled, "Ideas") && !hidden(toggled, "line 8"))
+        let shown = try #require(toggled.linesRect((open as NSString).range(of: "  line 8")))
+        let triangle = try #require(toggled.disclosures().first)
+        toggled.fold(triangle.range, folded: true)
+        toggled.restyle()
+        model.text = toggled.string; model.flush()
+        let folded = open.replacingOccurrences(of: "▾", with: "▸")
+        #expect(toggled.string == folded && toggled.disclosures().map(\.folded) == [true])
+        #expect(toggled.checkboxes().isEmpty && toggled.bullets().isEmpty && hidden(toggled, "buy oat") && hidden(toggled, "line 8") && !hidden(toggled, "After"))
+        let gone = toggled.linesRect((folded as NSString).range(of: "  - [ ] buy oat milk\n  - a dot\n\(lines)\n"))
+        #expect((gone?.height ?? 0) < 1 && shown.height > 10, "folded lines take no height: \(String(describing: gone))")
+        // The caret never rests in the folded lines: from the toggle's words' end it goes on to After.
+        let after = (folded as NSString).range(of: "After").location
+        #expect(toggled.settled((folded as NSString).range(of: "buy").location, from: (folded as NSString).range(of: "Ideas").location + 5) == after)
+        #expect(try String(contentsOf: toggleFile, encoding: .utf8) == folded)
+        model.reload()
+        #expect(model.text == folded && self.editor(model.text).disclosures().map(\.folded) == [true])
+        // Unfolded again, the lines show as they were.
+        toggled.fold(triangle.range, folded: false)
+        toggled.restyle()
+        #expect(toggled.string == open && toggled.checkboxes().count == 1 && !hidden(toggled, "line 8"))
+        // Return at the end of a folded toggle's line unfolds it and starts a line under it; Return on that line left
+        // blank takes its indent off, so the block ends.
+        let typing = self.editor("- ▸ Ideas\n  inside\nAfter")
+        typing.setSelectedRange(NSRange(location: 9, length: 0))
+        typing.insertNewline(nil)
+        #expect(typing.string == "- ▾ Ideas\n  \n  inside\nAfter" && typing.selectedRange().location == 12)
+        typing.insertText("first", replacementRange: typing.selectedRange())
+        typing.restyle()
+        typing.insertNewline(nil)
+        #expect(typing.string == "- ▾ Ideas\n  first\n  \n  inside\nAfter")
+        let fresh = self.editor("- ▾ Ideas\n  first")
+        fresh.setSelectedRange(NSRange(location: 17, length: 0))
+        fresh.insertNewline(nil)
+        fresh.restyle()
+        fresh.insertNewline(nil)
+        #expect(fresh.string == "- ▾ Ideas\n  first\n")
     }
 
     @Test("Marks never show, the caret's line included; the caret rests outside them, typing and deleting at a span's edge keep the Markdown whole")
