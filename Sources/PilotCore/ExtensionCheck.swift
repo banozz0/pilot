@@ -307,6 +307,9 @@ public enum ExtensionCheck {
     /// Its device and inode as listed, so a read that finds another file there (a link swapped in since) is refused.
     struct Listed { let path: String, url: URL, size: Int, executable: Bool, device: dev_t, inode: ino_t }
 
+    /// Every file `listing` finds in `folder`, by its path inside it: what `ext new` answers it made.
+    public static func files(in folder: URL) -> [String] { listing(folder).map(\.path) }
+
     /// The catalogue's `build-index.py files()`: every regular file in `folder`, hidden ones, `__pycache__` and `.pyc`
     /// left out and symlinks never followed, by path.
     static func listing(_ folder: URL) -> [Listed] {
@@ -367,6 +370,13 @@ extension ExtensionCheck {
     public struct Run: Equatable, Sendable {
         public let command: String, ranAs: String, ok: Bool, first: String
         public let why: String?
+        /// What Pilot read from its output, as it would draw it (T32: `ext test` answers it); nil when it read nothing.
+        public var drew: Drawn? = nil
+    }
+
+    /// A run's output as Pilot reads it: a list, detail or form; a surface's answer (a bar item); or a no-view command's outcome.
+    public enum Drawn: Equatable, Sendable {
+        case list(ListOutcome), surface(SurfaceOutcome), ran(ExtensionRun.Outcome)
     }
 
     /// Runs each of `ext`'s commands once, one after another as harness.py does: a surface's command with its surface
@@ -381,7 +391,9 @@ extension ExtensionCheck {
         let box = FileManager.default.temporaryDirectory.appending(path: "pilot-ext-test-\(UUID().uuidString)")
         defer { try? FileManager.default.removeItem(at: box) }
         for folder in ["home", "tmp"] { try? FileManager.default.createDirectory(at: box.appending(path: folder), withIntermediateDirectories: true) }
-        let environment = ["HOME": box.appending(path: "home").path, "TMPDIR": box.appending(path: "tmp").path + "/", "USER": pilot["USER"] ?? NSUserName()]
+        var environment = ["HOME": box.appending(path: "home").path, "TMPDIR": box.appending(path: "tmp").path + "/", "USER": pilot["USER"] ?? NSUserName()]
+        // The host a Raycast-format command runs in, when Pilot found it by this name rather than in its bundle (a sandbox, `swift run`).
+        environment["PILOT_EXT_HOST"] = pilot["PILOT_EXT_HOST"]
         let storage = ExtensionStorage(data: box.appending(path: "data"), cache: box.appending(path: "cache"), keychain: NoKeychain())
         var runs: [Run] = []
         for command in ext.commands {
@@ -408,7 +420,9 @@ extension ExtensionCheck {
 
     private static func run(_ command: Extension.Command, in ext: Extension, inputs: ExtensionRun.Inputs, environment: [String: String]) async -> Run {
         let (surface, ranAs, timeout, query) = kind(of: command, in: ext)
-        func run(ok: Bool, _ first: String = "", why: String? = nil) -> Run { Run(command: command.name, ranAs: ranAs, ok: ok, first: first, why: why) }
+        func run(ok: Bool, _ first: String = "", why: String? = nil, drew: Drawn? = nil) -> Run {
+            Run(command: command.name, ranAs: ranAs, ok: ok, first: first, why: why, drew: drew)
+        }
         let output: String
         do { output = try await ExtensionRun.output(command, query: query, surface: surface, inputs: inputs, environment: environment, timeout: timeout) }
         catch { return run(ok: false, why: ExtensionRun.reason(error, timeout: timeout)) }
@@ -420,14 +434,19 @@ extension ExtensionCheck {
             return type
         }
         if let plain = types.firstIndex(of: nil) { return run(ok: false, first, why: "printed a line outside the protocol: \(lines[plain].prefix(120))") }
-        // Its own error message is an answer: Pilot shows it as the command meant.
-        if types.contains("error") { return run(ok: true, first) }
-        let why: String? = switch (surface, command.mode) {
-        case (let kind?, _): if case .error(let reason) = ExtensionRun.surfaceAnswer(output, kind: kind) { reason } else { nil }
-        case (nil, .noView): if case .error(let reason) = ExtensionRun.outcome(of: output) { reason } else { nil }
-        case (nil, _): if case .error(let reason) = ExtensionRun.answer(output) { reason } else { nil }
+        let drew: Drawn = switch (surface, command.mode) {
+        case (let kind?, _): .surface(ExtensionRun.surfaceAnswer(output, kind: kind))
+        case (nil, .noView): .ran(ExtensionRun.outcome(of: output))
+        case (nil, _): .list(ExtensionRun.answer(output))
         }
-        return run(ok: why == nil, first, why: why)
+        // Its own error message is an answer: Pilot shows it as the command meant. A Raycast command's error line is the
+        // host's, for code that threw (T32), so it fails.
+        if types.contains("error"), command.runtime != .raycast { return run(ok: true, first, drew: drew) }
+        let why: String? = switch drew {
+        case .surface(.error(let reason)), .ran(.error(let reason)), .list(.error(let reason)): reason
+        default: nil
+        }
+        return run(ok: why == nil, first, why: why, drew: drew)
     }
 
     /// No Keychain, for `ext test` and the bar fixture: a password preference is unset, as on a Mac where it was never
@@ -442,42 +461,105 @@ extension ExtensionCheck {
 
 // MARK: Templates and a local install
 
-/// `pilot ext new`: a working extension made from one of Pilot's templates (`ext-template/<mode>` in its Resources),
-/// Python 3 stdlib only, one `main.py`, passing ExtensionCheck as made.
+/// `pilot ext new` (T32): a Raycast extension's source made from one of Pilot's own templates (`ext-template/<mode>` in
+/// its Resources, with `common/`'s tsconfig.json and icon): Raycast's `package.json` manifest and `src/index.tsx` on
+/// `@raycast/api` alone, which Pilot's host builds (`pilot ext test`, `ext install`) and Raycast runs too. Passes
+/// ExtensionCheck.source as made. list, detail and form are Raycast's `view` mode.
 public enum ExtensionTemplate: String, CaseIterable, Sendable {
-    case list, noView = "no-view", detail, bar
+    case list, detail, form, noView = "no-view", menuBar = "menu-bar"
 
-    /// The templates' own id and title, replaced in the copy's manifest.
-    static let id = "example", title = "Example"
+    /// The templates' own name and title, replaced in the copy's manifest; the folder every template takes as well.
+    static let id = "example", title = "Example", common = "common"
 
-    /// Copies the template into `parent/<id>`, its manifest naming `id` and `title` ("dash-board" titles "Dash board"),
-    /// and returns the folder. Throws when `id` is not a name, the template is missing, or `parent/<id>` already exists.
+    /// Copies the template and `common/` into `parent/<id>`, its manifest naming `id` and `title` ("dash-board" titles
+    /// "Dash board", the extension and its command alike), and returns the folder. Throws when `id` is not a name, the
+    /// template is missing, or `parent/<id>` already exists.
     public func make(id: String, title: String? = nil, templates: URL, in parent: URL) throws -> URL {
         let fm = FileManager.default
         guard Extension.isName(id) else { throw Extension.Problem.badID(id) }
         let source = templates.appending(path: rawValue), target = parent.appending(path: id)
-        guard fm.fileExists(atPath: source.appending(path: Extension.manifestName).path) else {
+        guard fm.fileExists(atPath: source.appending(path: RaycastManifest.name).path) else {
             throw CocoaError(.fileNoSuchFile, userInfo: [NSFilePathErrorKey: source.path])
         }
         guard !fm.fileExists(atPath: target.path) else { throw CocoaError(.fileWriteFileExists, userInfo: [NSFilePathErrorKey: target.path]) }
         try fm.copyItem(at: source, to: target)
         do {
-            let manifest = target.appending(path: Extension.manifestName)
+            let common = templates.appending(path: Self.common)
+            for name in (try? fm.contentsOfDirectory(atPath: common.path)) ?? [] where !name.hasPrefix(".") {
+                try fm.copyItem(at: common.appending(path: name), to: target.appending(path: name))
+            }
+            let manifest = target.appending(path: RaycastManifest.name)
             let quoted = String(decoding: try JSONEncoder().encode(title ?? ScriptCommand.title(file: id)), as: UTF8.self).dropFirst().dropLast()
             let text = try String(contentsOf: manifest, encoding: .utf8)
-                .replacing("\"id\": \"\(Self.id)\"", with: "\"id\": \"\(id)\"")
-                .replacing("\"title\": \"\(Self.title)", with: "\"title\": \"\(quoted)")
+                .replacing("\"name\": \"\(Self.id)\"", with: "\"name\": \"\(id)\"")
+                .replacing("\"title\": \"\(Self.title)\"", with: "\"title\": \"\(quoted)\"")
             try text.write(to: manifest, atomically: true, encoding: .utf8)
-            // A copy that lost its modes (a patch, a zip) still runs.
-            for file in ExtensionCheck.listing(target) where file.path.hasSuffix(".py") {
-                try fm.setAttributes([.posixPermissions: 0o755], ofItemAtPath: file.url.path)
-            }
-            guard try Extension(folder: target).id == id else { throw Extension.Problem.badID(id) }
+            let problems = ExtensionCheck.source(target)
+            guard problems.isEmpty else { throw Extension.Problem.unreadable(problems.joined(separator: "; ")) }
         } catch {
             try? fm.removeItem(at: target)
             throw error
         }
         return target
+    }
+}
+
+extension ExtensionCheck {
+    /// Whether `folder` is a Raycast extension's source, as /extension makes one: Raycast's package.json and a `src/`
+    /// folder, which Pilot builds before it checks, tests or installs it (T32). A built folder (a store install's, a
+    /// fixture's) has no `src/` and is read as it stands.
+    public static func isRaycastSource(_ folder: URL) -> Bool {
+        var isFolder: ObjCBool = false
+        return RaycastManifest.holds(folder) && FileManager.default.fileExists(atPath: folder.appending(path: "src").path, isDirectory: &isFolder) && isFolder.boolValue
+    }
+
+    /// Why a Raycast extension's source is not ready to build, before the host reads it (T32), in the words /extension's
+    /// maker acts on: its manifest's fields as Raycast's manifest page names them (developers.raycast.com/information/manifest,
+    /// read 2026-11-21: name, title, description, icon, author, platforms, categories, and each command's name, title,
+    /// description and mode), the icon a PNG in assets/, and each command's `src/<name>.tsx` (or .ts, .jsx, .js). What
+    /// only a build finds (a type in the code, a package with no lockfile) the host's plan and esbuild say after.
+    public static func source(_ folder: URL) -> [String] {
+        typealias P = Extension.Problem
+        let fm = FileManager.default
+        let manifest: [String: JSONValue]
+        do {
+            guard case .object(let o) = try JSONDecoder().decode(JSONValue.self, from: Data(contentsOf: folder.appending(path: RaycastManifest.name))) else {
+                return ["package.json is not a JSON object"]
+            }
+            manifest = o
+        } catch CocoaError.fileReadNoSuchFile { return ["no package.json"] }
+        catch { return ["package.json is not JSON: \(error.localizedDescription)"] }
+        var problems: [String] = []
+        if case .string(let name)? = manifest["name"], Extension.isName(name) {} else { problems.append(P.badID(py(manifest["name"])).reason) }
+        for field in ["title", "description", "author"] where !isText(manifest[field]) { problems.append("\(field) is missing") }
+        for field in ["platforms", "categories"] {
+            if case .array(let list)? = manifest[field], !list.isEmpty, list.allSatisfy(isText) {} else { problems.append("\(field) must be a list of words") }
+        }
+        if RaycastManifest.iconFile(manifest["icon"], in: folder) == nil { problems.append("icon must name a PNG in assets/, like extension-icon.png") }
+        guard case .array(let commands)? = manifest["commands"], !commands.isEmpty else { return problems + [P.noCommands.reason] }
+        var names = Set<String>()
+        for command in commands {
+            guard case .object(let c) = command, case .string(let name)? = c["name"] else {
+                problems.append("a command needs a name")
+                continue
+            }
+            if !Extension.isCommandName(name) { problems.append(P.badCommandName(name).reason) }
+            if !names.insert(name.lowercased()).inserted { problems.append(P.duplicateCommand(name).reason) }
+            for field in ["title", "description"] where !isText(c[field]) { problems.append("command \(name): \(field) is missing") }
+            if case .string(let mode)? = c["mode"], ["view", "no-view", "menu-bar"].contains(mode) {} else {
+                problems.append(P.unknownMode(command: name, mode: py(c["mode"])).reason + " (Raycast's are view, no-view and menu-bar)")
+            }
+            if let interval = c["interval"] {
+                // Surface.raycastPace's grammar, which holds what it reads to a minute at least and a day at most.
+                if case .string(let pace) = interval, pace.wholeMatch(of: /[0-9]+(?:\.[0-9]+)?[smhd]/) != nil {} else {
+                    problems.append("command \(name): interval must read like 90s, 5m, 12h or 1d (a minute at least)")
+                }
+            }
+            if !["tsx", "ts", "jsx", "js"].contains(where: { fm.fileExists(atPath: folder.appending(path: "src/\(name).\($0)").path) }) {
+                problems.append("command \(name) has no src/\(name).tsx")
+            }
+        }
+        return problems
     }
 }
 
@@ -494,6 +576,9 @@ extension ExtensionCheck {
 
         /// Removes the copy and its temporary folder.
         public func remove() { try? FileManager.default.removeItem(at: copy.deletingLastPathComponent()) }
+
+        /// The same copy, said to be read from `folder`: a build's, named by the source folder it was built from (T32).
+        public func read(from folder: URL) -> Staged { Staged(source: folder, copy: copy, problems: problems, ext: ext, entry: entry) }
     }
 
     /// Reads `folder` into a temporary copy, off the main actor: each file once, with its sha256, checked as it is read

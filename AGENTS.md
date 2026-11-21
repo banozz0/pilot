@@ -43,6 +43,8 @@ ADR 0010 (extensions speak JSON lines, Pilot draws) is the contract, with every 
 A catalogue extension is one self-contained folder. Its programs are Python 3 stdlib only, `#!/usr/bin/env python3`, executable, and run on
 macOS's own `/usr/bin/python3` (3.9); they print only protocol lines on stdout and never log item titles, clipboard text or secrets.
 Licence: ideas only, never code, from Raycast, Vicinae, ClipBook or Alfred extensions.
+`pilot ext new` and the AI chat's /extension make a Raycast extension from Pilot's own templates (`Packaging/ext-template/<mode>` plus `common/`:
+`package.json`, `src/index.tsx` on `@raycast/api` alone); `ext test` and `ext install` build it with the host first. Templates take ideas from Raycast's docs, never its code.
 The catalogue is `catalogue/`: `extensions/<id>/` and `themes/<id>/` (a theme pack), one `index.json`. Each extension's tests are
 `catalogue/tests/test_<id>.py` on its harness, shimming `open`, `pbcopy`, `pbpaste` and `gh`. After a change Pilot should offer, bump the
 extension's `version` and run `python3 catalogue/scripts/build-index.py`. Once before landing: `python3 catalogue/scripts/check.py && python3 -m unittest discover -s catalogue/tests`,

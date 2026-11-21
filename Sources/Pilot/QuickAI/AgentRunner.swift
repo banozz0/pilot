@@ -167,7 +167,8 @@ enum WidgetMaker {
 
 /// "/extension <idea>" in the chat (spec pilot-ai-helper T17): Claude Code with the file tools as well as `pilot`, in a
 /// fresh folder of its own under the temporary folder, on the extension skill (Packaging/skills/extension), which walks it through
-/// `pilot ext new`, its edits, `pilot ext test` and `pilot ext install` (each run and the install wait on Allow). What
+/// `pilot ext new` (a Raycast extension's source, T32), its edits, `pilot ext test` (built by Pilot's host) and `pilot ext
+/// install` (each run and the install wait on Allow). What
 /// holds it (ADR 0013, probes A–G, 2026-10-12): `--restricted` keeps Read, Write and Edit inside that folder; dontAsk
 /// refuses shell commands that write or name a path outside it, but lets read-only ones chained after `pilot` run
 /// (`pilot ping; ps aux`), so Pilot's shell gate (pilot-agent-shell, AIChat.Agent.environment) runs only one plain

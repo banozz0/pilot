@@ -121,11 +121,22 @@ public struct GitHubInstall: Sendable {
     public struct Fetched: Codable, Sendable { public let host, what, check: String; public let bytes: Int }
 
     public let spec: String, workspace: URL, tools: URL
+    /// A Raycast extension's source folder on this Mac to build in place of a GitHub folder (T32), nil for GitHub.
+    public let local: URL?
 
     /// `github:<owner>/<repo>/<folder>` as the host takes it, nil for any other argument.
     public init?(_ argument: String, extensions: URL) {
         guard argument.hasPrefix("github:") else { return nil }
-        spec = String(argument.dropFirst("github:".count))
+        self.init(spec: String(argument.dropFirst("github:".count)), local: nil, extensions: extensions)
+    }
+
+    /// A Raycast extension's source folder on this Mac (T32: what /extension makes), read by the host's `--local` as `--fetch`
+    /// reads a GitHub folder, then built the same way; `folder` is already resolved and allowed to be read.
+    public init(local folder: URL, extensions: URL) { self.init(spec: folder.path, local: folder, extensions: extensions) }
+
+    private init(spec: String, local: URL?, extensions: URL) {
+        self.spec = spec
+        self.local = local
         let support = extensions.deletingLastPathComponent()
         workspace = support.appending(path: "\(Self.prefix)\(UUID().uuidString)")
         tools = support.appending(path: "Tools")
@@ -148,7 +159,8 @@ public struct GitHubInstall: Sendable {
                 try? fm.removeItem(at: old)
             }
         }
-        let (lines, last) = try await host(["--fetch", spec, workspace.path, tools.path], input: Data())
+        let step = local.map { ["--local", $0.path] } ?? ["--fetch", spec]
+        let (lines, last) = try await host(step + [workspace.path, tools.path], input: Data())
         let plan = try JSONDecoder().decode(Plan.self, from: last)
         guard Extension.isName(plan.id), plan.title.unicodeScalars.count <= 80,
               plan.commands.allSatisfy({ Extension.isCommandName($0.name) && ["view", "no-view", "menu-bar"].contains($0.mode) }) else {
@@ -157,7 +169,7 @@ public struct GitHubInstall: Sendable {
         guard plan.preferences.allSatisfy({ $0.count <= 64 && $0.wholeMatch(of: #/[A-Za-z][A-Za-z0-9_-]*/#) != nil }) else {
             throw Refused(errorDescription: "its package.json names a preference outside a letter then letters, digits, _ and -")
         }
-        guard plan.tree.wholeMatch(of: #/[0-9a-f]{40}/#) != nil else { throw Refused(errorDescription: "GitHub's listing named no tree") }
+        guard local != nil || plan.tree.wholeMatch(of: #/[0-9a-f]{40}/#) != nil else { throw Refused(errorDescription: "GitHub's listing named no tree") }
         guard plan.packages.allSatisfy(Self.npm) else { throw Refused(errorDescription: "its lockfile names a package outside npm's names") }
         return (plan, lines)
     }

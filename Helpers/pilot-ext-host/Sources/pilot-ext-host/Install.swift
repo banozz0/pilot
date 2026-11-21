@@ -10,6 +10,9 @@ import JavaScriptCore
 //     checked against the listing's git blob hash, into <workspace>/source; its last line is the plan Pilot builds from (no question, T26):
 //     the manifest's commands and preferences, the packages its lockfile pins (its dependencies, and the dev-only ones its
 //     code imports), and whether esbuild is in <tools> yet.
+//   pilot-ext-host --local <folder> <workspace> <tools>
+//     the same, from a folder on this Mac (T32: `pilot ext test|install` of a Raycast extension's source, as /extension
+//     makes one): the files a fetch would take, read from the folder, regular files only, into <workspace>/source; then the plan.
 //   pilot-ext-host --build <workspace> <tools> [<pilot-ext-prelude.js>], the fetched plan on stdin
 //     esbuild 0.28.2 (once, checked by its pinned sha512, kept in <tools>), each package's tarball from the npm registry
 //     checked by the lockfile's sha512 and unpacked here (no npm, so no install script ever runs), then esbuild per
@@ -21,7 +24,7 @@ import JavaScriptCore
 // Nothing is written outside the two folders named.
 
 enum Installer {
-    static let modes: Set<String> = ["--fetch", "--build"]
+    static let modes: Set<String> = ["--fetch", "--local", "--build"]
 
     // esbuild as the npm registry serves it (@esbuild/darwin-arm64, MIT), pinned: the integrity is the one the prelude's
     // own lockfile records for this version (Helpers/pilot-ext-host/prelude/package-lock.json).
@@ -55,12 +58,14 @@ enum Installer {
                 switch arguments.first {
                 case "--fetch" where arguments.count == 4:
                     try await fetch(arguments[1], workspace: URL(filePath: arguments[2]), tools: URL(filePath: arguments[3]))
+                case "--local" where arguments.count == 4:
+                    try local(URL(filePath: arguments[1]), workspace: URL(filePath: arguments[2]), tools: URL(filePath: arguments[3]))
                 case "--build" where arguments.count == 3 || arguments.count == 4:
                     let input = FileHandle.standardInput.readDataToEndOfFile()
                     try await build(workspace: URL(filePath: arguments[1]), tools: URL(filePath: arguments[2]), plan: input,
                                     prelude: arguments.count == 4 ? URL(filePath: arguments[3]) : nil)
                 default:
-                    throw Refused("usage: pilot-ext-host --fetch <owner>/<repo>/<path> <workspace> <tools> | --build <workspace> <tools> [<prelude>]")
+                    throw Refused("usage: pilot-ext-host --fetch <owner>/<repo>/<path> <workspace> <tools> | --local <folder> <workspace> <tools> | --build <workspace> <tools> [<prelude>]")
                 }
             } catch {
                 say(["type": "error", "text": (error as? Refused)?.text ?? error.localizedDescription])
@@ -106,7 +111,7 @@ enum Installer {
                   ["100644", "100755"].contains(e["mode"] as? String ?? "") else { return nil }
             return (p, sha, e["size"] as? Int ?? 0)
         }
-        var wanted = blobs.filter { ["package.json", "package-lock.json", "tsconfig.json"].contains($0.path) || $0.path.hasPrefix("src/") || $0.path.hasPrefix("assets/") }
+        var wanted = blobs.filter { blob in buildFiles.contains(blob.path) || buildFolders.contains { blob.path.hasPrefix($0 + "/") } }
         guard wanted.contains(where: { $0.path == "package.json" }) else { throw Refused("\(path) has no package.json") }
         let source = workspace.appending(path: "source")
         // Then each top-level folder of the extension's own that a relative import in what was fetched names (T15: Google
@@ -121,10 +126,21 @@ enum Installer {
             wanted += batch
             have.formUnion(batch.map(\.path))
         }
+        try sayPlan(source, wanted: wanted, total: total, tree: treeSHA, from: "github:\(owner)/\(repo)/\(path)", tools: tools)
+    }
+
+    typealias Blob = (path: String, sha: String, size: Int)
+
+    /// What a build reads of an extension's folder, from GitHub or this Mac: these files and these folders' files.
+    static let buildFiles = ["package.json", "package-lock.json", "tsconfig.json"], buildFolders = ["src", "assets"]
+
+    /// The plan line, the last of `--fetch` and `--local`: `plan()` on what was read into `source`, with where it came
+    /// from, its size and whether esbuild is in `tools` yet.
+    static func sayPlan(_ source: URL, wanted: [Blob], total: Int, tree: String, from: String, tools: URL) throws {
         var plan = try plan(source, imports: importedPackages(wanted.map(\.path), in: source))
         plan["type"] = "plan"
-        plan["tree"] = treeSHA
-        plan["source"] = "github:\(owner)/\(repo)/\(path)"
+        plan["tree"] = tree
+        plan["source"] = from
         plan["files"] = wanted.count
         plan["bytes"] = total
         plan["esbuild"] = try esbuildReady(tools) == nil ? "download" : "reuse"
@@ -133,7 +149,41 @@ enum Installer {
         say(plan)
     }
 
-    typealias Blob = (path: String, sha: String, size: Int)
+    // MARK: Local
+
+    /// A Raycast extension's source on this Mac (T32), read as `fetch` reads a GitHub folder: package.json, package-lock.json,
+    /// tsconfig.json, src/** and assets/**, held to the same limits, copied into <workspace>/source; then the same plan, its
+    /// `tree` empty and its `source` the folder. Regular files only: a link is never followed, so nothing outside the folder
+    /// is read, and hidden files and node_modules stay behind (the build fetches the lockfile's packages itself).
+    static func local(_ folder: URL, workspace: URL, tools: URL) throws {
+        let fm = FileManager.default, root = folder.standardizedFileURL
+        func regular(_ url: URL) -> Int? {
+            var info = stat()
+            return lstat(url.path, &info) == 0 && info.st_mode & S_IFMT == S_IFREG ? Int(info.st_size) : nil
+        }
+        var wanted: [Blob] = buildFiles.compactMap { name in
+            regular(root.appending(path: name)).map { (name, "", $0) }
+        }
+        guard wanted.contains(where: { $0.path == "package.json" }) else { throw Refused("\(cut(folder.path)) has no package.json") }
+        for top in buildFolders {
+            guard let walk = fm.enumerator(at: root.appending(path: top), includingPropertiesForKeys: nil, options: [.skipsHiddenFiles]) else { continue }
+            for case let url as URL in walk {
+                guard let size = regular(url) else { continue }
+                wanted.append((String(url.standardizedFileURL.path.dropFirst(root.path.count + 1)), "", size))
+            }
+        }
+        let total = try checkLimits(wanted, folder.path)
+        let source = workspace.appending(path: "source")
+        for file in wanted {
+            guard safe(file.path) else { throw Refused("\(cut(file.path)) leaves its folder") }
+            let data = try Data(contentsOf: root.appending(path: file.path))
+            guard data.count <= fileLimit else { throw Refused("\(cut(file.path)) is \(data.count) bytes, past \(fileLimit)") }
+            let to = source.appending(path: file.path)
+            try fm.createDirectory(at: to.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try data.write(to: to)
+        }
+        try sayPlan(source, wanted: wanted, total: total, tree: "", from: folder.path, tools: tools)
+    }
 
     /// The source folder's limits, read from the listing before a file of `wanted` is fetched; answers its bytes.
     static func checkLimits(_ wanted: [Blob], _ path: String) throws -> Int {

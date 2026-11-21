@@ -336,7 +336,7 @@ struct ExplainerFilmRenders {
 
     /// Weather installed from the catalogue, its bar item asked once (Sven's Q515: its icon in the bar), in a folder of its own,
     /// beside a Pomodoro and the AI usage gauge (Sven's cut 6 note: a bunch of extensions in the bar). With `tea`, cut 6's own
-    /// extension too: a tea timer made with `pilot ext new --mode bar`, counting down.
+    /// extension too: a tea timer of its own, counting down.
     static func weatherBar(tea: Bool = false) async throws -> (bar: ExtensionBar, folder: URL) {
         let dir = try ExtensionSurfaceTests.folder()
         let exts = dir.appending(path: "Extensions")

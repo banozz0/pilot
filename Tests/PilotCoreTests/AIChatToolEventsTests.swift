@@ -141,8 +141,8 @@ struct AIChatToolEventsTests {
 
     @Test("A file tool's row names the tool and the file by its folder; the shell's names its command")
     func fileToolRows() {
-        let line = #"{"type":"assistant","message":{"content":[{"type":"tool_use","id":"w1","name":"Write","input":{"file_path":"/private/var/folders/x/T/pilot-ext/1a2b/open-ports/main.py","content":"…"}},{"type":"tool_use","id":"r1","name":"Read","input":{"file_path":"extension.json"}},{"type":"tool_use","id":"b1","name":"Bash","input":{"command":"pilot ext test open-ports"}},{"type":"tool_use","id":"g1","name":"Glob","input":{}}]}}"#
-        #expect(AIChat.Agent.claudeEvents(line) == [.toolCall(id: "w1", command: "Write open-ports/main.py"), .toolCall(id: "r1", command: "Read extension.json"),
+        let line = #"{"type":"assistant","message":{"content":[{"type":"tool_use","id":"w1","name":"Write","input":{"file_path":"/private/var/folders/x/T/pilot-ext/1a2b/open-ports/src/index.tsx","content":"…"}},{"type":"tool_use","id":"r1","name":"Read","input":{"file_path":"package.json"}},{"type":"tool_use","id":"b1","name":"Bash","input":{"command":"pilot ext test open-ports"}},{"type":"tool_use","id":"g1","name":"Glob","input":{}}]}}"#
+        #expect(AIChat.Agent.claudeEvents(line) == [.toolCall(id: "w1", command: "Write src/index.tsx"), .toolCall(id: "r1", command: "Read package.json"),
                                                     .toolCall(id: "b1", command: "pilot ext test open-ports"), .toolCall(id: "g1", command: "Glob")])
     }
 

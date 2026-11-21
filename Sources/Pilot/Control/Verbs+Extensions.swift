@@ -187,6 +187,46 @@ final class ExtensionTools {
         return staged
     }
 
+    /// A Raycast extension's source (ExtensionCheck.isRaycastSource, what /extension makes) built, then read into a temporary
+    /// copy named as `folder`, as `stage` reads one (T32): asked about unless inside `readable`, its manifest held to ExtensionCheck.source,
+    /// then the host's `--local` and `--build`, as a GitHub install's (esbuild, the lockfile's packages, no install script) in a
+    /// workspace beside Extensions, gone after. Nothing the extension wrote runs here: esbuild only reads it. Answers the
+    /// staged copy of the built folder (package.json, dist/, assets/) and what the build said.
+    func build(_ folder: URL, peer: ControlPeer?, verb: String) async throws(ControlError) -> (ExtensionCheck.Staged, GitHubInstall.Built) {
+        let real = folder.resolvingSymlinksInPath().standardizedFileURL
+        try await gate.allow(readAsk(real), peer: peer) { () throws(ControlError) in }
+        let problems = ExtensionCheck.source(real)
+        guard problems.isEmpty else {
+            throw ControlError(.badValue, "\(folder.path) fails the check, so nothing was \(verb):\n" + problems.map { "- \($0)" }.joined(separator: "\n"))
+        }
+        let local = GitHubInstall(local: real, extensions: extensions)
+        defer { local.remove() }
+        func refused(_ error: any Error, _ what: String) -> ControlError {
+            ControlError(.badValue, "\(folder.path) not \(what): \(ExtensionCatalogue.Problem.reason(error))")
+        }
+        let plan: GitHubInstall.Plan, built: GitHubInstall.Built
+        do { (plan, _) = try await local.fetch() } catch { throw refused(error, "read, nothing \(verb)") }
+        do { (built, _) = try await local.build(plan) } catch { throw refused(error, "built, nothing \(verb)") }
+        let staged: ExtensionCheck.Staged
+        do { staged = try await ExtensionCheck.stage(URL(filePath: built.folder)) } catch { throw refused(error, "built, nothing \(verb)") }
+        return (staged.read(from: folder), built)
+    }
+
+    /// `folder` read into a temporary copy for `verb`: built first when it is a Raycast extension's source (T32), else as it stands.
+    func read(_ folder: URL, peer: ControlPeer?, verb: String) async throws(ControlError) -> (ExtensionCheck.Staged, GitHubInstall.Built?) {
+        guard ExtensionCheck.isRaycastSource(folder) else { return (try await stage(folder, peer: peer, verb: verb), nil) }
+        let (staged, built) = try await build(folder, peer: peer, verb: verb)
+        return (staged, built)
+    }
+
+    /// What a build answers beside the check: the esbuild it used and the Node modules its bundles need that Pilot lacks.
+    static func built(_ built: GitHubInstall.Built) -> JSONValue {
+        var o: [String: JSONValue] = ["esbuild": .string("\(built.esbuildVersion), \(built.esbuild)")]
+        let missing = built.missingModules
+        if !missing.isEmpty { o["needs"] = .string("Node modules Pilot doesn't have yet: \(missing.joined(separator: ", ")); it may not work") }
+        return .object(o)
+    }
+
     /// `ext test`'s question: each command runs once as Sven, so it asks as a script does.
     static func testAsk(_ ext: Extension, from source: URL) -> ControlGate.Ask {
         let programs = Array(Set(ext.commands.map { program($0, in: ext) })).sorted()
@@ -201,9 +241,9 @@ final class ExtensionTools {
 
 extension ControlVerbs {
     static let extSubcommands: [(name: String, usage: String, help: String)] = [
-        ("new", "ext new <id> [--mode <mode>] [--title <title>] [--dir <folder>]", "Makes an extension folder from a template, outside Pilot's Extensions folder."),
-        ("test", "ext test [<folder>] [--check]", "Checks a folder as an extension, then runs each command once after Allow; --check only checks. A folder outside the temporary folders and ~/Downloads is read only after Allow."),
-        ("install", "ext install <folder> | ext install github:<owner>/<repo>/<folder>", "Copies a checked folder into Pilot's Extensions folder after Allow. A Raycast extension's GitHub folder installs straight away, with no question: fetched (each file checked by its git blob hash), then built on this Mac without Node (esbuild downloaded once into Tools and the lockfile's packages from the npm registry, each checked by its sha512, no install script run); its result line says how many packages came and which Node modules Pilot lacks."),
+        ("new", "ext new <id> [--mode <mode>] [--title <title>] [--dir <folder>]", "Makes a Raycast extension's source from Pilot's template for the mode, outside Pilot's Extensions folder: package.json (Raycast's manifest), src/index.tsx on @raycast/api, tsconfig.json and assets/extension-icon.png. It runs in Raycast too."),
+        ("test", "ext test [<folder>] [--check]", "Checks a folder as an extension, then runs each command once after Allow, HOME in a temporary folder, and answers what each drew or its error; --check only checks. A Raycast extension's source (package.json and src/) is built first, as an install builds it, and the check names esbuild's error. A folder outside the temporary folders and ~/Downloads is read only after Allow."),
+        ("install", "ext install <folder> | ext install github:<owner>/<repo>/<folder>", "Copies a checked folder into Pilot's Extensions folder after Allow; a Raycast extension's source is built first, and its built folder installs. A Raycast extension's GitHub folder installs straight away, with no question: fetched (each file checked by its git blob hash), then built on this Mac without Node (esbuild downloaded once into Tools and the lockfile's packages from the npm registry, each checked by its sha512, no install script run); its result line says how many packages came and which Node modules Pilot lacks."),
         ("remove", "ext remove <id>", "Moves an installed extension to the Trash after Allow; its data and settings stay."),
         ("show", "ext show <id>", "An installed extension's card: version, description, examples, what it says it touches, commands, the preferences it still needs."),
         ("broken", "ext broken", "The folders in Extensions that do not read as extensions, each with why."),
@@ -447,8 +487,9 @@ extension ControlVerbs {
         }
         do {
             let made = try mode.make(id: id, title: args.value("title"), templates: templates, in: parent)
-            return .object(["made": .string(made.path), "id": .string(id), "mode": .string(mode.rawValue),
-                            "next": .string("pilot ext test \(made.path)")])
+            let files = ExtensionCheck.files(in: made).map(JSONValue.string)
+            return .object(["made": .string(made.path), "id": .string(id), "mode": .string(mode.rawValue), "files": .array(files),
+                            "next": .string("pilot ext test \(made.path) --check")])
         } catch let problem as Extension.Problem {
             throw ControlError(.badValue, problem.reason)
         } catch {
@@ -458,16 +499,19 @@ extension ControlVerbs {
 
     private static func testExtension(_ args: ControlArguments, _ tools: ExtensionTools, cwd: String?, peer: ControlPeer?) async throws(ControlError) -> JSONValue {
         let folder = ExtensionTools.folder(args.positional.dropFirst().first ?? ".", cwd: cwd)
-        // The check and the runs read a copy, never the folder again.
-        let staged = try await tools.stage(folder, peer: peer, verb: "tested")
+        // The check and the runs read a copy, never the folder again; a Raycast extension's source is built first (T32).
+        let (staged, built) = try await tools.read(folder, peer: peer, verb: "tested")
         defer { staged.remove() }
         guard let ext = staged.ext else {
             throw ControlError(.badValue, "\(folder.path) fails the check, so nothing ran:\n" + staged.problems.map { "- \($0)" }.joined(separator: "\n"))
         }
         var answer: [String: JSONValue] = ["extension": .string(ext.id), "folder": .string(folder.path), "check": .string("passed")]
+        answer["built"] = built.map(ExtensionTools.built)
         guard !args.has("check") else { return .object(answer) }
         // The commands asked about are the ones run.
-        let runs = try await tools.gate.allow(ExtensionTools.testAsk(ext, from: staged.source), peer: peer) { () throws(ControlError) in await ExtensionCheck.runs(ext) }
+        let runs = try await tools.gate.allow(ExtensionTools.testAsk(ext, from: staged.source), peer: peer) { () throws(ControlError) in
+            await ExtensionCheck.runs(ext)
+        }
         guard runs.allSatisfy(\.ok) else {
             throw ControlError(.badValue, "\(runs.count { !$0.ok }) of \(runs.count) runs failed:\n" + runs.map { run in
                 "- \(run.command) (\(run.ranAs)): \(run.ok ? "ok" : run.why ?? "failed")\(run.first.isEmpty ? "" : "; first: \(run.first)")"
@@ -476,9 +520,34 @@ extension ControlVerbs {
         answer["runs"] = .array(runs.map { run in
             var entry: [String: JSONValue] = ["command": .string(run.command), "as": .string(run.ranAs), "first": .string(run.first)]
             entry["why"] = run.why.map(JSONValue.string)
+            entry["drew"] = run.drew.map(Self.drawn)
             return .object(entry)
         })
         return .object(answer)
+    }
+
+    /// The rows a test answer shows of a list.
+    static let shownRows = 8
+
+    /// What a test run drew, in `ext run`'s words (T32): a list's first rows (`shownRows`, the rest counted, so an agent's
+    /// test answer stays short) or its empty view, a detail, a form, a bar item's line and menu, or a no-view command's HUD
+    /// or actions (none performed).
+    static func drawn(_ drew: ExtensionCheck.Drawn) -> JSONValue {
+        switch drew {
+        case .list(.items(let items)):
+            .object(["items": .array(items.prefix(shownRows).map(Self.item)), "rows": .number(Double(items.count))])
+        case .list(.empty(let empty)): .object(["items": .array([]), "empty": Self.empty(empty)])
+        case .list(.detail(let detail)): .object(["detail": Self.detail(detail)])
+        case .list(.form(let form)): .object(["form": Self.form(form)])
+        case .surface(.bar(let bar)):
+            .object(["bar": .object(["text": .string(bar.text), "symbol": bar.symbol.map(JSONValue.string) ?? .null,
+                                     "image": .bool(bar.image != nil), "menu": .array(bar.blocks.map(Self.block))])])
+        case .surface(.blocks(let blocks, _)): .object(["blocks": .array(blocks.map(Self.block))])
+        case .ran(.hud(let line, _)): .object(["shows": line.map(JSONValue.string) ?? .null])
+        case .ran(.actions(let actions, _)): .object(["actions": .array(actions.map(Self.action)), "note": .string("not performed")])
+        case .list(.error(let why)), .surface(.error(let why)), .ran(.error(let why)), .ran(.failed(let why)): .object(["error": .string(why)])
+        case .ran(.timedOut): .object(["error": .string("timed out")])
+        }
     }
 
     private static func installExtension(_ args: ControlArguments, _ tools: ExtensionTools, cwd: String?, peer: ControlPeer?) async throws(ControlError) -> JSONValue {
@@ -486,8 +555,9 @@ extension ControlVerbs {
             return try await installFromGitHub(github, tools, peer: peer, from: "the pilot command")
         }
         let folder = ExtensionTools.folder(try args.word(1, "folder"), cwd: cwd)
-        // Read once into a copy: the check, the question and the install all read the copy's bytes.
-        let staged = try await tools.stage(folder, peer: peer, verb: "installed")
+        // Read once into a copy: the check, the question and the install all read the copy's bytes. A Raycast extension's
+        // source is built first, and the built folder is what installs, as from GitHub (T32).
+        let staged = try await tools.read(folder, peer: peer, verb: "installed").0
         defer { staged.remove() }
         guard let ext = staged.ext, let entry = staged.entry else {
             throw ControlError(.badValue, "\(folder.path) fails the check, so nothing was installed:\n" + staged.problems.map { "- \($0)" }.joined(separator: "\n"))
