@@ -277,7 +277,7 @@ final class PilotMenu {
         branchOpened(branch, opening: true)
         provideWindows(engine)
         provideMenuItems(listed: entries)
-        provideFinderSelection()
+        provideSelection()
         refreshRates()
         // The file index reads its saved index now, so it answers by the time Sven reaches the Files view.
         FileIndex.shared.start()
@@ -553,14 +553,20 @@ final class PilotMenu {
         }
     }
 
-    /// Dress selected folders and Reset folder icons while Finder is in front with folders selected (P43), the selection
-    /// read off the main thread.
-    private func provideFinderSelection() {
-        guard let model, previousApp?.bundleIdentifier == DesktopIcons.finder else { return }
+    /// What is selected in the app Sven was in, read off the main thread after the menu is up (SelectionActions, spec
+    /// launcher-best T11): over selected text Translate, Ask AI and Act on the selection… lead the root; over Finder's
+    /// files a search finds their actions, and Dress selected folders and Reset folder icons with folders among them
+    /// (P43); Act on the buffered files… leads while the buffer holds any. Nothing read is logged.
+    private func provideSelection() {
+        guard let model else { return }
+        let front = previousApp, commands = AICommandBook.shared.commands.map { (id: $0.id, title: $0.title) }
         Task { [weak self] in
-            let rows = await Task.detached(priority: .userInitiated) { FolderDesigns.rows(FolderDesigns.finderSelection()) }.value
+            let read = await SelectionActions.read(front: front)
+            let folders = read.folders
+            let designs = folders.isEmpty ? [] : await Task.detached(priority: .userInitiated) { FolderDesigns.rows(folders) }.value
             guard self?.model === model else { return }
-            model.nav.provide(.selection, rows)
+            SelectionActions.held = read.held
+            model.nav.provide(.selection, designs + SelectionActions.rows(read.held, buffer: SelectionActions.buffer, commands: commands))
         }
     }
 
@@ -1572,6 +1578,15 @@ final class PilotMenu {
             let words = model?.nav.clipboardWords
             close(restoreFocus: true)
             runWhenFrontmost(previous, id) { ClipboardHistory.shared.toggle(searching: words) }
+        // Act on the selection the menu opened over (T11): with that app in front again, as an action runs.
+        case .action(let id) where SelectionActions.owns(id):
+            close(restoreFocus: true)
+            let web: (String) -> Void = { [weak self] text in
+                let choice = self?.webSearch ?? WebSearchReader.read(browser: WebSearchReader.defaultBrowser(), fullDiskAccess: FileIndex.hasFullDiskAccess())
+                WebSearchReader.open(text, with: choice)
+            }
+            let frontmost: (@escaping () -> Void) -> Void = { [weak self] body in self?.runWhenFrontmost(previous, id, body) }
+            frontmost { SelectionActions.run(id, web: web, frontmost: frontmost) }
         case .action(let id):
             close(restoreFocus: true)
             runWhenFrontmost(previous, id) { RunCaller.with("menu") { Engine.shared?.action(id)?.run() } }

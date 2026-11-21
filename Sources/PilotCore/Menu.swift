@@ -670,6 +670,12 @@ public struct MenuEntry: Identifiable, Equatable, Sendable {
     /// Leads the root before typing, above its branches, and a search finds it as any row: the call to join (MeetingLink,
     /// spec launcher-best T5). Never a pick, so frecency, favourites and aliases leave it alone.
     public var leadsRoot = false
+    /// Acts on what was selected as the menu opened (SelectionActions, spec launcher-best T11): never a pick, as that
+    /// selection is gone by the next open.
+    public var onSelection = false
+    /// One of those that leads the root before typing, above the call to join and the branches: Translate and Ask AI on
+    /// selected text, Act on the buffered files.
+    public var leadsSelection = false
 
     public init(title: String, target: Target, home: MenuBranch? = nil, detail: String? = nil, detailIsKey: Bool = false,
                 running: Bool = false, inSearch: Bool = true, keywords: String? = nil, isAnswer: Bool = false, ownKind: Kind? = nil,
@@ -687,8 +693,8 @@ public struct MenuEntry: Identifiable, Equatable, Sendable {
     public var id: Target { target }
     /// The row's id in the frecency store: its target's, except an answer's, which answers one search and is never a pick
     /// (a translation's Download row opens an action, yet picking it says nothing about that action).
-    /// A browser history page (T9) is never one either, so no address visited lands in Pilot's ranking.
-    public var frecencyKey: String? { isAnswer || leadsRoot || ownKind == .history ? nil : target.key }
+    /// A browser history page (T9) is never one either, so no address visited lands in Pilot's ranking, nor a selection's row (T11).
+    public var frecencyKey: String? { isAnswer || leadsRoot || onSelection || ownKind == .history ? nil : target.key }
     /// What a search matches: the title and any keywords.
     public var searchText: String { keywords.map { "\(title) \($0)" } ?? title }
     /// An answer is its own kind (card agent-bo-95422933), so providing answers never replaces the rows of the kind its
@@ -1053,7 +1059,7 @@ public struct MenuNavigator: Sendable {
             // Nothing typed: the root's branches, or the kind Tab shows (rootKind); the Files view (also when Search inside
             // emptied it) lists nothing until Sven types.
             guard !query.isEmpty else {
-                rows = only.map(rootKind) ?? entries.filter(\.leadsRoot) + rootRows
+                rows = only.map(rootKind) ?? entries.filter(\.leadsSelection) + entries.filter(\.leadsRoot) + rootRows
                 kindCounts = Dictionary(uniqueKeysWithValues: [.app, .window, .action].map { k in (k, entries.count { Self.listedUntyped($0) && $0.kind.tab == k }) })
                 return
             }

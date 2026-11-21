@@ -6,9 +6,10 @@ import UniformTypeIdentifiers
 
 /// Hyper + right-click on a file (story 199): Pilot's own actions for the files under the pointer, as the menu's picker
 /// opened at the pointer, its rows those FileAction lists for their kind. Each row runs what Pilot already does to a file
-/// (Open With, Quick Look, Convert, Resize, folder designs); Read aloud and Ask AI read the file's text off
+/// (Open With, Quick Look, Convert, Resize, folder designs), then Send to an app and Add to the file buffer
+/// (SelectionActions, spec launcher-best T11); Read aloud and Ask AI read the file's text off
 /// the main thread first, at most FileAction.textLimit characters; Change icon sets a picture as the file's icon.
-/// Nothing is kept once the picker closes.
+/// Nothing is kept once the picker closes but the file buffer.
 @MainActor
 enum FileActionsMenu {
     /// What the press named: Finder's files under its point, read through Accessibility, on the desktop (no window
@@ -21,7 +22,7 @@ enum FileActionsMenu {
     static func open(_ source: Source, at point: CGPoint) {
         let anchor = CGPoint(x: point.x, y: Screens.primaryHeight - point.y)
         switch source {
-        case .files(let urls): show(urls, at: anchor)
+        case .files(let urls): show(urls, at: anchor, extra: SelectionActions.extras(urls))
         case .finder, .desktop:
             Task {
                 let urls = await Task.detached(priority: .userInitiated) { FinderItems.at(point) }.value
@@ -29,22 +30,30 @@ enum FileActionsMenu {
                     if case .desktop = source { return DesktopMenu.open(at: point) }
                     return flog.notice("file menu: no file under the pointer")
                 }
-                show(urls, at: anchor)
+                show(urls, at: anchor, extra: SelectionActions.extras(urls))
             }
         }
     }
 
-    /// The picker for `urls` with its top left at `anchor`. `own` runs an action itself and says so (Pilot Files' Cmd+K:
-    /// Move to Trash through FileOps, so Cmd+Z puts it back, and Open on a folder in the window); any other is `run`'s.
-    /// `except` leaves those rows out.
-    static func show(_ urls: [URL], at anchor: CGPoint, except: Set<FileAction> = [],
+    /// A row after the file actions that runs its own work: Send to an app and the file buffer (SelectionActions, spec
+    /// launcher-best T11).
+    struct Extra {
+        let title: String, symbol: String
+        let run: @MainActor () -> Void
+    }
+
+    /// The picker for `urls` with its top left at `anchor`, or at the menu's own spot without one (the selection's
+    /// actions, picked in the menu). `own` runs an action itself and says so (Pilot Files' Cmd+K: Move to Trash through
+    /// FileOps, so Cmd+Z puts it back, and Open on a folder in the window); any other is `run`'s. `except` leaves those
+    /// rows out; `extra` rows follow them.
+    static func show(_ urls: [URL], at anchor: CGPoint?, except: Set<FileAction> = [], extra: [Extra] = [],
                      own: @escaping @MainActor (FileAction) -> Bool = { _ in false }) {
         Task {
             // Off the main thread: a folder's icon is hashed to tell whether Pilot dressed it.
             let actions = await Task.detached(priority: .userInitiated) {
                 FileAction.list(for: urls.map(kind), customIcon: customIcon(urls)).filter { !except.contains($0) }
             }.value
-            pick(urls, actions, at: anchor, own: own)
+            pick(urls, actions, extra: extra, at: anchor, own: own)
         }
     }
 
@@ -57,12 +66,18 @@ enum FileActionsMenu {
         return false
     }
 
-    private static func pick(_ urls: [URL], _ actions: [FileAction], at anchor: CGPoint, own: @escaping @MainActor (FileAction) -> Bool) {
-        let rows = rows(actions)
+    private static func pick(_ urls: [URL], _ actions: [FileAction], extra: [Extra], at anchor: CGPoint?, own: @escaping @MainActor (FileAction) -> Bool) {
+        let rows = rows(actions) + extra.enumerated().map { i, e in
+            MenuEntry(title: e.title, target: .action(extraPrefix + String(i)), icon: .glyph(e.symbol, .accent))
+        }
         flog.notice("file menu: \(urls.count) files, \(rows.count) actions")
         PilotMenu.$anchor.withValue(anchor) {
             PilotMenu.shared.pick(rows, title: urls.count == 1 ? urls[0].lastPathComponent : "\(urls.count) items") { row in
-                guard case .action(let id) = row.target, let action = FileAction(rawValue: String(id.dropFirst(prefix.count))) else { return }
+                guard case .action(let id) = row.target else { return }
+                if id.hasPrefix(extraPrefix), let i = Int(id.dropFirst(extraPrefix.count)), extra.indices.contains(i) {
+                    return PilotMenu.$anchor.withValue(anchor) { extra[i].run() }
+                }
+                guard let action = FileAction(rawValue: String(id.dropFirst(prefix.count))) else { return }
                 // A picker the action opens (Convert to…, Open With…, Folder design…) opens at the pointer too.
                 PilotMenu.$anchor.withValue(anchor) { if !own(action) { run(action, on: urls) } }
             }
@@ -71,6 +86,8 @@ enum FileActionsMenu {
 
     /// A row's action id: this prefix and the FileAction's name.
     private static let prefix = "files."
+    /// An extra row's id: this prefix and its place among them.
+    private static let extraPrefix = "files.extra:"
 
     /// The picker's rows, one per action, each with its glyph; Move to Trash in red.
     static func rows(_ actions: [FileAction]) -> [MenuEntry] {
