@@ -440,6 +440,37 @@ struct FilesWindowRenders {
         shelf.doubleClicked(outside)
         print("OPEN PATH a double-click outside the selection: launched \(launched)")
         #expect(launched == [["bust.png"]])
+
+        // Sven, 2026-11-21: a look at a picture, big. Space (and the Quick Look button) on the four picked opens them in
+        // Pilot's viewer in the list's order, never LaunchServices; one picture alone steps through the folder's; a
+        // click on its tile's or the inspector's picture is the same look. A video, or a pick with one, keeps Quick Look.
+        ImageViewer.closeAll()
+        launched = []
+        shelf.selected = nil
+        for row in pickedRows { shelf.select(row, modifiers: .command) }
+        // Never Quick Look's own panel, which would come onto the screen.
+        try #require(shelf.viewerPictures(for: pickedRows[0]) != nil)
+        shelf.quickLook(pickedRows[0])
+        let looked = try #require(ImageViewer.model(showing: pics.appending(path: listOrder[0])), "Space on the picked: no viewer")
+        await looked.settled()
+        print("LOOK Space on four picked: launched \(launched), viewer \(looked.index + 1) of \(looked.files.count) \(looked.files.map(\.lastPathComponent)), closes on a click outside \(looked.closesOnClickOutside)")
+        #expect(launched.isEmpty && looked.files.map(\.lastPathComponent) == listOrder && looked.closesOnClickOutside && ImageViewer.openCount == 1)
+        looked.step(1)
+        #expect(looked.file.lastPathComponent == listOrder[1])
+        ImageViewer.closeAll()
+        shelf.select(outside)
+        #expect(shelf.look(outside))
+        let alone = try #require(ImageViewer.model(showing: pics.appending(path: "bust.png")), "a click on one picture: no viewer")
+        await alone.settled()
+        print("LOOK a click on bust.png alone: viewer \(alone.index + 1) of \(alone.files.count) \(alone.files.map(\.lastPathComponent))")
+        #expect(alone.files.count == 7 && !alone.files.contains { $0.pathExtension == "mp4" })
+        ImageViewer.closeAll()
+        let video = try #require(shelf.shown.first { $0.url.pathExtension == "mp4" })
+        shelf.select(video)
+        #expect(shelf.viewerPictures(for: video) == nil && !shelf.look(video))
+        for row in pickedRows { shelf.select(row, modifiers: .command) }
+        print("LOOK a video, and a pick with one: viewer pictures \(String(describing: shelf.viewerPictures(for: video))), viewers \(ImageViewer.openCount)")
+        #expect(shelf.viewerPictures(for: video) == nil && ImageViewer.openCount == 0)
     }
 
     /// The tree under `folder`: each item's path from it and its size, so a write undone leaves it as it was.

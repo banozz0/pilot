@@ -357,7 +357,7 @@ extension NSAttributedString.Key {
 }
 
 /// The text view: draws inline code on its fill, each checkbox over its hidden `- [ ]` and each picture under its line,
-/// toggles a box on a click, and saves a picture pasted or dropped in.
+/// toggles a box on a click, opens a picture big on a click (NotesPictureClick), and saves a picture pasted or dropped in.
 final class NotesTextView: NSTextView {
     var style = MarkdownStyle(style: .unstyled)
     /// Whether it takes the keyboard when its window becomes key.
@@ -1030,9 +1030,9 @@ final class NotesTextView: NSTextView {
 
     /// Each picture and where it draws, in view coordinates, at the line's start: on its line, its link hidden (under the
     /// line when a picture's link reads as words, which no restyle does now).
-    func pictureRects() -> [(rect: NSRect, image: NSImage)] {
+    func pictureRects() -> [(rect: NSRect, image: NSImage, link: String)] {
         guard let storage = textStorage, let layout = layoutManager else { return [] }
-        var shown: [(NSRect, NSImage)] = []
+        var shown: [(NSRect, NSImage, String)] = []
         storage.enumerateAttribute(.notesImage, in: NSRange(location: 0, length: storage.length)) { value, range, _ in
             guard let link = value as? String, let image = picture(link), let size = pictureSize(link) else { return }
             // The line's own fragment: a hidden link's glyphs are null ones, so its newline's, when it has one.
@@ -1041,7 +1041,7 @@ final class NotesTextView: NSTextView {
             // The link hidden, the picture is the line.
             let hidden = storage.attribute(.notesHidden, at: range.location, effectiveRange: nil) != nil
             let height = hidden ? 0 : (storage.attribute(.paragraphStyle, at: range.location, effectiveRange: nil) as? NSParagraphStyle)?.minimumLineHeight ?? style.line
-            shown.append((NSRect(x: line.rect.minX, y: line.rect.minY + height + Self.pictureGap, width: size.width, height: size.height), image))
+            shown.append((NSRect(x: line.rect.minX, y: line.rect.minY + height + Self.pictureGap, width: size.width, height: size.height), image, link))
         }
         return shown
     }
@@ -1262,6 +1262,7 @@ final class NotesTextView: NSTextView {
         if isEditable, let box = checkboxes().first(where: { $0.rect.insetBy(dx: -3, dy: -3).contains(point) }) {
             return toggle(box.range, ticked: box.ticked)
         }
+        if openPicture(event) { return }
         // NSTextView tracks the drag until the release; the format bar waits for it.
         tracking = true
         super.mouseDown(with: event)
@@ -1354,6 +1355,7 @@ final class NotesTextView: NSTextView {
         super.resetCursorRects()
         guard isEditable else { return }
         for box in checkboxes() { addCursorRect(box.rect, cursor: .pointingHand) }
+        addPictureCursors()
     }
 }
 

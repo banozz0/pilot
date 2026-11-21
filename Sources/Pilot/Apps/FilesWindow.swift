@@ -9,8 +9,8 @@ import UniformTypeIdentifiers
 
 /// Pilot Files (P85, spec pilot-1.1 T10, T11): a file browser in windows of its own, like Finder (Q772), in T5's
 /// pick B (Q784): the sidebar (Places, Favourites, Devices), the folder as a list or a grid, and an inspector that never
-/// closes. A folder opens in place, a file opens through NSWorkspace, Space Quick Looks it, search asks the pilot-files
-/// index inside the shown folder. Hidden apps (Install › Hidden apps) never show, in the listing or in a search.
+/// closes. A folder opens in place, a file opens through NSWorkspace, Space Quick Looks it (a picture: Pilot's image
+/// viewer, as a click on a grid tile's picture or the inspector's does), search asks the pilot-files index inside the shown folder. Hidden apps (Install › Hidden apps) never show, in the listing or in a search.
 /// The file actions (T11: rename, Trash, copy, move, new folder, undo; T55: new file from a template, cut and paste) each
 /// go through T6's FileOps in `FilesModel.run`; every refusal it gives shows in the window. Confirmed permanent Bin
 /// deletion uses TrashDeletion separately and cannot be undone. T55 adds the
@@ -708,10 +708,30 @@ final class FilesModel {
             .map { $0.title == "Open" ? ("Open", { [weak self] in self?.openPicked(item) }) : $0 }
     }
 
-    /// Space and Quick Look: the item in Quick Look, or the panel closed when it shows.
+    /// Space and Quick Look: pictures in Pilot's image viewer (look), anything else in Quick Look, or its panel closed
+    /// when it shows. The viewer's own Space closes it.
     func quickLook(_ item: FolderItem) {
         if QLPreviewPanel.sharedPreviewPanelExists(), let panel = QLPreviewPanel.shared(), panel.isVisible { return panel.orderOut(nil) }
+        if look(item) { return }
         FileActions.preview(item.url.path(percentEncoded: false))
+    }
+
+    /// The pictures a look at `item` shows: the selection when `item` is in it, else `item`, when every one is a picture
+    /// the viewer reads; nil for anything else.
+    func viewerPictures(for item: FolderItem) -> [URL]? {
+        let picked = selections(for: item)
+        guard !picked.isEmpty, picked.allSatisfy({ !$0.isFolder && ViewerImages.viewable($0.url) }) else { return nil }
+        return picked.map(\.url)
+    }
+
+    /// A picture looked at big (Sven, 2026-11-21): Space, the Quick Look button, a click on a grid tile's picture or the
+    /// inspector's open it in Pilot's image viewer, Left and Right through the picked pictures (one: its folder's), Esc,
+    /// Space or a click outside closing it. False when it is not a picture the viewer reads.
+    @discardableResult
+    func look(_ item: FolderItem) -> Bool {
+        guard let pictures = viewerPictures(for: item), ImageViewer.show(pictures, closesOnClickOutside: true) != nil else { return false }
+        filesLog.notice("files: \(pictures.count) picture(s) in the viewer")
+        return true
     }
 
     /// Cmd+I: Pilot's Show preview window, the file and its facts (Finder's Get Info would need Finder's automation).
@@ -1871,7 +1891,7 @@ private struct FilesContent: View {
 
     /// The list's keys, only while the list or grid has focus and no name is being edited (a key typed in the search or
     /// rename field never moves the selection or a file): the arrows step (left and right in the grid), Space Quick
-    /// Looks, and once per press Return renames, Cmd+Backspace trashes, Cmd+C copies, Cmd+X cuts (Esc unmarks), Cmd+V
+    /// Looks (pictures in Pilot's image viewer), and once per press Return renames, Cmd+Backspace trashes, Cmd+C copies, Cmd+X cuts (Esc unmarks), Cmd+V
     /// moves what was cut or pastes a copy, Cmd+Option+V moves, Cmd+Shift+N makes a folder, Cmd+Z undoes. Pilot has no
     /// Edit menu, so these keys are the window's own.
     private func key(_ press: KeyPress) -> KeyPress.Result {
@@ -2162,6 +2182,29 @@ private struct PickedFrame: ViewModifier {
     }
 }
 
+/// A click on a picture the viewer reads (a grid tile's, the inspector's) opens it big in Pilot's image viewer; Shift
+/// and Cmd clicks only pick, as before. The double-click is its own and comes first, so it still opens the file, and the
+/// single click waits out the double-click's interval (a second click would land in the viewer). Anything else: no change.
+private struct FilesPictureLook: ViewModifier {
+    let item: FolderItem
+    let model: FilesModel
+    var on = true
+
+    func body(content: Content) -> some View {
+        if on, !item.isFolder, ViewerImages.viewable(item.url) {
+            content
+                .onTapGesture(count: 2) { model.doubleClicked(item) }
+                .onTapGesture {
+                    guard NSEvent.modifierFlags.isDisjoint(with: [.command, .shift]) else { return }
+                    model.look(item)
+                }
+                .pointerStyle(.link)
+        } else {
+            content
+        }
+    }
+}
+
 private struct FilesTile: View {
     @Environment(\.ink) private var ink
     let item: FolderItem
@@ -2178,6 +2221,7 @@ private struct FilesTile: View {
                     Image(nsImage: picture).resizable().aspectRatio(contentMode: FilesModel.isImage(item) ? .fill : .fit)
                         .frame(maxWidth: 120, maxHeight: 84)
                         .clipShape(shape).overlay { shape.strokeBorder(ink.text.opacity(0.1)) }
+                        .modifier(FilesPictureLook(item: item, model: model))
                 } else {
                     FilesIcon(item: item, model: model, side: 64)
                 }
@@ -2231,7 +2275,7 @@ private struct FilesIcon: View {
 }
 
 /// The inspector, always open: the selection (else the shown folder) as a large preview, its name, "kind · size", its
-/// facts, and at the foot Open, Quick Look and More. The preview is the inspector's width and as tall as the picture's
+/// facts, and at the foot Open, Quick Look and More; a click on a picture's preview opens it big (FilesPictureLook). The preview is the inspector's width and as tall as the picture's
 /// shape allows (Sven, 2026-11-04: bigger), QuickLook's thumbnail for pictures, video and documents, else the item's icon.
 private struct FilesInspector: View {
     @Environment(\.ink) private var ink
@@ -2257,6 +2301,7 @@ private struct FilesInspector: View {
             // The look is an overlay, so a picture never widens the column.
             ink.well.frame(maxWidth: .infinity).frame(height: height).overlay { look }
                 .clipShape(RoundedRectangle(cornerRadius: ink.radius(10), style: .continuous))
+                .modifier(FilesPictureLook(item: item, model: model, on: picture != nil))
                 .overlay { RoundedRectangle(cornerRadius: ink.radius(10), style: .continuous).strokeBorder(ink.line2) }
             Text(item.name).font(ink.ui(15, .semibold)).foregroundStyle(ink.text).lineLimit(2).truncationMode(.middle).padding(.top, 16)
             Text(item.size.map { "\(item.kind) · \(FolderListing.size($0))" } ?? item.kind).font(ink.ui(12.5)).foregroundStyle(ink.muted)
