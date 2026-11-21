@@ -68,7 +68,8 @@ struct InstrumentBindsList: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(Theme.windowFill(style.color(\.canvas)))
         .onChange(of: seed, initial: true) { search = seed }
-        .onAppear { if seed.isEmpty { searching = true } }
+        // On each return visit too (page-switch-3: a kept page shown again appears no more).
+        .onPageArrive { if seed.isEmpty { searching = true } }
         .bindsDialogs(editing: $editing, switchingTo: $switchingTo, confirmingResetAll: $confirmingResetAll, refusal: $refusal)
     }
 

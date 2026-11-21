@@ -74,7 +74,7 @@ struct RingsPage: View {
             }
             .padding(.top, 4)
         }
-        .onAppear {
+        .onPageArrive {
             states = engine.rings.states()
             roles = engine.rings.roleApps()
             menu = RingMenuSource(engine: engine)

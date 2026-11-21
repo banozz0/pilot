@@ -62,7 +62,7 @@ struct OpenWithPage: View {
             // Story 160's Apps for keys: the app or site each role key opens (Q462, Q463).
             AppRolesBlock().id(AppSection.appsForKeys)
         }
-        .onAppear {
+        .onPageArrive {
             // Every kind's apps from LaunchServices hold the main thread ~40 ms: read before the first draw, then on a
             // visit after it, just after the page shows, so the switch does not wait on them (page-perf).
             if kinds.rows.isEmpty { kinds.load() } else { Task { kinds.load() } }

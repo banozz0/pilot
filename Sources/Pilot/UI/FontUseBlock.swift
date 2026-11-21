@@ -28,7 +28,7 @@ struct FontUseBlock: View {
             BlockRow { pilotRow(.mono, "Mono", standard: ink.isInstrument ? "Geist Mono" : "JetBrains Mono") }
             ForEach(rows, id: \.place.id) { row in BlockRow { appRow(row) } }
         }
-        .onAppear(perform: refresh)
+        .onPageArrive(refresh)
         .task { families = await Task.detached { (InstalledFonts.families(), InstalledFonts.monoFamilies()) }.value }
     }
 

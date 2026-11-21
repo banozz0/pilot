@@ -49,7 +49,7 @@ struct InstrumentHome: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .onChange(of: ownQuery, initial: true) { if windowHits == nil { ownHits.refresh(ownQuery, engine: engine, schema: sources.schema) } }
         .modifier(TakesSearchKey(requests: model?.searchRequests, searching: $searching))
-        .onAppear { if model?.searchOpen == true { searching = true } }
+        .onPageArrive { if model?.searchOpen == true { searching = true } }
     }
 
     /// The date line and the greeting; beside them Hyper's state, what needs you, or how many settings match.

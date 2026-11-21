@@ -181,7 +181,7 @@ struct FloatAppsBlock: View {
             }
             .frame(height: 300)
         }
-        .onAppear {
+        .onPageArrive {
             floatedFirst = FloatApps.floated(block.block)
             if apps == nil { installed = Self.lastInstalled }
             list()

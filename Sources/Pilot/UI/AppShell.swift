@@ -384,7 +384,13 @@ extension View {
 
     /// `action` as this view appears and each time its kept page shows again: onAppear's twin of `onPageLeave`.
     func onPageArrive(_ action: @escaping () -> Void) -> some View {
-        onAppear(perform: action).modifier(PageShownChange(shown: action, hidden: {}))
+        onAppear(perform: action).onPageReturn(action)
+    }
+
+    /// `action` each time this view's kept page shows again, after the switch has drawn: a one-shot read a `.task` makes
+    /// as the page is built, again on each return visit, as when a removed page was put back.
+    func onPageReturn(_ action: @escaping () -> Void) -> some View {
+        modifier(PageShownChange(shown: action, hidden: {}))
     }
 }
 
