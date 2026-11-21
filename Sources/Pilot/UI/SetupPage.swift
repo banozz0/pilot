@@ -129,15 +129,17 @@ struct SetupPage: View {
 
     /// Every part, each its own card with its controls and keys showing (Sven, 2026-10-07: "fill them with whats needed"),
     /// in two columns once the window is wide enough; nothing folds, so a link only scrolls to its part.
+    /// Each column's cards built as they scroll in (page-switch-3: every card up front held a first visit 150 ms in a
+    /// debug build, the ones under the fold about 60 of it), whole once a key or a link asks for a part.
     private var cards: some View {
         Group {
             if wide {
                 HStack(alignment: .top, spacing: 14) {
-                    VStack(spacing: 14) { ForEach(Self.left, id: \.self) { card($0) } }
-                    VStack(spacing: 14) { ForEach(Self.right, id: \.self) { card($0) } }
+                    PageStack(spacing: 14, asked: section != nil) { ForEach(Self.left, id: \.self) { card($0) } }
+                    PageStack(spacing: 14, asked: section != nil) { ForEach(Self.right, id: \.self) { card($0) } }
                 }
             } else {
-                VStack(spacing: 14) { ForEach(Self.front, id: \.self) { card($0) } }
+                PageStack(spacing: 14, asked: section != nil) { ForEach(Self.front, id: \.self) { card($0) } }
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
