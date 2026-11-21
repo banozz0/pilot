@@ -208,6 +208,9 @@ struct ExtensionCatalogueTests {
         let calls = Calls()
         let data = try await Self.github(status: 200, body: Data("hello".utf8), calls: calls).fetch("index.json", 100)
         #expect(data == Data("hello".utf8) && calls.gh.withLock { $0 }.isEmpty)
+        // A test build's Info.plist names its pushed branch; a release's names none, and an odd name reads main.
+        #expect(ExtensionCatalogue.branch(info: nil) == "main" && ExtensionCatalogue.branch(info: ["PilotCatalogueBranch": "ext-clean-work"]) == "ext-clean-work")
+        #expect(ExtensionCatalogue.branch(info: ["PilotCatalogueBranch": "../x"]) == "main" && ExtensionCatalogue.branch(info: ["PilotCatalogueBranch": "a b"]) == "main")
         await #expect(throws: ExtensionCatalogue.Problem.tooBig(path: "index.json", limit: 3)) {
             try await Self.github(status: 200, body: Data("hello".utf8)).fetch("index.json", 3)
         }

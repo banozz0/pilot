@@ -29,6 +29,8 @@ struct ExtensionsPageView: View {
     @State private var filter = ExtensionsPage.Filter.all
     @State private var query = ""
     @State private var picked: String?
+    /// Move to Trash on the old Raycast line was pressed once: it asks Sure? before the folders go.
+    @State private var trashingRaycast = false
     /// The row the page just landed on, lit for a moment.
     @State private var lit: String?
     /// Measured, never assumed: starting wide would hold the side column open and the page past a narrow window.
@@ -171,6 +173,7 @@ struct ExtensionsPageView: View {
                 ForEach(listing.installed) { entry in row(entry, current: current) }
                 if filter == .all { catalogueRows(listing, current: current) }
                 if !settings.broken.isEmpty, filter == .all, query.isEmpty { broken }
+                if !settings.raycast.isEmpty, filter == .all, query.isEmpty { raycast }
             }
             .padding(.horizontal, 8).padding(.top, 6).padding(.bottom, 14)
         }
@@ -306,6 +309,29 @@ struct ExtensionsPageView: View {
             }
         }
         .padding(.top, 8)
+    }
+
+    /// Old Raycast folders an earlier test build left: one quiet line, never a row each, whose Move to Trash asks first.
+    private var raycast: some View {
+        let n = settings.raycast.count
+        return HStack(spacing: 8) {
+            if trashingRaycast {
+                Text("Move \(Self.plural(n, "folder")) to the Trash?").font(ink.ui(11.5)).foregroundStyle(ink.text)
+                Spacer(minLength: 6)
+                Button("Cancel") { trashingRaycast = false }.buttonStyle(.pilot)
+                Button("Yes, Move") {
+                    trashingRaycast = false
+                    Task { await settings.trashRaycast() }
+                }
+                .buttonStyle(PilotButtonStyle(primary: true, destructive: true))
+            } else {
+                Text(Self.plural(n, "old Raycast extension")).font(ink.ui(11.5)).foregroundStyle(ink.muted)
+                    .help(settings.raycast.joined(separator: ", "))
+                Spacer(minLength: 6)
+                Button("Move to Trash") { trashingRaycast = true }.buttonStyle(.pilot)
+            }
+        }
+        .padding(.horizontal, 10).padding(.top, 10)
     }
 
     // MARK: The detail

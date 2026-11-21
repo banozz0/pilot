@@ -219,17 +219,35 @@ public struct CleanProgress: Equatable, Sendable {
 
 /// The Clean branch's rows (story 117).
 public enum CleanMenu {
-    /// What a Clean row is: the clean, the disk explorer, Install Mole, or a line to read (an item, a note), by its place,
-    /// since a row's target is its id in the list and Mole repeats titles ("Obsolete VS Code extension").
-    public enum Pick: Hashable, Sendable { case run, analyze, install, note(Int), reports }
+    /// What a Clean row is: Mole's whole clean, the ticked paths to the Trash, the disk explorer, Install Mole, a line to
+    /// read (an item, a note) by its place, since a row's target is its id in the list and Mole repeats titles ("Obsolete
+    /// VS Code extension"), a part's plain line when Mole listed none of its paths, or a path's tick by its id.
+    public enum Pick: Hashable, Sendable {
+        case run, ticked, analyze, install, note(Int), unlisted(String), path(String), reports
+
+        /// A line to read or a tick: Return keeps the menu open on it.
+        public var staysOpen: Bool {
+            switch self {
+            case .note, .unlisted, .path: true
+            default: false
+            }
+        }
+    }
+
+    /// A part of Mole's preview: its `➤` section, which its file list heads `=== part ===` too (Mole records only the
+    /// section a path was found in, never the item line).
+    public static func part(_ section: String) -> MenuBranch { .category(section, in: .clean) }
 
     /// With Mole missing, one row installs it through Install's confirm step, Homebrew with it in one run when that is
     /// missing too (Sven, 2026-10-29, Q557). While the preview runs, nothing, so the menu says it is previewing. Then the
-    /// clean with its total and exact command, each item, a note when the system caches were skipped, and Disk usage.
-    /// Reports (story 153) ends the list.
-    public static func entries(_ preview: CleanPreview?, mole: Bool, homebrew: Bool = true) -> [MenuEntry] {
-        func row(_ title: String, _ pick: Pick, _ detail: String? = nil, _ icon: MenuIcon) -> MenuEntry {
-            MenuEntry(title: title, target: .clean(pick), home: .clean, detail: detail, inSearch: false, icon: icon)
+    /// clean with its total and exact command (with a path unticked, Clean ticked first, moving only the ticked paths to
+    /// the Trash, then Clean all: Q310, Q311), a row per part that opens to Mole's lines for it and its paths one by one,
+    /// biggest first, each with its tick, a note when the system caches were skipped, and Disk usage. Reports (story 153)
+    /// ends the list.
+    public static func entries(_ preview: CleanPreview?, mole: Bool, homebrew: Bool = true, unticked: Set<String> = [],
+                               home: String = NSHomeDirectory()) -> [MenuEntry] {
+        func row(_ title: String, _ pick: Pick, _ detail: String? = nil, _ icon: MenuIcon, in branch: MenuBranch = .clean) -> MenuEntry {
+            MenuEntry(title: title, target: .clean(pick), home: branch, detail: detail, inSearch: false, icon: icon)
         }
         let reports = row("Reports", .reports, "every Update and Clean run, kept", MenuIcon.reports)
         guard mole else {
@@ -238,14 +256,43 @@ public enum CleanMenu {
             return [install, reports]
         }
         guard let preview else { return [] }
-        let items = preview.items.enumerated().map { i, item in
-            row(item.title, .note(i), item.detail.isEmpty ? item.section : "\(item.section) · \(item.detail)",
-                MenuIcon.clean(title: item.title, section: item.section))
+        let list = preview.list, ticked = list.rows.filter { !unticked.contains($0.id) }
+        func clean(_ word: String) -> MenuEntry {
+            row([word, preview.total].compactMap(\.self).joined(separator: " "), .run, Mole.clean, .glyph("sparkles", .good))
         }
-        let system = preview.systemSkipped
-            ? [row("System caches: the clean asks for your password", .note(items.count), nil, .glyph("lock", .amber))] : []
-        return [row(["Clean", preview.total].compactMap(\.self).joined(separator: " "), .run, Mole.clean, .glyph("sparkles", .good))] + items + system
-            + [row("Disk usage", .analyze, Mole.analyze, .glyph("chart.pie", .third)), reports]
+        var rows = ticked.count == list.rows.count ? [clean("Clean")] : [
+            row("Clean ticked \(RemoveList.size(CleanList.bytes(ticked)))", .ticked,
+                "\(ticked.count) of \(list.rows.count) paths to the Trash", .glyph("checkmark.square", .good)),
+            clean("Clean all")]
+        var sections: [String] = []
+        for name in preview.items.map(\.section) + list.parts.map(\.name) where !sections.contains(name) { sections.append(name) }
+        let parts = Dictionary(list.parts.map { ($0.name, $0.rows) }) { first, _ in first }
+        for section in sections {
+            let branch = part(section), lines = preview.items.enumerated().filter { $0.element.section == section }
+            let paths = (parts[section] ?? []).sorted { ($0.bytes ?? -1) > ($1.bytes ?? -1) }
+            let named = lines.map(\.element.title).joined(separator: ", ")
+            let on = paths.filter { !unticked.contains($0.id) }
+            let state = paths.isEmpty ? "not listed one by one"
+                : "\(on.count) of \(paths.count) ticked, \(RemoveList.size(CleanList.bytes(on)))"
+            rows.append(MenuEntry(title: section, target: .branch(branch), home: .clean, detail: named.isEmpty ? state : "\(named) · \(state)",
+                                  inSearch: false, icon: MenuIcon.clean(title: lines.first?.element.title ?? section, section: section)))
+            rows += lines.map { i, item in
+                row(item.title, .note(i), item.detail.isEmpty ? nil : item.detail, MenuIcon.clean(title: item.title, section: item.section), in: branch)
+            }
+            if paths.isEmpty {
+                rows.append(row("Mole lists no paths here: Clean all cleans these, Clean ticked leaves them", .unlisted(section), nil,
+                                .glyph("info.circle", .neutral), in: branch))
+            }
+            rows += paths.map { path in
+                let tick = !unticked.contains(path.id)
+                return row(AppConfigs.tilde(path.path, home: home), .path(path.id), path.count > 1 ? "\(path.count) items · \(path.size)" : path.size,
+                           .glyph(tick ? "checkmark.square.fill" : "square", tick ? .good : .neutral), in: branch)
+            }
+        }
+        if preview.systemSkipped {
+            rows.append(row("System caches: the clean asks for your password", .note(preview.items.count), nil, .glyph("lock", .amber)))
+        }
+        return rows + [row("Disk usage", .analyze, Mole.analyze, .glyph("chart.pie", .third)), reports]
     }
 
     /// What the branch says while Mole previews: the section it is on and what it found so far, once it has printed any.
@@ -274,6 +321,9 @@ public final class CleanPreviewer {
     @ObservationIgnored private var generation = 0
     /// How far the run has got; nil when none runs.
     public private(set) var progress: CleanProgress?
+    /// The kept list's paths unticked, by id, in Hyper+Space or on Update & Clean (one set for both, and `pilot clean`
+    /// lists it): they stay when Clean ticked runs. A new run ticks them all again.
+    public private(set) var unticked: Set<String> = []
     /// Each run's end, once, whether or not a menu waits on it: its preview, or nil when it failed.
     @ObservationIgnored public var onFinish: ((CleanPreview?) -> Void)?
     /// Each new run's start, with who asked for it (the menu, the command), so a log says what started Mole.
@@ -317,6 +367,7 @@ public final class CleanPreviewer {
     public func drop() {
         generation += 1
         kept = nil
+        unticked = []
         progress = nil
         running?.cancel()
         running = nil
@@ -328,7 +379,19 @@ public final class CleanPreviewer {
         guard let at = kept?.at, var preview = kept?.preview else { return }
         preview.list = preview.list.without(ids)
         kept = (at, preview)
+        unticked.subtract(ids)
     }
+
+    /// Ticks the path `id` names when it is unticked, else unticks it.
+    public func toggle(_ id: String) { tick([id], on: unticked.contains(id)) }
+
+    /// Ticks the paths `ids` name when `on`, else unticks them (a part's tick on Update & Clean).
+    public func tick(_ ids: some Sequence<String>, on: Bool) {
+        if on { unticked.subtract(ids) } else { unticked.formUnion(ids) }
+    }
+
+    /// The kept list's ticked paths' ids; none when no list is kept.
+    public var ticked: [String] { (ready?.list.rows ?? []).map(\.id).filter { !unticked.contains($0) } }
 
     private func heard(_ line: String, in run: Int) {
         guard run == generation, var next = progress else { return }
@@ -341,7 +404,7 @@ public final class CleanPreviewer {
         guard run == generation else { return }
         running = nil
         progress = nil
-        if let preview { kept = (now(), preview) }
+        if let preview { kept = (now(), preview); unticked = [] }
         onFinish?(preview)
     }
 }

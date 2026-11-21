@@ -144,6 +144,10 @@ struct SandboxHost {
         // PILOT_SANDBOX_INFO's, a built bundle's Contents/Info.plist, to read the route that build takes.
         let info = ProcessInfo.processInfo.environment["PILOT_SANDBOX_INFO"].map { URL(filePath: $0) }
             ?? URL(filePath: #filePath).deletingLastPathComponent().appending(path: "../../Packaging/Info.plist")
+        // That build's catalogue branch too (a test build's PilotCatalogueBranch), so `ext catalogue` reads what it reads.
+        if ProcessInfo.processInfo.environment["PILOT_SANDBOX_INFO"] != nil {
+            ExtensionCatalogue.branch = ExtensionCatalogue.branch(info: NSDictionary(contentsOf: info) as? [String: Any])
+        }
         // The notes in this run's throwaway folder, never Sven's Documents › Pilot Notes, which a fresh Engine's nil setting
         // names; PILOT_SANDBOX_NOTES=<file.md> copies that note in first, so `pilot list notes` lists it.
         let notes = PilotFolder.support.appending(path: "Sandbox Notes", directoryHint: .isDirectory)

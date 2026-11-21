@@ -201,6 +201,12 @@ final class ControlJobsTests {
         #expect(parts.map { $0["part"] } == [.string("Browsers"), .string("Developer tools")])
         let id = Self.list(parts[1]["rows"]).map(Self.fields)[0]["id"]
         #expect(id == .string(Self.cleanList.rows[1].id) && Self.list(parts[1]["rows"]).map(Self.fields)[0]["ticked"] == .bool(true))
+        // A path unticked in Hyper+Space or on Update & Clean (one set of ticks) lists unticked, and leaves the ticked total.
+        jobs.previewer.toggle(Self.cleanList.rows[1].id)
+        let unticked = await object("clean")
+        #expect(Self.list(Self.list(unticked["parts"]).map(Self.fields)[1]["rows"]).map(Self.fields)[0]["ticked"] == .bool(false))
+        #expect(unticked["ticked"] == .string(RemoveList.size(CleanList.bytes([Self.cleanList.rows[0]]))))
+        jobs.previewer.toggle(Self.cleanList.rows[1].id)
         #expect(await ask("clean", "0000000000").error?.code == .badValue && trashed.isEmpty)
         allow = false
         #expect(await ask("clean", Self.cleanList.rows[1].id).error?.code == .denied && trashed.isEmpty)

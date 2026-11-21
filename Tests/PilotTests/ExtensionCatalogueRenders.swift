@@ -66,6 +66,49 @@ struct ExtensionCatalogueRenders {
         try await shot("instrument-reading", reading, style: .instrument, theme: "nightwatch")
     }
 
+    /// Old Raycast folders (package.json, no extension.json) beside one broken extension, as Sven's Extensions folder held
+    /// them (2026-11-21): the page's state printed and the page drawn, in a temporary folder only.
+    /// `PILOT_RENDER_DIR=<fresh dir> swift test --filter "Raycast leftovers"`
+    @Test("Raycast leftovers on the Extensions page", .enabled(if: env["PILOT_RENDER_DIR"] != nil))
+    func raycastLeftovers() async throws {
+        let out = URL(fileURLWithPath: try #require(Self.env["PILOT_RENDER_DIR"])).appendingPathComponent("extensions-raycast")
+        try FileManager.default.createDirectory(at: out, withIntermediateDirectories: true)
+        testApp()
+        DisplayFaces.directory = LookThemeTests.fonts
+        DisplayFaces.register()
+        let look = Look.shared
+        let saved = (look.themeID, look.style)
+        defer { (look.themeID, look.style) = saved }
+        (look.themeID, look.style) = ("nightwatch", .instrument)
+
+        let (model, dir) = try ExtensionCatalogueModelTests.model()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        await model.open()
+        let extensions = model.installer.extensions
+        for id in ["kill-process", "raycast-pomodoro", "raycast-weather", "speedtest", "todo-list"] {
+            try FileManager.default.createDirectory(at: extensions.appending(path: id), withIntermediateDirectories: true)
+            try Data(#"{"name": "\#(id)", "commands": []}"#.utf8).write(to: extensions.appending(path: "\(id)/package.json"))
+        }
+        try ExtensionCatalogueModelTests.write(#"{"id": "broken-one", "title": "Broken", "version": "1.0.0", "commands": []}"#,
+                                               as: "broken-one", in: extensions)
+        let settings = await Self.settings(model)
+        print("RAYCAST before: broken \(settings.broken.map { "\($0.folder): \($0.problem.reason)" })")
+        let page = Ground { ExtensionsPageView(onScreen: false, settings: settings).frame(width: 1000, height: 900) }
+            .styled(.page(.extensions), look: look).pilotTheme(look: look)
+        try writeRender(page, to: out.appendingPathComponent("leftovers.png"), wait: 0.6)
+        print("RAYCAST page: broken \(settings.broken.map(\.folder)), raycast \(settings.raycast)")
+        await settings.trashRaycast()
+        let trash = dir.appending(path: "Trash")
+        let trashed = (try? FileManager.default.contentsOfDirectory(at: trash, includingPropertiesForKeys: nil)) ?? []
+        print("RAYCAST after Move to Trash: broken \(settings.broken.map(\.folder)), raycast \(settings.raycast); Extensions holds "
+              + "\((try FileManager.default.contentsOfDirectory(atPath: extensions.path)).sorted()); the Trash holds \(trashed.count) folders, "
+              + "each with package.json: \(trashed.allSatisfy { FileManager.default.fileExists(atPath: $0.appending(path: "package.json").path) })")
+        #expect(settings.raycast.isEmpty && settings.broken.map(\.folder) == ["broken-one"] && trashed.count == 5)
+        let after = Ground { ExtensionsPageView(onScreen: false, settings: settings).frame(width: 1000, height: 900) }
+            .styled(.page(.extensions), look: look).pilotTheme(look: look)
+        try writeRender(after, to: out.appendingPathComponent("trashed.png"), wait: 0.6)
+    }
+
     /// The page's state on `model`'s Extensions folder, read, with no Keychain or settings of Sven's.
     static func settings(_ model: ExtensionCatalogueModel) async -> ExtensionsSettings {
         let dir = model.installer.extensions.deletingLastPathComponent()

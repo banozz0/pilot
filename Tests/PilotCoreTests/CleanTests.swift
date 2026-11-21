@@ -148,7 +148,13 @@ struct CleanTests {
         #expect(rows.first?.detail == "mo clean")
         #expect(rows.first?.target == .clean(.run))
         #expect(rows.map(\.title).contains("User app cache"))
-        #expect(rows.first { $0.title == "User app cache" }?.detail == "User essentials · 41 items, 13.53GB")
+        // Each part opens to Mole's lines for it (Mole records a path's section, never its line), then its paths (W89).
+        #expect(rows.first { $0.title == "User app cache" }?.detail == "41 items, 13.53GB")
+        #expect(rows.first { $0.title == "User app cache" }?.home == CleanMenu.part("User essentials"))
+        #expect(rows.filter { $0.home == .clean }.compactMap { if case .branch(let b) = $0.target { b.title } else { nil } }
+                == ["User essentials", "Browsers", "Developer tools"])
+        #expect(rows.first { $0.target == .branch(CleanMenu.part("Browsers")) }?.detail == "Chrome cache, Chrome Service Worker · not listed one by one")
+        #expect(rows.contains { $0.target == .clean(.unlisted("Browsers")) })
         #expect(rows.contains { $0.target == .clean(.note(7)) && $0.title.contains("System caches") })
         // The target is the row's id in the list, so no two rows share one, Mole's repeated titles included.
         #expect(Set(rows.map(\.id)).count == rows.count)
@@ -157,7 +163,21 @@ struct CleanTests {
         #expect(Set(twice.map(\.id)).count == twice.count)
         #expect(rows.suffix(2).map(\.title) == ["Disk usage", "Reports"])
         #expect(rows.suffix(2).map(\.target) == [.clean(.analyze), .clean(.reports)])
-        #expect(rows.allSatisfy { $0.home == .clean && !$0.inSearch })
+        #expect(rows.allSatisfy { $0.home?.browsed == .clean && !$0.inSearch })
+        // With its file list: each part's paths biggest first with a tick; an untick shows on the part and splits Clean in two.
+        var listed = CleanPreview.parse(Self.dryRun)
+        listed.list = CleanList.parse("=== User essentials ===\n/Users/me/Library/Caches/A  # 1.0MB\n/Users/me/Library/Caches/B  # 3.0MB, 4 items\n",
+                                      home: "/Users/me")
+        let b = CleanList.id("/Users/me/Library/Caches/B")
+        let all = CleanMenu.entries(listed, mole: true, home: "/Users/me")
+        #expect(all.filter { $0.home == CleanMenu.part("User essentials") }.map(\.title)
+                == ["User app cache", "User app logs", "Trash", "~/Library/Caches/B", "~/Library/Caches/A"])
+        #expect(all.first { $0.target == .clean(.path(b)) }?.detail == "4 items · 3 MB")
+        let off = CleanMenu.entries(listed, mole: true, unticked: [b], home: "/Users/me")
+        #expect(off.prefix(2).map(\.target) == [.clean(.ticked), .clean(.run)])
+        #expect(off.prefix(2).map(\.title) == ["Clean ticked 1 MB", "Clean all 28.75GB"])
+        #expect(off.first { $0.target == .branch(CleanMenu.part("User essentials")) }?.detail
+                == "User app cache, User app logs, Trash · 1 of 2 ticked, 1 MB")
     }
 
     @Test("With Mole missing Clean's first row installs it through Install's confirm step, then Reports (story 153)")
@@ -207,8 +227,11 @@ struct CleanTests {
         #expect(previewer.ready == nil)
         _ = await previewer.preview()
         #expect(runs == 2)
+        // A tick unticked in the menu holds until the kept preview goes; then every path is ticked again.
+        previewer.toggle("0000000001")
+        #expect(previewer.unticked == ["0000000001"])
         previewer.drop()
-        #expect(previewer.ready == nil)
+        #expect(previewer.ready == nil && previewer.unticked.isEmpty)
         _ = await previewer.preview()
         #expect(runs == 3)
     }

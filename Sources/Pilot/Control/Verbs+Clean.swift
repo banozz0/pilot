@@ -8,14 +8,14 @@ extension ControlVerbs {
     /// the exact command, then run in the visible terminal.
     func registerClean(_ jobs: ControlJobs) {
         let words = ["list", "preview", "run", "analyze"], subcommands = words + ["<id>…"]
-        register(ControlVerb("clean", help: "What Clean would remove, part by part with each path's id and size (Mole's read-only preview); the ids you name moved to the Trash after Allow; or Mole's whole clean or Disk usage after Allow, as the menu's Clean does (Mac › Update & Clean ticks them).",
+        register(ControlVerb("clean", help: "What Clean would remove, part by part with each path's id and size (Mole's read-only preview); the ids you name moved to the Trash after Allow; or Mole's whole clean or Disk usage after Allow, as the menu's Clean does (Hyper+Space › Clean and Mac › Update & Clean tick them, one set of ticks).",
                              usage: "pilot clean [list] [--wait] | clean <id> [<id>…] | clean run | clean analyze",
                              flags: [.init("wait", help: "list: waits for Mole's dry run to finish (a minute or two, at most 15 min) rather than answering its progress", takesValue: false)],
                              schema: { .object(["subcommands": .array(subcommands.map(JSONValue.string))]) },
                              index: { .object(["subcommands": .array(subcommands.map(JSONValue.string))]) },
                              detail: { word in
                                  switch word {
-                                 case "list", "preview": "pilot clean [list] [--wait]: what Mole's dry run says it would remove, each part with its total and each path with its id, size and tick (all ticked, as Mole's clean takes them all); removes nothing, and starts the run when none is kept. preview is the same"
+                                 case "list", "preview": "pilot clean [list] [--wait]: what Mole's dry run says it would remove, each part with its total and each path with its id, size and tick (ticked until unticked in Hyper+Space or on Update & Clean); removes nothing, and starts the run when none is kept. preview is the same"
                                  case "<id>…": "pilot clean <id> [<id>…]: asks Allow with the paths, then moves only those to the Trash, one at a time; a path that fails says why and the rest go on. Ids come from the kept list; pilot clean lists them"
                                  case "run": "pilot clean run: asks Allow with mo clean, then Mole cleans everything it listed in a terminal window, where it asks for your password; answers the run's report"
                                  case "analyze": "pilot clean analyze: asks Allow, then opens Mole's disk explorer in a terminal window; it needs the user's hands"
@@ -98,7 +98,7 @@ extension ControlVerbs {
 
     /// The kept preview; else Mole's run, waited on with `wait`, or started (or joined) and its progress answered.
     private static func cleanPreview(_ jobs: ControlJobs, wait: Bool) async -> JSONValue {
-        if let ready = jobs.previewer.ready { return preview(ready) }
+        if let ready = jobs.previewer.ready { return preview(ready, unticked: jobs.previewer.unticked) }
         let run = Task { await jobs.previewer.preview(caller: "pilot clean preview") }
         guard wait else {
             // The run is under way once the main actor lets it start; its progress shows from then.
@@ -110,23 +110,23 @@ extension ControlVerbs {
         guard let preview = await run.value else {
             return .object(["state": .string("failed"), "note": .string("Mole's preview did not finish; pilot clean preview tries again")])
         }
-        return Self.preview(preview)
+        return Self.preview(preview, unticked: jobs.previewer.unticked)
     }
 
     /// Mole's own lines as `items`, as before W89, then its file list as `parts`: each with its total and every path's id,
-    /// size and tick (all ticked by default, as Mole's clean takes them all).
-    private static func preview(_ p: CleanPreview) -> JSONValue {
-        let home = CleanModule.home
+    /// size and tick (every one ticked until it is unticked in Hyper+Space or on Update & Clean), and the ticked total.
+    private static func preview(_ p: CleanPreview, unticked: Set<String>) -> JSONValue {
+        let home = CleanModule.home, ticked = p.list.rows.filter { !unticked.contains($0.id) }
         let parts = p.list.parts.map { part -> JSONValue in
             .object(["part": .string(part.name), "total": .string(RemoveList.size(part.bytes)), "count": .number(Double(part.rows.count)),
                      "rows": .array(part.rows.map { r in
                          .object(["id": .string(r.id), "path": .string(AppConfigs.tilde(r.path, home: home)), "size": .string(r.size),
-                                  "items": .number(Double(r.count)), "ticked": .bool(true)])
+                                  "items": .number(Double(r.count)), "ticked": .bool(!unticked.contains(r.id))])
                      })])
         }
         return .object(["state": .string("ready"), "total": p.total.map(JSONValue.string) ?? .null, "systemSkipped": .bool(p.systemSkipped),
                         "items": .array(p.items.map { .object(["section": .string($0.section), "title": .string($0.title), "detail": .string($0.detail)]) }),
-                        "parts": .array(parts), "ticked": .string(RemoveList.size(p.list.bytes)),
+                        "parts": .array(parts), "ticked": .string(RemoveList.size(CleanList.bytes(ticked))),
                         "cleanTicked": .string("pilot clean <id> [<id>…]"), "clean": .string(Mole.clean)])
     }
 }

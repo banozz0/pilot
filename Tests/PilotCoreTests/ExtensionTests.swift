@@ -78,7 +78,7 @@ struct ExtensionTests {
         #expect(Extension.Problem.badID("Bad.Id").reason.contains("Bad.Id"))
     }
 
-    @Test("The Extensions folder lists each good extension by title and each bad folder with its reason")
+    @Test("The Extensions folder lists each good extension by title, each bad folder with its reason, and old Raycast folders apart")
     func find() throws {
         let dir = try folder()
         defer { try? FileManager.default.removeItem(at: dir) }
@@ -90,12 +90,15 @@ struct ExtensionTests {
         try write("#!/bin/sh\n", "a/go", in: dir, executable: true)
         try write("{", "broken/extension.json", in: dir)
         try write("loose file", "notes.txt", in: dir)
+        try write(#"{"name": "speedtest"}"#, "speedtest/package.json", in: dir)
         try FileManager.default.createDirectory(at: dir.appending(path: "empty"), withIntermediateDirectories: true)
         try FileManager.default.createDirectory(at: dir.appending(path: ".hidden"), withIntermediateDirectories: true)
 
         let found = Extension.find(in: dir)
         #expect(found.extensions.map(\.id) == ["alpha", "demo"])
         #expect(found.broken.map(\.folder) == ["broken", "empty"])
+        // An old Raycast install is never a broken row: only the one line that offers it to the Trash (Sven, 2026-11-21).
+        #expect(found.raycast == ["speedtest"])
         #expect(Extension.find(in: dir.appending(path: "missing")) == Extension.Found(extensions: [], broken: []))
     }
 
