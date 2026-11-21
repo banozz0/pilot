@@ -119,19 +119,7 @@ private struct PagePart: View {
     let extensionPage: String?
 
     var body: some View {
-        content.styled(.page(page))
-            // A block a link or the search asked for, on More (simplify-pages T7) or a front (Sven, 2026-11-11, after 2276):
-            // KitMore or KitLanding lands there, then clears it.
-            // Only the page shown takes them: the host being left may still update once as the switch lands.
-            .environment(\.blockLanding, model.blockFocus.flatMap { model.page == page ? $0 : nil }.map { place in BlockLanding(place: place) { model.blockFocus = nil } })
-            // The setting row a search result opened, ringed for 2 s (pilot-ui-redesign T6).
-            .environment(\.landingRing, model.ringed.flatMap { model.page == page ? $0 : nil })
-            // A ringed setting whose row is on its page's More (pilot-ui-redesign T17): More, so the ring shows.
-            .onChange(of: model.ringed) {
-                guard let key = model.ringed, model.page == page, Self.ringsOnMore[page]?.contains(key) == true,
-                      let more = AppSection.more(of: page) else { return }
-                model.sections[page] = more
-            }
+        content.styled(.page(page)).modifier(PageLanding(model: model, page: page))
     }
 
     /// The settings each page keeps on its More tab, by their `pilot` keys (pilot-ui-redesign T16, T17, T18; S1 B).
@@ -139,7 +127,9 @@ private struct PagePart: View {
                                                       .tiling: FocusedWindowMore.moreKeys, .captures: CapturesPage.moreKeys,
                                                       .voice: VoicePage.moreKeys]
 
-    /// A page that reads on a repeat takes `model.live`; one that reads once as it shows takes `model.onScreen`.
+    /// A page that reads on a repeat takes `model.live`; one that reads once as it shows takes `model.onScreen`. Each is
+    /// false while the part is hidden (WhileShown), and Binds and Launcher keep the search they last showed (HeldSearch):
+    /// only those read `pageShown`, so a part hidden or shown again redraws them alone.
     @ViewBuilder private var content: some View {
         switch page {
         case .home:
@@ -151,32 +141,32 @@ private struct PagePart: View {
                 // Back from System (Sven's round 3 notes on build 2300): the blocks carry the page's intro.
                 KitPage { MouseButtonsBlocks() }
             } else {
-                BindsKeyboardPage(search: model.query, startOnPlain: section == .plainCombos, editBind: $model.editBind) { model.go($0) }
+                HeldSearch(model: model) { BindsKeyboardPage(search: $0, startOnPlain: section == .plainCombos, editBind: $model.editBind) { model.go($0) } }
             }
         case .menu:
             if section == .rings {
                 RingsPage { model.go($0) }
             } else {
-                MenuPage(section: section, search: model.query, editAlias: $model.editAlias) { model.editBind = $0; model.go(AppPlace(.binds)) }
+                HeldSearch(model: model) { MenuPage(section: section, search: $0, editAlias: $model.editAlias) { model.editBind = $0; model.go(AppPlace(.binds)) } }
             }
         case .workspaces: WorkspacesSettingsView(more: section == .workspacesMore)
         // Tiling's More: the focused window's exact rows (pilot-ui-redesign T16).
         case .tiling: if section == .tilingMore { FocusedWindowMore() } else { TilingSettingsView() }
         // The menu bar lane's page (card agent-bo-95422913).
-        case .menuBar: MenuBarPage(onScreen: model.live)
+        case .menuBar: WhileShown { MenuBarPage(onScreen: $0 && model.live) }
         // Pilot's dock's own page (round 4).
         case .dock: DockPage(more: section == .dockMore)
         case .look where section == .themeCatalogue: ThemeCataloguePage()
         case .look: LookPage(section: section == .wallpaper ? section : nil, focus: model.wallpaperFocus) { model.sections[.look] = nil }
         case .widgets: WidgetsPage()
-        case .system: SetupPage(onScreen: model.onScreen, section: $model.setupSection)
+        case .system: WhileShown { SetupPage(onScreen: $0 && model.onScreen, section: $model.setupSection) }
         // Reports is on Update & Clean's More since the feature trim (2026-11-19): Open report goes there.
         case .upkeep: UpkeepPage(more: section == .upkeepMore) { model.go($0) }
         case .clipboard: ClipboardSettingsView(more: section == .clipMore)
         case .captures:
             if section == .captureHistory { CaptureHistoryPage() } else { CapturesPage(recording: section == .recording, more: section == .capturesMore) }
         case .snippets: SnippetsSettingsView(editSnippet: $model.editSnippet)
-        case .notes: NotesPage(onScreen: model.onScreen)
+        case .notes: WhileShown { NotesPage(onScreen: $0 && model.onScreen) }
         case .files:
             // File search is a place on the front (settings tidy), which the window scrolls to.
             if section == .folders { FolderDesignsView() } else { ConvertPage() }
@@ -199,22 +189,74 @@ private struct PagePart: View {
         case .voice: VoicePage(more: section == .voiceMore)
         case .extensions:
             if let id = extensionPage {
-                ExtensionSurfacePage(id: id, onScreen: model.live) { model.extensionFocus = $0; model.go(AppPlace(.extensions)) }.id(id)
+                WhileShown { shown in ExtensionSurfacePage(id: id, onScreen: shown && model.live) { model.extensionFocus = $0; model.go(AppPlace(.extensions)) } }.id(id)
             } else {
                 // One list (Q601): a link to the catalogue picks its first row once it is read.
-                ExtensionsPageView(onScreen: model.onScreen, focus: $model.extensionFocus, toCatalogue: section == .extensionCatalogue,
+                WhileShown { shown in ExtensionsPageView(onScreen: shown && model.onScreen, focus: $model.extensionFocus, toCatalogue: section == .extensionCatalogue,
                                    landedCatalogue: { model.sections[.extensions] = nil },
-                                   editBind: { model.editBind = $0; model.go(AppPlace(.binds)) }, openPage: { model.goExtensionPage($0) })
+                                   editBind: { model.editBind = $0; model.go(AppPlace(.binds)) }, openPage: { model.goExtensionPage($0) }) }
             }
         }
     }
 }
 
+/// What the window asks of the part shown (a landing, a ring), never of a part kept hidden: `shown` is read first, so a
+/// hidden part reads none of it and no switch elsewhere redraws it (page-switch-3).
+private struct PageLanding: ViewModifier {
+    @Environment(\.pageShown) private var shown
+    @Bindable var model: AppWindowModel
+    let page: AppPage
+
+    func body(content: Content) -> some View {
+        content
+            // A block a link or the search asked for, on More (simplify-pages T7) or a front (Sven, 2026-11-11, after 2276):
+            // KitMore or KitLanding lands there, then clears it.
+            // Only the page shown takes them: the host being left may still update once as the switch lands.
+            .environment(\.blockLanding, here(model.blockFocus).map { place in BlockLanding(place: place) { model.blockFocus = nil } })
+            // The setting row a search result opened, ringed for 2 s (pilot-ui-redesign T6).
+            .environment(\.landingRing, here(model.ringed))
+            // A ringed setting whose row is on its page's More (pilot-ui-redesign T17): More, so the ring shows.
+            .onChange(of: shown ? model.ringed : nil) {
+                guard let key = model.ringed, model.page == page, PagePart.ringsOnMore[page]?.contains(key) == true,
+                      let more = AppSection.more(of: page) else { return }
+                model.sections[page] = more
+            }
+    }
+
+    /// `value` while this part shows and is the window's page, read only then.
+    private func here<T>(_ value: @autoclosure () -> T?) -> T? { shown && model.page == page ? value() : nil }
+}
+
+/// A page's view given whether its part shows (`pageShown`), for the `onScreen` and `live` it takes.
+private struct WhileShown<Content: View>: View {
+    @Environment(\.pageShown) private var shown
+    @ViewBuilder let content: (Bool) -> Content
+    var body: some View { content(shown) }
+}
+
+/// A page's view given the window's search as its part last showed it: a part kept hidden keeps its words, and typing
+/// on another page never redraws it.
+private struct HeldSearch<Content: View>: View {
+    @Environment(\.pageShown) private var shown
+    let model: AppWindowModel
+    @ViewBuilder let content: (String) -> Content
+    @State private var held = Held()
+    private final class Held { var query = "" }
+
+    var body: some View {
+        if shown { held.query = model.query }
+        return content(held.query)
+    }
+}
+
 /// The window's pages kept built (perf-round; Sven on combined-5, build 2962: switching pages still lagged, SwiftUI
 /// building and laying out the page being 80 to 90 % of a switch, page-perf): each part visited is a host of its own,
-/// kept while the window is open, and a return visit only puts it back. A part not shown is out of the window, so no
-/// key, click, focus, Hyper press or accessibility read reaches it, and its views have disappeared (onDisappear, its
-/// .task cancelled, timelines stopped) until it shows again. Past `PageDeck.cap` the part shown longest ago goes.
+/// kept while the window is open, and a return visit only shows it again. A part not shown stays in the window, hidden
+/// (page-switch-3; Sven on combined-6, build 2995: "still a bit slow and laggy": putting a removed host back cost a
+/// return visit 30 to 40 ms more), so no click, key equivalent or accessibility read reaches it and it loses the
+/// keyboard as it goes; its views see `pageShown` false, and every timer, task, observer and extension session a page
+/// runs stops on it (`onScreen` and `live` false, `onPageLeave`) until it shows again. Past `PageDeck.cap` the part
+/// shown longest ago goes, its views disappearing as before.
 struct KeptPages<Content: View>: NSViewRepresentable {
     let key: String
     @ViewBuilder var content: () -> Content
@@ -225,12 +267,12 @@ struct KeptPages<Content: View>: NSViewRepresentable {
     }
 }
 
-/// KeptPages' view: the shown part's host as its one subview, the others held out of the window.
+/// KeptPages' view: the shown part's host, and the other parts kept, hidden.
 final class PageDeck: NSView {
     /// How many parts stay built: about 6 to 8 MB each while the window is open (perf-round: 149 MB with one, 169 with
     /// four, 193 with eight, 344 with every page), all of them gone with the window's tree when it closes.
     static let cap = 4
-    private var hosts: [String: NSHostingView<AnyView>] = [:]
+    private var hosts: [String: PageHost] = [:]
     /// The parts by when they showed, the one showing last.
     private(set) var order: [String] = []
     var shown: String? { order.last }
@@ -243,29 +285,115 @@ final class PageDeck: NSView {
     }
 
     func show(_ key: String, _ root: AnyView) {
-        let host: NSHostingView<AnyView>
+        let host: PageHost
         let built = hosts[key] == nil
         if let kept = hosts[key] {
-            kept.rootView = root
+            kept.rootView = PageHost.root(root, kept.slot)
             host = kept
         } else {
-            host = NSHostingView(rootView: root)
+            host = PageHost(root)
             // Sized by this view, never by its content: no constraints, no intrinsic size to work out.
             host.sizingOptions = []
             hosts[key] = host
         }
-        guard shown != key || host.superview !== self else { return }
+        guard shown != key || host.superview !== self || host.isHidden else { return }
         PageSwitchTiming.showed(from: shown, to: key, first: built)
-        if let shown, let old = hosts[shown], old !== host { old.removeFromSuperview() }
+        if let shown, let old = hosts[shown], old !== host { hide(old) }
         order.removeAll { $0 == key }
         order.append(key)
         if host.frame != bounds { host.frame = bounds }
-        addSubview(host)
+        if host.superview === self { host.isHidden = false } else { addSubview(host) }
+        tellSoon()
         while order.count > Self.cap {
             // Its tree goes with it: emptied first, so nothing the views hold keeps the host alive.
-            let gone = hosts.removeValue(forKey: order.removeFirst())
-            gone?.rootView = AnyView(EmptyView())
+            guard let gone = hosts.removeValue(forKey: order.removeFirst()) else { continue }
+            gone.removeFromSuperview()
+            gone.rootView = AnyView(EmptyView())
         }
+    }
+
+    /// A part left: hidden and out of the keyboard's way at once; its views are told with the shown one's (`tellSoon`).
+    private func hide(_ host: PageHost) {
+        if let responder = window?.firstResponder as? NSView, responder.isDescendant(of: host) { window?.makeFirstResponder(nil) }
+        host.isHidden = true
+    }
+
+    private var telling = false
+
+    /// Each kept part's views learn whether they show once the switch has drawn: the part shown comes back as it was
+    /// left, then resumes its reads, and the one left stops its own, a run loop turn later, so neither holds the switch.
+    /// Waits for the commit (AfterCommit), then tells on the next turn: a block or a main-queue job queued now could run
+    /// in this turn, before the commit. Run loop blocks, not the main queue's, so a nested run loop (a test's) runs them too.
+    private func tellSoon() {
+        guard !telling else { return }
+        telling = true
+        let main = CFRunLoopGetMain()
+        AfterCommit.observe(repeats: false) { [weak self] in
+            CFRunLoopPerformBlock(main, CFRunLoopMode.commonModes.rawValue) { MainActor.assumeIsolated { self?.tell() } }
+            CFRunLoopWakeUp(main)
+        }
+        // Shown from inside the run loop's own wait (a display pass), the observer first runs on the next one.
+        CFRunLoopWakeUp(main)
+    }
+
+    private func tell() {
+        telling = false
+        for (key, host) in hosts where host.slot.shown != (key == shown) { host.slot.shown = key == shown }
+    }
+}
+
+/// A kept part's host: its slot says whether it shows, and no key equivalent reaches it while hidden.
+final class PageHost: NSHostingView<AnyView> {
+    let slot = PageSlot()
+
+    convenience init(_ root: AnyView) {
+        self.init(rootView: AnyView(EmptyView()))
+        rootView = Self.root(root, slot)
+    }
+
+    /// The part's views over its slot, which sets `pageShown` for them.
+    static func root(_ content: AnyView, _ slot: PageSlot) -> AnyView { AnyView(PageSlotRoot(slot: slot, content: content)) }
+
+    override func performKeyEquivalent(with event: NSEvent) -> Bool { isHidden ? false : super.performKeyEquivalent(with: event) }
+}
+
+/// Whether a kept part shows (PageDeck sets it; page-switch-3).
+@MainActor @Observable final class PageSlot {
+    var shown = true
+}
+
+/// A kept part's root: only this reads its slot, so a part hidden or shown again updates from here down.
+private struct PageSlotRoot: View {
+    let slot: PageSlot
+    let content: AnyView
+    var body: some View { content.environment(\.pageShown, slot.shown) }
+}
+
+extension EnvironmentValues {
+    /// Whether the window shows this view's page: false while PageDeck keeps the page hidden (page-switch-3).
+    @Entry var pageShown = true
+}
+
+extension View {
+    /// `action` as this view disappears and each time its kept page is hidden behind another: what onDisappear did on a
+    /// page switch while a page left the window (page-switch-3). A plain onDisappear in a page runs only as its part
+    /// goes for good (past PageDeck.cap, or with the window).
+    func onPageLeave(_ action: @escaping () -> Void) -> some View {
+        onDisappear(perform: action).modifier(PageShownChange(shown: {}, hidden: action))
+    }
+
+    /// `action` as this view appears and each time its kept page shows again: onAppear's twin of `onPageLeave`.
+    func onPageArrive(_ action: @escaping () -> Void) -> some View {
+        onAppear(perform: action).modifier(PageShownChange(shown: action, hidden: {}))
+    }
+}
+
+private struct PageShownChange: ViewModifier {
+    @Environment(\.pageShown) private var pageShown
+    let shown: () -> Void
+    let hidden: () -> Void
+    func body(content: Content) -> some View {
+        content.onChange(of: pageShown) { pageShown ? shown() : hidden() }
     }
 }
 

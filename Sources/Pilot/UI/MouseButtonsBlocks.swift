@@ -74,7 +74,7 @@ struct MouseButtonsBlocks: View {
             }
         }
         .onAppear { if mice == nil { mouse.findMice() } }
-        .onDisappear { if shown == nil, mouse.learn != .idle { mouse.cancel() } }
+        .onPageLeave { if shown == nil, mouse.learn != .idle { mouse.cancel() } }
         .onChange(of: mouse.learn) { anyway = false }
         .sheet(item: editing(found)) { button in
             // The window behind the sheet stays main while the sheet is key: its height caps the sheet's.

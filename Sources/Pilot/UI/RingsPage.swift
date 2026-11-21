@@ -80,7 +80,7 @@ struct RingsPage: View {
             menu = RingMenuSource(engine: engine)
             engine.mouseButtons.findMice()
         }
-        .onDisappear { if recording != nil { stopRecording() } }
+        .onPageLeave { if recording != nil { stopRecording() } }
         .confirmationDialog("Delete ring \(deleting?.name ?? "")?", isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } }),
                             presenting: deleting) { ring in
             Button("Delete", role: .destructive) { delete(ring) }

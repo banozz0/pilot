@@ -167,13 +167,15 @@ struct BindsKeyboardPage: View {
 /// modifier, so the window's focus changing redraws only this, never the board.
 private struct PicksKeys: ViewModifier {
     @Environment(\.controlActiveState) private var active
+    /// A board kept hidden behind another page takes no press (page-switch-3).
+    @Environment(\.pageShown) private var shown
     let when: Bool
     let engine: Engine
     let pick: (Key) -> Void
 
     func body(content: Content) -> some View {
         content
-            .onChange(of: when && active == .key, initial: true) { _, picks in engine.pickKeys(picks ? pick : nil) }
+            .onChange(of: shown && when && active == .key, initial: true) { _, picks in engine.pickKeys(picks ? pick : nil) }
             .onDisappear { engine.pickKeys(nil) }
     }
 }

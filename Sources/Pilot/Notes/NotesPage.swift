@@ -65,10 +65,9 @@ struct NotesPage: View {
             if given != nil, start.actions { model.openActions() }
             if onScreen { keys.start(model) } else { keys.stop() }
         }
-        .onDisappear {
-            keys.stop()
-            model?.flush()
-        }
+        .onDisappear { keys.stop() }
+        // Hidden behind another page too (page-switch-3): the keys stop with `onScreen`, the note is saved.
+        .onPageLeave { model?.flush() }
     }
 
     /// A panel key on the page: as in the panel, but Escape in the list goes back to the note, as there is no panel

@@ -478,11 +478,13 @@ private struct NowPlayingPress: ButtonStyle {
 /// The time in and the time left, ticking each second while it plays, still while it is paused: the one part of the tile
 /// that redraws between reads.
 private struct NowPlayingTime<Content: View>: View {
+    /// Still on the Widgets page's preview while the page is kept hidden behind another (page-switch-3).
+    @Environment(\.pageShown) private var pageShown
     let track: NowPlaying.Track
     @ViewBuilder let content: (String, String?) -> Content
 
     var body: some View {
-        if track.playing {
+        if track.playing, pageShown {
             TimelineView(.periodic(from: track.at, by: 1)) { context in shown(context.date) }
         } else {
             shown(track.at)
@@ -500,9 +502,10 @@ private struct NowPlayingLine: View {
     let track: NowPlaying.Track
     let fill: Color, track2: Color
     let height: CGFloat
+    @Environment(\.pageShown) private var pageShown
 
     var body: some View {
-        if track.playing, track.duration != nil {
+        if track.playing, track.duration != nil, pageShown {
             TimelineView(.periodic(from: track.at, by: 1)) { context in bar(context.date) }
         } else {
             bar(track.at)

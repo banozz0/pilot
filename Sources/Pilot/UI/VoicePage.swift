@@ -102,9 +102,9 @@ struct ReadAloudBlock: View {
             if part == .more { moreRows } else { frontRows(others) }
         }
         // Kokoro's ▶ lines are made while the voices show, never at idle: on the front once its list opens.
-        .onAppear { if part == .all || voicesOpen { kokoro.renderSamples(true) } }
+        .onPageArrive { if part == .all || voicesOpen { kokoro.renderSamples(true) } }
         .onChange(of: voicesOpen) { kokoro.renderSamples(voicesOpen) }
-        .onDisappear {
+        .onPageLeave {
             if part != .more { kokoro.renderSamples(false) }
             if previewing != nil { ReadAloud.shared.stop() }
         }
