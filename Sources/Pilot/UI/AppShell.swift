@@ -244,6 +244,7 @@ final class PageDeck: NSView {
 
     func show(_ key: String, _ root: AnyView) {
         let host: NSHostingView<AnyView>
+        let built = hosts[key] == nil
         if let kept = hosts[key] {
             kept.rootView = root
             host = kept
@@ -254,6 +255,7 @@ final class PageDeck: NSView {
             hosts[key] = host
         }
         guard shown != key || host.superview !== self else { return }
+        PageSwitchTiming.showed(from: shown, to: key, first: built)
         if let shown, let old = hosts[shown], old !== host { old.removeFromSuperview() }
         order.removeAll { $0 == key }
         order.append(key)
