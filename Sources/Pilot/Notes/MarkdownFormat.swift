@@ -6,10 +6,12 @@ import PilotCore
 /// editor applies it as an edit Undo takes back. The paragraph styles are Apple Notes' (Sven, 2026-11-20), each a plain
 /// Markdown line form: Title `# `, Heading `## `, Subheading `### `, Body none, Monostyled a fenced block, Bulleted List
 /// `- `, Dashed List `+ ` (CommonMark's third bullet, which Pilot draws as a dash), Numbered List `1. `, Block Quote `> `.
-/// Underline is `<u>…</u>` (inline HTML, which CommonMark keeps), strikethrough GitHub's `~~…~~`.
+/// Underline is `<u>…</u>` (inline HTML, which CommonMark keeps), strikethrough GitHub's `~~…~~`. A toggle (Sven,
+/// 2026-11-21) is a list line whose words start with a triangle, `- ▾ ` open and `- ▸ ` folded, its lines indented two
+/// spaces under it: another Markdown app shows a list item with its lines nested under it.
 enum MarkdownFormat: String, CaseIterable, Identifiable {
     case title, heading, subheading, body, mono, bullets, dashes, numbers, quote
-    case bold, italic, underline, strike, code, checklist, link
+    case bold, italic, underline, strike, code, checklist, toggle, link
 
     var id: String { rawValue }
 
@@ -34,6 +36,7 @@ enum MarkdownFormat: String, CaseIterable, Identifiable {
         case .strike: "Strikethrough"
         case .code: "Code"
         case .checklist: "Checklist"
+        case .toggle: "Toggle"
         case .link: "Link"
         }
     }
@@ -54,6 +57,8 @@ enum MarkdownFormat: String, CaseIterable, Identifiable {
         case .underline: ("u", false)
         case .code: ("e", false)
         case .checklist: ("l", true)
+        // D for disclosure: Apple Notes has no toggle, and ⌘⇧D is no other format's key.
+        case .toggle: ("d", true)
         case .mono, .quote, .strike, .link: nil
         }
     }
@@ -104,6 +109,7 @@ enum MarkdownFormat: String, CaseIterable, Identifiable {
         case .strike: "strikethrough"
         case .code: "chevron.left.forwardslash.chevron.right"
         case .checklist: "checklist"
+        case .toggle: "arrowtriangle.right"
         case .link: "link"
         }
     }
@@ -124,7 +130,7 @@ enum MarkdownFormat: String, CaseIterable, Identifiable {
         if let marks { return Self.inline(s, selection, marks.open, marks.close, marks.span) }
         switch self {
         case .link: return Self.link(s, selection)
-        // The paragraph styles and the checklist: a line's kind.
+        // The paragraph styles, the checklist and the toggle: a line's kind.
         default: return style(s, selection)
         }
     }
@@ -174,6 +180,7 @@ enum MarkdownFormat: String, CaseIterable, Identifiable {
             case .numbers: return indent + "\(number). " + words
             case .quote: return "> " + words
             case .checklist: return indent + "- [ ] " + words
+            case .toggle: return indent + "- " + MarkdownBlocks.unfolded + " " + words
             default: return indent + words
             }
         }
@@ -186,7 +193,7 @@ enum MarkdownFormat: String, CaseIterable, Identifiable {
         return strip(strip(rest, headingMark), listMark)
     }
 
-    /// The paragraph style a line is in, its indent aside, or the checklist (which the Aa menu does not list).
+    /// The paragraph style a line is in, its indent aside, or the checklist or toggle (which the Aa menu does not list).
     static func lineStyle(_ line: String) -> MarkdownFormat {
         let rest = String(line.drop { $0 == " " || $0 == "\t" })
         if has(rest, quoteMark) { return .quote }
@@ -197,6 +204,7 @@ enum MarkdownFormat: String, CaseIterable, Identifiable {
         default: break
         }
         if has(rest, checkMark) { return .checklist }
+        if has(rest, toggleMark) { return .toggle }
         if has(rest, dashMark) { return .dashes }
         if has(rest, bulletMark) { return .bullets }
         if has(rest, numberMark) { return .numbers }
@@ -466,14 +474,15 @@ enum MarkdownFormat: String, CaseIterable, Identifiable {
     // MARK: Lines
 
     static let headingMark = try! NSRegularExpression(pattern: #"^#{1,6}[ \t]+"#)
-    /// A list or checklist mark with its indent kept out: `- `, `* `, `+ `, `1. `, `- [ ] `.
-    static let listMark = try! NSRegularExpression(pattern: #"^([-*+][ \t]+\[[ xX]\]|[-*+]|\d+[.)])[ \t]+"#)
+    /// A list, checklist or toggle mark with its indent kept out: `- `, `* `, `+ `, `1. `, `- [ ] `, `- ▾ `.
+    static let listMark = try! NSRegularExpression(pattern: #"^([-*+][ \t]+\[[ xX]\]|"# + MarkdownBlocks.toggleSign + #"|[-*+]|\d+[.)])[ \t]+"#)
     /// A bulleted line's `- ` or `* `; `+ ` is the dashed list's.
-    static let bulletMark = try! NSRegularExpression(pattern: #"^[-*][ \t]+(?!\[[ xX]\][ \t])"#)
-    static let dashMark = try! NSRegularExpression(pattern: #"^\+[ \t]+(?!\[[ xX]\][ \t])"#)
+    static let bulletMark = try! NSRegularExpression(pattern: #"^[-*][ \t]+(?!\[[ xX]\][ \t]|[▸▾][ \t])"#)
+    static let dashMark = try! NSRegularExpression(pattern: #"^\+[ \t]+(?!\[[ xX]\][ \t]|[▸▾][ \t])"#)
     static let numberMark = try! NSRegularExpression(pattern: #"^\d+[.)][ \t]+"#)
     static let quoteMark = try! NSRegularExpression(pattern: #"^>[ \t]?"#)
     static let checkMark = try! NSRegularExpression(pattern: #"^[-*+][ \t]+\[[ xX]\][ \t]+"#)
+    static let toggleMark = try! NSRegularExpression(pattern: "^" + MarkdownBlocks.toggleSign + #"[ \t]+"#)
 
     static func headingLevel(_ line: String) -> Int {
         let ns = line as NSString

@@ -234,8 +234,22 @@ struct NotesPanelRenders {
 
         """
 
-    /// The format bar's Aa styles open over a bulleted line (its style ticked) in both themes, and the note in every
-    /// style, written as `styles-<theme>-menu.png` and `styles-tokyo-night-note.png`.
+    /// A note with an open toggle and a folded one (Sven, 2026-11-21).
+    static let toggles = """
+        # Trip
+        - ▾ Packing
+          - [ ] Passport
+          - Charger and **adapter**
+        - ▸ Budget
+          Flights 420
+          Hotel 380
+        Booked on Friday.
+
+        """
+
+    /// The format bar's Aa styles open over a bulleted line (its style ticked) in both themes, the note in every style,
+    /// and a note with an open and a folded toggle, written as `styles-<theme>-menu.png`, `styles-tokyo-night-note.png`
+    /// and `styles-tokyo-night-toggles.png`.
     @Test("The notes panel renders Aa's paragraph styles and a note in every style", .enabled(if: env["PILOT_RENDER_DIR"] != nil && env["CFFIXED_USER_HOME"] != nil))
     func renderStyles() throws {
         let home = try #require(Self.env["CFFIXED_USER_HOME"])
@@ -255,13 +269,14 @@ struct NotesPanelRenders {
         let store = NoteStore(folder: folder)
         _ = try store.load()
         try Data(Self.styled.utf8).write(to: folder.appending(path: "title-with-bold-100013.md"))
+        try Data(Self.toggles.utf8).write(to: folder.appending(path: "trip-100014.md"))
 
         look.style = .instrument
-        for (theme, state) in [("tokyo-night", "menu"), ("porcelain", "menu"), ("tokyo-night", "note"), ("tokyo-night", "link")] {
+        for (theme, state) in [("tokyo-night", "menu"), ("porcelain", "menu"), ("tokyo-night", "note"), ("tokyo-night", "link"), ("tokyo-night", "toggles")] {
             look.themeID = theme
             let model = NotesModel(store: store, defaults: UserDefaults(suiteName: testSuite())!)
             model.reload()
-            model.open("title-with-bold-100013.md")
+            model.open(state == "toggles" ? "trip-100014.md" : "title-with-bold-100013.md")
             let panel = HUD.makePanel(NotesPanelView(model: model).frame(width: NotesPanel.defaultSize.width, height: 720), surface: .notes)
             defer { panel.close() }
             let content = try #require(panel.contentView)
@@ -269,7 +284,12 @@ struct NotesPanelRenders {
             let editor = try #require(NotesMarkdownRenders.editors(in: content).first { $0.isEditable })
             panel.makeFirstResponder(editor)
             let s = editor.string as NSString
-            if state == "menu" || state == "link" {
+            if state == "toggles" {
+                editor.setSelectedRange(NSRange(location: s.length, length: 0))
+                // Packing open, its box and dot drawn; Budget folded, its lines hidden.
+                try #require(editor.disclosures().map(\.folded) == [false, true] && editor.checkboxes().count == 1 && editor.bullets().count == 1)
+                try #require(editor.textStorage?.attribute(.notesHidden, at: s.range(of: "Flights").location, effectiveRange: nil) != nil)
+            } else if state == "menu" || state == "link" {
                 editor.setSelectedRange(s.range(of: "Bullet again"))
                 RunLoop.main.run(until: Date().addingTimeInterval(0.3))
                 // Aa's styles, or the link field the bar's link opens (Q285: a link's address never shows in the note).

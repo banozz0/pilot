@@ -6,8 +6,9 @@ import SwiftUI
 /// marks (`#`, `**`, `_`, `~~`, `<u>`, backticks, `>`, fences, table pipes, a link's brackets and address) are hidden and
 /// drawn as what they make, on every line, the caret's too, as Apple Notes shows a note (Sven, 2026-11-20, Q285, which
 /// retired Q114's caret-line reveal); formats change through the format bar, Aa, Cmd+K and their keys. Headings sized, `-` a dot, `- [ ]` a
-/// checkbox a click toggles (done dim and struck through), a quote a callout with a bar, fenced code a panel, a table a
-/// grid, and a line that only links a picture drawn with the picture under it (notes round 2). The text stays the
+/// checkbox a click toggles (done dim and struck through), `- ▾`/`- ▸` a toggle whose triangle a click folds or unfolds
+/// (the lines indented under it hidden while folded), a quote a callout with a bar, fenced code a panel, a table a grid,
+/// and a line that only links a picture drawn with the picture under it (notes round 2). The text stays the
 /// Markdown on disk; styling only sets attributes, so nothing typed is ever rewritten. A picture pasted or dropped in is
 /// saved in the notes folder's attachments/ and linked.
 struct MarkdownEditor: NSViewRepresentable {
@@ -471,12 +472,25 @@ final class NotesTextView: NSTextView {
     /// Where a caret put at `p` (from `old`) rests: never inside marks.
     func settled(_ p: Int, from old: Int) -> Int {
         var p = p
+        func allMarks(_ line: (range: NSRange, end: Int, lead: Int)) -> Bool {
+            line.end > line.range.location && line.lead == line.end && (line.range.location..<line.end).allSatisfy { side($0) != nil }
+        }
         for _ in 0..<8 {
             let (range, end, lead) = line(at: p)
-            // A line that is all marks: passed over whole.
-            if end > range.location, lead == end, (range.location..<end).allSatisfy({ side($0) != nil }) {
-                if backward, range.location > 0 { p = range.location - 1; continue }
-                if !backward, end < NSMaxRange(range) { p = NSMaxRange(range); continue }
+            // A line that is all marks: passed over whole, with every such line beside it (a folded toggle's) in one step.
+            if allMarks((range, end, lead)) {
+                if backward, range.location > 0 {
+                    var above = line(at: range.location - 1)
+                    while allMarks(above), above.range.location > 0 { above = line(at: above.range.location - 1) }
+                    p = allMarks(above) ? range.location - 1 : above.end
+                    continue
+                }
+                if !backward, end < NSMaxRange(range) {
+                    var below = line(at: NSMaxRange(range))
+                    while allMarks(below), below.end < NSMaxRange(below.range) { below = line(at: NSMaxRange(below.range)) }
+                    p = below.range.location
+                    continue
+                }
                 return p
             }
             if p < lead {
@@ -584,7 +598,38 @@ final class NotesTextView: NSTextView {
             while side(stop) == .close { stop += 1 }
             place(stop)
         }
+        if !placing, caret.length == 0, toggleReturn(selectedRange().location) { return }
         super.insertNewline(sender)
+    }
+
+    /// Return in a toggle (Sven, 2026-11-21): at the end of its line, a child line indented under it (a folded toggle
+    /// unfolds first, so the new line shows); at the end of an open toggle's child, the next child at its indent; on a
+    /// child line left blank, the indent goes, so the block ends there. False anywhere else.
+    private func toggleReturn(_ caret: Int) -> Bool {
+        let s = string as NSString
+        let (range, end, _) = line(at: caret)
+        guard caret == end else { return false }
+        let words = NSRange(location: range.location, length: end - range.location)
+        let toggles = MarkdownBlocks.toggles(s, skipping: MarkdownBlocks.fences(s).map(\.block))
+        func lead(_ upTo: Int) -> String { s.substring(with: NSRange(location: range.location, length: upTo - range.location)) }
+        if let toggle = toggles.first(where: { $0.line.location == range.location }) {
+            if toggle.folded { fold(toggle.mark, folded: false) }
+            super.insertText("\n" + lead(toggle.mark.location) + "  ", replacementRange: NSRange(location: NSNotFound, length: 0))
+            return true
+        }
+        let (columns, start, blank) = MarkdownBlocks.indent(s, words)
+        let open = toggles.filter { !$0.folded }
+        if blank {
+            // A blank indented line right under an open toggle or its last child: the block ends.
+            let above = range.location > 0 ? s.lineRange(for: NSRange(location: range.location - 1, length: 0)).location : nil
+            guard columns > 0, open.contains(where: { $0.line.location == above || $0.children.map(NSMaxRange) == range.location }) else { return false }
+            edit(words, "", caret: range.location)
+            return true
+        }
+        // A child of an open toggle: the next child at its indent.
+        guard open.contains(where: { $0.children.map { NSLocationInRange(range.location, $0) } == true }) else { return false }
+        super.insertText("\n" + lead(start), replacementRange: NSRange(location: NSNotFound, length: 0))
+        return true
     }
 
     /// Backspace: at a line's words' start takes the line's style off (a list, check, heading or quote mark); after a
@@ -834,12 +879,15 @@ final class NotesTextView: NSTextView {
             hide(m.range)
             lineStyle(m.range, style.paragraph(line: size.height + 2 * Self.pictureGap))
         }
+        let toggles = MarkdownBlocks.toggles(s, skipping: fences.map(\.block))
+        let toggleLines = Set(toggles.map(\.line.location))
         // A list: `-` or `*` drawn as a dot and `+` as a dash, numbers in the quote's colour; a wrapped line lines up under
         // its own text.
         each(MarkdownMarks.list) { m in
             let sign = m.range(at: 2)
             let line = s.lineRange(for: m.range)
-            let isBox = MarkdownMarks.checkbox.firstMatch(in: storage.string, range: line) != nil
+            // A checkbox's or a toggle's dash is drawn as its box or triangle.
+            let isBox = toggleLines.contains(line.location) || MarkdownMarks.checkbox.firstMatch(in: storage.string, range: line) != nil
             if sign.length == 1, "-*+".contains(s.substring(with: sign)), !isBox {
                 let drawn: NSAttributedString.Key = s.character(at: sign.location) == 43 ? .notesDash : .notesBullet
                 storage.addAttributes([drawn: true, .foregroundColor: NSColor.clear], range: sign)
@@ -849,21 +897,43 @@ final class NotesTextView: NSTextView {
             lineStyle(m.range, style.paragraph(indent: width(m.range)))
             lineMark(m.range)
         }
+        /// A control drawn at the dash's place (a checkbox's box, a toggle's triangle): its clear `marker` takes exactly
+        /// the box and the room after it, spread over its characters, and a wrapped line lines up under its words.
+        func boxRoom(_ marker: NSRange) {
+            let spread = (style.box + style.boxGap - width(marker)) / CGFloat(marker.length)
+            for i in marker.location..<NSMaxRange(marker) { kern(spread, at: i) }
+            let line = s.lineRange(for: marker)
+            lineStyle(marker, style.paragraph(indent: width(NSRange(location: line.location, length: marker.location - line.location)) + style.box + style.boxGap))
+            lineMark(marker)
+        }
         each(MarkdownMarks.checkbox) { m in
             let ticked = s.substring(with: m.range(at: 2)) != " "
             storage.addAttributes([.notesCheckbox: ticked, .foregroundColor: NSColor.clear], range: m.range(at: 1))
-            // The hidden `- [ ] ` takes exactly the box and the room after it, spread over its six characters.
-            let marker = NSRange(location: m.range(at: 1).location, length: NSMaxRange(m.range) - m.range(at: 1).location)
-            let spread = (style.box + style.boxGap - width(marker)) / CGFloat(marker.length)
-            for i in marker.location..<NSMaxRange(marker) { kern(spread, at: i) }
-            let lead = NSRange(location: m.range.location, length: marker.location - m.range.location)
-            lineStyle(m.range, style.paragraph(indent: width(lead) + style.box + style.boxGap))
-            lineMark(m.range)
+            // `- [ ] ` with the space after it.
+            boxRoom(NSRange(location: m.range(at: 1).location, length: NSMaxRange(m.range) - m.range(at: 1).location))
             if ticked {
                 let rest = s.lineRange(for: m.range)
                 let after = NSRange(location: NSMaxRange(m.range), length: NSMaxRange(rest) - NSMaxRange(m.range))
                 storage.addAttributes([.foregroundColor: style.muted, .strikethroughStyle: NSUnderlineStyle.single.rawValue,
                                        .strikethroughColor: style.muted], range: after)
+            }
+        }
+        // A toggle (Sven, 2026-11-21): its `- ▸ ` takes the triangle's room and the gap after it.
+        for toggle in toggles {
+            storage.addAttributes([.notesToggle: toggle.folded, .foregroundColor: NSColor.clear], range: toggle.mark)
+            boxRoom(NSRange(location: toggle.mark.location, length: toggle.mark.length + 1))
+        }
+        // An open toggle's lines start under its words, not its triangle: their two spaces of indent take the triangle's
+        // room and its gap (a nested toggle's lines move once for each toggle they sit in).
+        let step = style.box + style.boxGap - NSAttributedString(string: "  ", attributes: [.font: style.body]).size().width
+        for toggle in toggles where !toggle.folded {
+            guard let children = toggle.children else { continue }
+            s.enumerateSubstrings(in: children, options: [.byParagraphs, .substringNotRequired]) { _, line, _, _ in
+                guard line.length > 0, let now = storage.attribute(.paragraphStyle, at: line.location, effectiveRange: nil) as? NSParagraphStyle,
+                      let moved = now.mutableCopy() as? NSMutableParagraphStyle else { return }
+                moved.firstLineHeadIndent += step
+                moved.headIndent += step
+                storage.addAttribute(.paragraphStyle, value: moved, range: s.paragraphRange(for: line))
             }
         }
         for table in MarkdownBlocks.tables(s, skipping: fences.map(\.block)) {
@@ -874,6 +944,15 @@ final class NotesTextView: NSTextView {
         for block in blocks {
             if block.location > 0 { roomAfter(s.paragraphRange(for: NSRange(location: block.location - 1, length: 0))) }
             roomAfter(s.paragraphRange(for: NSRange(location: max(NSMaxRange(block) - 1, block.location), length: 0)))
+        }
+        // Last, over every other pass: a folded toggle's lines are hidden, take no height and draw nothing (no box, dot,
+        // picture or fill is left to draw or click inside them); the caret passes over them as over any line of marks.
+        for toggle in toggles where toggle.folded {
+            guard let children = toggle.children else { continue }
+            for key in Self.drawnKeys { storage.removeAttribute(key, range: children) }
+            storage.removeAttribute(.link, range: children)
+            hide(children)
+            storage.addAttribute(.paragraphStyle, value: style.paragraph(line: Self.foldedLine), range: children)
         }
         storage.endEditing()
         // A mark hidden or shown changes the glyphs, not only how they draw.
@@ -943,6 +1022,12 @@ final class NotesTextView: NSTextView {
         }
     }
 
+    /// What the editor draws over or under the words: none of it shows inside a folded toggle.
+    private static let drawnKeys: [NSAttributedString.Key] = [.notesCheckbox, .notesBullet, .notesDash, .notesImage, .notesCode,
+                                                              .notesCodeBlock, .notesQuote, .notesTable, .notesToggle]
+    /// A folded toggle's hidden line: as near no height as a line fragment takes.
+    static let foldedLine: CGFloat = 0.01
+
     /// The line fragment holding `glyph`, in view coordinates, and the glyph's baseline in it.
     private func fragment(at glyph: Int) -> (rect: NSRect, glyphs: NSRange, baseline: CGFloat)? {
         guard let layout = layoutManager else { return nil }
@@ -952,19 +1037,23 @@ final class NotesTextView: NSTextView {
     }
 
     /// Each checkbox's box and whether it is ticked, in view coordinates: centred on its line, at the dash's place.
-    func checkboxes() -> [(range: NSRange, rect: NSRect, ticked: Bool)] {
+    func checkboxes() -> [(range: NSRange, rect: NSRect, ticked: Bool)] { squares(.notesCheckbox) }
+
+    /// Each toggle's triangle and whether it is folded, in view coordinates: the checkbox's square, at the dash's place.
+    func disclosures() -> [(range: NSRange, rect: NSRect, folded: Bool)] { squares(.notesToggle) }
+
+    /// A control drawn at the dash's place (`key` on its clear mark, a Bool its state): its box-sized square, centred on
+    /// its line.
+    private func squares(_ key: NSAttributedString.Key) -> [(NSRange, NSRect, Bool)] {
         guard let storage = textStorage, let layout = layoutManager else { return [] }
-        var boxes: [(NSRange, NSRect, Bool)] = []
-        storage.enumerateAttribute(.notesCheckbox, in: NSRange(location: 0, length: storage.length)) { value, range, _ in
-            guard let ticked = value as? Bool else { return }
-            let glyph = layout.glyphIndexForCharacter(at: range.location)
-            guard let line = fragment(at: glyph) else { return }
-            let height = (storage.attribute(.paragraphStyle, at: range.location, effectiveRange: nil) as? NSParagraphStyle)?.minimumLineHeight ?? style.line
+        return runs(key).compactMap { run in
+            guard let on = run.value as? Bool else { return nil }
+            let glyph = layout.glyphIndexForCharacter(at: run.range.location)
+            guard let line = fragment(at: glyph) else { return nil }
+            let height = (storage.attribute(.paragraphStyle, at: run.range.location, effectiveRange: nil) as? NSParagraphStyle)?.minimumLineHeight ?? style.line
             let x = line.rect.minX + layout.location(forGlyphAt: glyph).x
-            let rect = NSRect(x: x.rounded(), y: (line.rect.minY + (height - style.box) / 2).rounded(), width: style.box, height: style.box)
-            boxes.append((range, rect, ticked))
+            return (run.range, NSRect(x: x.rounded(), y: (line.rect.minY + (height - style.box) / 2).rounded(), width: style.box, height: style.box), on)
         }
-        return boxes
     }
 
     /// Each inline code's fill, one per line it wraps over: 4 pt past its glyphs each side, 1 pt over and under.
@@ -1254,12 +1343,28 @@ final class NotesTextView: NSTextView {
                 style.unticked.setStroke(); path.stroke()
             }
         }
+        // A toggle's triangle: pointing right while folded, down while open.
+        style.quote.setFill()
+        for toggle in disclosures() where toggle.rect.intersects(dirtyRect) {
+            let c = NSPoint(x: toggle.rect.midX, y: toggle.rect.midY), r: CGFloat = 4.5
+            let path = NSBezierPath()
+            if toggle.folded {
+                path.move(to: NSPoint(x: c.x - r * 0.7, y: c.y - r)); path.line(to: NSPoint(x: c.x - r * 0.7, y: c.y + r)); path.line(to: NSPoint(x: c.x + r * 0.9, y: c.y))
+            } else {
+                path.move(to: NSPoint(x: c.x - r, y: c.y - r * 0.7)); path.line(to: NSPoint(x: c.x + r, y: c.y - r * 0.7)); path.line(to: NSPoint(x: c.x, y: c.y + r * 0.9))
+            }
+            path.close()
+            path.fill()
+        }
     }
 
     override func mouseDown(with event: NSEvent) {
         let point = convert(event.locationInWindow, from: nil)
         if isEditable, let box = checkboxes().first(where: { $0.rect.insetBy(dx: -3, dy: -3).contains(point) }) {
             return toggle(box.range, ticked: box.ticked)
+        }
+        if isEditable, let toggle = disclosures().first(where: { $0.rect.insetBy(dx: -3, dy: -3).contains(point) }) {
+            return fold(toggle.range, folded: !toggle.folded)
         }
         // NSTextView tracks the drag until the release; the format bar waits for it.
         tracking = true
@@ -1341,9 +1446,15 @@ final class NotesTextView: NSTextView {
     }
 
     /// Ticks or unticks the box at `range`, as an edit Undo takes back.
-    func toggle(_ range: NSRange, ticked: Bool) {
-        let mark = NSRange(location: range.location + 3, length: 1)
-        let new = ticked ? " " : "x"
+    func toggle(_ range: NSRange, ticked: Bool) { swapMark(at: range.location + 3, ticked ? " " : "x") }
+
+    /// Folds or unfolds the toggle whose `- ▸` is `range`: its triangle flipped, as an edit Undo takes back, so the file
+    /// keeps it.
+    func fold(_ range: NSRange, folded: Bool) { swapMark(at: NSMaxRange(range) - 1, folded ? MarkdownBlocks.folded : MarkdownBlocks.unfolded) }
+
+    /// The one character of a mark at `at` swapped for `new`, as an edit Undo takes back.
+    private func swapMark(at: Int, _ new: String) {
+        let mark = NSRange(location: at, length: 1)
         guard shouldChangeText(in: mark, replacementString: new) else { return }
         textStorage?.replaceCharacters(in: mark, with: new)
         didChangeText()
@@ -1353,6 +1464,7 @@ final class NotesTextView: NSTextView {
         super.resetCursorRects()
         guard isEditable else { return }
         for box in checkboxes() { addCursorRect(box.rect, cursor: .pointingHand) }
+        for toggle in disclosures() { addCursorRect(toggle.rect, cursor: .pointingHand) }
     }
 }
 

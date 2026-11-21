@@ -2,7 +2,7 @@ import AppKit
 import PilotCore
 import SwiftUI
 
-/// The notes editor's blocks that span lines (Q114, Sven 2026-10-15): fenced code and tables, found in the text as typed.
+/// The notes editor's blocks that span lines (Q114, Sven 2026-10-15): fenced code, tables and toggles, found in the text as typed.
 /// Pure, so the live preview's passes and the tests read the same blocks.
 enum MarkdownBlocks {
     /// A fenced code block: its fence lines (their words, no line end) and every line from the opening fence to the end
@@ -74,6 +74,54 @@ enum MarkdownBlocks {
             let block = NSRange(location: all[i].line.location, length: NSMaxRange(all[end - 1].line) - all[i].line.location)
             found.append(Table(block: block, rows: rows))
             i = end
+        }
+        return found
+    }
+
+    /// A toggle (Sven, 2026-11-21): its line `- ▾ Title` (open) or `- ▸ Title` (folded), its `- ▸` mark and whether it is
+    /// folded, and the lines it holds: the lines under it indented deeper than it, blank ones between them included, up
+    /// to the first line with words at its indent or less; nil when it holds none.
+    struct Toggle: Equatable {
+        var line: NSRange
+        var mark: NSRange
+        var folded: Bool
+        var children: NSRange?
+    }
+
+    /// A toggle's triangles, and its mark (`- ▸`) as a pattern, which MarkdownFormat's line marks build on.
+    static let folded = "▸", unfolded = "▾"
+    static let toggleSign = #"[-*+][ \t][▸▾]"#
+    /// A toggle line: its indent, then its mark (the triangle last), then the space.
+    static let toggleLine = try! NSRegularExpression(pattern: #"^([ \t]*)("# + toggleSign + #")[ \t]"#)
+
+    /// A line's indent in columns, a tab to the next of every four, where its words start, and whether it has none.
+    static func indent(_ s: NSString, _ line: NSRange) -> (columns: Int, words: Int, blank: Bool) {
+        var columns = 0, i = line.location
+        while i < NSMaxRange(line), [32, 9].contains(s.character(at: i)) {
+            columns = s.character(at: i) == 9 ? (columns / 4 + 1) * 4 : columns + 1
+            i += 1
+        }
+        return (columns, i, i == NSMaxRange(line))
+    }
+
+    /// The toggles outside `skipping` (code blocks), in order; a toggle inside another's lines is listed too.
+    static func toggles(_ s: NSString, skipping: [NSRange] = []) -> [Toggle] {
+        let all = lines(s)
+        var found: [Toggle] = []
+        for (n, (words, line)) in all.enumerated() {
+            guard !skipping.contains(where: { NSIntersectionRange($0, line).length > 0 }),
+                  let m = toggleLine.firstMatch(in: s as String, range: words) else { continue }
+            let own = indent(s, words).columns
+            var last: Int?
+            for next in all[(n + 1)...] {
+                let (columns, _, blank) = indent(s, next.words)
+                if blank { continue }
+                guard columns > own else { break }
+                last = NSMaxRange(next.line)
+            }
+            let children = last.map { NSRange(location: NSMaxRange(line), length: $0 - NSMaxRange(line)) }
+            let mark = m.range(at: 2)
+            found.append(Toggle(line: line, mark: mark, folded: s.substring(with: NSRange(location: NSMaxRange(mark) - 1, length: 1)) == folded, children: children))
         }
         return found
     }
@@ -174,4 +222,6 @@ extension NSAttributedString.Key {
     static let notesCodeBlock = NSAttributedString.Key("PilotNotesCodeBlock")
     /// On a table drawn as a grid: its MarkdownTableGrid.
     static let notesTable = NSAttributedString.Key("PilotNotesTable")
+    /// On a toggle's `- ▸`, drawn clear: whether it is folded; its triangle is drawn in its place.
+    static let notesToggle = NSAttributedString.Key("PilotNotesToggle")
 }
