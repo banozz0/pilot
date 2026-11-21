@@ -108,6 +108,29 @@ struct CleanTests {
         var progress = CleanProgress()
         Self.dryRun172.split(whereSeparator: \.isNewline).forEach { progress.read(String($0)) }
         #expect(progress == CleanProgress(section: "Large files", items: 5))
+        // Its file list (W89): each path under its part with Mole's decimal size; one counted under another, the Trash's
+        // items and a pattern are left out.
+        let list = CleanList.parse("""
+        # Mole Cleanup Preview - 2026-11-21 10:00:00
+        #   /Users/*/Library/Caches/com.example.app
+
+        === User essentials ===
+        /Users/me/Library/Caches/Foo  # 57.9MB, 12 items
+        /Users/me/Library/Caches/Foo/Sub  # 1.0MB, counted under /Users/me/Library/Caches/Foo
+        /Users/me/.Trash/old.zip  # 4KB
+        /Users/me/Library/Logs/*.log  # 1KB
+
+        === Developer tools ===
+        /Users/me/Library/Developer/Xcode/DerivedData/App-x  # 1.02GB
+        /Users/me/Library/Caches/Bar  # size unknown
+        """, home: "/Users/me")
+        #expect(list.parts.map(\.name) == ["User essentials", "Developer tools"])
+        #expect(list.rows.map(\.path) == ["/Users/me/Library/Caches/Foo", "/Users/me/Library/Developer/Xcode/DerivedData/App-x", "/Users/me/Library/Caches/Bar"])
+        #expect(list.rows.map(\.bytes) == [57_900_000, 1_020_000_000, nil] && list.rows[0].count == 12)
+        #expect(list.parts[1].bytes == 1_020_000_000 && list.rows[2].size == "size unknown")
+        #expect(list.rows[0].id == CleanList.id("/Users/me/Library/Caches/Foo") && list.rows[0].id.count == 10)
+        #expect(list.rows([list.rows[1].id, "0000000000"]) == [list.rows[1]])
+        #expect(list.without([list.rows[0].id]).parts.map(\.name) == ["Developer tools"])
     }
 
     @Test("A run with admin access cached includes system caches; a run that never summed has no total")

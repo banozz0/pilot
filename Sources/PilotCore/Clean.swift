@@ -24,6 +24,8 @@ public struct CleanPreview: Equatable, Sendable {
     public let total: String?
     /// Mole skipped the system caches for want of a cached admin session; the real clean asks for it.
     public let systemSkipped: Bool
+    /// Every path the run listed in its file list, what Clean's ticks act on (W89); empty when the file did not read.
+    public var list: CleanList = .empty
 
     public static func parse(_ text: String) -> CleanPreview {
         var items: [Item] = [], section = "", total: String?, systemSkipped = false
@@ -53,6 +55,148 @@ public struct CleanPreview: Equatable, Sendable {
         var detail = split.map { String(line[$0.upperBound...]) } ?? ""
         if detail.hasSuffix(" dry") { detail.removeLast(4) }
         return Item(section: section, title: title, detail: detail)
+    }
+}
+
+/// Mole's own file list from its dry run, `~/.config/mole/clean-list.txt` (Mole 1.72): each path it would remove, under
+/// its `=== part ===` heading, with its size (W89). Clean shows them as ticked rows, every one ticked as Mole's clean took
+/// them all, and moves only the ticked ones to the Trash. Left out, so never offered: a path counted under another listed
+/// one (it goes with that one), anything in the Trash (Mole empties it; it cannot go to the Trash again), and any line
+/// that is not one absolute path.
+public struct CleanList: Equatable, Sendable {
+    public struct Row: Equatable, Sendable, Identifiable {
+        /// A short hash of the path: the same path keeps its id from one run to the next.
+        public let id: String
+        public let path: String, part: String
+        /// Mole's measure, nil when it said "size unknown".
+        public let bytes: Int64?
+        /// The files and folders it holds, as Mole counted them (1 for one).
+        public let count: Int
+
+        public init(path: String, part: String, bytes: Int64?, count: Int = 1) {
+            id = CleanList.id(path); self.path = path; self.part = part; self.bytes = bytes; self.count = count
+        }
+
+        public var size: String { bytes.map(RemoveList.size) ?? "size unknown" }
+    }
+
+    /// One `=== part ===` heading's rows, in Mole's order.
+    public struct Part: Equatable, Sendable, Identifiable {
+        public let name: String
+        public let rows: [Row]
+        public var id: String { name }
+        public var bytes: Int64 { CleanList.bytes(rows) }
+    }
+
+    public let rows: [Row]
+    /// The rows by part, grouped once here, not on every read.
+    public let parts: [Part]
+    public static let empty = CleanList(rows: [])
+
+    public init(rows: [Row]) {
+        self.rows = rows
+        var order: [String] = [], grouped: [String: [Row]] = [:]
+        for row in rows {
+            if grouped[row.part] == nil { order.append(row.part) }
+            grouped[row.part, default: []].append(row)
+        }
+        parts = order.map { Part(name: $0, rows: grouped[$0] ?? []) }
+    }
+
+    public var bytes: Int64 { Self.bytes(rows) }
+    public static func bytes(_ rows: [Row]) -> Int64 { rows.compactMap(\.bytes).reduce(0, +) }
+
+    /// The rows `ids` name, in the list's order; an id it does not hold is dropped, so nothing outside it can be named.
+    public func rows(_ ids: some Collection<String>) -> [Row] {
+        let wanted = Set(ids)
+        return rows.filter { wanted.contains($0.id) }
+    }
+
+    /// The list once `ids` are gone: what a clean left.
+    public func without(_ ids: Set<String>) -> CleanList { CleanList(rows: rows.filter { !ids.contains($0.id) }) }
+
+    /// `/Users/me/Library/Caches/Foo  # 57.9MB, 12 items` under `=== App caches ===`; `home` places its Trash.
+    public static func parse(_ text: String, home: String) -> CleanList {
+        let trash = (home.hasSuffix("/") ? home : home + "/") + ".Trash/"
+        var rows: [Row] = [], part = "", seen = Set<String>()
+        for raw in text.split(whereSeparator: \.isNewline) {
+            let line = String(raw)
+            if line.hasPrefix("=== "), line.hasSuffix(" ===") { part = String(line.dropFirst(4).dropLast(4)); continue }
+            guard !line.hasPrefix("#"), let mark = line.range(of: "  # ", options: .backwards) else { continue }
+            let path = String(line[..<mark.lowerBound]), notes = line[mark.upperBound...].components(separatedBy: ", ")
+            guard path.hasPrefix("/"), !path.contains("*"), !path.hasPrefix(trash), (path as NSString).standardizingPath == path,
+                  !notes.contains(where: { $0.hasPrefix("counted under ") }), seen.insert(path).inserted else { continue }
+            let count = notes.dropFirst().lazy.compactMap { $0.hasSuffix(" items") ? Int($0.dropLast(6)) : nil }.first ?? 1
+            rows.append(Row(path: path, part: part, bytes: size(notes[0]), count: count))
+        }
+        return CleanList(rows: rows)
+    }
+
+    /// Mole's sizes are decimal ("57.9MB", "1.02GB", "4KB", "0B"); nil for "size unknown".
+    public static func size(_ words: String) -> Int64? {
+        let units: [(String, Double)] = [("TB", 1e12), ("GB", 1e9), ("MB", 1e6), ("KB", 1e3), ("B", 1)]
+        for (unit, scale) in units where words.hasSuffix(unit) {
+            return Double(words.dropLast(unit.count)).map { Int64(($0 * scale).rounded()) }
+        }
+        return nil
+    }
+
+    /// FNV-1a of the path, its first 10 hex digits.
+    public static func id(_ path: String) -> String {
+        var hash: UInt64 = 0xcbf2_9ce4_8422_2325
+        for byte in path.utf8 { hash = (hash ^ UInt64(byte)) &* 0x100_0000_01b3 }
+        let hex = String(hash, radix: 16)
+        return String((String(repeating: "0", count: 16 - hex.count) + hex).prefix(10))
+    }
+
+    /// Moves each row to the Trash through `trash`, one at a time: a row that fails says why and the rest go on. A path
+    /// that is gone, or is `home` or a folder above it, is not moved.
+    public static func move(_ rows: [Row], home: String, trash: (URL) async throws -> Void) async -> CleanOutcome {
+        var outcome = CleanOutcome()
+        let homeParts = URL(filePath: home).standardizedFileURL.pathComponents
+        for row in rows {
+            let url = URL(filePath: row.path)
+            if homeParts.starts(with: url.standardizedFileURL.pathComponents) {
+                outcome.failed.append(.init(row: row, why: "it holds the home folder, so Clean leaves it"))
+            } else if (try? FileManager.default.attributesOfItem(atPath: row.path)) == nil {
+                outcome.failed.append(.init(row: row, why: "it is no longer there"))
+            } else {
+                do {
+                    try await trash(url)
+                    outcome.moved.append(row)
+                } catch { outcome.failed.append(.init(row: row, why: error.localizedDescription)) }
+            }
+        }
+        return outcome
+    }
+}
+
+/// What a clean of ticked rows did: the rows now in the Trash, and each one that is not with why.
+public struct CleanOutcome: Equatable, Sendable {
+    public struct Failure: Equatable, Sendable {
+        public let row: CleanList.Row, why: String
+    }
+
+    public var moved: [CleanList.Row] = [], failed: [Failure] = []
+    /// The run's id in Reports, once it is kept there.
+    public var report: String?
+
+    public init(moved: [CleanList.Row] = [], failed: [Failure] = []) { self.moved = moved; self.failed = failed }
+
+    public var bytes: Int64 { CleanList.bytes(moved) }
+
+    /// "Moved 2 items, 1.2 MB, to the Trash; 1 not moved."
+    public var summary: String {
+        let n = moved.count
+        let lead = "Moved \(n) item\(n == 1 ? "" : "s"), \(RemoveList.size(bytes)), to the Trash"
+        return failed.isEmpty ? lead : "\(lead); \(failed.count) not moved"
+    }
+
+    /// What Reports keeps as the run's output: each row moved or not and why, then the summary.
+    public func text(home: String) -> String {
+        let moved = moved.map { "Moved to the Trash: \(AppConfigs.tilde($0.path, home: home)) (\($0.size))" }
+        let failed = failed.map { "Not moved: \(AppConfigs.tilde($0.row.path, home: home)): \($0.why)" }
+        return (moved + failed + ["", summary]).joined(separator: "\n")
     }
 }
 
@@ -115,13 +259,15 @@ public enum CleanMenu {
 
 /// Mole's preview, run once and kept for 15 minutes (it takes a minute or two and keeps going when the menu closes);
 /// a menu opening meanwhile waits on the same run and reads its progress. `run` is the dry run's output, nil when it
-/// failed; it hands each line Mole prints to its argument as it goes.
+/// failed; it hands each line Mole prints to its argument as it goes. `list` reads the file list that run wrote, given
+/// when it started, so an older run's file is never read as this one's (W89).
 @MainActor @Observable
 public final class CleanPreviewer {
     public static let keep: TimeInterval = 15 * 60
 
     @ObservationIgnored private let now: () -> Date
     @ObservationIgnored private let run: (@escaping @Sendable (String) -> Void) async -> String?
+    @ObservationIgnored private let list: @Sendable (Date) -> CleanList?
     @ObservationIgnored private var kept: (at: Date, preview: CleanPreview)?
     @ObservationIgnored private var running: Task<CleanPreview?, Never>?
     /// Bumped by `drop`, so a run let go of before a clean neither reports nor is kept.
@@ -133,8 +279,10 @@ public final class CleanPreviewer {
     /// Each new run's start, with who asked for it (the menu, the command), so a log says what started Mole.
     @ObservationIgnored public var onStart: ((String) -> Void)?
 
-    public init(now: @escaping () -> Date = { .now }, run: @escaping (@escaping @Sendable (String) -> Void) async -> String?) {
+    public init(now: @escaping () -> Date = { .now }, list: @escaping @Sendable (Date) -> CleanList? = { _ in nil },
+                run: @escaping (@escaping @Sendable (String) -> Void) async -> String?) {
         self.now = now
+        self.list = list
         self.run = run
     }
 
@@ -152,8 +300,11 @@ public final class CleanPreviewer {
         let mine = generation
         onStart?(caller)
         progress = CleanProgress()
-        let task = Task { [run] in
-            let preview = await run { line in Task { @MainActor [weak self] in self?.heard(line, in: mine) } }.map(CleanPreview.parse)
+        let task = Task { [run, list] in
+            let started = Date.now
+            var preview = await run { line in Task { @MainActor [weak self] in self?.heard(line, in: mine) } }.map(CleanPreview.parse)
+            // The file list is read and parsed off the main thread.
+            if preview != nil { preview?.list = await Task.detached { list(started) }.value ?? .empty }
             finish(preview, in: mine)
             return preview
         }
@@ -169,6 +320,14 @@ public final class CleanPreviewer {
         progress = nil
         running?.cancel()
         running = nil
+    }
+
+    /// After a clean of ticked rows the rows it moved leave the kept list; the rest stay to tick, and Mole's own lines
+    /// stay as it printed them.
+    public func cleaned(_ ids: Set<String>) {
+        guard let at = kept?.at, var preview = kept?.preview else { return }
+        preview.list = preview.list.without(ids)
+        kept = (at, preview)
     }
 
     private func heard(_ line: String, in run: Int) {

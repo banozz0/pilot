@@ -67,6 +67,25 @@ struct ReportsPageRenders {
         #expect(!text.contains("[34m"), "colours stripped, read: \(text)")
         // Login and background items left for a page of their own (Sven, 2026-11-16).
         #expect(!text.contains("Login and background"), "read: \(text)")
+        // W89: Clean's ticked list in Instrument, parts closed as it opens; Mole there and its list kept.
+        look.style = .instrument
+        let list = CleanList(rows: [
+            CleanList.Row(path: "/Users/me/Library/Caches/com.example.FakeApp", part: "App caches", bytes: 2_500_000, count: 2),
+            CleanList.Row(path: "/Users/me/Library/Caches/com.example.OtherApp", part: "App caches", bytes: 1_200_000),
+            CleanList.Row(path: "/Users/me/Library/Logs/FakeApp", part: "Logs", bytes: 300_000),
+            CleanList.Row(path: "/Users/me/Library/Caches/Homebrew/downloads", part: "Developer tools", bytes: 3_500_000),
+        ])
+        let ticks = ReportsGround {
+            UpkeepPage(store: store, mole: true, homebrew: true, cleanList: list)
+        }.styled(.page(.upkeep), look: look).frame(width: 1000, height: 1500).pilotTheme(look: look)
+        try LookPageTests().hosted(ticks, height: 1500) { host in
+            let rep = try #require(snapshot(host, scale: 2))
+            if let dir { try rep.representation(using: .png, properties: [:])?.write(to: dir.appending(path: "upkeep-clean-ticks.png")) }
+            let read = try recognisedText(in: rep).map(\.text).joined(separator: "\n")
+            for line in ["What Clean would remove", "App caches", "Logs", "Developer tools", "Move ticked to Trash", "Clean all"] {
+                #expect(read.contains(line), "\(line) missing, read: \(read)")
+            }
+        }
         for query in ["update", "clean", "upgrade", "free space"] { #expect(AppPlace.search(query).first == AppPlace(.upkeep), "\(query)") }
         #expect(AppPlace.search("report").first == AppPlace(.reports))
     }

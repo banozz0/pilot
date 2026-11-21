@@ -19,6 +19,9 @@ final class ControlJobsTests {
     var reads = 0
     var mole: String? = "/opt/homebrew/bin/mo"
     var previews = 0
+    var trashed: [[String]] = []
+    nonisolated static let cleanList = CleanList(rows: [CleanList.Row(path: "/Users/me/Library/Caches/Chrome", part: "Browsers", bytes: 1_730_000_000),
+                                       CleanList.Row(path: "/Users/me/Library/Developer/Xcode/DerivedData", part: "Developer tools", bytes: 4_200_000_000)])
 
     static let outdated = [
         UpdateRow(item: .package(Package(.formula, "git")!), from: "2.40", to: "2.41"),
@@ -44,7 +47,8 @@ final class ControlJobsTests {
         }
         jobs.readUpdates = { [unowned self] in reads += 1; return rows }
         jobs.includeSelfUpdating = { false }
-        jobs.previewer = CleanPreviewer { [unowned self] _ in previews += 1; return Self.moleOutput }
+        jobs.previewer = CleanPreviewer(list: { _ in Self.cleanList }) { [unowned self] _ in previews += 1; return Self.moleOutput }
+        jobs.trash = { [unowned self] ids in trashed.append(ids); return CleanOutcome(moved: Self.cleanList.rows(ids)) }
         jobs.mole = { [unowned self] in mole }
         jobs.every = .milliseconds(20)
         verbs.registerCore()
@@ -192,6 +196,17 @@ final class ControlJobsTests {
         #expect(Self.list(ready["items"]).map(Self.fields).map { $0["title"] } == [.string("Chrome cache"), .string("Xcode DerivedData")])
         #expect(await object("clean", "preview")["state"] == .string("ready"))
         #expect(previews == 1)
+        // W89: bare clean lists too, part by part, every row ticked; ids clean only those rows, after Allow.
+        let parts = Self.list(await object("clean")["parts"]).map(Self.fields)
+        #expect(parts.map { $0["part"] } == [.string("Browsers"), .string("Developer tools")])
+        let id = Self.list(parts[1]["rows"]).map(Self.fields)[0]["id"]
+        #expect(id == .string(Self.cleanList.rows[1].id) && Self.list(parts[1]["rows"]).map(Self.fields)[0]["ticked"] == .bool(true))
+        #expect(await ask("clean", "0000000000").error?.code == .badValue && trashed.isEmpty)
+        allow = false
+        #expect(await ask("clean", Self.cleanList.rows[1].id).error?.code == .denied && trashed.isEmpty)
+        allow = true
+        let moved = await object("clean", Self.cleanList.rows[1].id)
+        #expect(trashed == [[Self.cleanList.rows[1].id]] && Self.list(moved["moved"]).count == 1 && asked.last?.title == "Clean")
 
         jobs.previewer = CleanPreviewer { _ in try? await Task.sleep(for: .seconds(30)); return nil }
         let running = await object("clean", "preview")
