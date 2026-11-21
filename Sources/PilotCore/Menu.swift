@@ -662,6 +662,11 @@ public struct MenuEntry: Identifiable, Equatable, Sendable {
     public var section: String?
     /// An extension's detail, which the panel draws in place of the list this row stands alone in (card agent-bo-95423245).
     public var extensionDetail: Extension.Detail?
+    /// T31, a Raycast row as Raycast lays it out: its accessories in order (drawn in `detail`'s place), its section's
+    /// subtitle beside the heading, and its side detail, drawn at the list's right while the view shows details.
+    public var accessories: [Extension.Item.Accessory]?
+    public var sectionSubtitle: String?
+    public var sideDetail: Extension.Detail?
     /// The extension whose page Cmd+Return opens from its detail (pilot-1-1 T9, Q639); nil when it has none to open.
     public var extensionPage: String?
     /// The installed extension an Extensions row stands for (story 158): Cmd+K offers Uninstall… on it.
@@ -850,6 +855,12 @@ public struct MenuNavigator: Sendable {
     public let isLive: Bool
     /// A live view's Raycast List.EmptyView while its list has no rows (T26), drawn in the panel's empty look.
     public var emptyView: Extension.Empty?
+    /// A Raycast view's chrome (T31): its navigation title and icon in the foot, its search bar's placeholder, and
+    /// whether its list shows the selected row's detail at its right.
+    public var chrome: Extension.Chrome?
+    /// A Raycast command's view (T31), drawn as Raycast lays it out: its session gives it a chrome as it opens. Pilot's own
+    /// live pickers (the catalogue, the Raycast Store, folder designs) and extension.json lists have none.
+    public var isRaycast: Bool { isLive && chrome != nil }
 
     /// `branch` opens the menu inside it, as Omarchy's apps menu opens in Apps; `frecency` ranks the entries as of `now`;
     /// `root` orders and hides the root's branches and places the extras switched on among them.

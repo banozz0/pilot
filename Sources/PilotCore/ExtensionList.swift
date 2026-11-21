@@ -224,17 +224,30 @@ extension Extension {
         public let section: String?, accessory: Badge?
         /// How many of its actions were of a type Pilot does not know, or missing their field, and so dropped.
         public let dropped: Int
+        /// T31, a Raycast row as Raycast lays it out: every accessory in its order (the `accessory` above is the first with
+        /// text, for the places that show one word), its section's subtitle, its symbol's tint (a Raycast colour), a file
+        /// whose own icon it wears (`fileIcon`), and its side detail while its List shows details.
+        public internal(set) var accessories: [Accessory]
+        /// Filled in from its list's `sections` (each section's subtitle sent once per answer).
+        public internal(set) var sectionSubtitle: String?
+        public let tint: String?, file: String?
+        public let detail: Detail?
 
         public init(id: String? = nil, title: String, subtitle: String? = nil, icon: String? = nil, keywords: String? = nil,
                     actions: [Action], badges: [Badge] = [], inline: [Action] = [], image: Data? = nil, section: String? = nil,
-                    accessory: Badge? = nil, symbol: String? = nil) {
+                    accessory: Badge? = nil, symbol: String? = nil, accessories: [Accessory] = [], sectionSubtitle: String? = nil,
+                    tint: String? = nil, file: String? = nil, detail: Detail? = nil) {
             self.id = id; self.title = title; self.subtitle = subtitle; self.icon = icon; self.keywords = keywords; self.actions = actions
             self.image = image; self.section = section; self.accessory = accessory; self.symbol = symbol.flatMap(Self.symbolName)
             self.badges = Array(badges.prefix(Badge.most)); self.inline = Array(inline.prefix(Self.mostInline))
+            self.accessories = accessories; self.sectionSubtitle = sectionSubtitle; self.tint = tint; self.file = file; self.detail = detail
             dropped = 0
         }
 
-        private enum CodingKeys: String, CodingKey { case id, title, subtitle, icon, keywords, actions, badges, inline, image, section, accessory, symbol }
+        private enum CodingKeys: String, CodingKey {
+            case id, title, subtitle, icon, keywords, actions, badges, inline, image, section, accessory, symbol
+            case accessories, tint, file, detail
+        }
 
         public init(from decoder: any Decoder) throws {
             let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -255,6 +268,113 @@ extension Extension {
             // A word alone, or a badge's text and tone.
             accessory = (try? c.decode(String.self, forKey: .accessory)).flatMap { $0.isEmpty ? nil : Badge(text: $0) }
                 ?? (try? c.decode(Badge.self, forKey: .accessory))
+            // Read leniently, as a badge is: a broken accessory or detail is skipped, never the row.
+            // decodeIfPresent: a missing key is no throw, which ~700 rows an answer would pay for.
+            accessories = Array(((try? c.decodeIfPresent([Lenient<Accessory>].self, forKey: .accessories)) ?? []).compactMap(\.value).prefix(Accessory.most))
+            sectionSubtitle = nil
+            tint = try? c.decodeIfPresent(String.self, forKey: .tint)
+            file = (try? c.decodeIfPresent(String.self, forKey: .file)).flatMap { $0.hasPrefix("/") ? $0 : nil }
+            detail = try? c.decodeIfPresent(Detail.self, forKey: .detail)
+        }
+
+        /// A Raycast List.Item accessory (T31), drawn at the row's right in Raycast's order: its text, or a tag (a pill
+        /// tinted with its colour), or a date already worded; its colour (a Raycast colour); its icon; its tooltip. An
+        /// accessory's picture comes once per answer, named by `picture` (the list's `pictures`), filled in by `resolving`.
+        public struct Accessory: Equatable, Sendable, Decodable {
+            /// The most a row shows.
+            public static let most = 6
+            public let text: String?, tag: Bool, color: String?, tooltip: String?
+            public internal(set) var picture: Picture
+            /// The key of its picture in its list's `pictures`.
+            let named: String?
+
+            public init(text: String? = nil, tag: Bool = false, color: String? = nil, tooltip: String? = nil, picture: Picture = Picture()) {
+                self.text = text; self.tag = tag; self.color = color; self.tooltip = tooltip; self.picture = picture; named = nil
+            }
+
+            private enum CodingKeys: String, CodingKey { case text, tag, color, tooltip, picture }
+
+            public init(from decoder: any Decoder) throws {
+                let c = try decoder.container(keyedBy: CodingKeys.self)
+                text = (try? c.decodeIfPresent(String.self, forKey: .text)).flatMap { $0.isEmpty ? nil : $0 }
+                tag = (try? c.decodeIfPresent(Bool.self, forKey: .tag)) ?? false
+                color = try? c.decodeIfPresent(String.self, forKey: .color)
+                tooltip = try? c.decodeIfPresent(String.self, forKey: .tooltip)
+                named = try? c.decodeIfPresent(String.self, forKey: .picture)
+                picture = Picture(decoder)
+                guard text != nil || !picture.isEmpty || named != nil else {
+                    throw DecodingError.dataCorruptedError(forKey: .text, in: c, debugDescription: "an empty accessory")
+                }
+            }
+
+            /// Its picture filled in from its list's `pictures` (base64 by key).
+            func resolving(_ pictures: [String: Data]) -> Accessory {
+                guard let named, let image = pictures[named] else { return self }
+                var out = self
+                out.picture = Picture(symbol: picture.symbol, tint: picture.tint, image: image, emoji: picture.emoji, file: picture.file)
+                return out
+            }
+        }
+
+        /// Its accessories' pictures and its section's subtitle filled in from its list's `pictures` and `sections`.
+        func resolving(_ pictures: [String: Data], sections: [String: String]) -> Item {
+            let note = section.flatMap { sections[$0] }
+            guard note != nil || !pictures.isEmpty && accessories.contains(where: { $0.named != nil }) else { return self }
+            var out = self
+            out.sectionSubtitle = note
+            if !pictures.isEmpty { out.accessories = accessories.map { $0.resolving(pictures) } }
+            return out
+        }
+    }
+}
+
+extension Extension {
+    /// A Raycast icon as pilot-ext-host sends it beside an accessory, a metadata label or a tag (T31): an SF Symbol and
+    /// its tint (a Raycast colour), a picture's PNG or JPEG bytes, an emoji, or a file whose own icon is drawn.
+    public struct Picture: Equatable, Sendable {
+        public let symbol: String?, tint: String?, image: Data?, emoji: String?, file: String?
+
+        public init(symbol: String? = nil, tint: String? = nil, image: Data? = nil, emoji: String? = nil, file: String? = nil) {
+            self.symbol = symbol.flatMap(Item.symbolName); self.tint = tint; self.image = image; self.emoji = emoji; self.file = file
+        }
+
+        public var isEmpty: Bool { symbol == nil && image == nil && emoji == nil && file == nil }
+
+        private enum CodingKeys: String, CodingKey { case symbol, tint, image, icon, file }
+
+        /// Read from the same object as what wears it, leniently: a field that is not what it should be is no picture.
+        init(_ decoder: any Decoder) {
+            let c = try? decoder.container(keyedBy: CodingKeys.self)
+            func read(_ key: CodingKeys) -> String? { (try? c?.decodeIfPresent(String.self, forKey: key)) ?? nil }
+            self.init(symbol: read(.symbol), tint: read(.tint),
+                      image: read(.image).flatMap { Data(base64Encoded: $0) }.flatMap { $0.count <= Item.largestImage ? $0 : nil },
+                      emoji: read(.icon).flatMap { ScriptCommand.isEmoji($0) ? $0 : nil }, file: read(.file).flatMap { $0.hasPrefix("/") ? $0 : nil })
+        }
+    }
+
+    /// A Raycast colour (a `Color` name, a hex or CSS string) as the theme role Pilot draws it in (T31): Pilot's theme,
+    /// never Raycast's palette. Blue, purple and magenta are the accent, green good, yellow and orange amber, red a
+    /// problem, the text colours the text's; a hex or any other is the accent.
+    public static func tint(_ colour: String?) -> MenuIcon.Tint? {
+        guard let colour, !colour.isEmpty else { return nil }
+        switch colour.lowercased().replacingOccurrences(of: "raycast-", with: "") {
+        case "red": return .problem
+        case "green": return .good
+        case "yellow", "orange": return .amber
+        case "primarytext", "primary-text": return .neutral
+        case "secondarytext", "secondary-text": return .second
+        default: return .accent
+        }
+    }
+
+    /// What Raycast draws around a view (T31): its navigation title (the foot's left, after the command's icon), a
+    /// List's search bar placeholder, and whether a List shows its selected row's detail at its right. `icon` is
+    /// Pilot's own: the command's icon, which the foot wears.
+    public struct Chrome: Equatable, Sendable {
+        public var title: String?, placeholder: String?, showsDetail: Bool
+        public var icon: MenuIcon?
+        public init(title: String? = nil, placeholder: String? = nil, showsDetail: Bool = false, icon: MenuIcon? = nil) {
+            self.title = title; self.placeholder = placeholder; self.showsDetail = showsDetail; self.icon = icon
         }
     }
 }
@@ -269,25 +389,67 @@ extension Extension {
             public init(label: String, text: String) { self.label = label; self.text = text }
         }
 
+        /// One part of a Raycast Metadata, as Raycast lays it out (T31): a label (its title, text and icon), a link (its
+        /// title, text and target), a tag list (its title and tags) or a separator.
+        public struct Part: Equatable, Sendable, Decodable {
+            public enum Kind: String, Sendable, Decodable { case label, link, tags, separator }
+            /// A TagList's tag: its text, colour (a Raycast colour) and icon.
+            public struct Tag: Equatable, Sendable, Decodable {
+                public let text: String?, color: String?, picture: Picture
+                public init(text: String?, color: String? = nil, picture: Picture = Picture()) { self.text = text; self.color = color; self.picture = picture }
+                private enum CodingKeys: String, CodingKey { case text, color }
+                public init(from decoder: any Decoder) throws {
+                    let c = try decoder.container(keyedBy: CodingKeys.self)
+                    text = try? c.decodeIfPresent(String.self, forKey: .text); color = try? c.decodeIfPresent(String.self, forKey: .color)
+                    picture = Picture(decoder)
+                }
+            }
+
+            public let kind: Kind, title: String, text: String?, color: String?, target: String?, picture: Picture, tags: [Tag]
+
+            public init(kind: Kind, title: String = "", text: String? = nil, color: String? = nil, target: String? = nil,
+                        picture: Picture = Picture(), tags: [Tag] = []) {
+                self.kind = kind; self.title = title; self.text = text; self.color = color; self.target = target; self.picture = picture; self.tags = tags
+            }
+
+            private enum CodingKeys: String, CodingKey { case kind, title, text, color, target, tags }
+
+            public init(from decoder: any Decoder) throws {
+                let c = try decoder.container(keyedBy: CodingKeys.self)
+                kind = try c.decode(Kind.self, forKey: .kind)
+                title = ((try? c.decodeIfPresent(String.self, forKey: .title)) ?? nil) ?? ""
+                text = try? c.decodeIfPresent(String.self, forKey: .text); color = try? c.decodeIfPresent(String.self, forKey: .color)
+                target = try? c.decodeIfPresent(String.self, forKey: .target)
+                tags = ((try? c.decodeIfPresent([Lenient<Tag>].self, forKey: .tags)) ?? nil)?.compactMap(\.value) ?? []
+                picture = Picture(decoder)
+            }
+        }
+
         public let markdown: String, metadata: [Fact], actions: [Item.Action]
         /// Its blocks, read as a page's are, the unknown and broken ones skipped; empty when it sends none.
         public let blocks: [Block]
+        /// Its Metadata's parts in order (T31), drawn as Raycast lays them out; `metadata` is the same as flat pairs.
+        public let parts: [Part]
+        /// What its metadata draws: its parts, else its flat facts as labels (Pilot's own extensions send only those).
+        public var laidOut: [Part] { parts.isEmpty ? metadata.map { Part(kind: .label, title: $0.label, text: $0.text) } : parts }
         /// How many of its actions were of a type Pilot does not know, or missing their field, and so dropped.
         public let dropped: Int
 
-        public init(markdown: String, metadata: [Fact], actions: [Item.Action], blocks: [Block] = []) {
-            self.markdown = markdown; self.metadata = metadata; self.actions = actions; self.blocks = blocks
+        public init(markdown: String, metadata: [Fact], actions: [Item.Action], blocks: [Block] = [], parts: [Part] = []) {
+            self.markdown = markdown; self.metadata = metadata; self.actions = actions; self.blocks = blocks; self.parts = parts
             dropped = 0
         }
 
-        private enum CodingKeys: String, CodingKey { case markdown, metadata, actions, blocks }
+        private enum CodingKeys: String, CodingKey { case markdown, metadata, actions, blocks, parts }
 
         public init(from decoder: any Decoder) throws {
             let c = try decoder.container(keyedBy: CodingKeys.self)
             markdown = try c.decodeIfPresent(String.self, forKey: .markdown) ?? ""
             metadata = try c.decodeIfPresent([Fact].self, forKey: .metadata) ?? []
-            (actions, dropped) = try Item.Action.decode(c, .actions)
+            // A List.Item.Detail carries no actions (its row's are the ones pressed).
+            (actions, dropped) = c.contains(.actions) ? try Item.Action.decode(c, .actions) : ([], 0)
             blocks = Block.blocks((try? c.decodeIfPresent([Lenient<Block.Line>].self, forKey: .blocks))?.compactMap(\.value))
+            parts = ((try? c.decodeIfPresent([Lenient<Part>].self, forKey: .parts)) ?? nil)?.compactMap(\.value) ?? []
         }
     }
 }
@@ -474,6 +636,9 @@ extension ExtensionRun {
     private struct Answer: Decodable {
         let type: String, text: String?, items: [Extension.Item]?, ack: Int?, isLoading: Bool?, empty: Extension.Empty?
         let hearsSearch: Bool?, filtering: Bool?, searchText: String?
+        /// T31: the view's navigation title and search bar placeholder, whether a List shows details, and its accessories'
+        /// pictures by key, each sent once per answer however many rows wear it.
+        let title: String?, placeholder: String?, showsDetail: Bool?, pictures: [String: String]?, sections: [String: String]?
     }
 
     /// The list, the detail or the reason in what a view's program printed: the first error, else the last answer.
@@ -498,19 +663,21 @@ extension ExtensionRun {
 
     /// A Raycast host's own fields beside its answer (ADR 0017, T2): the request it answers and whether its List still loads;
     /// its List's search (T30).
-    struct Meta: Equatable { var ack: Int?, loading = false, search = ListSearch() }
+    struct Meta: Equatable { var ack: Int?, loading = false, search = ListSearch(), chrome = Extension.Chrome() }
 
     static func reply(_ line: some StringProtocol) -> Reply {
         guard !line.allSatisfy(\.isWhitespace) else { return .skip }
         let data = Data(line.utf8), decoder = JSONDecoder()
         guard let answer = try? decoder.decode(Answer.self, from: data) else { return .plain }
         let meta = Meta(ack: answer.ack, loading: answer.isLoading == true,
-                        search: ListSearch(hears: answer.hearsSearch == true, filters: answer.filtering ?? true, text: answer.searchText))
+                        search: ListSearch(hears: answer.hearsSearch == true, filters: answer.filtering ?? true, text: answer.searchText),
+                        chrome: Extension.Chrome(title: answer.title, placeholder: answer.placeholder, showsDetail: answer.showsDetail == true))
         switch answer.type {
         case "error": return .answer(.error("says: \(answer.text ?? "it failed")"), meta)
         case "list":
             if answer.items?.isEmpty != false, let empty = answer.empty { return .answer(.empty(empty), meta) }
-            return .answer(.items(answer.items ?? []), meta)
+            let pictures = (answer.pictures ?? [:]).compactMapValues { Data(base64Encoded: $0) }
+            return .answer(.items((answer.items ?? []).map { $0.resolving(pictures, sections: answer.sections ?? [:]) }), meta)
         case "detail": return .answer((try? decoder.decode(Extension.Detail.self, from: data)).map(ListOutcome.detail) ?? .error(unreadable), meta)
         case "form": return .answer((try? decoder.decode(Extension.Form.self, from: data)).map(ListOutcome.form) ?? .error(unreadable), meta)
         default: return .skip
@@ -539,6 +706,9 @@ public enum ExtensionList {
             row.ownActions = item.actions.map(\.label)
             if item.actions.contains(where: { $0.key != nil }) { row.ownKeys = item.actions.map(\.key) }
             row.section = item.section
+            row.accessories = item.accessories.isEmpty ? nil : item.accessories
+            row.sectionSubtitle = item.sectionSubtitle
+            row.sideDetail = item.detail
             return row
         }
     }
@@ -551,7 +721,15 @@ public enum ExtensionList {
             icon.image = image
             return icon
         }
-        if item.icon == nil, let symbol = item.symbol { return .glyph(symbol, .neutral) }
+        // A file's own icon (Raycast's fileIcon, T31: Kill Process's apps), read from the Mac as an app's is.
+        if item.icon == nil, item.symbol == nil, let file = item.file { return MenuIcon(appPath: file, symbol: "doc", tint: .neutral) }
+        // Its tint as Pilot's theme draws that colour (T31: Todo List's circles).
+        if item.icon == nil, let symbol = item.symbol {
+            guard let tint = Extension.tint(item.tint) else { return .glyph(symbol, .neutral) }
+            var icon = MenuIcon.glyph(symbol, tint)
+            icon.ownTint = true
+            return icon
+        }
         return .command(emoji: item.icon ?? command.icon)
     }
 

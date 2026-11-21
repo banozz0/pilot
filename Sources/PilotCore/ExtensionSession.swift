@@ -40,6 +40,8 @@ public final class ExtensionSession: Sendable {
         public var stale: [String: JSONValue] = [:]
         /// Its List's search: heard, filtered by Pilot or by itself, its own text (T30).
         public var search = ListSearch()
+        /// Its navigation title, search bar placeholder and whether its List shows details (T31).
+        public var chrome = Extension.Chrome()
     }
 
     /// A form field's edits the host has not agreed with: its value before them, each value sent, the last one's number.
@@ -242,7 +244,7 @@ public final class ExtensionSession: Sendable {
         let watcher = state.withLock { s -> (@Sendable () -> Void)? in
             if let ack = meta.ack { s.acked = max(s.acked, ack) }
             let (shown, stale) = merged(outcome, &s)
-            let first = s.newest == nil, view = View(outcome: shown, loading: meta.loading, stale: stale, search: meta.search)
+            let first = s.newest == nil, view = View(outcome: shown, loading: meta.loading, stale: stale, search: meta.search, chrome: meta.chrome)
             s.newest = view
             if !view.loading { settle(&s) }
             // An error answers everything waiting; an ack every request up to it; the first line the run.

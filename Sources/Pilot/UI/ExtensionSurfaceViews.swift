@@ -580,6 +580,7 @@ struct BlockMarkdown: View, Equatable {
                 case .code(let code):
                     Text(code).font(ink.mono(compact ? 11 : 12)).foregroundStyle(ink.text2)
                         .padding(8).frame(maxWidth: .infinity, alignment: .leading).background(ink.well, in: .rect(cornerRadius: 6))
+                case .image(let alt, let source): MarkdownImage(alt: alt, source: source)
                 }
             }
         }

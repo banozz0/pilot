@@ -183,6 +183,8 @@ final class PilotMenu {
         source.show = { [weak model] in model?.nav.replaceList($0) }
         (source as? ExtensionListSession)?.showEmpty = { [weak model] in model?.nav.emptyView = $0 }
         (source as? ExtensionListSession)?.showSearch = { [weak model] in model?.nav.query = $0 }
+        (source as? ExtensionListSession)?.showChrome = { [weak model] in model?.nav.chrome = $0 }
+        if let opening = (source as? ExtensionListSession)?.openingChrome, model.nav.chrome == nil { model.nav.chrome = opening }
         // A row on screen is told to its source, and rows the source fills in later keep the row Sven is on (T29).
         source.showKeeping = { [weak self, weak model, weak source] rows in
             guard let self, let model, let source, self.source === source, model.nav.actions == nil else { return }
@@ -213,6 +215,7 @@ final class PilotMenu {
             current.showKeeping = nil
             (current as? ExtensionListSession)?.showEmpty = { _ in }
             (current as? ExtensionListSession)?.showSearch = { _ in }
+            (current as? ExtensionListSession)?.showChrome = { _ in }
             var nav = MenuNavigator(list: [], title: title, live: true)
             nav.query = next.opening
             model.push(nav, over: current)
@@ -1233,6 +1236,7 @@ final class PilotMenu {
                 source.show = { _ in }
                 (source as? ExtensionListSession)?.showEmpty = { _ in }
                 (source as? ExtensionListSession)?.showSearch = { _ in }
+                (source as? ExtensionListSession)?.showChrome = { _ in }
                 model.onQuery = nil
             } else {
                 views.reversed().forEach { $0.source.close() }
@@ -2181,7 +2185,20 @@ extension MenuModel {
         guard found > 0, let only = nav.only else { return nil }
         return "\(found) \(only.rawValue)\(found == 1 ? "" : "s")"
     }
-    var prompt: String { nav.isList || nav.branch != nil ? "Filter…" : "Search or pick…" }
+    var prompt: String {
+        // A Raycast view's search bar as Raycast's (T31): its placeholder with Raycast's ellipsis, else "Search…"; a Detail
+        // has no search bar, so its line says nothing.
+        if nav.isRaycast { return Self.placeholder(nav) }
+        return nav.isList || nav.branch != nil ? "Filter…" : "Search or pick…"
+    }
+
+    /// A Raycast view's search bar placeholder as Raycast shows it (T31): its searchBarPlaceholder with an ellipsis after it
+    /// ("Filter by name…"), "Search…" without one, nothing on a Detail, which has no search bar.
+    static func placeholder(_ nav: MenuNavigator) -> String {
+        guard nav.shownDetail == nil else { return "" }
+        guard let given = nav.chrome?.placeholder?.trimmingCharacters(in: .whitespaces), !given.isEmpty else { return "Search…" }
+        return given.hasSuffix("…") || given.hasSuffix("...") ? given : given + "…"
+    }
 
     /// The list and Cmd+K's actions as the pointer drives them (card agent-bo-95422994): MenuNavigator's seams.
     func pointedRows(_ pointer: PointerTrack) -> PointerList {

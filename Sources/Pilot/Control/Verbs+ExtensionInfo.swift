@@ -200,12 +200,58 @@ extension ControlVerbs {
                                           var r: [String: JSONValue] = ["title": .string(row.title)]
                                           r["subtitle"] = row.subtitle.map(JSONValue.string)
                                           r["section"] = row.section.map(JSONValue.string)
+                                          r["sectionSubtitle"] = row.sectionSubtitle.map(JSONValue.string)
                                           r["actions"] = row.ownActions.map { .array($0.map(JSONValue.string)) }
+                                          r["accessories"] = row.accessories.map { .array($0.map(Self.accessory)) }
+                                          r["sideDetail"] = row.sideDetail.map(Self.pageDetail)
                                           return .object(r)
                                       })]
         if let title = model.nav.title { o["title"] = .string(title) }
         if let empty = model.nav.emptyView { o["empty"] = Self.empty(empty) }
-        if let detail = model.nav.shownDetail { o["detail"] = .string(String(detail.markdown.prefix(200))) }
+        if let detail = model.nav.shownDetail { o["detail"] = Self.pageDetail(detail) }
+        // What Raycast draws around the view (T31), as the page and Hyper+Space draw it.
+        if let chrome = model.nav.chrome {
+            var c: [String: JSONValue] = ["placeholder": .string(MenuModel.placeholder(model.nav)),
+                                          "foot": .string(chrome.title ?? model.nav.title ?? model.command.title)]
+            if chrome.showsDetail { c["showsDetail"] = .bool(true) }
+            o["chrome"] = .object(c)
+        }
+        return .object(o)
+    }
+
+    /// A Raycast accessory in words (T31): its text or tag, its colour and what its icon is.
+    static func accessory(_ one: Extension.Item.Accessory) -> JSONValue {
+        var o: [String: JSONValue] = [:]
+        o["text"] = one.text.map(JSONValue.string)
+        if one.tag { o["tag"] = .bool(true) }
+        o["color"] = one.color.map(JSONValue.string)
+        o["icon"] = picture(one.picture)
+        return .object(o)
+    }
+
+    /// A Raycast icon as words: its symbol and tint, "picture" for bytes, its emoji, or "file <path>".
+    static func picture(_ p: Extension.Picture) -> JSONValue? {
+        if let symbol = p.symbol { return .string(symbol + (p.tint.map { " (\($0))" } ?? "")) }
+        if let image = p.image { return .string("picture \(image.count) B") }
+        if let emoji = p.emoji { return .string(emoji) }
+        return p.file.map { .string("file " + $0) }
+    }
+
+    /// A detail as the page draws it (T31): its markdown's first 200 characters, an image named by its alt, and its
+    /// metadata parts in order.
+    static func pageDetail(_ detail: Extension.Detail) -> JSONValue {
+        var o: [String: JSONValue] = ["markdown": .string(String(detail.markdown.prefix(200)))]
+        let images = DetailBlock.split(detail.markdown).compactMap { if case .image(let alt, let source) = $0 { "\(alt) (\(source.prefix(22))…)" } else { nil } }
+        if !images.isEmpty { o["images"] = .array(images.map(JSONValue.string)) }
+        o["parts"] = detail.parts.isEmpty ? nil : .array(detail.parts.map { part in
+            var p: [String: JSONValue] = ["kind": .string(part.kind.rawValue)]
+            if !part.title.isEmpty { p["title"] = .string(part.title) }
+            p["text"] = part.text.map(JSONValue.string)
+            p["icon"] = picture(part.picture)
+            if !part.tags.isEmpty { p["tags"] = .array(part.tags.map { .string(($0.text ?? "") + ($0.color.map { " (\($0))" } ?? "")) }) }
+            p["target"] = part.target.map(JSONValue.string)
+            return .object(p)
+        })
         return .object(o)
     }
 

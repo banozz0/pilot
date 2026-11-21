@@ -25,6 +25,13 @@ final class ExtensionListSession: MenuSource {
     var showEmpty: (Extension.Empty?) -> Void = { _ in }
     /// A Raycast List set its own search text (T30: Todo List empties it once a todo is added): the search shows it.
     var showSearch: (String) -> Void = { _ in }
+    /// What Raycast draws around the view (T31): its navigation title and the command's icon in the foot, its search
+    /// bar's placeholder, whether its list shows details; set before `show`, and only when it changes. A Raycast
+    /// command's alone: Pilot's own extension.json lists keep Pilot's look.
+    var showChrome: (Extension.Chrome) -> Void = { _ in }
+    /// The chrome its view opens with, before the first answer: the command's icon (nil for an extension.json command).
+    var openingChrome: Extension.Chrome? { command.runtime == .raycast ? Extension.Chrome(icon: icon) : nil }
+    private var shownChrome: Extension.Chrome?
     private let run: (Extension.Command, String) async -> ListOutcome
     /// Ends the transport as the view closes: a session's process; nothing for one-shot runs, each stopped as cancelled.
     private let end: () -> Void
@@ -144,13 +151,18 @@ final class ExtensionListSession: MenuSource {
                 sent.insert(text)
                 showSearch(text)
             }
-            display(view.outcome, loading: view.loading, ownOrder: !view.search.filters)
+            display(view.outcome, loading: view.loading, ownOrder: !view.search.filters, chrome: view.chrome)
         }
     }
 
     /// Shows what the program answered, under the loading row while it still loads; `ownOrder`: a Raycast List filters
-    /// its rows itself, so Pilot keeps them as they come.
-    private func display(_ outcome: ListOutcome, loading: Bool = false, ownOrder: Bool = false) {
+    /// its rows itself, so Pilot keeps them as they come; `chrome`: what Raycast draws around it (T31).
+    private func display(_ outcome: ListOutcome, loading: Bool = false, ownOrder: Bool = false, chrome: Extension.Chrome = Extension.Chrome()) {
+        if command.runtime == .raycast {
+            var chrome = chrome
+            chrome.icon = icon
+            if chrome != shownChrome { shownChrome = chrome; showChrome(chrome) }
+        }
         var rows: [MenuEntry]
         var dropped = 0
         switch outcome {
@@ -187,6 +199,13 @@ final class ExtensionListSession: MenuSource {
                                   icon: .command(emoji: command.icon)), at: 0)
         }
         show(rows)
+    }
+
+    /// The command's icon as the foot wears it (T31): its own or its extension's icon file, else its emoji.
+    private var icon: MenuIcon {
+        var icon = MenuIcon.command(emoji: command.icon)
+        icon.file = command.picture ?? ext.picture
+        return icon
     }
 
     /// A Raycast command's host still runs, so its view can be kept as the panel closes (T30).

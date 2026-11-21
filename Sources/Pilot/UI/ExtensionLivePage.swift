@@ -176,6 +176,8 @@ final class ExtensionLivePageModel {
         if let list = next as? ExtensionListSession {
             list.showEmpty = { [weak self] in self?.nav.emptyView = $0 }
             list.showSearch = { [weak self] in self?.nav.query = $0 }
+            list.showChrome = { [weak self] in self?.nav.chrome = $0 }
+            if nav.chrome == nil { nav.chrome = list.openingChrome }
         }
         if search { next.search(nav.query) }
     }
@@ -184,6 +186,7 @@ final class ExtensionLivePageModel {
         old.show = { _ in }
         (old as? ExtensionListSession)?.showEmpty = { _ in }
         (old as? ExtensionListSession)?.showSearch = { _ in }
+        (old as? ExtensionListSession)?.showChrome = { _ in }
     }
 }
 
@@ -218,7 +221,8 @@ struct ExtensionLivePage: View {
             if model.depth > 0 {
                 IconButton(symbol: "chevron.left", label: "Back", size: 24, glyph: 11) { _ = model.handle(.escape) }
             }
-            TextField(model.nav.title ?? "Search \(model.command.title)", text: $model.query)
+            // A Raycast view's search bar placeholder as Raycast's (T31); a Detail has none.
+            TextField(model.nav.isRaycast ? MenuModel.placeholder(model.nav) : model.nav.title ?? "Search \(model.command.title)", text: $model.query)
                 .textFieldStyle(.plain).font(ink.ui(14)).foregroundStyle(ink.text).focused($focused)
                 .onKeyPress(phases: .down) { press in key(press) }
             let commands = ExtensionLivePageModel.commands(of: model.ext)
@@ -259,25 +263,32 @@ struct ExtensionLivePage: View {
             actions(menu)
         } else if let empty = nav.emptyView {
             // Its actions ride the one row kept behind it (T28), so Return and Cmd+K press them.
-            EmptyState(title: empty.title, line: empty.description)
+            RaycastEmptyView(view: empty)
         } else if nav.rows.isEmpty {
             Text(model.running ? "\(model.command.title) is loading…" : "Starting \(model.command.title)…")
                 .font(ink.ui(13)).foregroundStyle(ink.muted).padding(ink.pageInset)
+        } else if nav.chrome?.showsDetail == true {
+            // A Raycast List that shows details, as Hyper+Space draws it (T31).
+            RaycastListWithDetail(detail: nav.selected?.sideDetail) { rows(nav) }
         } else {
             rows(nav)
         }
     }
 
+    /// The rows as Hyper+Space draws a Raycast list (T31): Raycast's section headings, each row's icon, title, subtitle
+    /// and accessories (InstrumentMenuRow).
     private func rows(_ nav: MenuNavigator) -> some View {
         ScrollViewReader { reader in
             ScrollView {
-                LazyVStack(alignment: .leading, spacing: 2) {
+                LazyVStack(alignment: .leading, spacing: 0) {
                     ForEach(Array(nav.rows.enumerated()), id: \.offset) { index, row in
                         if let section = row.section, index == 0 || nav.rows[index - 1].section != section {
-                            Text(section).font(ink.ui(11, .semibold)).foregroundStyle(ink.muted)
-                                .padding(.top, index == 0 ? 0 : 8).padding(.horizontal, 8)
+                            RaycastSectionHeader(title: section, subtitle: row.sectionSubtitle)
+                                .padding(.horizontal, 12).padding(.top, index == 0 ? 4 : 12).padding(.bottom, 6)
                         }
-                        line(row, on: index == nav.selection).id(index)
+                        InstrumentMenuRow(row: row, on: index == nav.selection, quiet: false, system: false, best: false, query: nav.query,
+                                          alias: nil, layerKeys: [], tile: nil, window: nil, height: MenuPanelSize.lineRow)
+                            .id(index)
                             .contentShape(Rectangle())
                             .onTapGesture { model.click(index) }
                     }
@@ -286,18 +297,6 @@ struct ExtensionLivePage: View {
             }
             .onChange(of: nav.selection) { reader.scrollTo(nav.selection) }
         }
-    }
-
-    private func line(_ row: MenuEntry, on: Bool) -> some View {
-        HStack(spacing: 10) {
-            InstrumentRowIcon(row: row, on: on, tile: nil)
-            Text(row.title).font(ink.ui(13, on ? .semibold : .regular)).foregroundStyle(ink.text).lineLimit(1)
-            if let subtitle = row.subtitle { Text(subtitle).font(ink.ui(12)).foregroundStyle(ink.muted).lineLimit(1) }
-            Spacer(minLength: 8)
-            if let detail = row.detail { Text(detail).font(ink.mono(11)).foregroundStyle(ink.muted).lineLimit(1) }
-        }
-        .padding(.horizontal, 8).frame(height: 34)
-        .background { if on { RoundedRectangle(cornerRadius: 6, style: .continuous).fill(ink.line) } }
     }
 
     private func actions(_ menu: RowActionsMenu) -> some View {
@@ -314,11 +313,13 @@ struct ExtensionLivePage: View {
         .padding(.horizontal, ink.pageInset - 8).padding(.vertical, 10)
     }
 
-    /// Return's action on the selected row, Cmd+K, and Escape once a view is pushed.
+    /// As Raycast's: the command's icon and the view's navigation title, then Return's action on the selected row, Cmd+K,
+    /// and Escape once a view is pushed.
     private var foot: some View {
         let nav = model.nav
         let first = nav.actions == nil ? nav.selected?.ownActions?.first : "Run"
         return HStack(spacing: 14) {
+            RaycastFootPlace(chrome: nav.chrome, title: nav.title ?? model.command.title).font(ink.ui(11.5))
             Spacer()
             if let first { hint("↵", first) }
             if nav.actions != nil || !nav.selectedActions.isEmpty { hint("⌘K", nav.actions == nil ? "Actions" : "Close") }
