@@ -195,8 +195,8 @@ struct NotesPanelTests {
         NotesPage.perform(.step(1), on: model)
         NotesPage.perform(try #require(key(36)), on: model)
         #expect(model.note?.title == "Alpha" && !model.listFocused)
-        // ⌘P pins the open note, ⌘⌫ from the list asks, Return answers.
-        NotesPage.perform(try #require(key(35, .command, "p")), on: model)
+        // ⌘⇧P pins the open note (Q317), ⌘⌫ from the list asks, Return answers.
+        NotesPage.perform(try #require(key(35, [.command, .shift], "p")), on: model)
         #expect(model.note?.pinned == true)
         NotesPage.perform(.list, on: model)
         NotesPage.perform(try #require(key(51, .command)), on: model)
@@ -234,15 +234,16 @@ struct NotesPanelTests {
         #expect(!model.confirmingTrash && model.note?.title == "Alpha" && !model.listFocused)
     }
 
-    @Test("Cmd+P pins and unpins the open note (the highlighted one while the list has the keyboard, Cmd+K's while it is open), in the panel and on the Notes page; Shift+Cmd+P does nothing; Scratch is never pinned and says so")
+    @Test("Cmd+Shift+P pins and unpins the open note (the highlighted one while the list has the keyboard, Cmd+K's while it is open), in the panel and on the Notes page; Cmd+P pins the panel on screen (Q317), never on the page; Scratch is never pinned and says so")
     func cmdPPins() throws {
         let model = NotesModel(store: NoteStore(folder: folder), defaults: defaults)
         model.reload()
         model.new(); model.text = "Alpha"; model.flush()
         model.new(); model.text = "Beta"; model.flush()
         let beta = model.current
-        #expect(NotesKey(code: 35, flags: .command, key: "p", list: false, confirming: false) == .pin)
-        #expect(NotesKey(code: 35, flags: [.command, .shift], key: "p", list: false, confirming: false) == nil)
+        #expect(NotesKey(code: 35, flags: [.command, .shift], key: "p", list: false, confirming: false) == .pin)
+        #expect(NotesKey(code: 35, flags: .command, key: "p", list: false, confirming: false) == .pinOnScreen)
+        #expect(NotesKey(code: 35, flags: [.command, .option], key: "p", list: false, confirming: false) == nil)
         #expect(model.note.map { NoteAction.choices(for: $0).first } == .pin)
         model.perform(.pin)
         #expect(model.notes.first { $0.id == beta }?.pinned == true)
@@ -264,14 +265,27 @@ struct NotesPanelTests {
         // The editor holding the keyboard, in the panel and on the Notes page alike, the pinned note goes to Pinned.
         model.open(beta)
         let editor = NotesTextView(usingTextLayoutManager: false)
-        #expect(NotesKey.pressed(35, .command, "p", model: model, responder: editor) == .pin)
-        let page = try #require(NotesPageKeys.key(35, .command, "p", model: model, responder: editor))
+        #expect(NotesKey.pressed(35, [.command, .shift], "P", model: model, responder: editor) == .pin)
+        let page = try #require(NotesPageKeys.key(35, [.command, .shift], "P", model: model, responder: editor))
         NotesPage.perform(page, on: model)
         #expect(model.notes.first { $0.id == beta }?.pinned == true && model.groups.first { $0.section == .pinned }?.notes.map(\.id).contains(beta) == true)
-        // Cmd+K's Pin row shows ⌘P, and ⌘P with Cmd+K open pins its note and closes it.
+        // Cmd+P in the panel pins it on screen; on the page, which is no panel, the key goes on.
+        var screen = 0
+        model.toggleOnScreen = { screen += 1 }
+        model.perform(try #require(NotesKey.pressed(35, .command, "p", model: model, responder: editor)))
+        #expect(screen == 1 && NotesPageKeys.key(35, .command, "p", model: model, responder: editor) == nil)
+        // Cmd+K's rows show ⌘⇧P for the note and, in the panel alone, ⌘P for the screen; each key works with it open.
         model.openActions()
-        #expect(model.actions?.choices.first == .unpin && NoteAction.unpin.key == "⌘P" && NoteAction.pin.key == "⌘P")
-        let held = try #require(NotesKey.pressed(35, .command, "p", model: model, responder: editor))
+        #expect(model.actions?.choices.contains(.screen(false)) == false)
+        model.perform(.closeActions)
+        model.panelIsKey = { true }
+        model.openActions()
+        #expect(model.actions?.choices.prefix(2) == [.unpin, .screen(false)] && NoteAction.unpin.key == "⌘⇧P" && NoteAction.screen(true).key == "⌘P")
+        #expect(NoteAction.screen(true).title == "Unpin from screen")
+        model.perform(try #require(NotesKey.pressed(35, .command, "p", model: model, responder: editor)))
+        #expect(model.actions == nil && screen == 2)
+        model.openActions()
+        let held = try #require(NotesKey.pressed(35, [.command, .shift], "P", model: model, responder: editor))
         #expect(held == .pin)
         model.perform(held)
         #expect(model.actions == nil && model.notes.first { $0.id == beta }?.pinned == false)
@@ -376,7 +390,7 @@ struct NotesPanelTests {
         #expect(model.actions?.choices.map(\.title) == ["Pin", "Rename", "Duplicate", "Copy as Markdown", "Reveal in Finder",
                                                        "Title", "Heading", "Subheading", "Body", "Bulleted List", "Dashed List", "Numbered List",
                                                        "Bold", "Italic", "Underline", "Code", "Checklist", "Toggle", "Edit link…", "New note", "Move to Trash"])
-        #expect(model.actions?.choices.compactMap(\.key) == ["⌘P", "⌘⇧T", "⌘⇧H", "⌘⇧J", "⌘⇧B", "⌘⇧7", "⌘⇧8", "⌘⇧9", "⌘B", "⌘I", "⌘U", "⌘E", "⌘⇧L", "⌘⇧D", "⌘N", "⌘⌫"])
+        #expect(model.actions?.choices.compactMap(\.key) == ["⌘⇧P", "⌘⇧T", "⌘⇧H", "⌘⇧J", "⌘⇧B", "⌘⇧7", "⌘⇧8", "⌘⇧9", "⌘B", "⌘I", "⌘U", "⌘E", "⌘⇧L", "⌘⇧D", "⌘N", "⌘⌫"])
         #expect(key(125) == .stepActions(1) && key(36) == .runAction && key(53) == .closeActions && key(1, .command, "s") == .held)
         // Typing searches: "bol" leaves Bold; Backspace takes a letter off.
         model.perform(try #require(key(11, [], "b"))); model.perform(try #require(key(31, [], "o"))); model.perform(try #require(key(37, [], "l")))

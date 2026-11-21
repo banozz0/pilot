@@ -22,6 +22,10 @@ final class NotesModel {
     /// Where Copy as Markdown puts a note, and how a done action says so; tests swap both.
     @ObservationIgnored var pasteboard = NSPasteboard.general
     @ObservationIgnored var tip: @MainActor (String) -> Void = { HUD.tip($0) }
+    /// Pin on screen (Sven, Q317): whether the panel is the key window, so Cmd+K offers it, and its switch. Only the
+    /// panel's own model (NotesPanel.currentModel) is wired to them, so a model made anywhere else never shows the panel.
+    @ObservationIgnored var panelIsKey: @MainActor () -> Bool = { false }
+    @ObservationIgnored var toggleOnScreen: @MainActor () -> Void = {}
 
     private(set) var notes: [Note] = []
     /// Kept in the defaults, so the Notes page opens on it after Pilot quits and starts again (the panel opens on Scratch).
@@ -170,6 +174,9 @@ final class NotesModel {
         case .step(let by): stepList(by)
         case .new: new()
         case .pin: togglePin()
+        case .pinOnScreen:
+            actions = nil
+            toggleOnScreen()
         case .askTrash:
             // From the list it asks about the highlighted note, which opens so the question shows it.
             if listFocused, let id = selectedNote?.id, id != current { open(id) }
@@ -188,11 +195,12 @@ final class NotesModel {
     // MARK: Cmd+K
 
     /// Cmd+K: the actions on the open note, or the highlighted one while the list has the keyboard; the formats only on
-    /// the note being written in.
+    /// the note being written in; Pin on screen only in the panel.
     func openActions() {
         guard let target = selectedNote ?? note else { return }
         confirmingTrash = false
-        actions = NoteActions(note: target.id, title: target.title, choices: NoteAction.choices(for: target, writing: selectedNote == nil))
+        actions = NoteActions(note: target.id, title: target.title,
+                              choices: NoteAction.choices(for: target, writing: selectedNote == nil, onScreen: panelIsKey() ? pinnedOnScreen : nil))
     }
 
     func stepActions(_ by: Int) {
@@ -223,6 +231,7 @@ final class NotesModel {
         let words = id == current ? text : target.text
         switch action {
         case .pin, .unpin: pin(id, action == .pin)
+        case .screen: toggleOnScreen()
         case .rename:
             if id != current { open(id) } else { leaveList() }
             editor.selectTitle(of: text)
@@ -261,8 +270,9 @@ final class NotesModel {
         return note
     }
 
-    /// Cmd+P (Q116, Sven 2026-10-15): pins or unpins the open note, the highlighted one while the list has the keyboard,
-    /// or the one Cmd+K is open on (it closes). Scratch says it stays, rather than do nothing (Sven, 2026-11-21).
+    /// Cmd+Shift+P (Q116, Sven 2026-10-15, gave the note pin Cmd+P; Q317, 2026-11-21, gave Cmd+P to Pin on screen): pins
+    /// or unpins the open note, the highlighted one while the list has the keyboard, or the one Cmd+K is open on (it
+    /// closes). Scratch says it stays, rather than do nothing (Sven, 2026-11-21).
     func togglePin() {
         let id = actions?.note ?? selectedNote?.id ?? current
         actions = nil
@@ -430,6 +440,8 @@ final class NotesPanel {
     }
 
     var isShown: Bool { panel?.isVisible == true }
+    /// The panel has the keyboard: Cmd+K there offers Pin on screen.
+    var isKey: Bool { panel?.isKeyWindow == true }
 
     /// Pinned on screen (Sven, build 2363): the panel stays open on a click outside or another app taking the
     /// keyboard, floats over other windows, and is moved and sized as ever, its frame kept; Escape still hides it.
@@ -594,6 +606,8 @@ final class NotesPanel {
         model?.flush()
         welcomeOnce()
         let model = NotesModel(store: NoteStore(folder: folder))
+        model.panelIsKey = { [weak self] in self?.isKey == true }
+        model.toggleOnScreen = { [weak self] in self?.togglePinned() }
         self.model = model
         dropPanel()
         return model
@@ -744,13 +758,14 @@ final class NotesPanel {
 
 /// What a key does in the notes panel, by the state it is in (Q115, Q116, Sven 2026-10-15). Escape steps back one place:
 /// the Trash question keeps the note, the note hands the keyboard to the list, the list hides the panel. Return answers
-/// the question or opens the highlighted note; ↑↓ move through the list; Cmd+P pins, Cmd+N makes a note, Cmd+Backspace
+/// the question or opens the highlighted note; ↑↓ move through the list; Cmd+P pins the panel on screen and Cmd+Shift+P
+/// the note (Q317, Sven 2026-11-21; Q116 gave the note Cmd+P), Cmd+N makes a note, Cmd+Backspace
 /// asks before the Trash from the list, or deletes a note with no words in it, and is the editor's delete to the line's
 /// start otherwise (P56, Sven build 68); Cmd+K opens the actions, which then hold every key: what is typed searches
-/// them, ↑↓ choose, Return runs, Cmd+P pins their note, Escape or Cmd+K close. Nil: the key goes on to the editor or the list's field. `key` is
+/// them, ↑↓ choose, Return runs, Cmd+P and Cmd+Shift+P pin as their rows say, Escape or Cmd+K close. Nil: the key goes on to the editor or the list's field. `key` is
 /// the key's characters, modifiers aside (NSEvent's charactersIgnoringModifiers).
 enum NotesKey: Equatable {
-    case hide, list, keep, confirmTrash, open, step(Int), new, pin, askTrash, actions, closeActions, stepActions(Int), runAction
+    case hide, list, keep, confirmTrash, open, step(Int), new, pin, pinOnScreen, askTrash, actions, closeActions, stepActions(Int), runAction
     /// Escape while the format bar's Aa styles or link field are open: they close, before anything else Escape does.
     case closePopover
     /// A character for Cmd+K's search, or nil: Backspace takes one off.
@@ -765,8 +780,9 @@ enum NotesKey: Equatable {
         if actions {
             switch (code, flags, key) {
             case (53, _, _), (_, [.command], "k"): self = .closeActions
-            // Its Pin row shows ⌘P, so ⌘P pins its note there too.
-            case (_, [.command], "p"): self = .pin
+            // Its rows show ⌘P and ⌘⇧P, so they work there too.
+            case (_, [.command], "p"): self = .pinOnScreen
+            case (_, [.command, .shift], "p"): self = .pin
             case (36, [], _), (76, [], _): self = .runAction
             case (126, [], _): self = .stepActions(-1)
             case (125, [], _): self = .stepActions(1)
@@ -789,7 +805,8 @@ enum NotesKey: Equatable {
         default:
             switch (key, flags) {
             case ("n", [.command]): self = .new
-            case ("p", [.command]): self = .pin
+            case ("p", [.command]): self = .pinOnScreen
+            case ("p", [.command, .shift]): self = .pin
             case ("k", [.command]): self = .actions
             default: return nil
             }
@@ -814,11 +831,14 @@ extension NotesKey {
 /// their keys (direction B, 2026-10-18), a new one, the Trash last in the problem colour.
 enum NoteAction: Equatable {
     case pin, unpin, rename, duplicate, copy, reveal, format(MarkdownFormat), editLink, new, trash
+    /// Pin on screen (the panel's own pin, Q317), true while it is pinned.
+    case screen(Bool)
 
     var title: String {
         switch self {
         case .pin: "Pin"
         case .unpin: "Unpin"
+        case .screen(let on): on ? "Unpin from screen" : "Pin on screen"
         case .rename: "Rename"
         case .duplicate: "Duplicate"
         case .copy: "Copy as Markdown"
@@ -833,7 +853,8 @@ enum NoteAction: Equatable {
     /// The key that does it without Cmd+K, as its row shows it.
     var key: String? {
         switch self {
-        case .pin, .unpin: "⌘P"
+        case .pin, .unpin: "⌘⇧P"
+        case .screen: "⌘P"
         case .new: "⌘N"
         case .trash: "⌘⌫"
         case .format(let format): format.key
@@ -845,6 +866,7 @@ enum NoteAction: Equatable {
         switch self {
         case .pin: "pin"
         case .unpin: "pin.slash"
+        case .screen(let on): on ? "pin.circle.fill" : "pin.circle"
         case .rename: "pencil"
         case .duplicate: "plus.square.on.square"
         case .copy: "doc.on.doc"
@@ -858,7 +880,7 @@ enum NoteAction: Equatable {
 
     var group: Int {
         switch self {
-        case .pin, .unpin, .rename, .duplicate: 0
+        case .pin, .unpin, .screen, .rename, .duplicate: 0
         case .copy, .reveal: 1
         case .format, .editLink: 2
         case .new: 3
@@ -868,13 +890,14 @@ enum NoteAction: Equatable {
 
     var danger: Bool { self == .trash }
 
-    /// A note's actions, the formats only for the note being `writing` in: Scratch, never pinned, empty and kept, has only
-    /// its words, Finder, the formats and New note.
-    static func choices(for note: Note, writing: Bool = true) -> [NoteAction] {
+    /// A note's actions, the formats only for the note being `writing` in, Pin on screen only in the panel (`onScreen`
+    /// its state): Scratch, never pinned, empty and kept, has only its words, Finder, the formats and New note.
+    static func choices(for note: Note, writing: Bool = true, onScreen: Bool? = nil) -> [NoteAction] {
         // The link's address never shows in the note (Q285): Edit link opens the format bar's field on it.
         let formats = writing ? MarkdownFormat.keyed.map(NoteAction.format) + [.editLink] : []
-        if note.isScratch { return [.copy, .reveal] + formats + [.new] }
-        return [note.pinned ? .unpin : .pin, .rename, .duplicate, .copy, .reveal] + formats + [.new, .trash]
+        let screen = onScreen.map { [NoteAction.screen($0)] } ?? []
+        if note.isScratch { return screen + [.copy, .reveal] + formats + [.new] }
+        return [note.pinned ? .unpin : .pin] + screen + [.rename, .duplicate, .copy, .reveal] + formats + [.new, .trash]
     }
 
     /// A duplicate's words: the same, its title line ending " copy", so the two tell apart in the list.

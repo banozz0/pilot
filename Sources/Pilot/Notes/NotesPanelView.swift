@@ -97,10 +97,11 @@ struct NotesHead: View {
             if let status = status(shown, preview: preview != nil) {
                 Text(status).font(mono).monospacedDigit().foregroundStyle(style.color(\.text3)).lineLimit(1).fixedSize()
             }
-            // The panel's own pin (Sven, build 2363): on screen over other windows; a note's pin to the list's top is ⌘P.
+            // The panel's own pin (Sven, build 2363): on screen over other windows, ⌘P (Q317); a note's pin to the list's
+            // top is ⌘⇧P.
             if listKey {
                 NotesHeadButton(symbol: model.pinnedOnScreen ? "pin.circle.fill" : "pin.circle",
-                                label: model.pinnedOnScreen ? "Unpin from screen" : "Pin on screen") { NotesPanel.shared.togglePinned() }
+                                label: NoteAction.screen(model.pinnedOnScreen).title, shortcut: NoteAction.screen(false).key) { NotesPanel.shared.togglePinned() }
             }
             NotesHeadButton(key: "⌘K", label: "Actions") { model.perform(.actions) }
             if let inserting {
@@ -374,7 +375,7 @@ private struct NotesRowMenu: View {
             Divider()
             Button("Reveal in Finder") { model.reveal(note.id) }
         } else {
-            Button(note.pinned ? "Unpin" : "Pin") { model.pin(note.id, !note.pinned) }.keyboardShortcut("p", modifiers: .command)
+            Button(note.pinned ? "Unpin" : "Pin") { model.pin(note.id, !note.pinned) }.keyboardShortcut("p", modifiers: [.command, .shift])
             Button("Reveal in Finder") { model.reveal(note.id) }
             Divider()
             Button("Move to Trash…", role: .destructive) { model.open(note.id); model.askTrash() }
@@ -448,6 +449,8 @@ struct NotesHeadButton: View {
     var symbol: String?
     var key: String?
     let label: String
+    /// A key named in the tooltip alone, the glyph still drawn.
+    var shortcut: String?
     let action: () -> Void
     @State var hovered = false
 
@@ -457,7 +460,7 @@ struct NotesHeadButton: View {
         }
         .buttonStyle(.plain).focusable(false)
         .onHover { hovered = $0 }
-        .help(key.map { "\(label)  \($0)" } ?? label).accessibilityLabel(label)
+        .help((key ?? shortcut).map { "\(label)  \($0)" } ?? label).accessibilityLabel(label)
     }
 }
 
@@ -589,7 +592,7 @@ enum NotesText {
 
     static let scratchStays = "Scratch stays on top, empty, and never goes to the Trash"
     /// ⌘P on Scratch: it is never pinned; what is written in it becomes a note ⌘P pins.
-    static let scratchUnpinned = "Scratch stays on top: write in it, then ⌘P pins it as a note"
+    static let scratchUnpinned = "Scratch stays on top: write in it, then ⌘⇧P pins it as a note"
 
     /// "1 word", "49 words".
     static func count(_ words: Int) -> String { "\(words) \(words == 1 ? "word" : "words")" }
