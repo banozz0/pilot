@@ -10,9 +10,20 @@ import Synchronization
 /// (ExtensionInstaller, ThemeInstaller).
 public enum ExtensionCatalogue {
     /// The repo, and the folder in it the catalogue is: every path a Source fetches is inside `root`.
-    public static let repo = "banozz0/pilot", branch = "main", root = "catalogue", indexPath = "index.json"
+    public static let repo = "banozz0/pilot", root = "catalogue", indexPath = "index.json"
+    /// The branch it is read from: main, or in a test build (`PILOT_DEV=1 Scripts/build-app.sh`) the pushed branch it was
+    /// built from, Info.plist's PilotCatalogueBranch, so that build lists its own branch's entries (Sven, 2026-11-21). A
+    /// release build has no such key and reads main. The sandbox host sets it from PILOT_SANDBOX_INFO's.
+    nonisolated(unsafe) public static var branch = branch(info: Bundle.main.infoDictionary)
     /// Where a person finds the catalogue on the web, as a question names it.
-    public static let home = "github.com/\(repo)/tree/\(branch)/\(root)"
+    public static var home: String { "github.com/\(repo)/tree/\(branch)/\(root)" }
+
+    /// Info.plist's PilotCatalogueBranch when it is a plain branch name, else main.
+    public static func branch(info: [String: Any]?) -> String {
+        guard let name = info?["PilotCatalogueBranch"] as? String, !name.isEmpty, !name.contains(".."), !name.hasPrefix("/"),
+              name.allSatisfy({ $0.isASCII && ($0.isLetter || $0.isNumber || "-_./".contains($0)) }) else { return "main" }
+        return name
+    }
     /// The index format this Pilot reads: 2 lists themes beside the extensions.
     public static let schema = 2
     /// The most the index, one file and one extension may weigh, and the most files an extension may hold.

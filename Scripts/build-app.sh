@@ -122,6 +122,16 @@ xcrun actool --compile "$APP/Contents/Resources" --platform macosx --minimum-dep
 # updates counts from (Q331; a release has no such route): the main checkout that owns the git dir, never a linked
 # worktree, since a build from a scratch worktree in /tmp would record a folder a reboot wipes.
 PLIST=(-c "Add :PilotCommit string $(git -C "$ROOT" rev-parse HEAD)")
+# A test build (PILOT_DEV) reads the extension and theme catalogue from the branch it is built from while that branch is
+# on GitHub, so it lists the branch's own entries (ExtensionCatalogue.branch); main, a detached HEAD, a branch not pushed
+# and a release build read main.
+if [[ ${PILOT_DEV:-} == 1 ]]; then
+  BRANCH=$(git -C "$ROOT" symbolic-ref --short -q HEAD || true)
+  if [[ -n $BRANCH && $BRANCH != main ]] && git -C "$ROOT" rev-parse --verify -q "refs/remotes/origin/$BRANCH" >/dev/null; then
+    PLIST+=(-c "Add :PilotCatalogueBranch string $BRANCH")
+    echo "catalogue: this build reads github.com/banozz0/pilot/tree/$BRANCH/catalogue"
+  fi
+fi
 [[ -n ${SPARKLE_FEED:-} ]] && PLIST+=(-c "Set :SUFeedURL $SPARKLE_FEED")
 [[ -n ${SPARKLE_ED_KEY:-} ]] && PLIST+=(-c "Set :SUPublicEDKey $SPARKLE_ED_KEY")
 [[ $CONFIG == debug ]] && PLIST+=(-c "Add :PilotSource string $(dirname "$(git -C "$ROOT" rev-parse --path-format=absolute --git-common-dir)")")
