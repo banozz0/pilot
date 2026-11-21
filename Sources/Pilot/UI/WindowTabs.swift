@@ -32,7 +32,7 @@ struct WindowPageTabs: View {
         let pages = page.area.shown.count > 1 ? page.area.shown.map { (value: $0, title: $0.title) } : []
         let tabs = model.tabs
         let pick = Binding(get: { model.page }, set: { model.go(AppPlace($0)) })
-        let part = Binding(get: { model.section(of: page) }, set: { model.sections[page] = $0 })
+        let part = Binding(get: { model.section(of: page) }, set: { model.pick($0, of: page) })
         HStack(spacing: 12) {
             if !pages.isEmpty { InstrumentSegments(options: pages, selection: pick).fixedSize().accessibilityLabel("\(page.area.title) pages") }
             if !tabs.isEmpty { InstrumentSegments(options: tabs, selection: part).fixedSize().accessibilityLabel("\(page.title) parts") }
