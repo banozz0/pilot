@@ -150,7 +150,11 @@ private struct PagePart: View {
             if section == .rings {
                 RingsPage { model.go($0) }
             } else {
-                HeldSearch(model: model) { MenuPage(section: section, search: $0, editAlias: $model.editAlias) { model.editBind = $0; model.go(AppPlace(.binds)) } }
+                HeldSearch(model: model) {
+                    MenuPage(section: section, search: $0, editAlias: model.editAlias, tookAlias: { model.editAlias = nil },
+                             editBind: { model.editBind = $0; model.go(AppPlace(.binds)) })
+                        .equatable()
+                }
             }
         case .workspaces: WorkspacesSettingsView(more: section == .workspacesMore)
         // Tiling's More: the focused window's exact rows (pilot-ui-redesign T16).
@@ -162,13 +166,13 @@ private struct PagePart: View {
         case .look where section == .themeCatalogue: ThemeCataloguePage()
         case .look: LookPage(section: section == .wallpaper ? section : nil, focus: model.wallpaperFocus) { model.sections[.look] = nil }
         case .widgets: WidgetsPage()
-        case .system: WhileShown { SetupPage(onScreen: $0 && model.onScreen, section: $model.setupSection) }
+        case .system: WhileShown { SetupPage(onScreen: $0 && model.onScreen, section: model.setupSection, tookSection: { model.setupSection = nil }).equatable() }
         // Reports is on Update & Clean's More since the feature trim (2026-11-19): Open report goes there.
         case .upkeep: UpkeepPage(more: section == .upkeepMore) { model.go($0) }
         case .clipboard: ClipboardSettingsView(more: section == .clipMore)
         case .captures:
             if section == .captureHistory { CaptureHistoryPage() } else { CapturesPage(recording: section == .recording, more: section == .capturesMore) }
-        case .snippets: SnippetsSettingsView(editSnippet: $model.editSnippet)
+        case .snippets: SnippetsSettingsView(editSnippet: model.editSnippet, tookSnippet: { model.editSnippet = nil }).equatable()
         case .notes: WhileShown { NotesPage(onScreen: $0 && model.onScreen) }
         case .files:
             // File search is a place on the front (settings tidy), which the window scrolls to.

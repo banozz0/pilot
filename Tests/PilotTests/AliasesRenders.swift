@@ -72,7 +72,7 @@ struct AliasesRenders {
             // The whole page as Set alias… opens it: 900 pt high, the asked editor scrolled into view.
             let page = "\(theme)-1000-page-asked"
             if only.map(page.contains) ?? true {
-                let view = MenuPage(section: .aliases, editAlias: .constant(finder), aliases: try book())
+                let view = MenuPage(section: .aliases, editAlias: finder, aliases: try book())
                     .frame(width: LookRenders.page(1000), height: 900).pilotTheme(look: .shared).background(Theme.background)
                 try writeRender(view, to: dir.appendingPathComponent("\(page).png"), wait: 1.2)
             }

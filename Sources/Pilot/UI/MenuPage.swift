@@ -15,8 +15,11 @@ struct MenuPage: View {
     let section: AppSection?
     /// The window's search, which Abilities filters by.
     var search = ""
-    /// The row whose alias editor Aliases opens (the menu's Set alias…); Aliases clears it.
-    var editAlias: Binding<Alias?> = .constant(nil)
+    /// The row whose alias editor Aliases opens (the menu's Set alias…); `tookAlias` clears it as Aliases opens it. A
+    /// value and a closure, not a binding: a binding is a dynamic property, and one made again with the window's part
+    /// runs the page again whatever `==` says (topbar-search, after page-switch-4's Binds fix).
+    var editAlias: Alias? = nil
+    var tookAlias: () -> Void = {}
     /// Abilities' Set key: Binds' editor on that action.
     var editBind: (String) -> Void = { _ in }
     /// The books Aliases and Quicklinks edit; a render passes its own.
@@ -61,7 +64,7 @@ struct MenuPage: View {
             ScrollViewReader { scroll in
                 KitMore(entries: Self.entries.filter { settings != nil || $0.id != .translate }) {
                     if let settings { TranslateBlock(settings: settings).moreBlock(.translate) }
-                    AliasesList(book: aliases, asked: editAlias, page: scroll).moreBlock(.aliases)
+                    AliasesList(book: aliases, asked: Binding(get: { editAlias }, set: { if $0 == nil { tookAlias() } }), page: scroll).moreBlock(.aliases)
                     QuicklinksList(book: links).moreBlock(.quicklinks)
                     AppsShowAsBlock(look: .shared)
                 }
@@ -80,6 +83,17 @@ struct MenuPage: View {
                 if fit != .across { extras }
             } }
             .onGeometryChange(for: Fit.self) { Fit(width: $0.size.width) } action: { fit = $0 }
+        }
+    }
+}
+
+/// Equal on what it shows from (the part, the words, the alias asked for, its books),
+/// shown `.equatable()` by the window's part: its closures, made again with the part, never compare equal, so the
+/// whole page was built again as its kept part was hidden, shown or put back (topbar-search; page-switch-4's Binds fix).
+extension MenuPage: Equatable {
+    nonisolated static func == (a: Self, b: Self) -> Bool {
+        MainActor.assumeIsolated {
+            a.section == b.section && a.search == b.search && a.editAlias == b.editAlias && a.aliases === b.aliases && a.links === b.links
         }
     }
 }

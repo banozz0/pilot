@@ -37,8 +37,10 @@ struct SetupPage: View {
     @Environment(\.ink) private var ink
     /// The app window shows: the page follows the Mac's changes only then (AppWindowModel.onScreen).
     let onScreen: Bool
-    /// The section a key or a link asked for: the page opens it, scrolls there once and clears it.
-    @Binding var section: SetupSection?
+    /// The section a key or a link asked for: the page opens it, scrolls there once and clears it (`tookSection`). A
+    /// value and a closure, not a binding (topbar-search: a binding made again runs the page again).
+    let section: SetupSection?
+    let tookSection: () -> Void
     /// Two columns of cards once the page is `twoColumns` wide.
     @State private var wide = true
     @State private var sound: SetupSound
@@ -64,10 +66,11 @@ struct SetupPage: View {
     static let twoColumns: CGFloat = 640
 
     /// `open` is the renders' old way in and changes nothing: every part shows at once.
-    init(onScreen: Bool, section: Binding<SetupSection?> = .constant(nil), open: SetupSection? = .sound,
+    init(onScreen: Bool, section: SetupSection? = nil, tookSection: @escaping () -> Void = {}, open: SetupSection? = .sound,
          devices: SetupDevices = SetupDevices.make()) {
         self.onScreen = onScreen
-        _section = section
+        self.section = section
+        self.tookSection = tookSection
         _sound = State(initialValue: SetupSound(audio: devices.audio))
         _bluetooth = State(initialValue: SetupBluetooth(bluetooth: devices.bluetooth, defaults: devices.defaults))
         _wifi = State(initialValue: SetupWiFi(wifi: devices.wifi, defaults: devices.defaults))
@@ -95,7 +98,7 @@ struct SetupPage: View {
             .onChange(of: section, initial: true) {
                 guard let section else { return }
                 proxy.scrollTo(section, anchor: .top)
-                self.section = nil
+                tookSection()
             }
         } }
     }
@@ -864,4 +867,15 @@ enum SetupGlyph {
         (["tv", "hdmi", "display", "lg ", "dell", "monitor", "4k"], "tv"), (["controller", "dualsense", "xbox"], "gamecontroller"),
         (["watch"], "applewatch"), (["iphone"], "iphone"), (["ipad"], "ipad"),
     ]
+}
+
+/// Equal on what it shows from (on screen, the section asked for),
+/// shown `.equatable()` by the window's part: its closures, made again with the part, never compare equal, so the
+/// whole page was built again as its kept part was hidden, shown or put back (topbar-search; page-switch-4's Binds fix).
+extension SetupPage: Equatable {
+    nonisolated static func == (a: Self, b: Self) -> Bool {
+        MainActor.assumeIsolated {
+            a.onScreen == b.onScreen && a.section == b.section
+        }
+    }
 }
