@@ -51,14 +51,20 @@ extension ControlVerbs {
                 return o
             } ?? .replace
             let provider = args.value("provider").flatMap { $0 == "none" ? nil : $0 }
-            let command = CustomAICommand(id: "", title: args.value("title")!, prompt: args.value("prompt")!, provider: provider, output: output)
-            if let refusal = s.commands.book.save(command) { throw ControlError(.badValue, refusal) }
-            guard let saved = s.commands.book.command(CustomAICommand.slug(command.title)) else { throw ControlError(.badValue, "not saved") }
-            return .object(Self.row(saved))
+            // A title already saved changes that command in place, its id (and so its binds) kept.
+            let title = args.value("title")!
+            let kept = s.commands.book.commands.first { $0.id == CustomAICommand.slug(title) }?.id ?? ""
+            let command = CustomAICommand(id: kept, title: title, prompt: args.value("prompt")!, provider: provider, output: output)
+            switch s.commands.book.save(command) {
+            case .failure(let refusal): throw ControlError(.badValue, refusal.line)
+            case .success(let id):
+                guard let saved = s.commands.book.command(id) else { throw ControlError(.badValue, "not saved") }
+                return .object(Self.row(saved))
+            }
         }, remove: { args throws(ControlError) in
             let word = try args.word(0, "id; pilot list ai-commands lists them")
             guard let command = s.commands.book.command(word) else { throw ControlError(.badValue, "no AI command \(word)") }
-            if let refusal = s.commands.book.remove(command.id) { throw ControlError(.badValue, refusal) }
+            if let refusal = s.commands.book.remove(command.id) { throw ControlError(.badValue, refusal.line) }
             return .object(Self.row(command))
         }))
     }

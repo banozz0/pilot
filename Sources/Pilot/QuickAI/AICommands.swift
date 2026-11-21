@@ -66,32 +66,60 @@ final class AICommandBook {
             ?? commands.first { $0.id == CustomAICommand.slug(word) }
     }
 
-    /// Saves `command` over the one with its id, or after the others; else why not, and nothing changes.
-    func save(_ command: CustomAICommand) -> String? {
-        guard readable else { return "\(url.lastPathComponent) does not read, so nothing is saved over it" }
+    /// Saves `command` over the one with its id, or, with no id, after the others under its title's slug, kept from then on
+    /// so a rename keeps its binds; else why not, and nothing changes. Returns the saved id or the refusal.
+    func save(_ command: CustomAICommand) -> Result<String, Refusal> {
+        guard readable else { return .failure(.init("\(url.lastPathComponent) does not read, so nothing is saved over it")) }
         var command = command
         command.title = command.title.trimmingCharacters(in: .whitespacesAndNewlines)
         command.prompt = command.prompt.trimmingCharacters(in: .whitespacesAndNewlines)
-        command.id = CustomAICommand.slug(command.title)
-        guard !command.id.isEmpty else { return "--title: a title with a letter or a digit" }
-        guard !command.prompt.isEmpty else { return "--prompt: what the AI does with the selection" }
+        let new = command.id.isEmpty
+        if new { command.id = CustomAICommand.slug(command.title) }
+        guard !CustomAICommand.slug(command.title).isEmpty else { return .failure(.init("--title: a title with a letter or a digit")) }
+        guard !command.prompt.isEmpty else { return .failure(.init("--prompt: what the AI does with the selection")) }
         if let p = command.provider, AIProvider(rawValue: p) == nil {
-            return "--provider: one of \(AIProvider.allCases.map(\.rawValue).joined(separator: ", ")), or none for the AI page's"
+            return .failure(.init("--provider: one of \(AIProvider.allCases.map(\.rawValue).joined(separator: ", ")), or none for the AI page's"))
         }
         var next = commands
-        if let i = next.firstIndex(where: { $0.id == command.id }) { next[i] = command } else { next.append(command) }
+        switch (new, next.firstIndex { $0.id == command.id }) {
+        case (true, _?): return .failure(.init("--title: an AI command \(command.id) is saved already"))
+        case (false, nil): return .failure(.init("no AI command \(command.id) to change"))
+        case (_, let i?): next[i] = command
+        case (true, nil): next.append(command)
+        }
+        return write(next).map { .failure($0) } ?? .success(command.id)
+    }
+
+    struct Refusal: Error, Equatable {
+        let line: String
+        init(_ line: String) { self.line = line }
+    }
+
+    /// Takes it out, with the key bound to it, so the key is free again (as deleting a ring does).
+    func remove(_ id: String) -> Refusal? {
+        if let refusal = write(commands.filter { $0.id != id }) { return refusal }
+        Engine.shared?.clearKey(AICommands.prefix + id)
+        return nil
+    }
+
+    /// Reorders, as the page's arrows do: the pill shows the first few.
+    func move(_ id: String, by offset: Int) -> Refusal? {
+        guard let i = commands.firstIndex(where: { $0.id == id }) else { return .init("no AI command \(id)") }
+        let to = min(max(i + offset, 0), commands.count - 1)
+        guard to != i else { return nil }
+        var next = commands
+        next.insert(next.remove(at: i), at: to)
         return write(next)
     }
 
-    func remove(_ id: String) -> String? { write(commands.filter { $0.id != id }) }
-
-    private func write(_ next: [CustomAICommand]) -> String? {
+    private func write(_ next: [CustomAICommand]) -> Refusal? {
+        guard readable else { return .init("\(url.lastPathComponent) does not read, so nothing is saved over it") }
         do {
             let encoder = JSONEncoder()
             encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
             try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
             try encoder.encode(next).write(to: url, options: .atomic)
-        } catch { return "not saved: \(error.localizedDescription)" }
+        } catch { return .init("not saved: \(error.localizedDescription)") }
         commands = next
         return nil
     }
