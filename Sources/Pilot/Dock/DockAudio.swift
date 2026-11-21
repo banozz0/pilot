@@ -127,6 +127,8 @@ final class CoreAudioWatch: DockAudioWatch {
     private var deviceListener: AudioObjectPropertyListenerBlock?
     private var defaultListener: AudioObjectPropertyListenerBlock?
     private var nowPlaying: Task<Void, Never>?
+    /// A watch on the reader waits for its change (followPlaying).
+    private var followingPlaying = false
     private var nowPlayingReader: NowPlaying { .shared }
 
     private static var somewhere = AudioObjectPropertyAddress(mSelector: kAudioDevicePropertyDeviceIsRunningSomewhere,
@@ -194,14 +196,22 @@ final class CoreAudioWatch: DockAudioWatch {
     }
 
     /// What the reader says, read again at each change it makes: nothing read yet is nothing playing; nil only while it
-    /// cannot read at all (no helper in this build).
+    /// cannot read at all (no helper in this build). One watch at a time: the watch from before the device last stopped
+    /// still waits for the reader's next change, so a start reads now and adds no second watch, which would never end
+    /// (one more per start, as DockVisualizer.followTheme's did).
     private func followPlaying() {
         guard nowPlaying != nil else { return }
         let reader = nowPlayingReader
-        let said: Bool? = withObservationTracking {
-            reader.problem == nil ? reader.track?.playing ?? false : nil
-        } onChange: { [weak self] in
-            Task { @MainActor in self?.followPlaying() }
+        let read = { reader.problem == nil ? reader.track?.playing ?? false : nil }
+        let said: Bool?
+        if followingPlaying { said = read() } else {
+            followingPlaying = true
+            said = withObservationTracking(read) { [weak self] in
+                Task { @MainActor in
+                    self?.followingPlaying = false
+                    self?.followPlaying()
+                }
+            }
         }
         if said != playing {
             playing = said
