@@ -17,7 +17,7 @@ struct SnippetPaster {
     /// Keys into the focused app, as Pilot's own so the tap lets them through; after the tap callback returns.
     var post: ([KeyEvent]) -> Void = { events in DispatchQueue.main.async { Post.events(events, own: true) } }
     var later: PasteBack.Later = PasteBack.onMain
-    var now: () -> Date = Date.init
+    var now: () -> Date = { PlaceholderReads.now() }
     /// Typed instead when Pilot may not read the pasteboard (its access set to Always Deny): nothing to put back then.
     var type: (String) -> Void = { Post.text($0) }
 
@@ -30,10 +30,11 @@ struct SnippetPaster {
 
     /// `erasing`: the keyword's characters already in the field.
     func paste(_ snippet: Snippet, argument: String = "", erasing: Int = 0) {
-        let readable = pasteboard.accessBehavior != .alwaysDeny
-        let filled = snippet.expanded(now: now(), clipboard: readable ? pasteboard.string(forType: .string) : nil, argument: argument)
-        paste(filled.text, caretBack: filled.caretBack, erasing: erasing)
-        snippetLog.notice("snippet \(snippet.name, privacy: .public) pasted, \(filled.text.count) characters")
+        PlaceholderReads.read(for: snippet.text, argument: argument, pasteboard: pasteboard, now: now()) { values in
+            let filled = snippet.expanded(values)
+            paste(filled.text, caretBack: filled.caretBack, erasing: erasing)
+            snippetLog.notice("snippet \(snippet.name, privacy: .public) pasted, \(filled.text.count) characters")
+        }
     }
 
     /// Text as it is, over the selection or at the caret, the caret then moved `caretBack` to the left: a snippet's, or
@@ -47,6 +48,53 @@ struct SnippetPaster {
         PasteBack.paste(text, to: pasteboard, thenCopy: thenCopy, post: {
             post(Self.keys(KeyCode.delete, erasing) + Self.keys(KeyCode.v, 1, .cmd) + Self.keys(KeyCode.leftArrow, caretBack))
         }, later: later)
+    }
+}
+
+/// Where the placeholders' live values come from as a snippet pastes or a quicklink opens (launcher-best T6): the clock,
+/// the pasteboard, the clipboard history and the selection, each read only when the text holds its placeholder. The
+/// selection is read through Accessibility alone, never the app's Copy: no key goes to another app for it (ADR 0001).
+enum PlaceholderReads {
+    /// The clock: the sandbox host's fixed time (PILOT_SANDBOX_NOW), else now. Set once, before any read.
+    nonisolated(unsafe) static var now: () -> Date = Date.init
+    /// The sandbox host's selection (PILOT_SANDBOX_SELECTION), read instead of the front app's. Set once, before any read.
+    nonisolated(unsafe) static var selectionStandIn: String?
+
+    /// The front app's selected text through Accessibility alone (SelectedText with no Copy), off the main thread; nil
+    /// when it has none, only whitespace, or Pilot is in front.
+    @MainActor static func selection() async -> String? {
+        if let selectionStandIn { return selectionStandIn }
+        return await SelectedText.focused(copy: { nil })?.text
+    }
+
+    /// The history's text copies before the latest, newest first: `depth` of them, none for 0.
+    @MainActor static func earlierClips(_ depth: Int) -> [String] {
+        guard depth > 0 else { return [] }
+        return Array(ClipboardHistory.shared.recent().filter { $0.kind == .text }.dropFirst().prefix(depth).map(\.text))
+    }
+
+    /// `then` with the values `text` needs: at once, or after the selection is read when it holds {selection}.
+    /// {clipboard} reads `pasteboard` unless Pilot's access to it is Always Deny.
+    @MainActor static func read(for text: String, argument: String = "", pasteboard: NSPasteboard = .general, now: Date? = nil,
+                                then: @escaping @MainActor (Placeholders.Values) -> Void) {
+        let needs = Placeholders.summary(of: text)
+        let readable = needs.kinds.contains(.clipboard) && pasteboard.accessBehavior != .alwaysDeny
+        let values = Placeholders.Values(now: now ?? Self.now(), clipboard: readable ? pasteboard.string(forType: .string) : nil,
+                                         earlierClips: earlierClips(needs.clipboardDepth), argument: argument)
+        guard needs.kinds.contains(.selection) else { return then(values) }
+        Task { @MainActor in
+            var values = values
+            values.selection = await selection()
+            then(values)
+        }
+    }
+
+    /// What the Snippets page's preview and `pilot list` fill with: the clock, and samples for the clipboard, the
+    /// argument and the selection (the sandbox's selection when it has one), never the pasteboard or another app's text.
+    @MainActor static func samples() -> Placeholders.Values {
+        Placeholders.Values(now: now(), clipboard: SnippetsEditor.sampleClipboard,
+                            earlierClips: Array(repeating: SnippetsEditor.sampleEarlierClip, count: 9),
+                            selection: selectionStandIn ?? SnippetsEditor.sampleSelection, argument: SnippetsEditor.sampleArgument)
     }
 }
 

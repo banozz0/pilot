@@ -2,7 +2,8 @@ import Foundation
 
 /// A quicklink (card agent-bo-95423030, audit gap 4, after Raycast's Quicklinks): a named URL Sven opens from
 /// Hyper+Space, `{query}` in it filled with what he types after its keyword, so `gh pilot` searches GitHub for pilot.
-/// It opens in the default browser and binds as `links.open:<id>`.
+/// Its other placeholders (Placeholders: `{selection}`, `{clipboard}`, `{date +7d}`, modifiers) fill as it opens, each
+/// percent-encoded. It opens in the default browser and binds as `links.open:<id>`.
 public struct Quicklink: Codable, Equatable, Identifiable, Sendable {
     public var id: UUID
     public var name: String, keyword: String, url: String
@@ -30,16 +31,16 @@ public struct Quicklink: Codable, Equatable, Identifiable, Sendable {
         Quicklink(id: UUID(uuidString: String(format: "6B1F0C1E-2D7A-4C55-9C1B-5A1E3F0A%04d", n))!, name: name, keyword: keyword, url: url)
     }
 
-    public var takesQuery: Bool { url.contains(Self.placeholder) }
+    public var takesQuery: Bool { Placeholders.kinds(in: url).contains(.query) }
 
     public var actionID: String { Self.prefix + id.uuidString }
 
-    private static let queryAllowed = CharacterSet.urlQueryAllowed.subtracting(CharacterSet(charactersIn: "&=+#?/"))
-
-    /// The URL with `query` in place of {query}, percent-encoded so `&`, `=` and `#` stay inside it; nil when the result
-    /// is not a web or app link.
-    public func url(query: String) -> URL? {
-        let filled = url.replacingOccurrences(of: Self.placeholder, with: query.addingPercentEncoding(withAllowedCharacters: Self.queryAllowed) ?? "")
+    /// The URL with `query` in place of {query} and `values` in its other placeholders, each percent-encoded so `&`, `=`
+    /// and `#` stay inside it; nil when the result is not a web or app link.
+    public func url(query: String, values: Placeholders.Values = .init()) -> URL? {
+        var values = values
+        values.query = query
+        let filled = Placeholders.fill(url, values, url: true).text
         guard let link = URL(string: filled), link.scheme != nil else { return nil }
         return link
     }

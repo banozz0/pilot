@@ -15,6 +15,8 @@ final class ControlAI {
     var asking: (turn: Int, text: String)?
     /// The visible terminal Claude Code's `auth login` runs in, as the page's Sign in runs it.
     var run: InstallModule.Run = InstallModule.visibleRun
+    /// Your own AI commands (launcher-best T10), `pilot list|add|remove ai-commands` and `pilot ai run`.
+    lazy var commands = AICommands.shared
 }
 
 extension ControlVerbs {
@@ -26,7 +28,86 @@ extension ControlVerbs {
             await s.settings.refreshCLIs()
             return .array(AIProvider.allCases.map { .object(Self.row($0, s.settings)) })
         }))
+        registerAICommands(s)
         registerAIVerb(s)
+    }
+
+    /// Your own AI commands (launcher-best T10): each is an action, `ai.command:<id>`, that the menu, Binds, the rings and
+    /// the selection pill list.
+    func registerAICommands(_ s: ControlAI) {
+        let outputs = CustomAICommand.Output.allCases.map(\.rawValue).joined(separator: ", ")
+        register(ControlCollection("ai-commands", help: "Your own AI commands, run on the selected text from Hyper+Space, a bind, a ring or the selection pill: "
+                                   + "a prompt (the snippets' placeholders fill; {selection} names the selected text, which goes along as data), the AI it asks "
+                                   + "(the AI page's with its fallback unless one is named) and where the answer goes (\(outputs)). Each row's action is "
+                                   + "its ai.command:<id>; pilot ai run <id> --text <words> answers it.",
+                                   fields: [.init("title", help: "its name in the menu and the pill; its id is the title in lowercase, dashes between words"),
+                                            .init("prompt", help: "what the AI does with the selection, as \"Make it friendlier\""),
+                                            .init("output", help: "where the answer goes: \(outputs) (default replace)", required: false),
+                                            .init("provider", help: "the AI that answers: \(AIProvider.allCases.map(\.rawValue).joined(separator: ", ")); none for the AI page's", required: false)],
+                                   rowKey: "id", list: { .array(s.commands.book.commands.map { .object(Self.row($0)) }) },
+                                   add: { args throws(ControlError) in
+            let output = try args.value("output").map { word throws(ControlError) in
+                guard let o = CustomAICommand.Output(rawValue: word) else { throw ControlError(.badValue, "--output: one of \(outputs)") }
+                return o
+            } ?? .replace
+            let provider = args.value("provider").flatMap { $0 == "none" ? nil : $0 }
+            // A title already saved changes that command in place, its id (and so its binds) kept.
+            let title = args.value("title")!
+            let kept = s.commands.book.commands.first { $0.id == CustomAICommand.slug(title) }?.id ?? ""
+            let command = CustomAICommand(id: kept, title: title, prompt: args.value("prompt")!, provider: provider, output: output)
+            switch s.commands.book.save(command) {
+            case .failure(let refusal): throw ControlError(.badValue, refusal.line)
+            case .success(let id):
+                guard let saved = s.commands.book.command(id) else { throw ControlError(.badValue, "not saved") }
+                return .object(Self.row(saved))
+            }
+        }, remove: { args throws(ControlError) in
+            let word = try args.word(0, "id; pilot list ai-commands lists them")
+            guard let command = s.commands.book.command(word) else { throw ControlError(.badValue, "no AI command \(word)") }
+            if let refusal = s.commands.book.remove(command.id) { throw ControlError(.badValue, refusal.line) }
+            return .object(Self.row(command))
+        }))
+    }
+
+    static func row(_ c: CustomAICommand) -> [String: JSONValue] {
+        ["id": .string(c.id), "title": .string(c.title), "prompt": .string(c.prompt), "output": .string(c.output.rawValue),
+         "provider": c.provider.map(JSONValue.string) ?? .null, "action": .string(c.actionID)]
+    }
+
+    /// `ai run <command> [--text <words>]`: the command's answer for the words given, else the selection (the sandbox's
+    /// PILOT_SANDBOX_SELECTION, else the front app's through Accessibility alone), after Allow, as it sends them to the AI.
+    /// The answer comes back to the command only: nothing is pasted, copied or sent to the chat.
+    static func runCommand(_ args: ControlArguments, _ s: ControlAI, call: ControlCall) async throws(ControlError) -> JSONValue {
+        let word = try args.word(1, "command; pilot list ai-commands lists them")
+        guard let command = s.commands.book.command(word) else {
+            throw ControlError(.badValue, "no AI command \(word); pilot list ai-commands lists them")
+        }
+        let given = args.value("text")
+        var read = given
+        if read == nil { read = await PlaceholderReads.selection() }
+        guard let text = read, !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            throw ControlError(.notReady, "no text selected; --text gives the words")
+        }
+        let provider = command.provider.flatMap(AIProvider.init(rawValue:))
+        let to = provider.map { destination(s.settings, provider: $0) } ?? destinations(s.settings)
+        return try await s.gate.allow(ControlGate.Ask("Run AI command", "\(command.title) sends \(given == nil ? "the selected text" : "the words given") to \(to): "
+                                                      + ControlGate.Ask.visible(text) + "; the answer comes back to the command"),
+                                      peer: call.peer) { () throws(ControlError) in
+            _ = s.commands.heard.take()
+            let runner: QuickAI.Runner
+            switch s.commands.route(command, settings: s.settings) {
+            case .failure(let why): throw ControlError(.notReady, "\(why.title)\(why.hint.map { ": \($0)" } ?? "")")
+            case .success(let r): runner = r
+            }
+            switch await s.commands.answer(command, on: text, runner: runner) {
+            case .failure(let why): throw ControlError(.badValue, "\(why.title)\(why.hint.map { ": \($0)" } ?? "")")
+            case .success(let reply):
+                var out: [String: JSONValue] = ["id": .string(command.id), "title": .string(command.title), "output": .string(command.output.rawValue),
+                                                "provider": .string(to), "reply": .string(reply)]
+                out["notice"] = s.commands.heard.take().map { .string($0.line) }
+                return .object(out)
+            }
+        }
     }
 
     /// A provider as the page's list and its rows show it.

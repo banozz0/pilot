@@ -19,7 +19,8 @@ final class SelectionTools {
     static let shared: SelectionTools = SelectionTools()
     /// Shows the pill at the pointer for the text selected there, for a key or mouse button (no default key).
     static let id = "ai.selectionTools"
-    enum Button { case ask, read, copy, translate, summarise }
+    /// `command`: one of your own AI commands (AICommands), by its id; the pill lists the first few after its own.
+    enum Button: Equatable { case ask, read, copy, translate, summarise, command(String) }
 
     /// Tells the keyboard tap a press used the held layer: no quick-tap Escape at Hyper's release, and the bind list
     /// closes or never opens (HyperTap.layerUsed).
@@ -203,7 +204,8 @@ final class SelectionTools {
             let found = if let own { own.flatMap(SelectionEdit.ownTarget) } else { await edit.capture() }
             guard let found else { return tip(own != nil ? SelectionBox.nothingSelected : edit.miss) }
             guard !Task.isCancelled else { return }
-            ailog.notice("selection tools: \(String(describing: button), privacy: .public) on \(found.text.count) characters in \(found.app, privacy: .public)")
+            let name = if case .command = button { "AI command" } else { String(describing: button) }
+            ailog.notice("selection tools: \(name, privacy: .public) on \(found.text.count) characters in \(found.app, privacy: .public)")
             switch button {
             case .ask: SelectionBox.shared.open(found)
             case .translate: translate(found.text)
@@ -212,6 +214,9 @@ final class SelectionTools {
             case .copy:
                 edit.world.copy(found.text)
                 tip(SelectionBox.copied)
+            case .command(let id):
+                guard let command = AICommandBook.shared.command(id) else { return tip("No AI command \(id)") }
+                await AICommands.shared.run(command, on: found)
             }
         }
     }
@@ -248,7 +253,7 @@ final class SelectionTools {
     func showPanel(at point: CGPoint) {
         hidePanel()
         let look = Look.shared
-        let host = NSHostingView(rootView: SelectionPillView(summarise: summarises(), press: { [weak self] in self?.press($0) })
+        let host = NSHostingView(rootView: SelectionPillView(summarise: summarises(), commands: commands(), press: { [weak self] in self?.press($0) })
             .allowsWindowActivationEvents(true)
             .styled(.hud, look: look).pilotTheme(look: look))
         host.frame.size = host.fittingSize
@@ -288,6 +293,11 @@ final class SelectionTools {
         }
     }
 
+    /// Your AI commands the pill lists, by id and title, the first few as saved.
+    var commands: () -> [(id: String, title: String)] = {
+        AICommandBook.shared.commands.prefix(AICommands.pillLimit).map { ($0.id, $0.title) }
+    }
+
     func hidePanel() {
         monitors.forEach(NSEvent.removeMonitor)
         monitors = []
@@ -309,10 +319,12 @@ private let pillCallback: CGEventTapCallBack = { _, type, event, userInfo in
     return Unmanaged.passUnretained(event)
 }
 
-/// The pill's face: four buttons in one capsule, five with Summarise, Ask AI's sparkle lit, in the style's Ink.
+/// The pill's face: four buttons in one capsule, five with Summarise, then your first AI commands, Ask AI's sparkle lit,
+/// in the style's Ink.
 struct SelectionPillView: View {
     @Environment(\.ink) private var ink
     var summarise = false
+    var commands: [(id: String, title: String)] = []
     var press: (SelectionTools.Button) -> Void = { _ in }
 
     var body: some View {
@@ -327,6 +339,10 @@ struct SelectionPillView: View {
             if summarise {
                 rule
                 item("Summarise", symbol: "list.bullet") { press(.summarise) }
+            }
+            ForEach(commands, id: \.id) { command in
+                rule
+                item(command.title, symbol: "sparkles") { press(.command(command.id)) }
             }
         }
         .padding(.horizontal, 6).frame(height: 34)

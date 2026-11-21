@@ -2,7 +2,8 @@ import Foundation
 
 /// Saved text Sven pastes by typing its keyword in any app or picking it in Hyper+Space's Snippets branch (card
 /// agent-bo-95423044, audit gap 2; Raycast's Snippets the reference, no code). Its text may hold placeholders, filled
-/// as it is pasted: {date}, {time}, {clipboard}, {argument} (asked for first) and {cursor} (where the caret ends up).
+/// as it is pasted (Placeholders): {date +7d format="d MMM"}, {time}, {clipboard} and {clipboard N}, {selection}, {argument}
+/// or {argument name} (asked for first), {cursor} (where the caret ends up), each with | uppercase, lowercase, trim or encode.
 public struct Snippet: Codable, Equatable, Identifiable, Sendable {
     public var id: UUID
     public var name: String
@@ -14,43 +15,26 @@ public struct Snippet: Codable, Equatable, Identifiable, Sendable {
         self.id = id; self.name = name; self.keyword = keyword; self.text = text
     }
 
-    /// Its text holds {argument}, so pasting it asks for one first.
-    public var needsArgument: Bool { text.contains("{argument}") }
+    /// Its text holds an {argument}, named or not, so pasting it asks for one first.
+    public var needsArgument: Bool { !Placeholders.summary(of: text).argumentNames.isEmpty }
 
     /// The first line of `text` with any words, as the editor's list and the menu show it.
     public static func firstLine(_ text: String) -> String? {
         text.split(whereSeparator: \.isNewline).lazy.map { $0.trimmingCharacters(in: .whitespaces) }.first { !$0.isEmpty }
     }
 
-    /// The text to paste, its placeholders filled; an unknown brace stays as typed.
+    /// The text to paste, its placeholders filled (Placeholders); an unknown brace stays as typed. `earlierClips`: the
+    /// clipboard history before the latest copy, newest first, for {clipboard N}.
     public func expanded(now: Date, clipboard: String?, argument: String = "", locale: Locale = .current,
-                         timeZone: TimeZone = .current) -> SnippetText {
-        func format(date: DateFormatter.Style, time: DateFormatter.Style) -> String {
-            let formatter = DateFormatter()
-            formatter.locale = locale
-            formatter.timeZone = timeZone
-            formatter.dateStyle = date
-            formatter.timeStyle = time
-            return formatter.string(from: now)
-        }
-        var out = "", caret: Int?
-        var rest = text[...]
-        while let open = rest.firstIndex(of: "{") {
-            out += rest[..<open]
-            guard let close = rest[open...].firstIndex(of: "}") else { rest = rest[open...]; break }
-            let token = rest[rest.index(after: open)..<close]
-            switch token {
-            case "date": out += format(date: .medium, time: .none)
-            case "time": out += format(date: .none, time: .short)
-            case "clipboard": out += clipboard ?? ""
-            case "argument": out += argument
-            case "cursor": if caret == nil { caret = out.count }
-            default: out += rest[open...close]
-            }
-            rest = rest[rest.index(after: close)...]
-        }
-        out += rest
-        return SnippetText(text: out, caretBack: caret.map { out.count - $0 } ?? 0)
+                         timeZone: TimeZone = .current, earlierClips: [String] = [], selection: String? = nil) -> SnippetText {
+        expanded(.init(now: now, clipboard: clipboard, earlierClips: earlierClips, selection: selection, argument: argument,
+                       locale: locale, timeZone: timeZone))
+    }
+
+    /// The text to paste, filled with `values`.
+    public func expanded(_ values: Placeholders.Values) -> SnippetText {
+        let filled = Placeholders.fill(text, values)
+        return SnippetText(text: filled.text, caretBack: filled.caret.map { filled.text.count - $0 } ?? 0)
     }
 }
 
@@ -114,7 +98,7 @@ extension MenuEntries {
             let argument = s.needsArgument ? [s.name, s.keyword].lazy.filter { !$0.isEmpty }.compactMap { head in
                 query.lowercased().hasPrefix(head.lowercased() + " ") ? String(query.dropFirst(head.count + 1).drop(while: \.isWhitespace)) : nil
             }.first.flatMap { $0.isEmpty ? nil : $0 } : nil
-            let shown = argument.map { s.text.replacingOccurrences(of: "{argument}", with: $0) } ?? s.text
+            let shown = argument.map { Placeholders.fill(s.text, .init(argument: $0), only: [.argument]).text } ?? s.text
             let line = Snippet.firstLine(shown) ?? ""
             return MenuEntry(title: s.name, target: .snippet(SnippetPick(id: s.id, argument: argument)), home: .snippets,
                              detail: [s.keyword, line].filter { !$0.isEmpty }.joined(separator: " · "),
