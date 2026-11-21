@@ -272,6 +272,9 @@
 .ssnd .soff, .ssnd .son { fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; }
 .ssnd .son, .ssnd[data-on="1"] .soff { display: none; }
 .ssnd[data-on="1"] .son { display: inline; }
+.sfs { top: 10px; bottom: auto; }   /* full screen, the clip's top corner (Sven, 2026-11-21) */
+.sfs path { fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+.sbox video:fullscreen { opacity: 1; object-fit: contain; }   /* shown whole even when the loop never played (reduced motion) */
 
 @media (prefers-reduced-motion: no-preference) {
   @supports (animation-timeline: view()) {
