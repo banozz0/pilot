@@ -41,9 +41,9 @@ struct FrameFollowerTests {
 
     /// Stand-ins for two windows: distinct AX elements, never asked anything.
     static let dragged = AXUIElementCreateApplication(1), other = AXUIElementCreateApplication(2)
-    /// AX calls in one full read of the focused window (EngineObservers.axFocusedWindow): the focused window, subrole,
-    /// position, size, title, AXFullScreen, AXMinimized, _AXUIElementGetWindow. A frame read is one (FrameFollower.frame).
-    static let fullReadCalls = 8
+    /// AX calls in one full read of the focused window (EngineObservers.axFocusedWindow): the focused window, the
+    /// window's six attributes in one, _AXUIElementGetWindow. A frame read is one (FrameFollower.frame).
+    static let fullReadCalls = 3
 
     /// The left button and the display link DragFollower would start: the test ticks it.
     @MainActor final class Mouse {
@@ -111,7 +111,7 @@ struct FrameFollowerTests {
     /// The border's panel frame for a window frame: AppKit coordinates, grown by the 2-point line.
     static func border(_ f: CGRect) -> CGRect { CGRect(x: f.minX - 2, y: 2160 - f.maxY - 2, width: f.width + 4, height: f.height + 4) }
 
-    @Test("A 200-move drag: before, 200 full reads on the main thread (1600 AX calls); after, one frame read per 120 Hz frame, none on the main thread")
+    @Test("A 200-move drag: before, 200 full reads on the main thread (600 AX calls); after, one frame read per 120 Hz frame, none on the main thread")
     func dragCost() {
         let before = Self.drag(Self.rig()) { $0.observers.refreshFocusedWindow() } // what the AX callback did with each move
         let after = Self.drag(Self.rig()) { $0.observers.windowMoved(Self.dragged) }
@@ -280,10 +280,10 @@ struct FrameFollowerTests {
         try #require(AXIsProcessTrusted(), "the test runner has no Accessibility")
         let app = try #require(NSWorkspace.shared.frontmostApplication)
         let pid = app.processIdentifier
-        let read = try #require(EngineObservers.axFocusedWindow(pid))
+        let read = try #require(try EngineObservers.axFocusedWindow(pid))
         let element = try #require(read.element)
         let clock = ContinuousClock(), n = 200
-        let full = clock.measure { for _ in 0..<n { _ = EngineObservers.axFocusedWindow(pid) } }
+        let full = clock.measure { for _ in 0..<n { _ = try? EngineObservers.axFocusedWindow(pid) } }
         let frame = clock.measure { for _ in 0..<n { _ = FrameFollower.frame(of: element) } }
         #expect(FrameFollower.frame(of: element) == read.window.frame)
         print("[border-drag] live, \(app.localizedName ?? "?"): full read \(full / n) each, frame read \(frame / n) each")

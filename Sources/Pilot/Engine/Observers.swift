@@ -44,13 +44,16 @@ final class EngineObservers {
     private var tokens: [NSObjectProtocol] = []
     /// Each read of the focused window: focus, move, resize, the tiler's writes (the window border follows it, card agent-bo-95422950).
     var onFocusedWindow: (WindowBorder.Window?) -> Void = { _ in }
-    /// The focused window's title, frame and AX element as one app reports them; tests pass a fake.
-    @ObservationIgnored var readFocusedWindow: @MainActor (pid_t) -> FocusedWindowRead? = { EngineObservers.drawnFocusedWindow($0) }
+    /// The focused window's title, frame and AX element as one app reports them; tests pass a fake. Throws AXBusy when
+    /// the app did not answer in time.
+    @ObservationIgnored var readFocusedWindow: @MainActor (pid_t) throws -> FocusedWindowRead? = { try EngineObservers.drawnFocusedWindow($0) }
     /// The last read's window server number: the tiler's writes to other windows are not re-read.
     @ObservationIgnored private(set) var focusedWindowID: CGWindowID?
     /// The last read's window and its AX element: a move or resize of that element reads its frame alone.
     @ObservationIgnored private var focusedWindow: WindowBorder.Window?
     @ObservationIgnored private var focusedElement: AXUIElement?
+    /// The app the last read's window belongs to: a busy app keeps its border only while it is this one.
+    @ObservationIgnored private var focusedWindowPid: pid_t?
     /// Moves and resizes, read at most once per display frame, off the main thread.
     @ObservationIgnored let follower: FrameFollower
     /// The focused window while the mouse holds it: its window server bounds every display frame.
@@ -220,10 +223,11 @@ final class EngineObservers {
     }
 
     func refreshFocusedWindow() {
-        guard let read = Self.ownKeyWindow() ?? focusedApp.flatMap({ readFocusedWindow($0.processIdentifier) }) else {
-            focusedWindowFrame = nil; focusedWindowTitle = nil; focusedWindowID = nil; focusedWindow = nil; focusedElement = nil
-            return onFocusedWindow(nil)
-        }
+        let pid = focusedApp?.processIdentifier
+        let found: FocusedWindowRead?
+        do { found = try Self.ownKeyWindow() ?? pid.flatMap { try readFocusedWindow($0) } } catch { return busy(pid) }
+        guard let read = found else { return forgetFocusedWindow() }
+        focusedWindowPid = pid
         // Set only when they change: the top bar reads the title.
         if read.window.subrole != focusedWindowSubrole { focusedWindowSubrole = read.window.subrole }
         if read.window.frame != focusedWindowFrame { focusedWindowFrame = read.window.frame }
@@ -233,6 +237,21 @@ final class EngineObservers {
         onFocusedWindow(read.window)
         // Another app's window: the window server's frame again once the app has surely committed it (FrameFollower)
         if read.element != nil, let id = read.window.windowID { follower.settle(id) }
+    }
+
+    private func forgetFocusedWindow() {
+        focusedWindowFrame = nil; focusedWindowTitle = nil; focusedWindowID = nil; focusedWindow = nil; focusedElement = nil; focusedWindowPid = nil
+        onFocusedWindow(nil)
+    }
+
+    /// The focused app did not answer within AXBusy.timeout: nothing more is asked of it until its next focus, move
+    /// or glide event, which reads again. Its window keeps the border, settled where the window server draws it (no
+    /// call into the app); another app's window loses it, and its number, so the busy app's next glide re-reads.
+    private func busy(_ pid: pid_t?) {
+        let id = pid == focusedWindowPid ? focusedWindowID : nil
+        wlog.notice("focused window: app \(pid ?? 0, privacy: .public) did not answer in \(AXBusy.timeout, privacy: .public) s; border \(id != nil ? "kept" : "hidden", privacy: .public) until its next event")
+        guard let id else { return forgetFocusedWindow() }
+        follower.settle(id)
     }
 
     /// One of borderedWindowNotifications from Pilot's window `window`, one the border may mark. The mouse dragging the
@@ -332,8 +351,8 @@ final class EngineObservers {
     /// drawn when the app draws none (just opened, or on another Space). Pilot's own window keeps AppKit's frame:
     /// the window server takes a moved window's frame a run loop turn later, when AppKit commits it, and the read a
     /// move sets off came first, so the border stayed where the window had been (tester bug 9, 2026-11-19).
-    static func drawnFocusedWindow(_ pid: pid_t, read focused: @MainActor (pid_t) -> FocusedWindowRead? = axFocusedWindow) -> FocusedWindowRead? {
-        guard var read = focused(pid) else { return nil }
+    static func drawnFocusedWindow(_ pid: pid_t, read focused: @MainActor (pid_t) throws -> FocusedWindowRead? = { try axFocusedWindow($0) }) rethrows -> FocusedWindowRead? {
+        guard var read = try focused(pid) else { return nil }
         guard pid != getpid(), let id = read.window.windowID, !read.window.minimised, !read.window.fullScreen else { return read }
         let drawn = DragFollower.drawnBounds(of: id)
         let front = drawn != nil ? nil : normal(onScreen(), skipping: []).first { $0.pid == pid }.map { (id: $0.id, frame: $0.frame) }
@@ -344,23 +363,41 @@ final class EngineObservers {
     /// The focused window of app `pid` through Accessibility; nil when it has none. Pilot's own is read from AppKit with
     /// no element, so no Accessibility ask, here or in FrameFollower's reads off the main thread, reaches its own
     /// process: there AppKit answers on the asking thread and deadlocks against SwiftUI (T59).
-    static func axFocusedWindow(_ pid: pid_t) -> FocusedWindowRead? {
+    /// Runs on the main thread, the key tap's: two messages into the app (its focused window, then the window's six
+    /// attributes in one) plus the window server number, each waiting AXBusy.timeout at most; the first unanswered one
+    /// throws AXBusy and nothing more is asked. `ask` is the message; tests pass a busy app.
+    static func axFocusedWindow(_ pid: pid_t, ask: (AXUIElement, [String]) -> (AXError, [AnyObject]) = askApp) throws -> FocusedWindowRead? {
         guard pid != getpid() else { return ownKeyWindow(marked: false) }
-        var win: AnyObject?
-        guard AXUIElementCopyAttributeValue(AXUIElementCreateApplication(pid), kAXFocusedWindowAttribute as CFString, &win) == .success,
-              let win else { return nil }
+        let app = AXUIElementCreateApplication(pid)
+        AXUIElementSetMessagingTimeout(app, AXBusy.timeout)
+        let focused = try answer(ask(app, [kAXFocusedWindowAttribute]), pid)
+        guard let win = focused?.first, CFGetTypeID(win) == AXUIElementGetTypeID() else { return nil }
         let w = win as! AXUIElement
-        var pos: AnyObject?, size: AnyObject?, title: AnyObject?, subrole: AnyObject?
+        AXUIElementSetMessagingTimeout(w, AXBusy.timeout) // per element: a copied element has the global timeout
+        let names = [kAXSubroleAttribute, kAXPositionAttribute, kAXSizeAttribute, kAXTitleAttribute, "AXFullScreen", kAXMinimizedAttribute]
+        guard let v = try answer(ask(w, names), pid), v.count == names.count else { return nil }
+        // An attribute the window lacks is an AXError value in its place, read as missing: no subrole, no title, false
         var p = CGPoint.zero, s = CGSize.zero
-        AXUIElementCopyAttributeValue(w, kAXSubroleAttribute as CFString, &subrole)
-        AXUIElementCopyAttributeValue(w, kAXPositionAttribute as CFString, &pos)
-        AXUIElementCopyAttributeValue(w, kAXSizeAttribute as CFString, &size)
-        AXUIElementCopyAttributeValue(w, kAXTitleAttribute as CFString, &title)
-        if let pos { AXValueGetValue(pos as! AXValue, .cgPoint, &p) }
-        if let size { AXValueGetValue(size as! AXValue, .cgSize, &s) }
-        let ax = AXWindow(element: w, pid: pid)
-        return (title as? String, WindowBorder.Window(frame: CGRect(origin: p, size: s), subrole: subrole as? String,
-                                                      fullScreen: ax.isFullScreen, minimised: ax.isMinimised, windowID: ax.windowID), w)
+        if CFGetTypeID(v[1]) == AXValueGetTypeID() { AXValueGetValue(v[1] as! AXValue, .cgPoint, &p) }
+        if CFGetTypeID(v[2]) == AXValueGetTypeID() { AXValueGetValue(v[2] as! AXValue, .cgSize, &s) }
+        return (v[3] as? String, WindowBorder.Window(frame: CGRect(origin: p, size: s), subrole: v[0] as? String, fullScreen: v[4] as? Bool ?? false,
+                                                     minimised: v[5] as? Bool ?? false, windowID: AXWindow(element: w, pid: pid).windowID), w)
+    }
+
+    /// One message: the attributes' values, in order, or the error.
+    nonisolated static func askApp(_ element: AXUIElement, _ names: [String]) -> (AXError, [AnyObject]) {
+        var values: CFArray?
+        let error = AXUIElementCopyMultipleAttributeValues(element, names as CFArray, [], &values)
+        return (error, (values as? [AnyObject]) ?? [])
+    }
+
+    /// A message's values; nil for an app that refused (no window, no Accessibility), AXBusy for one that did not answer.
+    private static func answer(_ reply: (AXError, [AnyObject]), _ pid: pid_t) throws -> [AnyObject]? {
+        switch reply.0 {
+        case .success: reply.1
+        case .cannotComplete: throw AXBusy(pid: pid)
+        default: nil
+        }
     }
 
     private func watchFocusedApp() {
