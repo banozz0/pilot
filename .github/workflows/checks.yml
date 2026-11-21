@@ -108,7 +108,7 @@ jobs:
     needs: changes
     if: needs.changes.outputs.catalogue == 'true'
     runs-on: macos-15
-    timeout-minutes: 15
+    timeout-minutes: 10
     env:
       PY: /usr/bin/python3
     steps:
@@ -141,8 +141,27 @@ jobs:
           PYTHONDONTWRITEBYTECODE: "1"
         run: |
           "$PY" -m unittest discover -s catalogue/tests
+
+  # The runner's python3 run is its own job, in parallel with the one above (~3.5 and ~2.3 minutes, one after the other
+  # before).
+  catalogue-runner-python:
+    name: Catalogue (tests on the runner's python3)
+    needs: changes
+    if: needs.changes.outputs.catalogue == 'true'
+    runs-on: macos-15
+    timeout-minutes: 8
+    env:
+      PY: /usr/bin/python3
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Python
+        run: |
+          "$PY" --version
+          python3 --version
       - name: Tests on the runner's python3
-        if: ${{ !cancelled() }}
         env:
           PYTHONDONTWRITEBYTECODE: "1"
         run: |
