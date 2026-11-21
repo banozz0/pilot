@@ -660,6 +660,9 @@ public struct MenuEntry: Identifiable, Equatable, Sendable {
     /// The words in a file's picture the text index matched (Homy-style Files): a row found by them alone lists after
     /// the name hits, in the index's order, and its icon wears text.viewfinder.
     public var matchedWords: String?
+    /// One of your fallbacks (spec launcher-best T4): the navigator keeps it aside from the entries and offers it, with
+    /// what was typed, when a root search finds nothing (MenuFallbacks).
+    public var isFallback = false
 
     public init(title: String, target: Target, home: MenuBranch? = nil, detail: String? = nil, detailIsKey: Bool = false,
                 running: Bool = false, inSearch: Bool = true, keywords: String? = nil, isAnswer: Bool = false, ownKind: Kind? = nil,
@@ -712,7 +715,7 @@ public struct MenuEntry: Identifiable, Equatable, Sendable {
     /// A row that offers to look elsewhere for what was typed, not a result: Search files, Search to install, Search the
     /// web, and the Ask AI row every root search ends its hits with (an `ask …` typed is an answer, a result).
     public var isOffer: Bool {
-        if target.isSearchOffer { return true }
+        if target.isSearchOffer || isFallback { return true }
         if case .ask = target { return !isAnswer }
         return false
     }
@@ -824,6 +827,9 @@ public struct MenuNavigator: Sendable {
     /// Every root branch, which a root search finds, hidden ones and Config too; `rootRows` the ones the root lists before typing,
     /// in Sven's order (MenuRoot, story 152).
     private let branchRows: [MenuEntry], rootRows: [MenuEntry]
+    /// Your fallbacks in your order (MenuEntry.isFallback), kept out of the entries so no search or provider touches them;
+    /// none is Pilot's own offers.
+    private let fallbackRows: [MenuEntry]
     /// A picker: the root lists the entries themselves, not the branches.
     public let isList: Bool
     /// A picker's heading, "Audio output"; nil is the menu's own.
@@ -837,6 +843,8 @@ public struct MenuNavigator: Sendable {
     /// `root` orders and hides the root's branches and places the extras switched on among them.
     public init(entries: [MenuEntry], branch: MenuBranch? = nil, frecency: Frecency = Frecency(), favourites: Set<String> = [],
                 aliases: Aliases = Aliases(), root: MenuRoot = MenuRoot(), now: Date = .now) {
+        fallbackRows = entries.filter(\.isFallback)
+        let entries = entries.filter { !$0.isFallback }
         self.entries = entries
         isList = false
         isLive = false
@@ -881,6 +889,7 @@ public struct MenuNavigator: Sendable {
         boost = [:]
         branchRows = []
         rootRows = []
+        fallbackRows = []
         refresh()
     }
 
@@ -1072,8 +1081,11 @@ public struct MenuNavigator: Sendable {
             // group, or first when nothing matched (Sven 2026-10-16, Q174; Search files joined them, Q182).
             let fallbacks = only == nil ? Self.fallbacks(query, after: rows, via: webVia) : []
             let install = InstallSearch.Query(query).map { [MenuEntry(title: "Search to install \"\($0.text)\"", target: .searchInstall($0.text))] } ?? []
-            // Nothing else matched: Install's search is offered too, first when the text reads as an app's name.
-            if only == nil, rows.isEmpty, !install.isEmpty {
+            // Nothing matched and you picked your fallbacks (Launcher › Your menu, T4): those alone, in your order.
+            if only == nil, rows.isEmpty, !fallbackRows.isEmpty {
+                rows = fallbackRows.compactMap { MenuFallbacks.offer($0, query, own: fallbacks + files + install) }
+            } else if only == nil, rows.isEmpty, !install.isEmpty {
+                // Nothing else matched: Install's search is offered too, first when the text reads as an app's name.
                 let offers = install + files
                 rows = fallbacks + (Self.looksLikeApp(query) ? offers : offers.reversed())
             } else if only == .package {
@@ -1797,5 +1809,85 @@ extension FileSearch.Ask {
         calendar.firstWeekday = 2
         let unit: Calendar.Component = switch when { case .today: .day; case .week: .weekOfYear; case .month: .month }
         return calendar.dateInterval(of: unit, for: now).map { modified >= $0.start } ?? true
+    }
+}
+
+/// Your fallbacks (spec launcher-best T4, after Raycast's Fallback Commands and Alfred's fallback searches): what a root
+/// search that found nothing offers for the words, in the order picked on Launcher › Your menu (`menu.fallbacks`). Each
+/// is one of Pilot's four offers (`ai.ask`, `web`, `files`, `install`), a quicklink that takes words
+/// (`quicklinks.<keyword>`, opened with them) or a script that asks for them (its action id, the words typed after its
+/// title). None picked is Pilot's own offers, as before.
+public enum MenuFallbacks {
+    public struct Option: Equatable, Sendable {
+        public let id: String, title: String
+        public init(id: String, title: String) { self.id = id; self.title = title }
+    }
+
+    public static let builtIn = [Option(id: "ai.ask", title: "Ask AI"), Option(id: "web", title: "Search the web"),
+                                 Option(id: "files", title: "Search files"), Option(id: "install", title: "Search to install")]
+    public static let quicklinkPrefix = "quicklinks."
+
+    /// Every fallback there is to pick: the four built in, each quicklink taking words, each script asking for them
+    /// (`fills`, ScriptCommand.fills).
+    public static func options(links: [Quicklink], fills: [String: String]) -> [Option] {
+        builtIn + links.filter(\.takesQuery).map { Option(id: quicklinkPrefix + $0.keyword.lowercased(), title: "Search \($0.name)") }
+            + fills.sorted { $0.key < $1.key }.map { Option(id: $0.key, title: $0.value.trimmingCharacters(in: .whitespaces)) }
+    }
+
+    /// The rows the navigator keeps aside for `ids`, in their order (MenuEntry.isFallback); a quicklink or script since
+    /// removed is left out. Pilot's four stand in for the offers the navigator builds itself; a script's row is its own
+    /// from `rows`, so it keeps its icon.
+    public static func templates(_ ids: [String], links: [Quicklink], among rows: [MenuEntry]) -> [MenuEntry] {
+        ids.compactMap { id -> MenuEntry? in
+            var row: MenuEntry
+            switch id {
+            case "ai.ask": row = MenuEntry(title: "Ask AI", target: .ask(""))
+            case "web": row = MenuEntry(title: "Search the web", target: .searchWeb(""))
+            case "files": row = MenuEntry(title: "Search files", target: .searchFiles)
+            case "install": row = MenuEntry(title: "Search to install", target: .searchInstall(""))
+            case _ where id.hasPrefix(quicklinkPrefix):
+                let keyword = id.dropFirst(quicklinkPrefix.count)
+                guard let link = links.first(where: { $0.takesQuery && $0.keyword.caseInsensitiveCompare(keyword) == .orderedSame }) else { return nil }
+                row = MenuEntry(title: link.name, target: .action(link.actionID), detail: link.url(query: "x")?.host(), icon: MenuIcon.quicklink)
+            default:
+                guard let script = rows.first(where: { $0.target == .action(id) && $0.fills != nil }) else { return nil }
+                row = script
+            }
+            row.inSearch = false
+            row.isFallback = true
+            return row
+        }
+    }
+
+    /// A fallback offering what was typed, as the navigator lists it. Pilot's four are the navigator's `own` offers for
+    /// the words (nil when Search files or Search to install has none: the words are no file's or package's name); a
+    /// quicklink opens with them; a script types them after its title, where its row runs with them.
+    static func offer(_ template: MenuEntry, _ query: String, own: [MenuEntry]) -> MenuEntry? {
+        let typed = query.trimmingCharacters(in: .whitespaces)
+        var row: MenuEntry
+        switch template.target {
+        case .ask, .searchWeb, .searchFiles, .searchInstall:
+            guard let built = own.first(where: { sameOffer($0.target, template.target) }) else { return nil }
+            row = built
+        case .action(let id) where Quicklink.parse(id) != nil:
+            // An answer, as `gh …` gives (Quicklink.answers): one search's words are never a pick, a favourite or an alias.
+            row = MenuEntry(title: "Search \(template.title) for \u{201C}\(typed)\u{201D}", target: .action("\(id):\(typed)"),
+                            detail: template.detail, isAnswer: true, icon: MenuIcon.quicklink)
+        default:
+            row = template
+            row.subtitle = "\u{201C}\(typed)\u{201D}"
+            row.fills = (template.fills ?? "") + typed
+            row.inSearch = true
+            row.isAnswer = true
+        }
+        row.isFallback = true
+        return row
+    }
+
+    private static func sameOffer(_ a: MenuEntry.Target, _ b: MenuEntry.Target) -> Bool {
+        switch (a, b) {
+        case (.ask, .ask), (.searchWeb, .searchWeb), (.searchFiles, .searchFiles), (.searchInstall, .searchInstall): true
+        default: false
+        }
     }
 }

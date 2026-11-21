@@ -401,8 +401,10 @@ final class PilotMenu {
                                  branches: installed.branches,
                                  switches: SystemModule.switchStates(), fills: ScriptCommand.fills(scripts))
         // Each app's own commands (P38), from the drive catalogue.
-        return MenuEntries.commands(built, catalogue: DriveModule.catalogue, installed: Set(apps.map(\.bundle)))
-            + MenuEntries.quicklinks(QuicklinkBook.shared.links)
+        let links = QuicklinkBook.shared.links
+        let rows = MenuEntries.commands(built, catalogue: DriveModule.catalogue, installed: Set(apps.map(\.bundle))) + MenuEntries.quicklinks(links)
+        // Your fallbacks ride with the entries, which the navigator sets aside (T4).
+        return rows + MenuFallbacks.templates(MenuRootSettings.shared.fallbacks ?? [], links: links, among: rows)
     }
 
     /// Every window on every workspace, read once as the menu opens (the tiler's `list-windows --all`).

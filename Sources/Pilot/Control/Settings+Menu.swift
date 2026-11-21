@@ -53,12 +53,34 @@ extension SettingsSchema {
     }
 
     /// The Hyper+Space root's extra rows (Sven 2026-10-20), one switch each as Launcher › Your menu shows them, off by
-    /// default: `menu.extra.<id>`. The root's order and hidden branches stay the menu-root collection.
+    /// default: `menu.extra.<id>`. The root's order and hidden branches stay the menu-root collection. `menu.fallbacks` is
+    /// Your menu's When nothing matches.
     func registerMenuRoot(_ settings: MenuRootSettings) {
-        register(MenuRoot.extraRows.map { extra in
+        register(MenuRoot.extraRows.map { extra -> SettingKey in
             .bool("menu.extra.\(extra.id)", "Hyper+Space root lists \(extra.title)", page: "menu", standard: false,
                   read: { settings.root.extras.contains(extra.id) }, write: { settings.root.show(extra: extra.id, $0) })
-        })
+        } + [
+            // Your fallbacks (spec launcher-best T4): ids in order, as Launcher › Your menu lists them; default is Pilot's own.
+            .text("menu.fallbacks", "What a search that finds nothing offers, in order: \(MenuFallbacks.builtIn.map(\.id).joined(separator: ", ")), quicklinks.<keyword>, a script's id; default is Pilot's own",
+                  page: "menu", standard: "default", read: { settings.fallbacks?.joined(separator: ",") ?? "default" },
+                  write: { typed throws(ControlError) in settings.fallbacks = try Self.fallbacks(typed) }),
+        ])
+    }
+
+    /// Typed fallbacks as kept: known ids in the order typed, once each; nil (Pilot's own) for default, none or nothing.
+    @MainActor static func fallbacks(_ typed: String) throws(ControlError) -> [String]? {
+        let picked = words(typed, lowercased: false)
+        guard !picked.isEmpty, typed.trimmingCharacters(in: .whitespaces).lowercased() != "default" else { return nil }
+        let options = MenuRootSettings.fallbackOptions()
+        var kept: [String] = []
+        for word in picked {
+            // A script's id keeps its case as found; a word matches it in any case.
+            guard let option = options.first(where: { $0.id.caseInsensitiveCompare(word) == .orderedSame }) else {
+                throw ControlError(.badValue, "menu.fallbacks: no fallback \(word); they are \(options.map(\.id).joined(separator: ",")), or default")
+            }
+            if !kept.contains(option.id) { kept.append(option.id) }
+        }
+        return kept
     }
 
     /// A folder as the page's picker gives it: a full path (or ~/…) to a folder that is there.
