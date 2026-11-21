@@ -629,6 +629,50 @@
       ]
     },
     {
+      "id": "speedtest",
+      "title": "Speedtest",
+      "icon": "⚡",
+      "version": "1.0.0",
+      "description": "Tests your internet speed with macOS's own networkQuality, against Apple's servers: download, upload, latency and responsiveness, live on its page while it runs, and the last result kept.",
+      "examples": [
+        "Open Speedtest, Return: the test runs on its page, download then upload counting up",
+        "Open it again later: the last result shows, with Copy result and Run again"
+      ],
+      "requires": [
+        "networkQuality"
+      ],
+      "commands": [
+        {
+          "name": "speedtest",
+          "title": "Speedtest",
+          "mode": "detail"
+        }
+      ],
+      "permissions": {
+        "network": [
+          "mensura.cdn-apple.com",
+          "aaplimg.com"
+        ],
+        "clipboard": true,
+        "files": [],
+        "actions": []
+      },
+      "files": [
+        {
+          "path": "extension.json",
+          "sha256": "88f9e0697467c901bc74df5718cc0a38ed5d2363f8e93f1fe93f1ce95687fc6e",
+          "size": 1110,
+          "executable": false
+        },
+        {
+          "path": "main.py",
+          "sha256": "bc6d720affc06fcc97d039fad9a852a19a4d245e86b60fccbedd08bcc894fae9",
+          "size": 16942,
+          "executable": true
+        }
+      ]
+    },
+    {
       "id": "ssh-hosts",
       "title": "SSH hosts",
       "icon": "🖥️",

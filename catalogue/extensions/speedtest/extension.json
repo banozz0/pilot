@@ -1,0 +1,18 @@
+{
+  "id": "speedtest",
+  "title": "Speedtest",
+  "icon": "⚡",
+  "version": "1.0.0",
+  "description": "Tests your internet speed with macOS's own networkQuality, against Apple's servers: download, upload, latency and responsiveness, live on its page while it runs, and the last result kept.",
+  "examples": ["Open Speedtest, Return: the test runs on its page, download then upload counting up", "Open it again later: the last result shows, with Copy result and Run again"],
+  "runtime": "process",
+  "surfaces": { "page": { "command": "page", "every": 60 } },
+  "requires": ["networkQuality"],
+  "permissions": { "clipboard": true, "network": ["mensura.cdn-apple.com", "aaplimg.com"] },
+  "commands": [
+    { "name": "speedtest", "title": "Speedtest", "mode": "detail", "run": "main.py" },
+    { "name": "start", "title": "Run speed test", "mode": "no-view", "hidden": true, "run": "main.py" },
+    { "name": "stop", "title": "Stop speed test", "mode": "no-view", "hidden": true, "run": "main.py" },
+    { "name": "page", "title": "Speedtest page", "mode": "no-view", "hidden": true, "run": "main.py" }
+  ]
+}
