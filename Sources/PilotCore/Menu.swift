@@ -761,6 +761,8 @@ public struct MenuNavigator: Sendable {
         /// ⌘1 to ⌘9 in Line (menu-morph T3): run the list's nth row, as a click on it would. PilotMenu sends it only
         /// outside the Files view, where ⌘1 to ⌘3 stay its filters.
         case number(Int)
+        /// ⌫: up a folder on an empty search in a browsed folder (FolderBrowse); anywhere else the field deletes.
+        case deleteBackward
     }
     /// Providers that search as Sven types (files, Homebrew) start at this many characters.
     public static let minimumQuery = 2
@@ -814,6 +816,11 @@ public struct MenuNavigator: Sendable {
     /// A deeper branch an extra row opened from the root before typing (Notes from More rows, Sven 2026-10-21): up from it
     /// goes back to the root, not to the branch it lives in; nil when the open branch was reached through its parent.
     private var rooted: MenuBranch?
+    /// The folder → opened from a folder row (FolderBrowse, spec launcher-best T8), where browsing began and the kind Tab
+    /// showed there, which Escape goes back to; nil when no folder is browsed.
+    private var browse: (folder: String, from: Spot, only: MenuEntry.Kind?)?
+    /// The browsed folder: its items are the rows and the search filters them by name.
+    public var folder: String? { browse?.folder }
     /// Ranks again only when it changes: the search field hands back its text as it takes focus, which must not move the
     /// selection to the first row.
     public var query = "" { didSet { if query != oldValue { refresh() } } }
@@ -903,7 +910,8 @@ public struct MenuNavigator: Sendable {
 
     /// Back at `spot` (Escape in a picker it opened): its branch and search, its row selected while it is listed.
     public mutating func go(to spot: Spot) {
-        let moved = branch != spot.branch || only != nil
+        let moved = branch != spot.branch || only != nil || browse != nil
+        browse = nil
         branch = spot.branch
         rooted = spot.rooted
         only = nil
@@ -1031,6 +1039,12 @@ public struct MenuNavigator: Sendable {
         kindCounts = [:]
         guard let branch else {
             if isList { rows = MenuGroups.bySection(rank(entries)); return }
+            // A browsed folder's items, or a path typed at the root ("~/code/pi", "/Applications/"): read from the folder, no
+            // index asked.
+            if let (dir, stem) = browse.map({ ($0.folder, query) }) ?? (only == nil ? FolderBrowse.typed(query, home: home) : nil) {
+                rows = FolderBrowse.rows(in: dir, matching: stem, home: home, showHidden: fileFilters.hidden)
+                return
+            }
             // Nothing typed: the root's branches, or the kind Tab shows (rootKind); the Files view (also when Search inside
             // emptied it) lists nothing until Sven types.
             guard !query.isEmpty else {
@@ -1244,6 +1258,11 @@ public struct MenuNavigator: Sendable {
             guard let row = selected else { return .handled }
             return pick(row)
         case .right:
+            // A folder row opens, with text typed too ("~/code/pi" then → into pilot); any other row's → is the caret's.
+            if !isList, branch == nil, case .file(let path)? = selected?.target, FolderLooks.isFolder(URL(fileURLWithPath: path)) {
+                enter(path)
+                return .handled
+            }
             guard query.isEmpty, case .branch(let b)? = selected?.target else { return .ignored }
             open(b)
             return .handled
@@ -1255,6 +1274,11 @@ public struct MenuNavigator: Sendable {
             if let row = selected, !list.isEmpty { actions = RowActionsMenu(row: row, list) }
             return .handled
         case .escape:
+            // In a browsed folder a typed search clears first, then Escape goes back where browsing began.
+            if folder != nil {
+                if query.isEmpty { leaveFolder() } else { query = "" }
+                return .handled
+            }
             guard branch != nil else {
                 if isList { return back.map { .back($0) } ?? .close }
                 // At the root a typed search clears first, so Escape never throws away what Sven typed and closes at once.
@@ -1269,6 +1293,10 @@ public struct MenuNavigator: Sendable {
                 return .handled
             }
             up()
+            return .handled
+        case .left where folder != nil, .deleteBackward:
+            guard folder != nil, query.isEmpty else { return .ignored }
+            upFolder()
             return .handled
         case .left:
             guard branch != nil, query.isEmpty else { return .ignored }
@@ -1292,7 +1320,8 @@ public struct MenuNavigator: Sendable {
             return click(at: n - 1)
         case .space:
             // Quick Look in the Files view (Sven, 2026-10-07); a switch flips (S1); anywhere else the space is typed.
-            if fileQuery != nil, let row = selected, row.kind == .file { return .preview(row) }
+            // In a browsed folder too; a typed path's Space is typed, as folder names hold spaces.
+            if fileQuery != nil || folder != nil, let row = selected, row.kind == .file { return .preview(row) }
             guard spaceToggles, let row = selected, case .action(let id) = row.target else { return .ignored }
             switches([id: row.isOn != true])
             return .toggle(row)
@@ -1406,7 +1435,7 @@ public struct MenuNavigator: Sendable {
         case .escape, .commandK:
             actions = nil
             return .handled
-        case .left, .right:
+        case .left, .right, .deleteBackward:
             return .ignored
         case .tab, .backTab, .commandReturn, .filter, .toggleHidden, .number:
             return .handled
@@ -1441,6 +1470,7 @@ public struct MenuNavigator: Sendable {
             return .handled
         case .searchInside:
             guard case .file(let path) = row.target else { return .handled }
+            browse = nil
             fileFilters.place = .folder(path)
             only = .file
             query = ""
@@ -1456,6 +1486,32 @@ public struct MenuNavigator: Sendable {
         default: break
         }
         return .act(action, row)
+    }
+
+    /// → on a folder row: its items listed, the search cleared; the first folder entered keeps where browsing began.
+    private mutating func enter(_ path: String) {
+        browse = (FolderBrowse.standard(path), browse?.from ?? spot, browse?.only ?? only)
+        only = nil
+        clearQuery()
+    }
+
+    /// ← or ⌫ on an empty search in a browsed folder: the folder above, the one just left selected; above `/`, back
+    /// where browsing began.
+    private mutating func upFolder() {
+        guard let left = folder else { return }
+        guard let above = FolderBrowse.parent(of: left) else { return leaveFolder() }
+        browse?.folder = above
+        clearQuery()
+        select(.file(left))
+    }
+
+    /// Escape in a browsed folder: back to the search or Files view browsing began in, its row selected.
+    private mutating func leaveFolder() {
+        guard let (_, from, kind) = browse else { return }
+        browse = nil
+        only = kind
+        if query != from.query { query = from.query } else { refresh() }
+        select(from.row)
     }
 
     private mutating func open(_ b: MenuBranch) {

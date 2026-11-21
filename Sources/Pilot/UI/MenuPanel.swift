@@ -1166,6 +1166,8 @@ final class PilotMenu {
         case 125: .down
         case 36, 76: flags.contains(.command) ? .commandReturn : .return
         case 53: .escape
+        // ⌫ goes up a browsed folder on an empty search (FolderBrowse); the navigator hands any other back to the field.
+        case 51 where flags.isDisjoint(with: [.command, .option, .control, .shift]): .deleteBackward
         case 123 where plainArrow: .left
         case 124 where plainArrow: .right
         case 48: flags.contains(.shift) ? .backTab : .tab
@@ -2047,7 +2049,7 @@ extension MenuModel {
     /// A root search: no branch, something typed or a kind Tab shows (Sven 2026-10-12), so the kind tabs show.
     var searchingRoot: Bool { nav.branch == nil && (!nav.query.isEmpty || nav.only != nil) }
     /// The root as it opens: no branch, nothing typed, no kind shown, not a picker.
-    var atRoot: Bool { nav.branch == nil && !nav.isList && nav.query.isEmpty && nav.only == nil }
+    var atRoot: Bool { nav.branch == nil && !nav.isList && nav.query.isEmpty && nav.only == nil && nav.folder == nil }
     /// A narrow list (the root's, Trigger's, Capture's) shows only the current row's count, key and chevron
     /// (mockup A); the wide ones keep each row's key.
     var quiet: Bool { shape == .narrow }
