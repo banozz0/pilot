@@ -5,8 +5,10 @@ import AppKit
 private var resizeWithMouseTask: Task<(), any Error>? = nil
 
 func resizedObs(_: AXObserver, ax: AXUIElement, notif: CFString, _: UnsafeMutableRawPointer?) {
+    // Pilot: its own glide's frames (card agent-bo-95423033), known by element before any call into the app (move-lag)
+    if tilerIsGliding(ax) { return }
     let windowId = ax.containingWindowId()
-    if isGliding(windowId) { return } // Pilot: its own glide's frames (card agent-bo-95423033)
+    if isGliding(windowId) { return }
     windowResized(windowId, notif as String)
 }
 

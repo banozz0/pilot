@@ -326,7 +326,7 @@ class MacApp: AbstractApp { // Pilot: not final, for OwnApp (Pilot's own windows
         setFrameJobs[windowId] = withWindowAsync(windowId, .cancellable) { [axApp, glider, windows] window, job in
             let glider = try glider.threadGuarded
             guard let topLeft, let size,
-                  glider.retarget(windowId, from: glidingFrom, to: Rect(topLeftX: topLeft.x, topLeftY: topLeft.y, width: size.width, height: size.height),
+                  glider.retarget(windowId, element: window, from: glidingFrom, to: Rect(topLeftX: topLeft.x, topLeftY: topLeft.y, width: size.width, height: size.height),
                                   now: .now, duration: duration, span: span, fromCorner: fromCorner, then: then)
             else {
                 glider.stop(windowId)

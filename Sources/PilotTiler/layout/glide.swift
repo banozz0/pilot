@@ -125,19 +125,24 @@ struct FrameSteps {
 /// neighbours follow the mouse at once). Layout glides and space-switch slides both ask it.
 @MainActor var glidesAllowed: Bool { config.glide && !reduceMotion() && !lowPowerMode() && gapDrag == nil }
 
-/// The windows gliding now, in every app: their own moves and resizes are not news (movedObs, resizedObs, Pilot's window
-/// border), or each glide would set off a refresh and a focused-window read per frame.
-private let glidingWindowIds = Mutex<Set<UInt32>>([])
+/// The windows gliding now, in every app, with the AX element each glide writes to: their own moves and resizes are not
+/// news (movedObs, resizedObs, Pilot's window border), or each glide would set off a refresh and a focused-window read per frame.
+private let glidingWindows = Mutex<[UInt32: GlidingElement]>([:])
+
+/// A gliding window's element, compared in this process (CFEqual), never asked anything.
+struct GlidingElement: @unchecked Sendable { let element: AXUIElement? }
 
 func isGliding(_ windowId: UInt32?) -> Bool {
     guard let windowId else { return false }
-    return glidingWindowIds.withLock { $0.contains(windowId) }
+    return glidingWindows.withLock { $0[windowId] != nil }
 }
 
-/// Whether the window `element` belongs to is gliding: Pilot's own AX observers skip its moves and resizes. With nothing
-/// gliding (the tiler off, or between glides) it asks nothing of AX.
+/// Whether `element` is a gliding window's own: Pilot's own AX observers and the engine's skip its moves and resizes.
+/// Compared with the elements the glides write to, in this process: asking the app for the element's window number
+/// (_AXUIElementGetWindow) was a call into an app busy taking the glide's writes, on every move and resize it posted,
+/// 1.2 to 1.9 ms each at the median and 9 to 18 ms at p99, 21 to 35 % of Pilot's main thread while windows glide (move-lag).
 public func tilerIsGliding(_ element: AXUIElement) -> Bool {
-    glidingWindowIds.withLock { !$0.isEmpty } && isGliding(element.containingWindowId())
+    glidingWindows.withLock { $0.values.contains { $0.element.map { CFEqual($0, element) } ?? false } }
 }
 
 /// Windows whose frame the tiler has just finished writing: a glide that landed, or a jump. A glide's own moves are
@@ -167,10 +172,11 @@ final class Glider {
     /// The narrowest each window's app let it be (FrameSteps), learned from the writes.
     var minWidths: [UInt32: CGFloat] = [:]
 
-    func retarget(_ id: UInt32, from: Rect?, to: Rect, now: ContinuousClock.Instant, duration: Duration = GlideSet.duration,
+    /// `element`: the window's AX element the glide writes to, which its own moves and resizes name (tilerIsGliding).
+    func retarget(_ id: UInt32, element: AXUIElement? = nil, from: Rect?, to: Rect, now: ContinuousClock.Instant, duration: Duration = GlideSet.duration,
                   span: ClosedRange<CGFloat>? = nil, fromCorner: Bool = false, then: CGPoint? = nil) -> Bool {
         let gliding = glides.retarget(id, from: from, to: to, now: now, duration: duration, span: span, fromCorner: fromCorner, then: then)
-        mark(id, gliding: gliding)
+        mark(id, gliding: gliding, element: element)
         return gliding
     }
 
@@ -209,8 +215,8 @@ final class Glider {
         ticker = nil
     }
 
-    private func mark(_ id: UInt32, gliding: Bool) {
-        glidingWindowIds.withLock { if gliding { $0.insert(id) } else { $0.remove(id) } }
+    private func mark(_ id: UInt32, gliding: Bool, element: AXUIElement? = nil) {
+        glidingWindows.withLock { if gliding { $0[id] = GlidingElement(element: element) } else { $0[id] = nil } }
     }
 
     deinit { ticker?.stop() }

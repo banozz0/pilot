@@ -161,9 +161,15 @@ import Testing
         // The fastest of five runs: a loaded Mac only adds time to a run, so the fastest is the checks' own cost.
         func fastest(_ checks: () -> Void) -> Duration { (0..<5).map { _ in clock.measure(checks) }.min()! }
         let idle = fastest { for i in 0..<10_000 { _ = isGliding(UInt32(i)) || tilerIsGliding(element) } }
-        for id in UInt32(941)...952 { _ = glider.retarget(id, from: a, to: Rect(topLeftX: CGFloat(id), topLeftY: 0, width: 480, height: 540), now: t0) }
-        let gliding = fastest { for i in 0..<10_000 { _ = isGliding(UInt32(i)) } }
+        // Each gliding window's element, as the glide writes to it; never asked anything (another process's: never Pilot's, T59)
+        let elements = (UInt32(941)...952).map { (id: $0, element: AXUIElementCreateApplication(pid_t($0))) }
+        for (id, ax) in elements { _ = glider.retarget(id, element: ax, from: a, to: Rect(topLeftX: CGFloat(id), topLeftY: 0, width: 480, height: 540), now: t0) }
+        // A glide's own move is known by its element, with no call into the app it glides (move-lag: that call held
+        // Pilot's main thread 1.2 to 1.9 ms per move at the median)
+        #expect(tilerIsGliding(elements[3].element) && !tilerIsGliding(AXUIElementCreateApplication(960)))
+        let gliding = fastest { for i in 0..<10_000 { _ = isGliding(UInt32(i)) || tilerIsGliding(elements[i % 12].element) } }
         for id in UInt32(941)...952 { glider.stop(id) }
+        #expect(!tilerIsGliding(elements[3].element))
         print("drag move, gliding checks: \(idle / 10_000) per move with nothing gliding, \(gliding / 10_000) with 12 windows gliding")
         #expect(idle / 10_000 < .microseconds(5) && gliding / 10_000 < .microseconds(5))
     }
