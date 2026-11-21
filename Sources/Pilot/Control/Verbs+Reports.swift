@@ -21,6 +21,8 @@ final class ControlJobs {
     lazy var includeSelfUpdating: @MainActor () -> Bool = { Engine.shared?.settings.updateSelfUpdatingCasks ?? false }
     lazy var previewer = CleanModule.previewer
     lazy var mole: @MainActor () -> String? = { CleanModule.mole }
+    /// Moves the kept list's rows these ids name to the Trash and keeps the run in `store` (W89); nil with no list kept.
+    lazy var trash: @MainActor ([String]) async -> CleanOutcome? = { [unowned self] in await CleanModule.trash($0, from: previewer, store: store) }
     /// How often `report --wait` reads the run again, as the Reports page does, and how long it waits at most.
     var every: Duration = .seconds(2)
     var longest: Duration = .seconds(30 * 60)

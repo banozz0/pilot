@@ -43,6 +43,18 @@ public struct RunReport: Codable, Equatable, Sendable, Identifiable {
                   items: (preview?.items ?? []).map { Item(name: $0.title, detail: $0.detail.isEmpty ? $0.section : "\($0.section) · \($0.detail)") },
                   estimate: preview?.total)
     }
+
+    /// A clean of ticked rows' title (W89), which Reports reads to say "moved to the Trash" rather than "freed".
+    public static let trashTitle = "Clean ticked"
+
+    /// A clean of ticked rows: each row it moved to the Trash with its part and size, and their total; Pilot moves them,
+    /// so the command is what it did, in words.
+    public static func trash(_ outcome: CleanOutcome, home: String = NSHomeDirectory()) -> RunReport {
+        let n = outcome.moved.count + outcome.failed.count
+        return RunReport(kind: .clean, title: trashTitle, command: "Move \(n) ticked item\(n == 1 ? "" : "s") to the Trash",
+                         items: outcome.moved.map { Item(name: AppConfigs.tilde($0.path, home: home), detail: "\($0.part) · \($0.size)") },
+                         estimate: RemoveList.size(outcome.bytes))
+    }
 }
 
 /// How a run ended, read from its folder: the exit status the script wrote, else whether its shell still lives.
@@ -95,6 +107,7 @@ public struct RunRecord: Equatable, Sendable, Identifiable {
         let n = report.items.count, things = "\(n) \(n == 1 ? "item" : "items")"
         switch report.kind {
         case .update: return end == .done ? "\(things) updated" : "\(things) asked"
+        case .clean where report.title == RunReport.trashTitle: return report.estimate.map { "\($0) to the Trash" } ?? things
         case .clean: return freed.map { "\($0) freed" } ?? report.estimate.map { "Mole estimated \($0)" } ?? things
         }
     }
@@ -103,7 +116,7 @@ public struct RunRecord: Equatable, Sendable, Identifiable {
     public var itemsHeading: String {
         switch report.kind {
         case .update: end == .done ? "Updated" : "Asked to update"
-        case .clean: "Mole listed"
+        case .clean: report.title == RunReport.trashTitle ? "Moved to the Trash" : "Mole listed"
         }
     }
 }
@@ -186,6 +199,14 @@ public struct ReportStore: Sendable {
         }
         NotificationCenter.default.post(name: Self.began, object: nil)
         return dir
+    }
+
+    /// A run Pilot did itself and that ended as it began (a clean of ticked rows, W89): its report, its output and exit
+    /// status 0 written at once, so the next read settles it as done.
+    public func finished(_ report: RunReport, output: String) throws {
+        let dir = try begin(report)
+        try output.write(to: dir.appending(path: "output"), atomically: true, encoding: .utf8)
+        try "0".write(to: dir.appending(path: "status"), atomically: true, encoding: .utf8)
     }
 
     private struct End: Codable { let exit: Int32?, ended: Date, freed: String? }

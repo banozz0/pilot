@@ -3,16 +3,25 @@ import PilotCore
 
 /// Clean through Mole (story 117, card agent-bo-95422881): Mole's read-only preview off the main thread, kept for 15
 /// minutes and showing its progress, and the clean itself only after the confirm step, in the visible terminal Install uses.
+/// Since W89 the preview's file list is ticked rows too, and Pilot moves only the ticked ones to the Trash (`trash`).
 @MainActor
 enum CleanModule {
-    nonisolated static var mole: String? { Helper.mole.path() }
+    /// A stand-in Mac for Clean (Sandbox E2E's PILOT_SANDBOX_CLEAN): its Mole, the home that Mole lists and its file
+    /// list is read from, and the folder Trash moves go to in place of the Trash. Nil on a real Mac; set before the first
+    /// preview.
+    nonisolated(unsafe) static var standIn: (mole: String, home: String, trash: URL)?
+
+    nonisolated static var mole: String? { standIn?.mole ?? Helper.mole.path() }
+    /// The home Mole runs in and lists.
+    nonisolated static var home: String { standIn?.home ?? NSHomeDirectory() }
 
     static let previewer: CleanPreviewer = {
-        let previewer = CleanPreviewer { lines in
+        let previewer = CleanPreviewer(list: { started in readList(since: started) }) { lines in
             guard let mole else { return nil }
             ilog.notice("clean: previewing, mo \(Mole.preview.joined(separator: " "), privacy: .public)")
             var environment = ProcessInfo.processInfo.environment
             environment["NO_COLOR"] = "1"
+            environment["HOME"] = home
             do { return try await ChildProcess.run(mole, Mole.preview, environment: environment, timeout: .seconds(900), lines: lines) } catch {
                 ilog.error("clean: preview failed, \(String(describing: error), privacy: .public)")
                 return nil
@@ -22,10 +31,52 @@ enum CleanModule {
         // so it never reads as a scan Pilot started by itself; the kept preview shows when Clean opens next (Sven, Q246).
         previewer.onStart = { caller in ilog.notice("clean: preview started by \(caller, privacy: .public)") }
         previewer.onFinish = { preview in
-            if let preview { ilog.notice("clean: preview ready, \(preview.items.count) items, \(preview.total ?? "no total", privacy: .public)") }
+            if let preview {
+                ilog.notice("clean: preview ready, \(preview.items.count) items, \(preview.list.rows.count) paths, \(preview.total ?? "no total", privacy: .public)")
+            }
         }
         return previewer
     }()
+
+    /// Mole's file list for the run that started at `since` (`~/.config/mole/clean-list.txt`); nil when that run wrote
+    /// none, so an older run's list is never offered as this one's.
+    nonisolated static func readList(since: Date) -> CleanList? {
+        let file = URL(filePath: home).appending(path: ".config/mole/clean-list.txt")
+        guard let written = (try? FileManager.default.attributesOfItem(atPath: file.path))?[.modificationDate] as? Date,
+              written >= since.addingTimeInterval(-2), let text = try? String(contentsOf: file, encoding: .utf8) else { return nil }
+        return CleanList.parse(text, home: home)
+    }
+
+    /// Moves the ticked rows of the kept list to the Trash, off the main thread, one at a time (a row that fails says
+    /// why; the rest go on), keeps the run in `store` for Reports, and takes the moved rows off the kept list. Only rows
+    /// the kept list holds can go: nil when no list is kept.
+    static func trash(_ ids: some Collection<String>, from previewer: CleanPreviewer = previewer, store: ReportStore) async -> CleanOutcome? {
+        guard let list = previewer.ready?.list else { return nil }
+        let rows = list.rows(ids), home = home, standIn = standIn?.trash
+        ilog.notice("clean: moving \(rows.count) ticked paths to the Trash")
+        let outcome = await Task.detached {
+            CleanList.move(rows, home: home) { url in
+                if let standIn { try moveAside(url, into: standIn) } else { try FileManager.default.trashItem(at: url, resultingItemURL: nil) }
+            }
+        }.value
+        previewer.cleaned(Set(outcome.moved.map(\.id)))
+        do { try store.finished(RunReport.trash(outcome, home: home), output: outcome.text(home: home)) } catch {
+            ilog.error("clean: report not kept, \(String(describing: error), privacy: .public)")
+        }
+        ilog.notice("clean: \(outcome.summary, privacy: .public)")
+        return outcome
+    }
+
+    /// The stand-in's Trash: a move into `folder`, a number added when the name is taken, as the Trash does.
+    nonisolated private static func moveAside(_ url: URL, into folder: URL) throws {
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        var target = folder.appending(path: url.lastPathComponent), n = 1
+        while FileManager.default.fileExists(atPath: target.path) {
+            n += 1
+            target = folder.appending(path: "\(url.lastPathComponent) \(n)")
+        }
+        try FileManager.default.moveItem(at: url, to: target)
+    }
 
     /// Return on a Clean row: the clean asks with its exact command and stays open when done, so Mole's summary is read;
     /// Disk usage opens Mole's explorer; Install Mole is Install's own confirm step, with Homebrew's installer before it

@@ -24,9 +24,13 @@ struct UpkeepPage: View {
     @State private var output = ""
     /// Bumped when a run begins, so the page follows it to its end.
     @State private var wake = 0
+    /// What Clean would remove (W89): the kept preview's file list when there is one, else nil until Show list reads it.
+    @State var cleanList: CleanList? = CleanModule.previewer.ready?.list
+    /// Mole's preview is running for Show list.
+    @State private var scanning = false
 
     static let intro = "Update previews upgrades and Clean what it would remove; each asks first."
-    static let introInfo = "Clean runs Mole. Each run is kept under More › Reports with what it printed; the last \(ReportStore.keep) are kept."
+    static let introInfo = "Clean lists what Mole would remove and moves only what you tick to the Trash; Clean all runs Mole's whole clean. Each run is kept under More › Reports with what it printed; the last \(ReportStore.keep) are kept."
 
     /// More's index: Reports alone.
     static let entries = [MoreEntry(id: .reports, symbol: "list.bullet", controls: 1)]
@@ -38,7 +42,19 @@ struct UpkeepPage: View {
                     ReportsBlock(store: store, records: records, picked: $picked, output: output).moreBlock(.reports)
                 }
             } else {
-                KitLanding { KitPage(intro: Self.intro, info: Self.introInfo) { start } }
+                KitLanding {
+                    KitPage(intro: Self.intro, info: Self.introInfo) {
+                        start
+                        if let cleanList {
+                            CleanListBlock(list: cleanList) { ids in
+                                let outcome = await CleanModule.trash(ids, store: store)
+                                self.cleanList = CleanModule.previewer.ready?.list
+                                return outcome
+                            }
+                            .pageWide()
+                        }
+                    }
+                }
             }
         }
             .onChange(of: picked) { readOutput() }
@@ -84,8 +100,12 @@ struct UpkeepPage: View {
                 }
                 BlockRow {
                     if mole {
-                        starter(.clean, line: "Shows what Mole would remove and the space it frees; cleans only after you confirm.") {
-                            Button("Clean…") { PilotMenu.shared.toggle(branch: .clean) }.buttonStyle(.pilotPrimary)
+                        starter(.clean, line: scanning ? CleanMenu.waiting(CleanModule.previewer.progress)
+                                    : "Lists what Mole would remove, part by part; moves only what you tick to the Trash.") {
+                            HStack(spacing: 6) {
+                                Button("Clean all…") { PilotMenu.shared.toggle(branch: .clean) }.buttonStyle(.pilot)
+                                Button(cleanList == nil ? "Show list" : "Scan again") { scan() }.buttonStyle(.pilotPrimary).disabled(scanning)
+                            }
                         }
                     } else {
                         starter(.clean, line: homebrew ? "Clean runs through Mole, which is not installed." : "Clean runs through Mole, which installs through Homebrew; neither is installed.") {
@@ -94,6 +114,16 @@ struct UpkeepPage: View {
                     }
                 }
             }
+        }
+    }
+
+    /// Mole's preview, the kept one while fresh (Scan again drops it first), into the list block.
+    private func scan() {
+        if cleanList != nil { CleanModule.previewer.drop() }
+        scanning = true
+        Task {
+            cleanList = await CleanModule.previewer.preview(caller: "Update & Clean")?.list
+            scanning = false
         }
     }
 
