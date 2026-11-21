@@ -211,7 +211,7 @@ button, input { font: inherit; color: inherit; }
   <li>Dictation and Read aloud: your voice and the text run on the Mac. Only the models are downloaded, once.</li>
   <li>The words and replacements you teach dictation, and your last 20 dictation takes as text only, with Clear. Audio isn't kept. A take spoken while the model loads waits on your Mac until it's written down, then it's deleted.</li>
   <li>Define's meanings, from the Mac's own dictionary.</li>
-  <li>Text found in images (Apple's Vision) and image upscaling.</li>
+  <li>Text found in images (Apple's Vision).</li>
   <li>AI keys you add, which live in the macOS Keychain.</li>
   <li>Pilot's own log, which stays in macOS's log on your Mac.</li>
 </ul>
@@ -225,12 +225,12 @@ button, input { font: inherit; color: inherit; }
 <tr><td><code>api.dictionaryapi.dev</code></td><td>When you look up a word in Define, once you stop typing</td><td>The word</td></tr>
 <tr><td><code>api.giphy.com</code> and GIPHY's image servers</td><td>GIF search, after you add a GIPHY key</td><td>Your search words; the GIFs come back</td></tr>
 <tr><td><code>cdn.jsdelivr.net</code>, then <code>latest.currency-api.pages.dev</code></td><td>Currency conversion in the calculator, at most every 12 hours</td><td>A request for today's rates; nothing about you</td></tr>
-<tr><td><code>api.ipify.org</code></td><td>Stats › public address, if you turn it on; every 10 minutes while shown</td><td>A plain request; the answer is your public address</td></tr>
+<tr><td><code>api.ipify.org</code></td><td>Top bar › public address, if you turn it on; every 10 minutes while shown</td><td>A plain request; the answer is your public address</td></tr>
 <tr><td><code>api.github.com</code>, <code>itunes.apple.com</code>, <code>registry.npmjs.org</code>, <code>crates.io</code>, <code>pypi.org</code>, <code>proxy.golang.org</code></td><td>When you search in Install</td><td>Your search words</td></tr>
 <tr><td>The pictures beside Install's results</td><td>When a result shows one</td><td>A request for that picture: App Store artwork, a GitHub avatar or the app's site icon</td></tr>
 <tr><td>The address of what you install</td><td>When you install something from Install</td><td>The download, or the tool doing the install (Homebrew, npm and the like) contacting its own servers. Pilot shows the command first</td></tr>
 <tr><td><code>raw.githubusercontent.com</code></td><td>When you browse the extension catalogue, or install Homebrew from Install</td><td>File requests</td></tr>
-<tr><td><code>huggingface.co</code></td><td>The first time you use dictation, a Read aloud voice or the larger upscaler</td><td>Model downloads; nothing about you</td></tr>
+<tr><td><code>huggingface.co</code></td><td>The first time you use dictation or a Read aloud voice</td><td>Model downloads; nothing about you</td></tr>
 <tr><td>The site you make a web app from</td><td>Install › Web App</td><td>Requests for that site's page and icon</td></tr>
 <tr><td>Apple's speed-test servers</td><td>When you run Test internet speed (macOS's own <code>networkQuality</code>)</td><td>Test traffic</td></tr>
 <tr><td>Pilot's update feed</td><td>Once a day, only after you say yes to update checks</td><td>Pilot's version and your macOS version, as Sparkle sends them</td></tr>
