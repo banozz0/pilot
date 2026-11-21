@@ -51,7 +51,7 @@ struct DropdownTests {
     func switches() {
         #expect(Dropdown.Switch.allCases.map(\.title) == ["Launcher", "Key binds", "Tiling", "Top bar", "Keep awake", "Clipboard", "Dictation key"])
         #expect(Dropdown.Switch.allCases.map(\.short) == ["Launcher", "Binds", "Tiling", "Top bar", "Awake", "Clipboard", "Dictation"])
-        #expect(Dropdown.Switch.allCases.map { $0.state(true, layerKeys: [.capsLock], tiler: "Pilot's tiler") } == ["opens on its key", "binds on", "Pilot's tiler on", "macOS bar hidden", "kept awake", "recording", "a tap dictates"])
+        #expect(Dropdown.Switch.allCases.map { $0.state(true, layerKeys: [.capsLock], tiler: "Pilot's tiler") } == ["opens on its key", "binds on", "Pilot's tiler on", "macOS bar hidden", "kept awake", "keeps what you copy", "a tap dictates"])
         #expect(Dropdown.Switch.topBar.state(false, layerKeys: [.capsLock], tiler: "Pilot's tiler") == "macOS bar shown" && Dropdown.Switch.keepAwake.state(false, layerKeys: [.capsLock], tiler: "Pilot's tiler") == "sleeps as usual")
         #expect(Dropdown.Switch.hyper.state(false, layerKeys: [.capsLock], tiler: "Pilot's tiler") == "only the launcher's key")
         #expect(Dropdown.Switch.four.compactMap(\.settingKey) == ["launcher.on", "switch.on", "tiling.on", "clipboard.recording"])

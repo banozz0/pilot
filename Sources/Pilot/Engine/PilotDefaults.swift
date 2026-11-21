@@ -15,7 +15,7 @@ extension UserDefaults {
 }
 
 /// Pilot's first launch on this Mac (Sven, 2026-11-18 and 2026-11-19): a new install starts with only the launcher, the
-/// key binds, Hyper, its cheat sheet and launch at login on; an install from before keeps every switch as it was.
+/// key binds, Hyper, its cheat sheet, the clipboard (Q293, 2026-11-21) and launch at login on; an install from before keeps every switch as it was.
 @MainActor
 enum Install {
     static let key = "install.new"
