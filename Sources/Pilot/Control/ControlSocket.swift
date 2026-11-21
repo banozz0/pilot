@@ -35,6 +35,7 @@ final class ControlSocket {
         verbs.registerLog()
         verbs.registerSettings(.live, decide: ControlVerbs.allowPrompt)
         verbs.registerMenuCollections()
+        verbs.registerMenu()
         verbs.registerDesktop()
         verbs.registerWallpaper()
         verbs.registerActions(ControlActions())
