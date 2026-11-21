@@ -214,6 +214,8 @@ final class WidgetsPageModel {
 /// a page's WebContent process is not Pilot's to attribute.
 struct WidgetsPage: View {
     @Environment(\.ink) private var ink
+    /// The previews are read while the page shows, not while it is kept hidden behind another (page-switch-3).
+    @Environment(\.pageShown) private var pageShown
     @Bindable var model: WidgetsPageModel
     /// False in a render: nothing is read, and the model's rows are drawn as they are.
     var reads = true
@@ -260,13 +262,13 @@ struct WidgetsPage: View {
             }
             .padding(.top, 16).padding(.bottom, 20)
         }
-        .task {
-            guard reads else { return }
+        .task(id: pageShown) {
+            guard reads, pageShown else { return }
             model.reload()
             // Each widget's preview, in the style and Glass of the moment, before it is added.
             await previews.load(ReadyWidgets.all + model.installed, store: model.store)
         }
-        .onDisappear { if reads { previews.drop() } }
+        .onPageLeave { if reads { previews.drop() } }
         // A widget folder or .zip dropped on the page imports, locked, as Import folder… does.
         .dropDestination(for: URL.self) { urls, _ in
             // Files on this Mac only: a dropped web link is no widget.

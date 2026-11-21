@@ -141,7 +141,7 @@ private struct TextPreference: View {
         }
         .onChange(of: field.value) { if !typing { draft = Self.text(field.value) } }
         // A password typed but never submitted is still saved when the page goes away mid-edit.
-        .onDisappear { if secure, draft != Self.text(field.value) { save() } }
+        .onPageLeave { if secure, draft != Self.text(field.value) { save() } }
         .accessibilityLabel(field.preference.title)
     }
 

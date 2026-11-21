@@ -403,7 +403,8 @@ final class NotesTextView: NSTextView {
     func takeFocus() {
         guard wantsFocus else { return }
         DispatchQueue.main.async { [weak self] in
-            guard let self, self.wantsFocus, let window = self.window, window.firstResponder !== self else { return }
+            // Never from a page kept hidden behind another (page-switch-3).
+            guard let self, self.wantsFocus, !self.isHiddenOrHasHiddenAncestor, let window = self.window, window.firstResponder !== self else { return }
             window.makeFirstResponder(self)
         }
     }

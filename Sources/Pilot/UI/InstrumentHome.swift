@@ -48,8 +48,8 @@ struct InstrumentHome: View {
         .padding(.horizontal, Self.side).padding(.top, 20)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .onChange(of: ownQuery, initial: true) { if windowHits == nil { ownHits.refresh(ownQuery, engine: engine, schema: sources.schema) } }
-        .onChange(of: model?.searchRequests) { searching = true }
-        .onAppear { if model?.searchOpen == true { searching = true } }
+        .modifier(TakesSearchKey(requests: model?.searchRequests, searching: $searching))
+        .onPageArrive { if model?.searchOpen == true { searching = true } }
     }
 
     /// The date line and the greeting; beside them Hyper's state, what needs you, or how many settings match.
@@ -219,5 +219,17 @@ private struct HomeJumpBack: View {
             return Row(key: key, label: setting.label, place: place, value: SearchHits.words(value, kind: setting.kind))
         }
         .prefix(most).map(\.self)
+    }
+}
+
+/// ⌘F gives Home's field the keyboard, only while Home shows: one kept hidden behind another page never takes it
+/// (page-switch-3); its own modifier, so Home hidden or shown again redraws only this.
+private struct TakesSearchKey: ViewModifier {
+    @Environment(\.pageShown) private var shown
+    let requests: Int?
+    var searching: FocusState<Bool>.Binding
+
+    func body(content: Content) -> some View {
+        content.onChange(of: requests) { if shown { searching.wrappedValue = true } }
     }
 }

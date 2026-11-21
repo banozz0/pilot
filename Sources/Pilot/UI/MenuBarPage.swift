@@ -987,7 +987,8 @@ struct SidewaysWheel: NSViewRepresentable {
             let starts = event.phase == .began || event.phase == .mayBegin
                 || event.phase.isEmpty && event.momentumPhase.isEmpty && event.timestamp - last > Self.gap
             last = event.timestamp
-            if starts { owned = bounds.contains(convert(event.locationInWindow, from: nil)) }
+            // A page kept hidden behind another (page-switch-3) keeps its frame: it owns no gesture then.
+            if starts { owned = !isHiddenOrHasHiddenAncestor && bounds.contains(convert(event.locationInWindow, from: nil)) }
             guard owned, abs(event.scrollingDeltaY) > abs(event.scrollingDeltaX),
                   let under = window?.contentView?.hitTest(event.locationInWindow), Self.scrollsSideways(under) else { return false }
             under.scrollWheel(with: Self.sideways(event))

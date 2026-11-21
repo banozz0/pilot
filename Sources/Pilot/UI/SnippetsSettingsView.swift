@@ -11,8 +11,10 @@ struct SnippetsSettingsView: View {
     @State private var selection: TextSelection?
     @State private var confirmingDelete = false
     @FocusState private var focus: Field?
-    /// A snippet to pick and name, set from outside the page (the clipboard panel's Save as snippet); cleared once picked.
-    private let editSnippet: Binding<UUID?>
+    /// A snippet to pick and name, set from outside the page (the clipboard panel's Save as snippet); `tookSnippet` clears
+    /// it once picked. A value and a closure, not a binding (topbar-search: a binding made again runs the page again).
+    private let editSnippet: UUID?
+    private let tookSnippet: () -> Void
 
     private enum Field { case name, keyword, text }
 
@@ -21,9 +23,10 @@ struct SnippetsSettingsView: View {
     private static let fieldLine: CGFloat = 17
 
     /// `library` is a temp file's in tests; `selected` the snippet picked as the page opens, else the first.
-    init(library: SnippetLibrary = .shared, selected: UUID? = nil, editSnippet: Binding<UUID?> = .constant(nil)) {
+    init(library: SnippetLibrary = .shared, selected: UUID? = nil, editSnippet: UUID? = nil, tookSnippet: @escaping () -> Void = {}) {
         _editor = State(initialValue: SnippetsEditor(library: library, selected: selected))
         self.editSnippet = editSnippet
+        self.tookSnippet = tookSnippet
     }
 
     var body: some View {
@@ -32,10 +35,10 @@ struct SnippetsSettingsView: View {
             if let current = editor.current { filled(current) } else { empty }
         }
         .onChange(of: editor.selected) { selection = nil }
-        .onChange(of: editSnippet.wrappedValue, initial: true) {
-            guard let id = editSnippet.wrappedValue else { return }
+        .onChange(of: editSnippet, initial: true) {
+            guard let id = editSnippet else { return }
             editor.selected = id
-            editSnippet.wrappedValue = nil
+            tookSnippet()
             // The name field is drawn on the next pass; it takes the keys then.
             Task { focus = .name }
         }
@@ -452,5 +455,16 @@ private struct FocusEdge: ViewModifier {
     let on: Bool
     func body(content: Content) -> some View {
         content.overlay { if on { RoundedRectangle(cornerRadius: 6).strokeBorder(ink.accent.opacity(0.7)) } }
+    }
+}
+
+/// Equal on what it shows from (the snippet asked for),
+/// shown `.equatable()` by the window's part: its closures, made again with the part, never compare equal, so the
+/// whole page was built again as its kept part was hidden, shown or put back (topbar-search; page-switch-4's Binds fix).
+extension SnippetsSettingsView: Equatable {
+    nonisolated static func == (a: Self, b: Self) -> Bool {
+        MainActor.assumeIsolated {
+            a.editSnippet == b.editSnippet
+        }
     }
 }

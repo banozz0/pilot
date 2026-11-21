@@ -515,7 +515,7 @@ struct NameField: View {
         .onChange(of: focused) { _, now in
             if now { outside.watch() } else { outside.stop(); commit() }
         }
-        .onDisappear { outside.stop(); commit() }
+        .onPageLeave { outside.stop(); commit() }
     }
 
     private func commit() {

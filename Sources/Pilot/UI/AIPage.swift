@@ -647,6 +647,7 @@ struct SelectionSkipRow: View {
             Button { add() } label: { Chip(text: "Add app", symbol: "plus") }.buttonStyle(.kitPress)
         }
         .task { load() }
+        .onPageReturn { load() }
     }
 
     private func load() { apps = SelectionTools.shared.skipped.map { ($0, AppsModule.displayName($0)) } }

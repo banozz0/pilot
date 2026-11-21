@@ -330,6 +330,7 @@ struct GeneralPage: View {
                 }
             }
             .task { crash = await Task.detached { CrashReports.newest() }.value }
+            .onPageReturn { Task { crash = await Task.detached { CrashReports.newest() }.value } }
             // Q455: one row, closed on every visit, that unfolds the list in place.
             BlockRow {
                 Button { withAnimation(Kit.change) { acknowledgementsOpen.toggle() } } label: {

@@ -7,6 +7,8 @@ import SwiftUI
 /// and its report follow it.
 struct UpkeepPage: View {
     @Environment(\.ink) private var ink
+    /// The running report's 2 s read stops while the page is kept hidden behind another (page-switch-3).
+    @Environment(\.pageShown) private var shown
     var store = ReportStore.standard
     /// Mole is there for Clean to run (CleanModule.mole); a render says which.
     var mole = CleanModule.mole != nil
@@ -56,7 +58,8 @@ struct UpkeepPage: View {
             }
         }
             .onChange(of: picked) { readOutput() }
-            .task(id: wake) {
+            .task(id: shown ? wake : nil) {
+                guard shown else { return }
                 reload()
                 while records?.contains(where: { $0.end == .running }) == true {
                     try? await Task.sleep(for: .seconds(2))

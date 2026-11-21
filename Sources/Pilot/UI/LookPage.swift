@@ -259,7 +259,8 @@ private struct ThemePackControls: View {
         } message: {
             Text(deletingOwn ? ThemeCatalogueGallery.removeNote(.builtIn) : "Its folder and pictures are removed. This can't be undone.")
         }
-        .onDisappear { editor.invalidate(); look.endTrial() }
+        // A theme tried on goes when Look is hidden behind another page too (page-switch-3).
+        .onPageLeave { editor.invalidate(); look.endTrial() }
         .task {
             do {
                 let owner = try ThemeCoordinator.production(), store = owner.store

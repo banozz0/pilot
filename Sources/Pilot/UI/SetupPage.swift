@@ -37,8 +37,10 @@ struct SetupPage: View {
     @Environment(\.ink) private var ink
     /// The app window shows: the page follows the Mac's changes only then (AppWindowModel.onScreen).
     let onScreen: Bool
-    /// The section a key or a link asked for: the page opens it, scrolls there once and clears it.
-    @Binding var section: SetupSection?
+    /// The section a key or a link asked for: the page opens it, scrolls there once and clears it (`tookSection`). A
+    /// value and a closure, not a binding (topbar-search: a binding made again runs the page again).
+    let section: SetupSection?
+    let tookSection: () -> Void
     /// Two columns of cards once the page is `twoColumns` wide.
     @State private var wide = true
     @State private var sound: SetupSound
@@ -64,10 +66,11 @@ struct SetupPage: View {
     static let twoColumns: CGFloat = 640
 
     /// `open` is the renders' old way in and changes nothing: every part shows at once.
-    init(onScreen: Bool, section: Binding<SetupSection?> = .constant(nil), open: SetupSection? = .sound,
+    init(onScreen: Bool, section: SetupSection? = nil, tookSection: @escaping () -> Void = {}, open: SetupSection? = .sound,
          devices: SetupDevices = SetupDevices.make()) {
         self.onScreen = onScreen
-        _section = section
+        self.section = section
+        self.tookSection = tookSection
         _sound = State(initialValue: SetupSound(audio: devices.audio))
         _bluetooth = State(initialValue: SetupBluetooth(bluetooth: devices.bluetooth, defaults: devices.defaults))
         _wifi = State(initialValue: SetupWiFi(wifi: devices.wifi, defaults: devices.defaults))
@@ -95,7 +98,7 @@ struct SetupPage: View {
             .onChange(of: section, initial: true) {
                 guard let section else { return }
                 proxy.scrollTo(section, anchor: .top)
-                self.section = nil
+                tookSection()
             }
         } }
     }
@@ -129,15 +132,17 @@ struct SetupPage: View {
 
     /// Every part, each its own card with its controls and keys showing (Sven, 2026-10-07: "fill them with whats needed"),
     /// in two columns once the window is wide enough; nothing folds, so a link only scrolls to its part.
+    /// Each column's cards built as they scroll in (page-switch-3: every card up front held a first visit 150 ms in a
+    /// debug build, the ones under the fold about 60 of it), whole once a key or a link asks for a part.
     private var cards: some View {
         Group {
             if wide {
                 HStack(alignment: .top, spacing: 14) {
-                    VStack(spacing: 14) { ForEach(Self.left, id: \.self) { card($0) } }
-                    VStack(spacing: 14) { ForEach(Self.right, id: \.self) { card($0) } }
+                    PageStack(spacing: 14, asked: section != nil) { ForEach(Self.left, id: \.self) { card($0) } }
+                    PageStack(spacing: 14, asked: section != nil) { ForEach(Self.right, id: \.self) { card($0) } }
                 }
             } else {
-                VStack(spacing: 14) { ForEach(Self.front, id: \.self) { card($0) } }
+                PageStack(spacing: 14, asked: section != nil) { ForEach(Self.front, id: \.self) { card($0) } }
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -862,4 +867,15 @@ enum SetupGlyph {
         (["tv", "hdmi", "display", "lg ", "dell", "monitor", "4k"], "tv"), (["controller", "dualsense", "xbox"], "gamecontroller"),
         (["watch"], "applewatch"), (["iphone"], "iphone"), (["ipad"], "ipad"),
     ]
+}
+
+/// Equal on what it shows from (on screen, the section asked for),
+/// shown `.equatable()` by the window's part: its closures, made again with the part, never compare equal, so the
+/// whole page was built again as its kept part was hidden, shown or put back (topbar-search; page-switch-4's Binds fix).
+extension SetupPage: Equatable {
+    nonisolated static func == (a: Self, b: Self) -> Bool {
+        MainActor.assumeIsolated {
+            a.onScreen == b.onScreen && a.section == b.section
+        }
+    }
 }

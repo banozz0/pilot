@@ -3,10 +3,10 @@ import PilotCore
 import SwiftUI
 
 /// The app window's frame in Instrument: the floating panel (pilot-ui-redesign T3, round 2's shot 7c). The tab bar across
-/// the top (PanelTabBar); under it the open tab's pages listed by name down the left, the tab's name over them; beside the
-/// list the page under its bar, which holds its name, its parts and the search. An area of one page takes the whole width
-/// (Home, Keys, Launcher, AI, Pilot). More's card and what the search finds drop over the page. Binds draws its own bar
-/// (InstrumentBindsPage).
+/// the top (PanelTabBar), the window's search in it; under it the open tab's pages listed by name down the left, the
+/// tab's name over them; beside the list the page under its bar, which holds its name and its parts. An area of one page
+/// takes the whole width (Home, Keys, Launcher, AI, Pilot). More's card and what the search finds drop over the page.
+/// Binds draws its own bar (InstrumentBindsPage).
 struct InstrumentFrame: View {
     @Environment(Engine.self) private var engine
     @Environment(\.style) private var style
@@ -17,24 +17,33 @@ struct InstrumentFrame: View {
     @State private var hits = SearchHitsModel()
     /// The page open now and its settings' values as it opened, for Jump back in (HomeVisit); none on Home.
     @State private var visit: HomeVisit?
+    /// What the page list and the toolbar showed last, kept while a page without them shows.
+    @State private var held = Held()
 
     var body: some View {
         let list = !RailLayout.fullWidth(model.page.area)
         let owns = Self.pageOwnsBar(model.page, section: model.section(of: model.page))
         // Home draws its own head and search (pilot-ui-redesign T6, shot 7c-home): no bar over it.
         let bar = !owns && model.page != .home
+        let (area, toolbar) = held.note(area: model.page.area, listed: list,
+                                        bar: .init(page: model.page, extensionPage: model.extensionPage, listed: list), barred: bar)
         VStack(spacing: 0) {
             PanelTabBar(model: model, more: more)
             HStack(spacing: 0) {
-                if list {
-                    InstrumentPageList(model: model).frame(width: Self.listWidth).background(style.color(\.sidebar))
+                // The list and the toolbar stay in the window while a page without them shows (Binds and Home have none),
+                // folded away with what they showed last, so Binds <-> Menu bar only folds and unfolds them instead of
+                // taking them out and building them again (page-switch-4).
+                HStack(spacing: 0) {
+                    InstrumentPageList(model: model, area: area).frame(width: Self.listWidth).background(style.color(\.sidebar))
                     InstrumentRule(vertical: true)
                 }
+                .folded(away: !list, .horizontal)
                 VStack(spacing: 0) {
-                    if bar {
-                        InstrumentToolbar(model: model, listed: list)
+                    VStack(spacing: 0) {
+                        InstrumentToolbar(model: model, page: toolbar.page, extensionPage: toolbar.extensionPage, listed: toolbar.listed)
                         InstrumentRule()
                     }
+                    .folded(away: !bar, .vertical)
                     PageView(model: model)
                         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                 }
@@ -42,9 +51,10 @@ struct InstrumentFrame: View {
                 .background(Theme.windowFill(style.color(\.canvas)))
             }
         }
+        // What the top bar's search finds, under it; Home lists the same results in its own place.
         .overlay(alignment: .topTrailing) {
-            if bar && !model.query.trimmingCharacters(in: .whitespaces).isEmpty {
-                WindowSearchDrop(model: model).padding(.top, PanelTabBar.height + style.points(52) - 6).padding(.trailing, 16)
+            if model.page != .home && !model.query.trimmingCharacters(in: .whitespaces).isEmpty {
+                WindowSearchDrop(model: model).padding(.top, PanelTabBar.height - 8).padding(.trailing, PanelTabBar.searchTrailing)
             }
         }
         .overlay {
@@ -73,6 +83,33 @@ struct InstrumentFrame: View {
 
     /// The page list's width, as drawn: Tools' six pages by name without scrolling.
     static let listWidth: CGFloat = 156
+
+    /// The area the list showed last and the page the toolbar named last.
+    private final class Held {
+        struct Bar { let page: AppPage; let extensionPage: String?; let listed: Bool }
+        var area: AppArea?
+        var bar: Bar?
+
+        /// The list's area and the toolbar's page: noted while each shows, the last one noted while it is folded away
+        /// (today's until one was).
+        func note(area: AppArea, listed: Bool, bar: Bar, barred: Bool) -> (AppArea, Bar) {
+            if listed { self.area = area }
+            if barred { self.bar = bar }
+            return (self.area ?? area, self.bar ?? bar)
+        }
+    }
+}
+
+extension View {
+    /// Kept in the window but folded to nothing along `axis` while `away`: drawn nowhere, out of clicks, the keyboard
+    /// and accessibility.
+    func folded(away: Bool, _ axis: Axis) -> some View {
+        frame(width: away && axis == .horizontal ? 0 : nil, height: away && axis == .vertical ? 0 : nil, alignment: .topLeading)
+            .clipped()
+            .disabled(away)
+            .allowsHitTesting(!away)
+            .accessibilityHidden(away)
+    }
 }
 
 extension InstrumentFrame {
@@ -133,9 +170,9 @@ struct InstrumentHyperCap: View {
 private struct InstrumentPageList: View {
     @Environment(\.style) private var style
     @Bindable var model: AppWindowModel
+    let area: AppArea
 
     var body: some View {
-        let area = model.page.area
         VStack(alignment: .leading, spacing: 0) {
             HStack {
                 Text(area.title).accessibilityAddTraits(.isHeader)
@@ -186,13 +223,19 @@ private struct InstrumentPageRow: View {
 
 // MARK: - Search
 
-/// The window's search field over a page: Pilot's settings, pages and binds and System Settings' panes; Cmd+F focuses it,
-/// the arrows pick a result, Return opens the picked one, Escape empties it. Home draws its own, larger (InstrumentHome).
+/// The window's search field in the top bar: Pilot's settings, pages and binds and System Settings' panes, the search
+/// Home's field runs; Cmd+F focuses it, the arrows pick a result, Return opens the picked one, Escape empties it and
+/// gives the keyboard back to what had it before Cmd+F. Home draws its own, larger (InstrumentHome).
 struct InstrumentSearchField: View {
     @Environment(\.style) private var style
     @Environment(\.searchHits) private var hits
     @Bindable var model: AppWindowModel
+    /// False while a page draws its own search (Home): Cmd+F and the open search are the page's then.
+    var takesKey = true
     @FocusState private var searching: Bool
+    /// What had the keyboard as Cmd+F came, which Escape gives it back to.
+    @State private var before = Before()
+    private final class Before { weak var view: NSView? }
 
     var body: some View {
         let shape = RoundedRectangle(cornerRadius: style.radii.control + 1, style: .continuous)
@@ -202,7 +245,7 @@ struct InstrumentSearchField: View {
                 .textFieldStyle(.plain).styleText(\.body).foregroundStyle(style.color(\.text)).focused($searching)
                 .onSubmit { open() }
                 .searchKeys(hits)
-                .onExitCommand { model.query = ""; model.searchOpen = false; searching = false }
+                .onExitCommand { model.query = ""; model.searchOpen = false; searching = false; giveBack() }
             if model.query.isEmpty {
                 Text("⌘F").styleText(\.key).foregroundStyle(style.color(\.text3))
             } else {
@@ -213,9 +256,25 @@ struct InstrumentSearchField: View {
         .padding(.horizontal, 9).frame(height: style.points(30))
         .background(style.color(\.raised), in: shape)
         .overlay { shape.strokeBorder(style.color(\.line)) }
-        .onChange(of: model.searchRequests) { searching = true }
-        .onAppear { if model.searchOpen { searching = true } }
-        .onChange(of: searching) { if !searching && model.query.isEmpty { model.searchOpen = false } }
+        .onChange(of: model.searchRequests) {
+            guard takesKey else { return }
+            before.view = NSApp.keyWindow?.firstResponder as? NSView
+            searching = true
+        }
+        .onAppear { if takesKey && model.searchOpen { searching = true } }
+        // Off Home with the search open it takes the keyboard; on Home, Home's field does.
+        .onChange(of: takesKey) { searching = takesKey && model.searchOpen }
+        .onChange(of: searching) { if !searching && takesKey && model.query.isEmpty { model.searchOpen = false } }
+    }
+
+    /// The keyboard back where it was before Cmd+F, unless that view has gone or hides behind another page.
+    private func giveBack() {
+        guard let view = before.view else { return }
+        before.view = nil
+        DispatchQueue.main.async {
+            guard let window = view.window, !view.isHiddenOrHasHiddenAncestor else { return }
+            window.makeFirstResponder(view)
+        }
     }
 
     /// Return: the picked result, else the window's first place as before.
@@ -484,16 +543,19 @@ extension AppWindowModel {
 struct InstrumentToolbar: View {
     @Environment(\.style) private var style
     @Bindable var model: AppWindowModel
+    /// The page it names: the window's, or the one it named last while folded away (InstrumentFrame).
+    let page: AppPage
+    let extensionPage: String?
     /// The page list shows beside: the area's pages are there, not here. The page's parts are here at every width.
     let listed: Bool
 
     var body: some View {
-        let page = model.page
-        InstrumentPageBar(title: model.title) {
+        let tabs = AppWindowModel.tabs(page, extensionPage: extensionPage)
+        // The window's search is the top bar's (PanelTabBar).
+        InstrumentPageBar(title: AppWindowModel.title(page, extensionPage: extensionPage)) {
             if !listed, page.area.shown.count > 1 { areaPages(page.area).padding(.leading, 8) }
-            if !model.tabs.isEmpty { tabs(page).padding(.leading, 8) }
-            Spacer(minLength: 8)
-            InstrumentSearchField(model: model).frame(width: 180)
+            if !tabs.isEmpty { self.tabs(page).padding(.leading, 8) }
+            Spacer(minLength: 0)
         }
     }
 

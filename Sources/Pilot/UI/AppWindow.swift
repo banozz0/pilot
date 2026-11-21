@@ -14,11 +14,11 @@ final class AppWindowModel {
         didSet {
             guard page != oldValue else { return }
             defaults.set(page.rawValue, forKey: Self.lastPageKey)
-            Self.timeSwitch(from: oldValue, to: page)
+            PageSwitchTiming.began()
         }
     }
     /// The part picked on each merged page; a page not in here shows its first.
-    var sections: [AppPage: AppSection] = [:]
+    var sections: [AppPage: AppSection] = [:] { didSet { if sections != oldValue { PageSwitchTiming.began() } } }
     /// Binds' conflicts, shown as a sheet over the page.
     var showsConflicts = false
     /// What the search holds.
@@ -35,7 +35,7 @@ final class AppWindowModel {
     /// The extension a link or a stopped run asked for (card agent-bo-95423247); Extensions scrolls there and clears it.
     var extensionFocus: String?
     /// The extension whose page shows in place of the Extensions page (story 161); any other place clears it.
-    var extensionPage: String?
+    var extensionPage: String? { didSet { if extensionPage != oldValue { PageSwitchTiming.began() } } }
     /// What Install's search opens with, from Fonts' Get more fonts; going anywhere else clears it.
     var installQuery: String?
     /// The repo Developer › Repos opens on, from a Repos widget's row; going anywhere else clears it. `repoOpens` counts the
@@ -67,26 +67,6 @@ final class AppWindowModel {
     /// run only then, so a window left open behind other apps redraws nothing under its glass (Sven, 2026-10-17).
     var live: Bool { onScreen && isKey }
     private static let lastPageKey = "appWindow.page"
-    private static let log = Logger(subsystem: "dev.banozz.pilot", category: "window")
-    private static let signposts = OSSignposter(subsystem: "dev.banozz.pilot", category: .pointsOfInterest)
-
-    /// How long a page switch holds the main thread (bug 8, tester's feedback 2026-11-18: Keys → Windows stutters): from
-    /// the pick until the run loop is about to wait again, after Core Animation's commit, once SwiftUI has built and laid
-    /// out the new page (an observer ordered after the commit's). A "page switch" interval for Instruments, and one line
-    /// in the log: `log stream --predicate 'subsystem == "dev.banozz.pilot" AND category == "window"'`.
-    private static func timeSwitch(from: AppPage, to: AppPage) {
-        let start = ContinuousClock.now
-        let interval = signposts.beginInterval("page switch", "\(from.rawValue) → \(to.rawValue)")
-        let done = CFRunLoopObserverCreateWithHandler(nil, CFRunLoopActivity.beforeWaiting.rawValue, false, CFIndex.max) { _, _ in
-            MainActor.assumeIsolated {
-                signposts.endInterval("page switch", interval)
-                let ms = Int((ContinuousClock.now - start) / .milliseconds(1))
-                log.notice("page switch: \(from.rawValue, privacy: .public) → \(to.rawValue, privacy: .public) in \(ms) ms")
-            }
-        }
-        CFRunLoopAddObserver(CFRunLoopGetMain(), done, .commonModes)
-    }
-
     init(defaults: UserDefaults = .pilot()) {
         self.defaults = defaults
         // A page saved before the cut opens where it went; a developer page saved while the switch was on, its area's first.
@@ -136,13 +116,15 @@ final class AppWindowModel {
     func shows(_ page: AppPage) -> Bool { page == self.page && extensionPage == nil }
 
     /// The name over the page: an extension page's emoji and title, else the page's.
-    var title: String {
+    var title: String { Self.title(page, extensionPage: extensionPage) }
+    static func title(_ page: AppPage, extensionPage: String?) -> String {
         guard let id = extensionPage else { return page.title }
         return ExtensionPages.shared.entries.first { $0.id == id }?.label ?? id
     }
 
     /// The page's tabs; an extension page has none.
-    var tabs: [(value: AppSection?, title: String)] { extensionPage == nil ? page.tabs : [] }
+    var tabs: [(value: AppSection?, title: String)] { Self.tabs(page, extensionPage: extensionPage) }
+    static func tabs(_ page: AppPage, extensionPage: String?) -> [(value: AppSection?, title: String)] { extensionPage == nil ? page.tabs : [] }
 
     /// Shows extension `id`'s page (story 161), under the Extensions page in the sidebar.
     func goExtensionPage(_ id: String) {
@@ -595,5 +577,72 @@ extension MenuRoot {
         var root = self
         root.extras.remove("config")
         return root
+    }
+}
+
+/// How long each page switch takes to draw (page-switch-3; Sven on combined-6, build 2995: "swapping from pilot pages is
+/// still a bit slow and laggy"): from the pick until the run loop is about to wait again, after Core Animation's commit,
+/// once SwiftUI has built or put back the new part and laid it out (an observer ordered after the commit's). One line a
+/// switch, naming the part (PageView.key), whether it was built (first) or kept (return), and the window opening as its
+/// first; a "page switch" interval for Instruments too:
+/// `log stream --predicate 'subsystem == "dev.banozz.pilot" AND category == "window"'`.
+@MainActor
+enum PageSwitchTiming {
+    private static let log = Logger(subsystem: "dev.banozz.pilot", category: "window")
+    private static let signposts = OSSignposter(subsystem: "dev.banozz.pilot", category: .pointsOfInterest)
+    private static var start: ContinuousClock.Instant?
+    private static var interval: OSSignpostIntervalState?
+    private static var shown: (from: String?, to: String, first: Bool)?
+    /// Run loop turns waited for the part to show; a pick that shows no other part (a tab the page draws itself) logs nothing.
+    private static var turns = 0
+    private static var done: CFRunLoopObserver?
+
+    /// The window's model picked another place: the clock starts, unless a pick earlier in this turn started it.
+    static func began() {
+        guard start == nil else { return }
+        start = .now
+        interval = signposts.beginInterval("page switch")
+        arm()
+    }
+
+    /// PageDeck put part `to` in the window, built now (`first`) or kept from before; `from` is the part it replaced, nil
+    /// as the window opens.
+    static func showed(from: String?, to: String, first: Bool) {
+        shown = (from, to, first)
+        began()
+    }
+
+    private static func arm() {
+        turns = 0
+        done = AfterCommit.observe(repeats: true) { turnEnded() }
+    }
+
+    private static func turnEnded() {
+        turns += 1
+        guard let start, shown != nil || turns >= 3 else { return }
+        if let shown {
+            let ms = Int((ContinuousClock.now - start) / .milliseconds(1))
+            let visit = shown.first ? "first" : "return"
+            log.notice("page switch: \(shown.from ?? "window open", privacy: .public) → \(shown.to, privacy: .public), \(visit, privacy: .public) visit, \(ms) ms to drawn")
+        }
+        if let interval { signposts.endInterval("page switch", interval) }
+        if let done { CFRunLoopRemoveObserver(CFRunLoopGetMain(), done, .commonModes) }
+        (Self.start, Self.interval, Self.shown, Self.done) = (nil, nil, nil, nil)
+    }
+}
+
+/// The main run loop about to wait, after Core Animation's commit (an observer ordered after the commit's): what a page
+/// switch drew is committed by then (page-switch-3; PageSwitchTiming, PageDeck).
+@MainActor
+enum AfterCommit {
+    /// Runs `action` each time the main run loop is about to wait, after the commit, until the observer is removed; once
+    /// when `repeats` is false.
+    @discardableResult
+    static func observe(repeats: Bool, _ action: @escaping @MainActor () -> Void) -> CFRunLoopObserver? {
+        let observer = CFRunLoopObserverCreateWithHandler(nil, CFRunLoopActivity.beforeWaiting.rawValue, repeats, CFIndex.max) { _, _ in
+            MainActor.assumeIsolated { action() }
+        }
+        CFRunLoopAddObserver(CFRunLoopGetMain(), observer, .commonModes)
+        return observer
     }
 }

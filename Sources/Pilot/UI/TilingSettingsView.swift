@@ -181,7 +181,7 @@ struct FloatAppsBlock: View {
             }
             .frame(height: 300)
         }
-        .onAppear {
+        .onPageArrive {
             floatedFirst = FloatApps.floated(block.block)
             if apps == nil { installed = Self.lastInstalled }
             list()
@@ -277,7 +277,7 @@ private struct GapsEditor: View {
         }
         .task(id: inner) { await block.settleDraft(inner, \.gaps.inner) { inner = nil } }
         .task(id: outer) { await block.settleDraft(outer, \.gaps.outer) { outer = nil } }
-        .onDisappear { block.writeDraft(inner, \.gaps.inner) {}; block.writeDraft(outer, \.gaps.outer) {} }
+        .onPageLeave { block.writeDraft(inner, \.gaps.inner) {}; block.writeDraft(outer, \.gaps.outer) {} }
     }
 
 }
@@ -366,7 +366,7 @@ private struct ScrollingEditor: View {
             }
         }
         .task(id: sliver) { await block.settleDraft(sliver, \.scrolling.sliver) { sliver = nil } }
-        .onDisappear { block.writeDraft(sliver, \.scrolling.sliver) {} }
+        .onPageLeave { block.writeDraft(sliver, \.scrolling.sliver) {} }
     }
 
     /// A width on or off, kept in the widths' own order, smallest first. The last one on stays: its chip is disabled, and

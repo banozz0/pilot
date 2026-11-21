@@ -114,7 +114,8 @@ struct AppWindowFrameTests {
             return FillPagesTests.labels(in: try #require(window.contentView))
         }
         let tabs = try labels(), split = AppArea.tabs(count: PanelTabs.count, developer: false)
-        #expect(tabs.contains("Tabs") && split.tabs.allSatisfy { tabs.contains($0.title) } && tabs.contains("More"), "\(tabs)")
+        // More plain, or naming the open area once the top bar's search leaves it no tab (topbar-search).
+        #expect(tabs.contains("Tabs") && split.tabs.allSatisfy { tabs.contains($0.title) } && tabs.contains { $0 == "More" || $0.hasPrefix("More, ") }, "\(tabs)")
         model.go(AppPlace(.general))
         #expect(try labels().contains("More, Pilot open"))
     }
@@ -541,7 +542,7 @@ struct AppWindowRenders {
         // Hyper+Ctrl+W's landing (card agent-bo-95422805): a window-sized page scrolled to Wi-Fi.
         let devices = SetupDevices(audio: SetupSoundTests.FakeAudio(), bluetooth: SetupBluetoothTests.FakeBluetooth(), wifi: SetupWiFiTests.FakeWiFi(),
                                    displays: SetupDisplays(system: SetupDisplaysTests.FakeDisplays()), look: setupLook, defaults: SetupBluetoothTests.defaults())
-        try await Self.renderSettled(SetupPage(onScreen: true, section: .constant(.wifi), devices: devices).frame(width: 700, height: 520).pilotTheme()
+        try await Self.renderSettled(SetupPage(onScreen: true, section: .wifi, devices: devices).frame(width: 700, height: 520).pilotTheme()
             .background(Theme.background), to: dir.appendingPathComponent("setup-at-wifi.png"))
     }
 

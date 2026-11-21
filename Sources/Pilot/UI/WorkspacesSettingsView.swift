@@ -354,7 +354,7 @@ extension View {
             guard (try? await Task.sleep(for: .milliseconds(300))) != nil else { return }
             write()
         }
-        .onDisappear(perform: write)
+        .onPageLeave(write)
     }
 }
 

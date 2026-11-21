@@ -10,7 +10,8 @@ struct WidgetsAddList: View {
     let add: (Widget) -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
+        // Its rows built as they scroll in (page-switch-3: the list was 47 of a first visit's 79 ms in a debug build).
+        PageStack {
             HStack(spacing: 8) {
                 WidgetsEyebrow(text: "Add to the desktop")
                 Spacer(minLength: 6)
