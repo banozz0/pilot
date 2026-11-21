@@ -1647,7 +1647,7 @@ final class PilotMenu {
     /// Stores the pick and logs the order it was picked from, so a ranking change shows in the log.
     private func record(_ entry: MenuEntry, from nav: MenuNavigator) {
         guard let key = entry.frecencyKey else { return }
-        frecency?.record(key, at: .now)
+        frecency?.record(key, at: .now, query: Self.learnedQuery(nav))
         guard let picks = frecency else { return }
         saveFrecency(picks)
         let top = nav.rows.prefix(3).map(\.title).joined(separator: ", ")
@@ -1656,6 +1656,20 @@ final class PilotMenu {
             return mlog.notice("menu: picked \(LinkToken.redact(key), privacy: .private) from \(top, privacy: .private), frecency \(picks.score(key, now: .now))")
         }
         mlog.notice("menu: picked \(LinkToken.redact(key), privacy: .public) for \"\(nav.query, privacy: .public)\" from \(top, privacy: .public), frecency \(picks.score(key, now: .now))")
+    }
+
+    /// The query a pick teaches (learned abbreviations, spec launcher-best T7): the root search's alone, where
+    /// MenuNavigator lists the learned row first; nil in a branch or a picker.
+    static func learnedQuery(_ nav: MenuNavigator) -> String? { nav.branch == nil && !nav.isList ? nav.query : nil }
+
+    /// A pick from the pilot command (`pilot menu pick`, T7) on the menu's own copy, as Return makes it, the row never
+    /// run; the picks as saved; nil when the file does not read, so nothing is saved over it.
+    func recordPick(_ key: String, query: String) throws -> Frecency? {
+        guard var picks = frecency else { return nil }
+        picks.record(key, at: .now, query: query)
+        try frecencyStore.save(picks)
+        frecency = picks
+        return picks
     }
 
     /// Reset ranking from the pilot command (CLI W4), on the menu's own copy, so its next pick saves no stale one; the

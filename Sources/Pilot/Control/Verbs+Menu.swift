@@ -2,27 +2,23 @@ import PilotCore
 
 extension ControlVerbs {
     /// `menu search`: what the Hyper+Space menu lists for a query, in its order, without drawing it (spec launcher-best T3,
-    /// Q324), so a launcher change is proved without a press on Sven's screen. Read-only: no acting verb (AGENTS.md). Built
+    /// Q324), so a launcher change is proved without a press on Sven's screen. Read-only; `menu pick` (T7) writes the ranking
+    /// alone, after Allow, and runs no row (AGENTS.md: no acting verb). Built
     /// from the entries, picks, favourites, aliases and root PilotMenu's toggleNow hands MenuNavigator, plus the settings
     /// rows its search provides; the rows that arrive after a keystroke from elsewhere (windows, files, app menu items,
     /// Install, emoji, answers, Translate, Define) are left out, and Search the web names no browser (webVia unread).
     func registerMenu() {
         let flags: [ControlVerb.Flag] = [.init("size", help: "also the face size the panel would take for these rows (MenuPanelSize, Line)", takesValue: false)]
-        register(ControlVerb("menu", help: "What the Hyper+Space menu lists for a search, in its order, read without drawing it.",
-                             usage: "pilot menu search <words> [--size]", flags: flags) { call throws(ControlError) in
+        register(ControlVerb("menu", help: "What the Hyper+Space menu lists for a search, in its order, read without drawing it; pick records a pick "
+                             + "of a listed row for that search, as Return does, without running it (learned abbreviations), after Allow.",
+                             usage: "pilot menu search <words> [--size] | pilot menu pick <words> <row>", flags: flags) { call throws(ControlError) in
             let args = call.arguments()
-            guard let word = args.positional.first, word == "search" else {
-                throw ControlError(.badValue, "pilot menu takes search: pilot menu search <words>")
+            guard let word = args.positional.first, word == "search" || word == "pick" else {
+                throw ControlError(.badValue, "pilot menu takes search or pick: pilot menu search <words>, pilot menu pick <words> <row>")
             }
-            guard let engine = Engine.shared else { throw ControlError(.notReady, "the key engine is not up yet") }
-            let scripts = ScriptCommand.find(), extensions = Extension.find().extensions
-            await DockCalendar.shared.readCalls(now: .now) // As the menu's open reads it, the call to join (T5).
-            let entries = PilotMenu.entries(engine, scripts: scripts, extensions: extensions)
-            var nav = MenuNavigator(entries: entries, frecency: PilotMenu.shared.frecency ?? Frecency(), favourites: FavouriteBook.shared.rows,
-                                    aliases: AliasBook.shared.aliases, root: MenuRootSettings.shared.root.listed)
+            if word == "pick" { return try await Self.pick(Array(args.positional.dropFirst()), peer: call.peer) }
             let query = args.positional.dropFirst().joined(separator: " ")
-            nav.query = query
-            nav.provideSettings(query, developer: DeveloperPages.on)
+            let nav = try await Self.navigator(query)
             let headings = MenuGroups.headings(nav.rows, searching: !query.isEmpty)
             let rows: [JSONValue] = nav.rows.enumerated().map { index, row in
                 let favourite = row.frecencyKey.map(nav.favourites.contains) ?? false
@@ -49,6 +45,44 @@ extension ControlVerbs {
             }
             return .object(answer)
         })
+    }
+
+    /// The navigator the menu would open with `query` typed at its root.
+    private static func navigator(_ query: String) async throws(ControlError) -> MenuNavigator {
+        guard let engine = Engine.shared else { throw ControlError(.notReady, "the key engine is not up yet") }
+        let scripts = ScriptCommand.find(), extensions = Extension.find().extensions
+        await DockCalendar.shared.readCalls(now: .now) // As the menu's open reads it, the call to join (T5).
+        let entries = PilotMenu.entries(engine, scripts: scripts, extensions: extensions)
+        var nav = MenuNavigator(entries: entries, frecency: PilotMenu.shared.frecency ?? Frecency(), favourites: FavouriteBook.shared.rows,
+                                aliases: AliasBook.shared.aliases, root: MenuRootSettings.shared.root.listed)
+        nav.query = query
+        nav.provideSettings(query, developer: DeveloperPages.on)
+        return nav
+    }
+
+    /// `menu pick <words> <row>` (spec launcher-best T7): a pick of a row `menu search <words>` lists, by its frecency key,
+    /// recorded as Return records it, so the words are learned for it; the row is never run. Asks Allow: it writes the
+    /// menu's ranking.
+    private static func pick(_ words: [String], peer: ControlPeer?) async throws(ControlError) -> JSONValue {
+        guard words.count >= 2, let key = words.last else { throw ControlError(.badValue, "pilot menu pick <words> <row>: a row's frecencyKey from pilot menu search") }
+        let query = words.dropLast().joined(separator: " ")
+        let nav = try await navigator(query)
+        guard let row = nav.rows.first(where: { $0.frecencyKey == key }) else {
+            throw ControlError(.badValue, "\(key) is not listed for \"\(query)\"; pilot menu search \(query) lists its rows")
+        }
+        return try await AllowPrompt.gate.allow(ControlGate.Ask("Record a menu pick", "\(row.shownTitle) for \"\(query)\""), peer: peer) { () throws(ControlError) in
+            let saved: Frecency?
+            do { saved = try PilotMenu.shared.recordPick(key, query: query) } catch {
+                throw ControlError(.badValue, "the ranking was not saved: \(error.localizedDescription)")
+            }
+            guard let saved else { throw ControlError(.badValue, "frecency.json does not read, so nothing was saved over it") }
+            let folded = Frecency.Typed.folded(query)
+            return .object([
+                "row": .string(key), "query": .string(query), "picks": .number(Double(saved.picks[key]?.count ?? 0)),
+                "fromQuery": .number(Double(saved.typed[key]?.count { $0.query == folded } ?? 0)),
+                "learned": saved.learned(query).map(JSONValue.string) ?? .null,
+            ])
+        }
     }
 
     /// A heading's word as `menu search` prints it.
