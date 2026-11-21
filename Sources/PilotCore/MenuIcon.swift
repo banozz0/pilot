@@ -154,6 +154,14 @@ public struct MenuIcon: Hashable, Sendable {
         return cleanRules.first { $0.0.contains(where: names) }?.1 ?? glyph("archivebox", .good)
     }
 
+    /// A Clean part (one of Mole's sections) wears its kind's glyph filled, in its tint: a browsers part safari.fill, a
+    /// developer one hammer.fill, so two parts never share a row's look even where their tints match (browsers and mail
+    /// are both accent), and a part is told from its own lines. Every glyph in `cleanRules` has a filled form.
+    public static func cleanPart(title: String, section: String) -> MenuIcon {
+        let kind = clean(title: title, section: section)
+        return glyph(kind.symbol + ".fill", kind.tint)
+    }
+
     private static let cleanRules: [([String], MenuIcon)] = [
         (["chrome", "safari", "firefox", "brave", "edge", "arc", "zen", "browser", "service worker"], glyph("safari", .accent)),
         (["xcode", "simulator", "derived", "vs code", "npm", "yarn", "pip", "cargo", "gradle", "go", "developer", "homebrew", "brew"],

@@ -44,9 +44,14 @@ struct MenuIconTests {
         #expect(MenuIcon.clean(title: "Xcode DerivedData", section: "Developer tools").symbol == "hammer")
         #expect(MenuIcon.clean(title: "User app logs", section: "User essentials").symbol == "doc.plaintext")
         #expect(MenuIcon.clean(title: "Trash", section: "User essentials").symbol == "trash")
-        let preview = CleanPreview(items: [.init(section: "Browsers", title: "Chrome cache", detail: "1 GB")], total: "1 GB", systemSkipped: true)
-        let symbols = CleanMenu.entries(preview, mole: true).compactMap(\.icon?.symbol)
+        // Two parts: each wears its kind's glyph filled, apart from each other and from the clean, Disk usage and Install Mole.
+        let preview = CleanPreview(items: [.init(section: "Browsers", title: "Chrome cache", detail: "1 GB"),
+                                           .init(section: "Developer tools", title: "Xcode DerivedData", detail: "2 GB")],
+                                   total: "3 GB", systemSkipped: true)
+        let entries = CleanMenu.entries(preview, mole: true)
+        let symbols = entries.filter { $0.home == .clean }.compactMap(\.icon?.symbol)
         #expect(Set(symbols).count == symbols.count, "\(symbols)")
+        #expect(entries.filter { if case .branch = $0.target { true } else { false } }.map(\.icon?.symbol) == ["safari.fill", "hammer.fill"])
         #expect(CleanMenu.entries(nil, mole: false).first?.icon != nil)
     }
 }
