@@ -190,8 +190,9 @@ def test(paths, job):
     if os.path.exists(paths.out):
         os.remove(paths.out)
     os.makedirs(os.path.dirname(paths.out), exist_ok=True)
+    # The flags of the run that showed live lines on a tty (-v: its readings; -c<path>: the JSON, attached).
     main_fd, child_fd = pty.openpty()
-    process = subprocess.Popen([job["tool"], "-s", "-c" + paths.out], stdin=subprocess.DEVNULL, stdout=child_fd,
+    process = subprocess.Popen([job["tool"], "-s", "-v", "-c" + paths.out], stdin=subprocess.DEVNULL, stdout=child_fd,
                                stderr=child_fd, start_new_session=True)
     os.close(child_fd)
 
