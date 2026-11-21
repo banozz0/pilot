@@ -247,14 +247,24 @@ struct AppWindowFrameTests {
         #expect(AppWindowModel(defaults: defaults).page == .home)
     }
 
-    @Test("The window is a normal one: 1296 × 838 at first, centred and shrunk to a smaller screen, resizable, full screen, dark, titled Pilot with the title hidden, closed by Esc (Sven 2026-11-20)")
+    @Test("The window is a normal one: 1296 × 838 at first, centred and shrunk to a smaller screen, resizable, full screen, dark, titled Pilot with the title hidden, never closed by Esc (Sven 2026-11-21)")
     func frame() {
         let w = AppWindowController.makeAppWindow(content: NSView())
         #expect(w.frame.size == AppWindowController.size && AppWindowController.size == NSSize(width: 1296, height: 838))
         #expect(w.minSize == AppWindowController.minSize && AppWindowController.minSize == NSSize(width: 780, height: 560))
-        #expect(w.styleMask.contains(.resizable) && w.styleMask.contains(.miniaturizable) && w.closesOnEscape)
+        #expect(w.styleMask.contains(.resizable) && w.styleMask.contains(.miniaturizable))
         #expect(w.collectionBehavior.contains(.fullScreenPrimary))
-        #expect(w.level == .normal && !AppWindowController.makeWindow(content: NSView()).closesOnEscape)
+        #expect(w.level == .normal)
+        // Esc no view took (the window's cancelOperation) leaves it open, tiled or floating, a field focused or not.
+        var closes = 0
+        let watch = NotificationCenter.default.addObserver(forName: NSWindow.willCloseNotification, object: w, queue: nil) { _ in closes += 1 }
+        w.cancelOperation(nil)
+        let field = NSTextField(frame: NSRect(x: 0, y: 0, width: 100, height: 22))
+        w.contentView?.addSubview(field)
+        w.makeFirstResponder(field)
+        w.cancelOperation(nil)
+        NotificationCenter.default.removeObserver(watch)
+        #expect(closes == 0, "Esc closed the app window \(closes) times")
         // A frame write at another size (a Hyper resize, the tiler, a size bind) resizes it.
         w.setFrame(NSRect(x: 100, y: 100, width: 1200, height: 900), display: false)
         #expect(w.frame == NSRect(x: 100, y: 100, width: 1200, height: 900), "\(w.frame)")
