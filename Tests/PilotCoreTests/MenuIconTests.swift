@@ -44,14 +44,20 @@ struct MenuIconTests {
         #expect(MenuIcon.clean(title: "Xcode DerivedData", section: "Developer tools").symbol == "hammer")
         #expect(MenuIcon.clean(title: "User app logs", section: "User essentials").symbol == "doc.plaintext")
         #expect(MenuIcon.clean(title: "Trash", section: "User essentials").symbol == "trash")
-        // Two parts: each wears its kind's glyph filled, apart from each other and from the clean, Disk usage and Install Mole.
+        // Five parts, three of them app parts whose lines are all of the app kind: each part wears its own glyph, apart
+        // from each other and from the clean, Disk usage and Install Mole; a section Mole may add wears its kind's, filled.
         let preview = CleanPreview(items: [.init(section: "Browsers", title: "Chrome cache", detail: "1 GB"),
-                                           .init(section: "Developer tools", title: "Xcode DerivedData", detail: "2 GB")],
-                                   total: "3 GB", systemSkipped: true)
+                                           .init(section: "Developer tools", title: "Xcode DerivedData", detail: "2 GB"),
+                                           .init(section: "App caches", title: "App cache", detail: "1 GB"),
+                                           .init(section: "Apps & utilities", title: "App data", detail: "1 GB"),
+                                           .init(section: "App leftovers", title: "App leftovers", detail: "1 GB")],
+                                   total: "6 GB", systemSkipped: true)
+        #expect(MenuIcon.cleanPart(title: "Trash", section: "A new section").symbol == "trash.fill")
         let entries = CleanMenu.entries(preview, mole: true)
         let symbols = entries.filter { $0.home == .clean }.compactMap(\.icon?.symbol)
         #expect(Set(symbols).count == symbols.count, "\(symbols)")
-        #expect(entries.filter { if case .branch = $0.target { true } else { false } }.map(\.icon?.symbol) == ["safari.fill", "hammer.fill"])
+        #expect(entries.filter { if case .branch = $0.target { true } else { false } }.map(\.icon?.symbol)
+                == ["safari.fill", "hammer.fill", "square.stack.3d.up.fill", "wrench.and.screwdriver.fill", "app.badge.fill"])
         #expect(CleanMenu.entries(nil, mole: false).first?.icon != nil)
     }
 }
