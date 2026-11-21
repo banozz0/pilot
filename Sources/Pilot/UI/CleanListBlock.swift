@@ -19,9 +19,8 @@ struct CleanListBlock: View {
 
     enum Phase: Equatable { case ready, confirming, working, done(CleanOutcome?) }
 
-    private var ticked: [CleanList.Row] { list.rows.filter { !unticked.contains($0.id) } }
-
     var body: some View {
+        let ticked = list.rows.filter { !unticked.contains($0.id) }
         KitBlock(title: "What Clean would remove", symbol: "sparkles",
                  note: "Mole's list, part by part. Only the ticked rows go to the Trash; the rest stay.") {
             Text(RemoveList.size(CleanList.bytes(ticked))).font(ink.ui(12, .semibold).monospacedDigit()).foregroundStyle(ink.text)
@@ -35,12 +34,12 @@ struct CleanListBlock: View {
                     if opened.contains(part.id) {
                         ForEach(part.rows) { row in
                             TickRow(title: AppConfigs.tilde(row.path, home: home), detail: row.count > 1 ? "\(row.count) items" : nil,
-                                    size: row.size, ticked: !unticked.contains(row.id)) { flip([row.id]) }
+                                    size: row.size, ticked: !unticked.contains(row.id)) { toggle(row.id) }
                                 .padding(.leading, 26)
                         }
                     }
                 }
-                BlockRow { foot }
+                BlockRow { foot(ticked) }
             }
         }
     }
@@ -51,7 +50,7 @@ struct CleanListBlock: View {
         let symbol = off == 0 ? "checkmark.square.fill" : off == ids.count ? "square" : "minus.square.fill"
         let open = opened.contains(part.id)
         return HStack(spacing: 10) {
-            Button { flip(ids, all: off > 0) } label: {
+            Button { tick(ids, on: off > 0) } label: {
                 Image(systemName: symbol).font(ink.ui(14)).foregroundStyle(off == ids.count ? ink.muted : ink.text)
             }
             .buttonStyle(.plain).accessibilityLabel("Tick all of \(part.name)")
@@ -70,7 +69,7 @@ struct CleanListBlock: View {
         .padding(.vertical, 6)
     }
 
-    @ViewBuilder private var foot: some View {
+    @ViewBuilder private func foot(_ ticked: [CleanList.Row]) -> some View {
         if case .done(let outcome) = phase {
             VStack(alignment: .leading, spacing: 6) {
                 Text(outcome?.summary ?? "The list ran out; scan again.").font(ink.ui(12.5, .semibold)).foregroundStyle(ink.text)
@@ -104,13 +103,12 @@ struct CleanListBlock: View {
         }
     }
 
-    /// Ticks `ids` when `all`, else flips each one.
-    private func flip(_ ids: [String], all: Bool? = nil) {
+    private func toggle(_ id: String) { tick([id], on: unticked.contains(id)) }
+
+    /// Ticks `ids` when `on`, else unticks them; a tick change takes back a pending Sure?.
+    private func tick(_ ids: [String], on: Bool) {
         guard phase != .working else { return }
         if phase == .confirming { phase = .ready }
-        for id in ids {
-            let on = all ?? unticked.contains(id)
-            if on { unticked.remove(id) } else { unticked.insert(id) }
-        }
+        if on { unticked.subtract(ids) } else { unticked.formUnion(ids) }
     }
 }

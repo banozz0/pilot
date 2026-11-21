@@ -6,10 +6,9 @@ import PilotCore
 /// Since W89 the preview's file list is ticked rows too, and Pilot moves only the ticked ones to the Trash (`trash`).
 @MainActor
 enum CleanModule {
-    /// A stand-in Mac for Clean (Sandbox E2E's PILOT_SANDBOX_CLEAN): its Mole, the home that Mole lists and its file
-    /// list is read from, and the folder Trash moves go to in place of the Trash. Nil on a real Mac; set before the first
-    /// preview.
-    nonisolated(unsafe) static var standIn: (mole: String, home: String, trash: URL)?
+    /// A stand-in Mac for Clean (Sandbox E2E's PILOT_SANDBOX_CLEAN): its Mole, and the home that Mole lists and its file
+    /// list is read from. Nil on a real Mac; set before the first preview. The Trash is FileOps', a throwaway folder there.
+    nonisolated(unsafe) static var standIn: (mole: String, home: String)?
 
     nonisolated static var mole: String? { standIn?.mole ?? Helper.mole.path() }
     /// The home Mole runs in and lists.
@@ -47,35 +46,23 @@ enum CleanModule {
         return CleanList.parse(text, home: home)
     }
 
-    /// Moves the ticked rows of the kept list to the Trash, off the main thread, one at a time (a row that fails says
-    /// why; the rest go on), keeps the run in `store` for Reports, and takes the moved rows off the kept list. Only rows
-    /// the kept list holds can go: nil when no list is kept.
+    /// Moves the ticked rows of the kept list to the Trash (FileOps', which asks for an administrator for an item root
+    /// owns, as Finder does), off the main thread, one at a time (a row that fails says why; the rest go on), keeps the
+    /// run in `store` for Reports, and takes the moved rows off the kept list. Only rows the kept list holds can go: nil
+    /// when no list is kept.
     static func trash(_ ids: some Collection<String>, from previewer: CleanPreviewer = previewer, store: ReportStore) async -> CleanOutcome? {
         guard let list = previewer.ready?.list else { return nil }
-        let rows = list.rows(ids), home = home, standIn = standIn?.trash
+        let rows = list.rows(ids), home = home
         ilog.notice("clean: moving \(rows.count) ticked paths to the Trash")
-        let outcome = await Task.detached {
-            CleanList.move(rows, home: home) { url in
-                if let standIn { try moveAside(url, into: standIn) } else { try FileManager.default.trashItem(at: url, resultingItemURL: nil) }
-            }
-        }.value
+        var outcome = await Task.detached { await CleanList.move(rows, home: home) { _ = try await FileOps.systemTrash($0) } }.value
         previewer.cleaned(Set(outcome.moved.map(\.id)))
-        do { try store.finished(RunReport.trash(outcome, home: home), output: outcome.text(home: home)) } catch {
-            ilog.error("clean: report not kept, \(String(describing: error), privacy: .public)")
-        }
+        let report = RunReport.trash(outcome, home: home)
+        do {
+            try store.finished(report, output: outcome.text(home: home))
+            outcome.report = report.id
+        } catch { ilog.error("clean: report not kept, \(String(describing: error), privacy: .public)") }
         ilog.notice("clean: \(outcome.summary, privacy: .public)")
         return outcome
-    }
-
-    /// The stand-in's Trash: a move into `folder`, a number added when the name is taken, as the Trash does.
-    nonisolated private static func moveAside(_ url: URL, into folder: URL) throws {
-        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-        var target = folder.appending(path: url.lastPathComponent), n = 1
-        while FileManager.default.fileExists(atPath: target.path) {
-            n += 1
-            target = folder.appending(path: "\(url.lastPathComponent) \(n)")
-        }
-        try FileManager.default.moveItem(at: url, to: target)
     }
 
     /// Return on a Clean row: the clean asks with its exact command and stays open when done, so Mole's summary is read;

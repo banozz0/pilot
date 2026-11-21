@@ -26,8 +26,6 @@ struct UpkeepPage: View {
     @State private var wake = 0
     /// What Clean would remove (W89): the kept preview's file list when there is one, else nil until Show list reads it.
     @State var cleanList: CleanList? = CleanModule.previewer.ready?.list
-    /// Mole's preview is running for Show list.
-    @State private var scanning = false
 
     static let intro = "Update previews upgrades and Clean what it would remove; each asks first."
     static let introInfo = "Clean lists what Mole would remove and moves only what you tick to the Trash; Clean all runs Mole's whole clean. Each run is kept under More › Reports with what it printed; the last \(ReportStore.keep) are kept."
@@ -100,6 +98,7 @@ struct UpkeepPage: View {
                 }
                 BlockRow {
                     if mole {
+                        let scanning = CleanModule.previewer.progress != nil
                         starter(.clean, line: scanning ? CleanMenu.waiting(CleanModule.previewer.progress)
                                     : "Lists what Mole would remove, part by part; moves only what you tick to the Trash.") {
                             HStack(spacing: 6) {
@@ -120,11 +119,7 @@ struct UpkeepPage: View {
     /// Mole's preview, the kept one while fresh (Scan again drops it first), into the list block.
     private func scan() {
         if cleanList != nil { CleanModule.previewer.drop() }
-        scanning = true
-        Task {
-            cleanList = await CleanModule.previewer.preview(caller: "Update & Clean")?.list
-            scanning = false
-        }
+        Task { cleanList = await CleanModule.previewer.preview(caller: "Update & Clean")?.list }
     }
 
     /// One of the two: its icon, name and what it does, its last run with a link to that report, and its button.

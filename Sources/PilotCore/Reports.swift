@@ -201,12 +201,12 @@ public struct ReportStore: Sendable {
         return dir
     }
 
-    /// A run Pilot did itself and that ended as it began (a clean of ticked rows, W89): its report, its output and exit
-    /// status 0 written at once, so the next read settles it as done.
-    public func finished(_ report: RunReport, output: String) throws {
+    /// A run Pilot did itself and that ended as it began (a clean of ticked rows, W89): its report, readable output and
+    /// end written at once, as a settled run's are.
+    public func finished(_ report: RunReport, output: String, now: Date = .now) throws {
         let dir = try begin(report)
-        try output.write(to: dir.appending(path: "output"), atomically: true, encoding: .utf8)
-        try "0".write(to: dir.appending(path: "status"), atomically: true, encoding: .utf8)
+        try output.write(to: dir.appending(path: "output.txt"), atomically: true, encoding: .utf8)
+        try JSONFile<End>(url: dir.appending(path: "end.json")).save(End(exit: 0, ended: Date(timeIntervalSince1970: now.timeIntervalSince1970.rounded(.down)), freed: nil))
     }
 
     private struct End: Codable { let exit: Int32?, ended: Date, freed: String? }

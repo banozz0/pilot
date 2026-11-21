@@ -89,17 +89,18 @@ public struct CleanList: Equatable, Sendable {
     }
 
     public let rows: [Row]
+    /// The rows by part, grouped once here, not on every read.
+    public let parts: [Part]
     public static let empty = CleanList(rows: [])
 
-    public init(rows: [Row]) { self.rows = rows }
-
-    public var parts: [Part] {
+    public init(rows: [Row]) {
+        self.rows = rows
         var order: [String] = [], grouped: [String: [Row]] = [:]
         for row in rows {
             if grouped[row.part] == nil { order.append(row.part) }
             grouped[row.part, default: []].append(row)
         }
-        return order.map { Part(name: $0, rows: grouped[$0] ?? []) }
+        parts = order.map { Part(name: $0, rows: grouped[$0] ?? []) }
     }
 
     public var bytes: Int64 { Self.bytes(rows) }
@@ -150,7 +151,7 @@ public struct CleanList: Equatable, Sendable {
 
     /// Moves each row to the Trash through `trash`, one at a time: a row that fails says why and the rest go on. A path
     /// that is gone, or is `home` or a folder above it, is not moved.
-    public static func move(_ rows: [Row], home: String, trash: (URL) throws -> Void) -> CleanOutcome {
+    public static func move(_ rows: [Row], home: String, trash: (URL) async throws -> Void) async -> CleanOutcome {
         var outcome = CleanOutcome()
         let homeParts = URL(filePath: home).standardizedFileURL.pathComponents
         for row in rows {
@@ -161,7 +162,7 @@ public struct CleanList: Equatable, Sendable {
                 outcome.failed.append(.init(row: row, why: "it is no longer there"))
             } else {
                 do {
-                    try trash(url)
+                    try await trash(url)
                     outcome.moved.append(row)
                 } catch { outcome.failed.append(.init(row: row, why: error.localizedDescription)) }
             }
@@ -177,6 +178,8 @@ public struct CleanOutcome: Equatable, Sendable {
     }
 
     public var moved: [CleanList.Row] = [], failed: [Failure] = []
+    /// The run's id in Reports, once it is kept there.
+    public var report: String?
 
     public init(moved: [CleanList.Row] = [], failed: [Failure] = []) { self.moved = moved; self.failed = failed }
 
@@ -299,11 +302,9 @@ public final class CleanPreviewer {
         progress = CleanProgress()
         let task = Task { [run, list] in
             let started = Date.now
-            let preview = await run { line in Task { @MainActor [weak self] in self?.heard(line, in: mine) } }.map { output in
-                var preview = CleanPreview.parse(output)
-                preview.list = list(started) ?? .empty
-                return preview
-            }
+            var preview = await run { line in Task { @MainActor [weak self] in self?.heard(line, in: mine) } }.map(CleanPreview.parse)
+            // The file list is read and parsed off the main thread.
+            if preview != nil { preview?.list = await Task.detached { list(started) }.value ?? .empty }
             finish(preview, in: mine)
             return preview
         }

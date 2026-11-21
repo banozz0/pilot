@@ -7,7 +7,7 @@ extension ControlVerbs {
     /// with what goes, then moves only those paths to the Trash. `run` (Mole's whole clean) and Disk usage ask Allow with
     /// the exact command, then run in the visible terminal.
     func registerClean(_ jobs: ControlJobs) {
-        let subcommands = ["list", "preview", "<id>…", "run", "analyze"]
+        let words = ["list", "preview", "run", "analyze"], subcommands = words + ["<id>…"]
         register(ControlVerb("clean", help: "What Clean would remove, part by part with each path's id and size (Mole's read-only preview); the ids you name moved to the Trash after Allow; or Mole's whole clean or Disk usage after Allow, as the menu's Clean does (Mac › Update & Clean ticks them).",
                              usage: "pilot clean [list] [--wait] | clean <id> [<id>…] | clean run | clean analyze",
                              flags: [.init("wait", help: "list: waits for Mole's dry run to finish (a minute or two, at most 15 min) rather than answering its progress", takesValue: false)],
@@ -16,7 +16,7 @@ extension ControlVerbs {
                              detail: { word in
                                  switch word {
                                  case "list", "preview": "pilot clean [list] [--wait]: what Mole's dry run says it would remove, each part with its total and each path with its id, size and tick (all ticked, as Mole's clean takes them all); removes nothing, and starts the run when none is kept. preview is the same"
-                                 case "<id>…", "id": "pilot clean <id> [<id>…]: asks Allow with the paths, then moves only those to the Trash, one at a time; a path that fails says why and the rest go on. Ids come from the kept list; pilot clean lists them"
+                                 case "<id>…": "pilot clean <id> [<id>…]: asks Allow with the paths, then moves only those to the Trash, one at a time; a path that fails says why and the rest go on. Ids come from the kept list; pilot clean lists them"
                                  case "run": "pilot clean run: asks Allow with mo clean, then Mole cleans everything it listed in a terminal window, where it asks for your password; answers the run's report"
                                  case "analyze": "pilot clean analyze: asks Allow, then opens Mole's disk explorer in a terminal window; it needs the user's hands"
                                  default: nil
@@ -25,7 +25,7 @@ extension ControlVerbs {
             let args = call.arguments()
             let sub = args.positional.first ?? "list"
             let ids = args.positional.filter(Self.isCleanID)
-            guard ["list", "preview", "run", "analyze"].contains(sub) || (!ids.isEmpty && ids.count == args.positional.count) else {
+            guard words.contains(sub) || (!ids.isEmpty && ids.count == args.positional.count) else {
                 throw ControlError(.badValue, "no clean \(sub); subcommands: \(subcommands.joined(separator: ", ")); pilot clean lists the ids")
             }
             guard jobs.mole() != nil else {
@@ -60,8 +60,8 @@ extension ControlVerbs {
         guard let list = jobs.previewer.ready?.list else {
             throw ControlError(.notReady, "no list is kept; pilot clean --wait lists what Clean would remove and its ids")
         }
-        let rows = list.rows(ids)
-        if let unknown = ids.first(where: { id in !rows.contains { $0.id == id } }) {
+        let listed = Set(list.rows.map(\.id))
+        if let unknown = ids.first(where: { !listed.contains($0) }) {
             throw ControlError(.badValue, "no path \(unknown) in the kept list; pilot clean lists the ids")
         }
         return try await jobs.gate.allow(Self.trashAsk(ids, jobs), peer: peer) { () throws(ControlError) in
@@ -75,7 +75,7 @@ extension ControlVerbs {
                 "toTrash": .string(RemoveList.size(outcome.bytes)),
                 "summary": .string(outcome.summary),
                 "left": .number(Double(jobs.previewer.ready?.list.rows.count ?? 0)),
-                "report": jobs.store.list().first.map { .string($0.id) } ?? .null,
+                "report": outcome.report.map(JSONValue.string) ?? .null,
                 "note": .string("in the Trash, so the space comes back once it is emptied; pilot clean lists what is left"),
             ])
         }
