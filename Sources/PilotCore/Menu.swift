@@ -1148,9 +1148,11 @@ public struct MenuNavigator: Sendable {
     }
 
     /// The row of `searched` whose alias the query is, before `rows` (card agent-bo-95423037), found even when its name
-    /// does not match; `rows` as they are when the query is no alias.
+    /// does not match; failing a typed alias, the row the query was learned for (Frecency.learned, spec launcher-best T7:
+    /// "ps" picked twice for Photoshop); `rows` as they are when the query is neither.
     private func aliasFirst(_ rows: [MenuEntry], of searched: [MenuEntry]) -> [MenuEntry] {
-        guard let key = aliases.key(for: query), let row = searched.first(where: { $0.frecencyKey == key }) else { return rows }
+        guard let key = aliases.key(for: query) ?? frecency.learned(query), let row = searched.first(where: { $0.frecencyKey == key })
+        else { return rows }
         return [row] + rows.filter { $0.id != row.id }
     }
 
