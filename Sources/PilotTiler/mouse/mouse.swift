@@ -20,8 +20,10 @@ var mouseLocation: CGPoint { isUnitTest ? unitTestScreen.withLock { $0.mouse } :
 // agent-bo-95422997, AC5): a tiled window being dragged only starts a drag (dropWithMouse.swift); any other move
 // refreshes like any other AX event.
 func movedObs(_: AXObserver, ax: AXUIElement, notif: CFString, _: UnsafeMutableRawPointer?) {
+    // Pilot: its own glide's frames (card agent-bo-95423033), known by element before any call into the app (move-lag)
+    if tilerIsGliding(ax) { return }
     let windowId = ax.containingWindowId()
-    if isGliding(windowId) { return } // Pilot: its own glide's frames (card agent-bo-95423033)
+    if isGliding(windowId) { return }
     windowMoved(windowId, notif as String)
 }
 

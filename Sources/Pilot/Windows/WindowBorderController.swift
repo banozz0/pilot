@@ -67,6 +67,13 @@ final class WindowBorderPanel: WindowBorderSurface {
     /// The window the panel last framed, and the one it is stacked above: the same, once its layer was read.
     private var above: CGWindowID?
     private var stacked: CGWindowID?
+    /// Where the window server has the panel after a move AppKit has not been told of yet (WindowServerMove), and
+    /// AppKit's catch-up, due once the moves stop.
+    private var placed: CGRect?
+    private var sync: DispatchWorkItem?
+    /// How long after the last move AppKit's frame catches up: told at once, its commit lands a median 4.15 ms later,
+    /// after the next 240 Hz move, and would pull the border back for a frame.
+    static let syncAfter: TimeInterval = 0.1
 
     init() {
         window = Self.overlay()
@@ -100,7 +107,7 @@ final class WindowBorderPanel: WindowBorderSurface {
             layer?.borderColor = NSColor(Color(hex: color)).cgColor
             drawn = (width, color)
         }
-        if window.frame != frame { window.setFrame(frame, display: false) }
+        place(frame)
         // Stacking never crosses levels, so the panel takes the window's own first, read once a window: the read is a
         // window-server call. With no window number, above every normal window, as before P32.
         if !window.isVisible || id != above {
@@ -115,5 +122,57 @@ final class WindowBorderPanel: WindowBorderSurface {
         if let stacked { window.order(.above, relativeTo: Int(stacked)) } else { window.orderFrontRegardless() }
     }
 
-    func hide() { if window.isVisible { window.orderOut(nil) } }
+    func hide() {
+        syncAppKit()
+        if window.isVisible { window.orderOut(nil) }
+    }
+
+    /// The panel at `frame`. A move of the shown panel goes to the window server at once (WindowServerMove): AppKit's
+    /// setFrame reaches it at AppKit's next commit, a median 4.15 ms later, so a border fed the window's place in time
+    /// still showed 1.3 frames behind a 240 Hz drag (move-lag). A resize, or the first show, is AppKit's.
+    private func place(_ frame: CGRect) {
+        let current = placed ?? window.frame
+        guard current != frame else { return }
+        if window.isVisible, current.size == frame.size, WindowServerMove.move(window.windowNumber, to: frame) {
+            placed = frame
+            sync?.cancel()
+            let item = DispatchWorkItem { [weak self] in MainActor.assumeIsolated { self?.syncAppKit() } }
+            sync = item
+            DispatchQueue.main.asyncAfter(deadline: .now() + Self.syncAfter, execute: item)
+        } else {
+            placed = nil
+            window.setFrame(frame, display: false)
+        }
+    }
+
+    /// AppKit's frame where the window server already has the panel: no move on screen.
+    private func syncAppKit() {
+        sync?.cancel()
+        sync = nil
+        guard let frame = placed else { return }
+        placed = nil
+        window.setFrame(frame, display: false)
+    }
+}
+
+/// A window's move straight to the window server, through SkyLight's CGSMoveWindow (private, looked up once by path,
+/// as the cursor calls are): it is there when the call returns. False when the call is gone or refused: AppKit's setFrame then.
+@MainActor
+enum WindowServerMove {
+    private typealias Connection = @convention(c) () -> Int32
+    private typealias Move = @convention(c) (Int32, UInt32, UnsafePointer<CGPoint>) -> Int32
+    private static let calls: (Connection, Move)? = {
+        guard let connection = CursorCalls.symbol("CGSMainConnectionID"), let move = CursorCalls.symbol("CGSMoveWindow") else {
+            wlog.error("border: CGSMoveWindow not found, moves go through AppKit")
+            return nil
+        }
+        return (unsafeBitCast(connection, to: Connection.self), unsafeBitCast(move, to: Move.self))
+    }()
+
+    /// `frame` in AppKit coordinates; the window server takes its top-left corner, y down from the primary screen's top.
+    static func move(_ window: Int, to frame: CGRect) -> Bool {
+        guard let (connection, move) = calls, let id = UInt32(exactly: window), id > 0 else { return false }
+        var corner = WindowGeometry.flip(frame, primaryHeight: Screens.primaryHeight).origin
+        return move(connection(), id, &corner) == 0
+    }
 }
