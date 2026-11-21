@@ -1,4 +1,4 @@
-import Foundation
+import AppKit
 import Observation
 import PilotCore
 
@@ -32,12 +32,27 @@ final class BrowserSettings {
 /// - A running browser's lock. A SQLite file (History, History.db, places.sqlite) is never opened: it and its `-wal` and
 ///   `-journal` are copied (a clone on APFS) into a folder only this user reads, the copy queried, the folder removed at
 ///   once. Bookmarks' JSON and plist are read whole, as any reader does.
-/// - Logs and stores. No title or address is logged (counts only, by the menu) or saved: the bookmarks' rows live in this
-///   reader's memory, read again only when a file's date or size changed; history pages are never cached and never a pick.
+/// - Logs and stores. No title or address is logged: the menu logs counts, a pick of one privately, and Return opens it
+///   through `open`, which logs nothing. A bookmark is a pick like any row, so one picked is kept in the ranking
+///   (frecency.json, with the short query it was picked from) and can be a favourite; history pages are never a pick,
+///   never a favourite and never cached. The bookmarks' rows live in this reader's memory, read again only when a file's
+///   date or size changed.
 /// - Isolated test runs read only `PILOT_SANDBOX_BROWSERS=<folder>` as the home (no Full Disk Access asked of it), and
 ///   nothing at all without it, so a sandbox never reads Sven's real profiles.
 actor BrowserReader {
     static let shared = BrowserReader()
+
+    /// Opens a browser page row's `apps.url:<browser>:<address>` in that browser (the default one when it is gone), logging
+    /// nothing, unlike a bind's AppsModule.open: the address is another app's record. The browser's id, or nil.
+    @MainActor static func open(_ id: String) -> String? {
+        guard case .url(let bundle, let raw)? = AppLink(id: id), let url = URL(string: raw) else { return nil }
+        if let app = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundle) {
+            NSWorkspace.shared.open([url], withApplicationAt: app, configuration: NSWorkspace.OpenConfiguration())
+        } else {
+            NSWorkspace.shared.open(url)
+        }
+        return bundle
+    }
 
     /// The home the browsers' files are under: the user's, or the sandbox's stand-in; nil reads nothing.
     nonisolated static func home() -> URL? {

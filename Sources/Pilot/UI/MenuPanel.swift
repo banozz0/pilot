@@ -1468,8 +1468,8 @@ final class PilotMenu {
     /// A Cmd+K action the navigator leaves to the panel (card agent-bo-95422968). Uninstall and opening never get here:
     /// the navigator searches Remove for the first and picks the row for the second.
     private func perform(_ action: RowAction, on entry: MenuEntry) {
-        // A menu item's key names its title path (T41 review): private.
-        if entry.kind == .menuItem {
+        // A menu item's key names its title path (T41 review), a browser page's its address (T9): private.
+        if Self.isPrivate(entry) {
             mlog.notice("menu: \(action.rawValue, privacy: .public) on \(LinkToken.redact(entry.frecencyKey ?? "a row"), privacy: .private)")
         } else {
             mlog.notice("menu: \(action.rawValue, privacy: .public) on \(LinkToken.redact(entry.frecencyKey ?? "a row"), privacy: .public)")
@@ -1557,6 +1557,10 @@ final class PilotMenu {
         case .app(let bundle):
             close(restoreFocus: false)
             mlog.notice("menu: open \(bundle, privacy: .public) \(RunCaller.with("menu") { AppsModule.open(bundle: bundle) } ? "opened" : "not installed", privacy: .public)")
+        // A browser's bookmark or history page (T9): opened in that browser with nothing logged but the browser.
+        case .action(let id) where entry.kind == .bookmark || entry.kind == .history:
+            close(restoreFocus: false)
+            mlog.notice("menu: a browser page opened in \(BrowserReader.open(id) ?? "no browser", privacy: .public)")
         // Another app's menu item (provideAppMenu): that app comes forward, then its item is pressed.
         case .action(let id) where entry.kind == .menuItem && entry.app != previous?.bundleIdentifier:
             guard let bundle = entry.app, let route = DriveRoute(id: id) else { return }
@@ -1688,6 +1692,9 @@ final class PilotMenu {
         }
     }
 
+    /// A row whose title or key names what another app holds (a menu item, a browser's page), logged only privately.
+    static func isPrivate(_ entry: MenuEntry) -> Bool { [.menuItem, .bookmark, .history].contains(entry.kind) }
+
     /// Stores the pick and logs the order it was picked from, so a ranking change shows in the log.
     private func record(_ entry: MenuEntry, from nav: MenuNavigator) {
         guard let key = entry.frecencyKey else { return }
@@ -1695,8 +1702,9 @@ final class PilotMenu {
         guard let picks = frecency else { return }
         saveFrecency(picks)
         let top = nav.rows.prefix(3).map(\.title).joined(separator: ", ")
-        // An app's menu item names what the app holds now and then (T41 review): its titles stay out of the public log.
-        guard entry.kind != .menuItem, !nav.rows.prefix(3).contains(where: { $0.kind == .menuItem }) else {
+        // An app's menu item names what the app holds now and then (T41 review), a bookmark the page it keeps (T9): their
+        // titles and keys stay out of the public log.
+        guard !Self.isPrivate(entry), !nav.rows.prefix(3).contains(where: Self.isPrivate) else {
             return mlog.notice("menu: picked \(LinkToken.redact(key), privacy: .private) from \(top, privacy: .private), frecency \(picks.score(key, now: .now))")
         }
         mlog.notice("menu: picked \(LinkToken.redact(key), privacy: .public) for \"\(nav.query, privacy: .public)\" from \(top, privacy: .public), frecency \(picks.score(key, now: .now))")
