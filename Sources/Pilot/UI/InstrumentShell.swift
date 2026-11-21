@@ -563,7 +563,7 @@ struct InstrumentToolbar: View {
     /// while it fits (P36); tighter where the bar is too narrow for them whole, never cut.
     private func tabs(_ page: AppPage) -> some View {
         let options = page.tabs.map { ($0.value, $0.title) }
-        let selection = Binding(get: { model.section(of: page) }, set: { model.sections[page] = $0 })
+        let selection = Binding(get: { model.section(of: page) }, set: { model.pick($0, of: page) })
         func segments(tight: Bool = false) -> InstrumentSegments<AppSection?> {
             InstrumentSegments(options: options, selection: selection, tight: tight)
         }

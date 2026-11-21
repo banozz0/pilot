@@ -81,7 +81,7 @@ struct PageView: View {
 
     var body: some View {
         let key = Self.key(model)
-        KeptPages(key: key) {
+        KeptPages(key: key, model: model) {
             PagePart(model: model, page: model.page, section: model.section(of: model.page), extensionPage: model.extensionPage)
                 .environment(model).environment(\.searchHits, hits)
                 .styled(.window).pilotWindowStyles().pilotTheme()
@@ -93,8 +93,11 @@ struct PageView: View {
     /// Which view the page shows now, as PagePart's switch picks it: a part that is a view of its own is kept apart, a
     /// part a page draws itself (a More tab, a landing) is that page's.
     static func key(_ model: AppWindowModel) -> String {
-        let page = model.page, section = model.section(of: page)
-        return switch page {
+        key(model.page, section: model.section(of: model.page), extensionPage: model.extensionPage)
+    }
+
+    static func key(_ page: AppPage, section: AppSection?, extensionPage: String?) -> String {
+        switch page {
         case .binds: section == .bindsMore ? "binds.more" : section == .mouse ? "binds.mouse" : "binds"
         case .menu: section == .rings ? "menu.rings" : "menu"
         case .tiling: section == .tilingMore ? "tiling.more" : "tiling"
@@ -104,7 +107,7 @@ struct PageView: View {
         case .install: section == .webApps ? "install.webApps" : section == .installMore ? "install.more" : "install"
         case .configs: section == .agents ? "configs.agents" : "configs"
         case .ai: section == .aiSetup ? "ai.setup" : "ai"
-        case .extensions: model.extensionPage.map { "extension." + $0 } ?? "extensions"
+        case .extensions: extensionPage.map { "extension." + $0 } ?? "extensions"
         default: page.rawValue
         }
     }
@@ -266,9 +269,15 @@ private struct HeldSearch<Content: View>: View {
 /// shown longest ago goes, its views disappearing as before.
 struct KeptPages<Content: View>: NSViewRepresentable {
     let key: String
+    /// Its picks reach the deck before SwiftUI does (PageDeck.picture).
+    let model: AppWindowModel
     @ViewBuilder var content: () -> Content
 
-    func makeNSView(context: Context) -> PageDeck { PageDeck() }
+    func makeNSView(context: Context) -> PageDeck {
+        let deck = PageDeck()
+        model.picking = { [weak deck] in deck?.picture($0) }
+        return deck
+    }
 
     /// The deck takes what it is offered. Asked its fitting size instead, AppKit fills a layout engine with every kept
     /// page's constraints to answer, on every switch and again as it resumes (page-switch-4: 15 % of a switch).
@@ -316,6 +325,7 @@ final class PageDeck: NSView {
         order.append(key)
         if host.frame != bounds { host.frame = bounds }
         if host.superview === self { host.isHidden = false } else { addSubview(host) }
+        matchLayers()
         tellSoon()
         while order.count > Self.cap {
             // Its tree goes with it: emptied first, so nothing the views hold keeps the host alive.
@@ -329,6 +339,58 @@ final class PageDeck: NSView {
     private func hide(_ host: PageHost) {
         if let responder = window?.firstResponder as? NSView, responder.isDescendant(of: host) { window?.makeFirstResponder(nil) }
         host.isHidden = true
+        host.left = window.map { PageHost.Left(look: Self.look(host), at: host.convert(host.bounds, to: nil), window: $0.frame.size) }
+    }
+
+    /// The part `picture` drew as it was left, before SwiftUI puts it back.
+    private(set) var pictured: String?
+
+    /// The first frame of a return visit (page-switch-5; Sven, 2026-11-21: "how can we make the switch instant?"): kept
+    /// part `key`'s own layers, as it drew when it was left, shown in place of the part showing now and committed at once,
+    /// before the model's change reaches SwiftUI. The live switch (`show`) follows in the same run loop turn, so the next
+    /// event reaches the live part, never the picture, and the picture is the part itself, glass and all: nothing is
+    /// captured and nothing more is held. Not while the window's size or the look changed since it was left (the part
+    /// keeps the size and theme it was shown at until it shows again), nor on a first visit (nothing to show yet). The
+    /// frame around it (the tabs, the page list, the toolbar) follows with the live switch.
+    func picture(_ key: String) {
+        guard key != shown, let host = hosts[key], host.superview === self, host.isHidden, let left = host.left,
+              left.window == window?.frame.size, left.look == Self.look(host), left.at.size == host.frame.size,
+              let shown, let old = hosts[shown], let layer = host.layer, let oldLayer = old.layer
+        else { return }
+        PageSwitchTiming.began()
+        // Where it was left in the window: a full-width part (Binds, Home) reaches past the deck of a part beside the list.
+        // Its layer moves there, not its view: a view moved would have the commit lay the window out first.
+        let at = convert(left.at, from: nil)
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        oldLayer.isHidden = true
+        layer.isHidden = false
+        if at.origin != host.frame.origin {
+            layer.setAffineTransform(CGAffineTransform(translationX: at.minX - host.frame.minX, y: at.minY - host.frame.minY))
+        }
+        CATransaction.commit()
+        CATransaction.flush()
+        pictured = key
+        PageSwitchTiming.pictured()
+        // Should SwiftUI not show `key` this turn after all, the layers go back to what their views say.
+        AfterCommit.observe(repeats: false) { [weak self] in self?.matchLayers() }
+    }
+
+    /// Every kept part's layers as its view says, once a picture has done its job.
+    private func matchLayers() {
+        guard pictured != nil else { return }
+        pictured = nil
+        for host in hosts.values {
+            if host.layer?.isHidden != host.isHidden { host.layer?.isHidden = host.isHidden }
+            if host.layer?.affineTransform() != .identity { host.layer?.setAffineTransform(.identity) }
+        }
+    }
+
+    /// What a kept part was drawn under: its picture is stale once the theme, the style, the glass or the appearance change.
+    private static func look(_ host: NSView) -> String {
+        let look = Look.shared
+        return "\(look.paletteRevision) \(look.style) \(look.glass) \(look.transparency) \(look.glassBlur) "
+            + "\(look.reduceTransparency) \(look.increaseContrast) \(host.effectiveAppearance.name.rawValue)"
     }
 
     private var telling = false
@@ -358,6 +420,9 @@ final class PageDeck: NSView {
 /// A kept part's host: its slot says whether it shows, and no key equivalent reaches it while hidden.
 final class PageHost: NSHostingView<AnyView> {
     let slot = PageSlot()
+    /// How it was hidden: under which look, where in the window and at what window size (PageDeck.picture).
+    var left: Left?
+    struct Left: Equatable { let look: String; let at: NSRect; let window: NSSize }
 
     convenience init(_ root: AnyView) {
         self.init(rootView: AnyView(EmptyView()))

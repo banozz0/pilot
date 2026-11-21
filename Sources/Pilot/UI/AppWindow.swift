@@ -67,6 +67,11 @@ final class AppWindowModel {
     /// run only then, so a window left open behind other apps redraws nothing under its glass (Sven, 2026-10-17).
     var live: Bool { onScreen && isKey }
     private static let lastPageKey = "appWindow.page"
+    /// The window's page deck, told the part a pick will show (PageView.key) before the pick changes anything, so a kept
+    /// part draws in the next frame (PageDeck.picture, page-switch-5). Before, never after: Core Animation's commit lays
+    /// out what SwiftUI has heard of, so a picture committed after the change would wait for the whole switch.
+    @ObservationIgnored var picking: ((String) -> Void)?
+
     init(defaults: UserDefaults = .pilot()) {
         self.defaults = defaults
         // A page saved before the cut opens where it went; a developer page saved while the switch was on, its area's first.
@@ -81,6 +86,25 @@ final class AppWindowModel {
 
     /// Shows `place`: its page, and its part (conflicts open as a sheet over Binds).
     func go(_ place: AppPlace) {
+        picking?(PageView.key(place.page, section: Self.part(place, picked: sections[place.page]) ?? place.page.firstSection, extensionPage: nil))
+        land(place)
+    }
+
+    /// The part `place` picks on its page, `picked` the one picked there now: nil for the page's first. A place on More is
+    /// that tab; one on the front is the front, or the tab it sits on (Sven, 2026-11-11, after 2276; pages round 4).
+    static func part(_ place: AppPlace, picked: AppSection?) -> AppSection? {
+        guard let section = place.section else { return place.page.hasOwnContent ? nil : picked }
+        if section.opensAsSheet { return picked }
+        return section.onMore ?? (section.onFront ? section.frontTab : section)
+    }
+
+    /// Picks part `part` of `page`, as its tabs do.
+    func pick(_ part: AppSection?, of page: AppPage) {
+        if page == self.page { picking?(PageView.key(page, section: part ?? page.firstSection, extensionPage: extensionPage)) }
+        sections[page] = part
+    }
+
+    private func land(_ place: AppPlace) {
         // Each only when it holds something: an Observable property set to what it holds still redraws every view that
         // reads it, the frame's and every kept page's, on every switch (perf-round).
         if extensionPage != nil { extensionPage = nil }
@@ -92,23 +116,12 @@ final class AppWindowModel {
         if ringed != nil { ringed = nil }
         if searchOpen { searchOpen = false }
         if page != place.page { page = place.page }
-        if let section = place.section {
-            if section.opensAsSheet {
-                showsConflicts = true
-            } else if let more = section.onMore {
-                // A place on More: its tab, and its block marked there.
-                sections[place.page] = more
-                blockFocus = section
-            } else if section.onFront {
-                // A place on the front: the front, or the tab it sits on, scrolled to its block (Sven, 2026-11-11, after
-                // 2276; pages round 4).
-                sections[place.page] = section.frontTab
-                blockFocus = section
-            } else {
-                sections[place.page] = section
-            }
-        } else if place.page.hasOwnContent {
-            sections[place.page] = nil
+        if place.section?.opensAsSheet == true {
+            showsConflicts = true
+        } else if place.section != nil || place.page.hasOwnContent {
+            sections[place.page] = Self.part(place, picked: sections[place.page])
+            // A place on More or on the front: its block marked there.
+            if let section = place.section, section.onMore != nil || section.onFront { blockFocus = section }
         }
     }
 
@@ -128,7 +141,8 @@ final class AppWindowModel {
 
     /// Shows extension `id`'s page (story 161), under the Extensions page in the sidebar.
     func goExtensionPage(_ id: String) {
-        go(AppPlace(.extensions))
+        picking?(PageView.key(.extensions, section: nil, extensionPage: id))
+        land(AppPlace(.extensions))
         extensionPage = id
     }
 
@@ -161,7 +175,7 @@ final class AppWindowModel {
         let parts = tabs.map(\.value)
         guard parts.count > 1 else { return }
         let at = parts.firstIndex(of: section(of: page)) ?? 0
-        sections[page] = parts[(at + step + parts.count) % parts.count]
+        pick(parts[(at + step + parts.count) % parts.count], of: page)
     }
 
     /// Binds' clash count: what ShortcutConflicts finds for `binds`, and the default keys another action holds
@@ -593,11 +607,14 @@ enum PageSwitchTiming {
     private static var start: ContinuousClock.Instant?
     private static var interval: OSSignpostIntervalState?
     private static var shown: (from: String?, to: String, first: Bool)?
+    /// When PageDeck committed the part's picture, its first frame (page-switch-5).
+    private static var picture: ContinuousClock.Instant?
     /// Run loop turns waited for the part to show; a pick that shows no other part (a tab the page draws itself) logs nothing.
     private static var turns = 0
     private static var done: CFRunLoopObserver?
 
-    /// The window's model picked another place: the clock starts, unless a pick earlier in this turn started it.
+    /// The window's model picked another place, or PageDeck is about to show a kept part's picture: the clock starts,
+    /// unless a pick earlier in this turn started it.
     static func began() {
         guard start == nil else { return }
         start = .now
@@ -612,6 +629,9 @@ enum PageSwitchTiming {
         began()
     }
 
+    /// PageDeck committed the kept part's picture.
+    static func pictured() { picture = .now }
+
     private static func arm() {
         turns = 0
         done = AfterCommit.observe(repeats: true) { turnEnded() }
@@ -623,11 +643,12 @@ enum PageSwitchTiming {
         if let shown {
             let ms = Int((ContinuousClock.now - start) / .milliseconds(1))
             let visit = shown.first ? "first" : "return"
-            log.notice("page switch: \(shown.from ?? "window open", privacy: .public) → \(shown.to, privacy: .public), \(visit, privacy: .public) visit, \(ms) ms to drawn")
+            let first = picture.map { String(format: ", picture %.1f ms", ($0 - start) / .milliseconds(1)) } ?? ""
+            log.notice("page switch: \(shown.from ?? "window open", privacy: .public) → \(shown.to, privacy: .public), \(visit, privacy: .public) visit\(first, privacy: .public), \(ms) ms to drawn")
         }
         if let interval { signposts.endInterval("page switch", interval) }
         if let done { CFRunLoopRemoveObserver(CFRunLoopGetMain(), done, .commonModes) }
-        (Self.start, Self.interval, Self.shown, Self.done) = (nil, nil, nil, nil)
+        (Self.start, Self.interval, Self.shown, Self.done, Self.picture) = (nil, nil, nil, nil, nil)
     }
 }
 
