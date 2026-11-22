@@ -87,7 +87,7 @@ struct MenuBarPage: View {
                 Grid(horizontalSpacing: 12, verticalSpacing: 12) {
                     ForEach(Array(stride(from: 0, to: groups.count, by: columns)), id: \.self) { start in
                         GridRow(alignment: .top) {
-                            ForEach(groups[start..<min(start + columns, groups.count)], id: \.self) { group in groupTile(group, store: store) }
+                            Staged { ForEach(groups[start..<min(start + columns, groups.count)], id: \.self) { group in groupTile(group, store: store) } }
                         }
                     }
                 }
@@ -235,7 +235,8 @@ struct MenuBarPage: View {
     @ViewBuilder private func preview(_ store: BarItemsStore) -> some View {
         let preview = store.settings.preview(placement, emptyGroups: true)
         let radius = ink.corner(10, \.control)
-        VStack(spacing: 0) {
+        // A strip a turn while the page is built ahead (Staged).
+        VStack(spacing: 0) { Staged {
             if let top = preview.top {
                 ScrollView(.horizontal) {
                     // The drop, its marks and the strip's frames all sit inside the scrolled bar, so they share its places.
@@ -252,7 +253,7 @@ struct MenuBarPage: View {
             }
             if let menu = preview.menu { menuStrip(menu, store: store) }
             Spacer(minLength: 28)
-        }
+        } }
         .frame(maxWidth: .infinity)
         // A strip of the theme's desk under the bars; Instrument's sunk well.
         .background(Desk(ink: ink))

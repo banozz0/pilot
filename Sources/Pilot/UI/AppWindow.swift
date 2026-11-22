@@ -670,9 +670,11 @@ enum PageSwitchTiming {
     /// PageDeck committed the kept part's picture.
     static func pictured() { picture = .now }
 
-    /// PageDeck built part `key` ahead, hidden, in `took` of the main thread (page-first).
-    static func builtAhead(_ key: String, in took: Duration) {
-        log.notice("page built ahead: \(key, privacy: .public), \(Int(took / .milliseconds(1))) ms")
+    /// PageDeck built part `key` ahead, hidden, a piece a run loop turn: each turn's main-thread time (page-first).
+    static func builtAhead(_ key: String, turns: [Duration]) {
+        let ms = turns.map { $0 / .milliseconds(1) }
+        let pieces = ms.map { String(format: "%.1f", $0) }.joined(separator: " ")
+        log.notice("page built ahead: \(key, privacy: .public), \(ms.count) turns, longest \(String(format: "%.1f", ms.max() ?? 0), privacy: .public) ms (\(pieces, privacy: .public))")
     }
 
     private static func arm() {

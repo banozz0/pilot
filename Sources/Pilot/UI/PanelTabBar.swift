@@ -143,7 +143,8 @@ struct PanelTabStrip: View {
     static let spacing = 2.0
 
     var body: some View {
-        HStack(spacing: Self.spacing) {
+        // Three tabs a turn while the part is built ahead (Staged).
+        HStack(spacing: Self.spacing) { Staged(by: 3) {
             ForEach(tabs, id: \.self) { area in
                 Button { pick(area) } label: { label(symbol: area.symbol, on: area == open) { Text(area.title) } }
                     .buttonStyle(.kitPress)
@@ -165,7 +166,7 @@ struct PanelTabStrip: View {
                 .accessibilityLabel(moreTitle == "More" ? "More" : "More, \(moreTitle) open")
                 .accessibilityAddTraits(moreOn ? .isSelected : [])
             }
-        }
+        } }
         .fixedSize()
         .accessibilityElement(children: .contain).accessibilityLabel("Tabs")
     }

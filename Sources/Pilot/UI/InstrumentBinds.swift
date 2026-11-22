@@ -57,7 +57,8 @@ struct InstrumentBindsPage: View {
 
     var body: some View {
         let counts = tabCounts
-        VStack(spacing: 0) {
+        // A piece a turn while the page is built ahead (Staged): the bar, then the board and what is beside and under it.
+        VStack(spacing: 0) { Staged {
             ViewThatFits(in: .horizontal) {
                 InstrumentPageBar(title: "Binds", side: Self.side(width, style)) { HStack(spacing: 2) { layerButtons(counts) }.fixedSize().padding(.leading, 6); Spacer(minLength: 8); fittedControls }
                 VStack(spacing: 0) {
@@ -72,7 +73,7 @@ struct InstrumentBindsPage: View {
             case .beside: beside(marks)
             case .under: under(marks)
             }
-        }
+        } }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .background(Theme.windowFill(style.color(\.canvas)))
         .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0; Self.lastWidth = $0 }
@@ -186,10 +187,10 @@ struct InstrumentBindsPage: View {
     private func beside(_ marks: InstrumentBoardFit.Marks) -> some View {
         FillScroll {
             PinnedBeside {
-                VStack(spacing: 0) {
+                VStack(spacing: 0) { Staged {
                     keyboard(marks)
                     below
-                }
+                } }
                 .frame(maxWidth: .infinity, alignment: .top)
             } side: {
                 sideInspector
@@ -218,12 +219,12 @@ struct InstrumentBindsPage: View {
     /// The board across the page, the inspector under it (in two columns while it is 600 pt wide), the page scrolling.
     private func under(_ marks: InstrumentBoardFit.Marks) -> some View {
         ScrollView {
-            VStack(spacing: 16) {
+            VStack(spacing: 16) { Staged {
                 keyboard(marks)
                 InstrumentBindsInspector(binds: binds, key: key, layer: layer, boards: boards, clashes: clashes, refusal: refusal, acts: acts,
                                          shape: width - 2 * Self.side(width, style) >= 600 ? .columns : .column)
                 below
-            }
+            } }
             .padding(.horizontal, Self.side(width, style)).padding(.vertical, 20)
         }
     }
@@ -231,7 +232,7 @@ struct InstrumentBindsPage: View {
     // MARK: Keyboard
 
     private func keyboard(_ marks: InstrumentBoardFit.Marks) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 12) { Staged {
             // In one piece, its names shrinking where the 75 % board is tight (Sven's Q36).
             InstrumentBindsBoard(boards: boards, binds: binds, layerKeys: engine.settings.layerKeys, layer: layer, picked: key, marks: marks,
                                  module: module, pick: acts.pick, open: { acts.open($0, bound: binds.bound, layer: layer) }, whole: true,
@@ -240,7 +241,7 @@ struct InstrumentBindsPage: View {
                 HStack(spacing: 6) { modules; Spacer(minLength: 12); overlayHint }
                 VStack(alignment: .leading, spacing: 10) { modules; overlayHint }
             }
-        }
+        } }
         .padding(.horizontal, Self.inset(width)).padding(.top, 18).padding(.bottom, 16)
         .styleSurface(\.board, fill: \.board, radius: \.board)
     }
@@ -322,13 +323,14 @@ struct InstrumentBindsInspector: View {
     }
 
     private var column: some View {
-        VStack(alignment: .leading, spacing: 0) {
+        // A piece a turn while the page is built ahead (Staged).
+        VStack(alignment: .leading, spacing: 0) { Staged {
             picked
             InstrumentRule()
             free
             InstrumentRule()
             everyLayer
-        }
+        } }
     }
 
     // MARK: The picked key

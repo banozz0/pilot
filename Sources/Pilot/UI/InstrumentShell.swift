@@ -86,25 +86,26 @@ struct PartFrame<Content: View>: View {
 
     var body: some View {
         let (list, bar) = InstrumentFrame.frame(page, section: section)
-        VStack(spacing: 0) {
+        // Built a piece a turn while the part is built ahead (Staged): the bar, the list, the toolbar, the page.
+        VStack(spacing: 0) { Staged {
             PanelTabBar(model: model, more: more, open: page.area)
-            HStack(spacing: 0) {
+            HStack(spacing: 0) { Staged {
                 if list {
                     InstrumentPageList(model: model, page: page, extensionPage: extensionPage)
                         .frame(width: InstrumentFrame.listWidth).background(style.color(\.sidebar))
                     InstrumentRule(vertical: true)
                 }
-                VStack(spacing: 0) {
+                VStack(spacing: 0) { Staged {
                     if bar {
                         InstrumentToolbar(model: model, page: page, extensionPage: extensionPage, listed: list)
                         InstrumentRule()
                     }
                     content.frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-                }
+                } }
                 // The ground draws once: whole when solid, else at its strength over Tinted's blur, Glass's tint carrying it.
                 .background(Theme.windowFill(style.color(\.canvas)))
-            }
-        }
+            } }
+        } }
     }
 }
 

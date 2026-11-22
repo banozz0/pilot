@@ -36,7 +36,8 @@ struct InstrumentBindsBoard: View {
         let fit = InstrumentBoardFit.best(marks, boards: boards, width: width, measure: measure, whole: whole)
         let spacing = InstrumentBoardFit.Spacing(width: width)
         let unit = InstrumentBoardFit.unit(fit.board, width: width)
-        ZStack(alignment: .topLeading) {
+        // A dozen keys a turn while the page is built ahead (Staged).
+        ZStack(alignment: .topLeading) { Staged(by: 12) {
             ForEach(Array(fit.board.spots.enumerated()), id: \.offset) { _, spot in
                 let frame = InstrumentBoardFit.frame(spot, unit: unit, gap: spacing.gap)
                 // A name never breaks inside a word: drawn small enough that its longest word fits its key (simplify-pages T14).
@@ -48,7 +49,7 @@ struct InstrumentBindsBoard: View {
                     .offset(x: frame.minX, y: frame.minY)
                     .zIndex(spot.code != nil && spot.code == picked ? 1 : 0)
             }
-        }
+        } }
         .frame(maxWidth: .infinity, minHeight: InstrumentBoardFit.height(fit.board, gap: spacing.gap),
                maxHeight: InstrumentBoardFit.height(fit.board, gap: spacing.gap), alignment: .topLeading)
         .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0; Self.lastWidth = $0 }
