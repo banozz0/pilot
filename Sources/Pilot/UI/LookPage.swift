@@ -89,7 +89,7 @@ struct LookPage: View {
         return ScrollView {
             PageStack(asked: section != nil || focus != nil) {
                 // The preview takes the row's height, level with Glass and Wallpaper beside it (InstrumentPair's trick).
-                HStack(alignment: .top, spacing: 14) {
+                HStack(alignment: .top, spacing: 14) { Staged {
                     LookPreview(look: look).padding(.top, ink.style.density.padding)
                         .frame(maxWidth: .infinity, minHeight: 180, maxHeight: .infinity)
                     VStack(spacing: 0) {
@@ -129,7 +129,7 @@ struct LookPage: View {
                         WallpaperBlock(settings: wallpaper, screens: screens, focus: focus, part: .front).id(AppSection.wallpaper)
                     }
                     .frame(width: ink.isInstrument ? 290 : 330)
-                }
+                } }
                 .fixedSize(horizontal: false, vertical: true)
                 // With packs, ThemeSection draws the heading: Apply theme and Restore default sit on its line (Sven Q69).
                 VStack(alignment: .leading, spacing: 0) {
@@ -527,7 +527,8 @@ struct ThemeCards: View {
         // line up whatever each display face's height.
         Grid(horizontalSpacing: 8, verticalSpacing: 8) {
             ForEach(Array(stride(from: 0, to: themes.count, by: columns)), id: \.self) { start in
-                GridRow {
+                // Two cards a turn while the page is built ahead (Staged).
+                GridRow { Staged(by: 2) {
                     ForEach(themes[start..<min(start + columns, themes.count)]) { theme in
                         ThemeCard(theme: theme, picked: picked == theme.id, focused: focused == theme.id,
                                   taglines: taglines) {
@@ -545,7 +546,7 @@ struct ThemeCards: View {
                             }
                         }
                     }
-                }
+                } }
             }
         }
         .onMoveCommand { direction in

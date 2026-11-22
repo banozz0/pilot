@@ -108,7 +108,7 @@ struct SetupPage: View {
         sound.start()
         Task { await bluetooth.start() }
         Task { await wifi.start() }
-        displays.start()
+        displays.startOnPage()
         look.followLayouts()
         pointer?.refresh()
     }

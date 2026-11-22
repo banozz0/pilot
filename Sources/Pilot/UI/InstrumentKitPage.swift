@@ -26,10 +26,11 @@ struct InstrumentPage<Content: View>: View {
                         Text(intro).styleText(\.body).foregroundStyle(style.color(\.text2)).fixedSize(horizontal: false, vertical: true)
                     }
                 }
+                // A block a turn while the part is built ahead (Staged).
                 if flow {
-                    PageFlow(column: KitPage<EmptyView>.column(.instrument), gap: style.density.padding, spacing: spacing) { content }
+                    PageFlow(column: KitPage<EmptyView>.column(.instrument), gap: style.density.padding, spacing: spacing) { Staged { content } }
                 } else {
-                    content
+                    Staged { content }
                 }
             }
             .padding(.horizontal, style.density.page).padding(.top, style.density.padding).padding(.bottom, style.density.page)
@@ -61,7 +62,7 @@ struct PageStack<Content: View>: View {
         if asked || landing?.place != nil || ring != nil { whole.yes = true }
         return Group {
             if whole.yes {
-                VStack(alignment: .leading, spacing: spacing) { content }
+                VStack(alignment: .leading, spacing: spacing) { Staged { content } }
             } else {
                 LazyVStack(alignment: .leading, spacing: spacing) { content }
             }
@@ -96,7 +97,8 @@ struct InstrumentBlock<Trailing: View, Content: View>: View {
             if let note {
                 Text(note).styleText(\.caption).foregroundStyle(style.color(\.text3)).fixedSize(horizontal: false, vertical: true).padding(.bottom, 10)
             }
-            content
+            // A row a turn while the part is built ahead (Staged).
+            Staged { content }
         }
         .padding(.horizontal, style.density.padding).padding(.vertical, InstrumentKitPage.blockPadding)
         .frame(maxHeight: fill ? .infinity : nil, alignment: .top)

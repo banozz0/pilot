@@ -12,9 +12,9 @@ struct PanelTabBar: View {
     @Environment(\.style) private var style
     @Bindable var model: AppWindowModel
     let more: PanelMore
-    /// The bar's width and each label's, as drawn (PanelTabMeasures).
-    @State private var width: CGFloat = 0
-    @State private var widths = PanelTabWidths()
+    /// The area marked open: the part's own, as each kept part draws its own bar, so a switch's first frame shows the new
+    /// mark with the new page (page-frame).
+    let open: AppArea
 
     static let height: CGFloat = 64
     /// The traffic lights' inset at the left, as drawn.
@@ -28,8 +28,8 @@ struct PanelTabBar: View {
     static let searchTrailing: CGFloat = 14 + 28 + 12
 
     var body: some View {
-        let shown = AppArea.tabs(count: .max, developer: DeveloperPages.on).tabs
-        let split = AppArea.tabs(count: count(shown), developer: DeveloperPages.on), open = model.page.area
+        // As many tabs as the window's bar measured (PanelTabTop).
+        let split = AppArea.tabs(count: more.tabs, developer: DeveloperPages.on)
         HStack(spacing: 0) {
             Color.clear.frame(width: Self.lights, height: 1)
             Spacer(minLength: 0)
@@ -37,13 +37,40 @@ struct PanelTabBar: View {
                           moreOn: split.more.contains(open) || more.open, moreShown: !split.more.isEmpty,
                           pick: { model.go(AppPlace($0.pages[0])) }, toggleMore: { more.open.toggle() })
             Spacer(minLength: 0)
-            // The window's search on every page (Sven, 2026-11-21): Home's own search, its words and results. Cmd+F
-            // focuses it on every page but Home, whose larger field takes it.
-            InstrumentSearchField(model: model, takesKey: model.page != .home).frame(width: Self.search).padding(.leading, Self.searchGap)
-            InstrumentHyperCap(side: 28).padding(.leading, 12)
+            // The window's search and the Hyper cap go here, the window's own over every part's bar (PanelTabTop).
+            Color.clear.frame(width: Self.search + 12 + 28, height: 1).padding(.leading, Self.searchGap)
         }
         .padding(.trailing, 14)
         .frame(height: Self.height)
+        .frame(minWidth: 0, maxWidth: .infinity)
+        .background(style.color(\.sidebar))
+        .overlay(alignment: .bottom) { InstrumentRule() }
+    }
+}
+
+/// What the tab bar holds that is the same on every page, drawn by the window over each part's bar (PanelTabBar): the
+/// window's search, the Hyper key's cap, and the tabs' count. The count follows the window's width (ADR 0018, Sven
+/// 2026-11-20), every area that fits a tab in the fixed order, the rest in More; each tab is measured in place, off screen,
+/// so the count is the drawn names' own. Kept in the window, so the search keeps its words and the keyboard across switches.
+struct PanelTabTop: View {
+    @Bindable var model: AppWindowModel
+    let more: PanelMore
+    /// The bar's width and each label's, as drawn (PanelTabMeasures).
+    @State private var width: CGFloat = 0
+    @State private var widths = PanelTabWidths()
+
+    var body: some View {
+        let shown = AppArea.tabs(count: .max, developer: DeveloperPages.on).tabs
+        let split = AppArea.tabs(count: count(shown), developer: DeveloperPages.on)
+        HStack(spacing: 0) {
+            Spacer(minLength: 0)
+            // The window's search on every page (Sven, 2026-11-21): Home's own search, its words and results. Cmd+F
+            // focuses it on every page but Home, whose larger field takes it.
+            InstrumentSearchField(model: model, takesKey: model.page != .home).frame(width: PanelTabBar.search)
+            InstrumentHyperCap(side: 28).padding(.leading, 12)
+        }
+        .padding(.trailing, 14)
+        .frame(height: PanelTabBar.height)
         // The window's width, not the strip's: a strip too wide for it would overflow and read as room.
         .frame(minWidth: 0, maxWidth: .infinity)
         .background { PanelTabMeasures(shown: shown, widths: widths) }
@@ -52,8 +79,6 @@ struct PanelTabBar: View {
             PanelTabs.count = count; more.tabs = count
             if split.more.isEmpty { more.open = false }
         }
-        .background(style.color(\.sidebar))
-        .overlay(alignment: .bottom) { InstrumentRule() }
     }
 
     /// The tabs that fit the bar now; `AppArea.tabCount` until every label is measured.
@@ -64,7 +89,7 @@ struct PanelTabBar: View {
         // More holding areas i... is as wide as the widest name among them, or "More".
         let more = shown.indices.map { i in shown[i...].map { moreWidths[$0.title] ?? 0 }.max().map { max($0, moreWidths["More"] ?? 0) } ?? 0 }
         return AppArea.tabsThatFit(widths: widths.map(Double.init), more: more.map(Double.init), spacing: PanelTabStrip.spacing,
-                                   room: Double(Self.room(width)))
+                                   room: Double(PanelTabBar.room(width)))
     }
 }
 
@@ -118,7 +143,8 @@ struct PanelTabStrip: View {
     static let spacing = 2.0
 
     var body: some View {
-        HStack(spacing: Self.spacing) {
+        // Three tabs a turn while the part is built ahead (Staged).
+        HStack(spacing: Self.spacing) { Staged(by: 3) {
             ForEach(tabs, id: \.self) { area in
                 Button { pick(area) } label: { label(symbol: area.symbol, on: area == open) { Text(area.title) } }
                     .buttonStyle(.kitPress)
@@ -140,7 +166,7 @@ struct PanelTabStrip: View {
                 .accessibilityLabel(moreTitle == "More" ? "More" : "More, \(moreTitle) open")
                 .accessibilityAddTraits(moreOn ? .isSelected : [])
             }
-        }
+        } }
         .fixedSize()
         .accessibilityElement(children: .contain).accessibilityLabel("Tabs")
     }
