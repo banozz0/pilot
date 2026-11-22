@@ -358,10 +358,16 @@ public struct NotificationEntry: Sendable, Equatable, Identifiable {
     public var leftToMacOS: Bool
     /// Walks in a row that didn't find it; one is often a timeout, so only a second lets a drawerless record go.
     var missed = 0
+    /// When its pop-up's countdown began: it first showed as a card, or the pointer last left the cards. Nil for a saved
+    /// row until a walk finds its banner up, so a relaunch never counts from when it arrived.
+    var popupSince: Date?
+    /// Its pop-up hid itself after its time (Sven, 2026-11-22): no card while its banner stays up, even after a walk that
+    /// missed it; still live, still in the drawer.
+    public internal(set) var popupDone = false
 
     init(_ read: NotificationRead, at date: Date) {
         id = read.id; kind = read.kind; app = read.app; title = read.title; subtitle = read.subtitle; body = read.body
-        actions = read.actions; arrived = date; leftToMacOS = read.opensReply
+        actions = read.actions; arrived = date; leftToMacOS = read.opensReply; popupSince = date
     }
 
     /// A saved row, read back after a relaunch: its banner's state is unknown until the first walk finds it again.
@@ -372,6 +378,8 @@ public struct NotificationEntry: Sendable, Equatable, Identifiable {
     }
 
     public var isSystem: Bool { kind == .system }
+    /// A card whose pop-up hasn't hidden itself yet.
+    var showsPopup: Bool { live && !leftToMacOS && !popupDone }
 
     func differs(from read: NotificationRead) -> Bool {
         title != read.title || subtitle != read.subtitle || body != read.body || actions != read.actions
@@ -436,6 +444,30 @@ public struct NotificationFeed: Sendable {
     public var drawer: [NotificationEntry] { entries.filter(\.inDrawer) }
     /// The cards to draw: up now and not left to macOS.
     public var cards: [NotificationEntry] { live.filter { !$0.leftToMacOS } }
+    /// The cards whose pop-up still shows: each hides itself after its time (Sven, 2026-11-22). One hidden is still a card
+    /// for parking, so macOS's banner stays off screen too.
+    public var popups: [NotificationEntry] { entries.filter(\.showsPopup) }
+
+    /// Hides each pop-up whose countdown reached `seconds` by `now`; true when one hid.
+    public mutating func expirePopups(at now: Date, after seconds: TimeInterval) -> Bool {
+        var hid = false
+        for index in entries.indices where entries[index].showsPopup {
+            guard let since = entries[index].popupSince, now.timeIntervalSince(since) >= seconds else { continue }
+            entries[index].popupDone = true
+            hid = true
+        }
+        return hid
+    }
+
+    /// When the next pop-up hides; nil while none shows, so nothing need wait.
+    public func nextPopupEnd(after seconds: TimeInterval) -> Date? {
+        entries.filter(\.showsPopup).compactMap(\.popupSince).min().map { $0.addingTimeInterval(seconds) }
+    }
+
+    /// The pointer left the cards: each one showing counts down afresh from `now`.
+    public mutating func restartPopups(at now: Date) {
+        for index in entries.indices where entries[index].showsPopup { entries[index].popupSince = now }
+    }
 
     public struct Change: Sendable, Equatable {
         public var arrived: [NotificationEntry] = []
@@ -464,6 +496,7 @@ public struct NotificationFeed: Sendable {
                 entries[index].missed = 0
                 guard !entries[index].live || entries[index].differs(from: read) else { continue }
                 entries[index].live = true
+                if entries[index].popupSince == nil { entries[index].popupSince = date }
                 entries[index].take(read)
                 change.changed = true
             } else if !seen.contains(read.id) {

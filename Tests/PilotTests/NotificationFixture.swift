@@ -7,11 +7,16 @@ import SwiftUI
 /// The sandbox's Notification Center (a harness, not a test): `tree.json` in a throwaway folder stands in for the
 /// Accessibility tree, `pid` for its process, and what the watcher does is appended to `events.jsonl`. Rewriting the tree
 /// and bumping `generation` is a banner arriving. `cc-tree.json` is Control Center's tree (none: not running), where
-/// macOS draws its own privacy hints; a node's `key` names it for the moves.
+/// macOS draws its own privacy hints; a node's `key` names it for the moves. The clock stands still at the host's start
+/// until a `clock <seconds>` line moves it, so a pop-up hides only when the script says its time has come.
 @MainActor
 enum NotificationFixture {
+    static var clock: TimeInterval = 0
+
     static func install(_ folder: String) {
         let source = NotificationFixtureSource(URL(filePath: folder))
+        let start = Date.now
+        PilotNotifications.shared.now = { start.addingTimeInterval(clock) }
         PilotNotifications.shared.useSandbox(source: source, presenter: NotificationRecordingPresenter(source: source))
         source.pollCommands()
     }
@@ -130,7 +135,8 @@ final class NotificationFixtureSource: NotificationSource, @unchecked Sendable {
 
     /// `commands`, a line each: `open <id>`, `close <id>` or `button <name> <id>`, the taps a card would make;
     /// `bell-drop <display> <x> <y> <side>` and `bell <display>`, the bell's drag and where it is; `drawer-closed <w> <h>`,
-    /// the drawer closing at a pulled size; `dock-bell <x> <y> <side>`, where a card rises over the dock's bell.
+    /// the drawer closing at a pulled size; `dock-bell <x> <y> <side>`, where a card rises over the dock's bell;
+    /// `clock <seconds>`, the still clock moved to that long after the start; `hover on|off`, the pointer over the cards.
     @MainActor private func runCommands() {
         guard has("commands"), let text = text("commands"), !text.isEmpty else { return }
         for line in text.split(separator: "\n") {
@@ -145,6 +151,10 @@ final class NotificationFixtureSource: NotificationSource, @unchecked Sendable {
             case ("bell-drop"?, 5): bellDrop(display: words[1], x: Double(words[2]) ?? 0, y: Double(words[3]) ?? 0, side: Double(words[4]) ?? 0)
             case ("bell"?, 2): bellPlace(display: words[1])
             case ("dock-bell"?, 4): dockCards(x: Double(words[1]) ?? 0, y: Double(words[2]) ?? 0, side: Double(words[3]) ?? 0)
+            case ("clock"?, 2):
+                NotificationFixture.clock = TimeInterval(words[1]) ?? 0
+                PilotNotifications.shared.popupTick()
+            case ("hover"?, 2): PilotNotifications.shared.hoverPopups(words[1] == "on")
             case ("relaunch"?, 1):
                 record(["event": "relaunch"])
                 PilotNotifications.shared.relaunchForSandbox()

@@ -31,6 +31,8 @@ final class NotificationPanels: NotificationPresenting {
     let model = NotificationCardsModel.shared
     private let settings = NotificationSettings.shared
     private var cardsPanel: KeyPanel?
+    /// The cards panel's pointer, which pauses the pop-ups' countdowns; dropped with the panel.
+    private var cardsHover: PopupHover?
     private var bellPanel: KeyPanel?
     private var drawerPanel: KeyPanel?
     private var outsideClicks: Any?
@@ -127,6 +129,10 @@ final class NotificationPanels: NotificationPresenting {
             cardsPanel = BarPanelWindow.keyPanel(NotificationCardStack(model: model), surface: .barPopovers, level: HUD.level, takesKey: false) { [weak self] in
                 self?.cardsFrame($0) ?? NotificationPlacement.cards(nextTo: NotificationPlacement.bell(in: notificationScreen()), in: notificationScreen(), size: $0)
             }
+            // Active always: Pilot is never the active app, and SwiftUI's hover reports nothing then.
+            let hover = PopupHover { PilotNotifications.shared.hoverPopups($0) }
+            cardsPanel?.contentView?.addTrackingArea(NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect], owner: hover))
+            cardsHover = hover
         }
     }
 
@@ -294,13 +300,28 @@ final class NotificationPanels: NotificationPresenting {
         if BarPanel.shared.shown == [.notifications] { BarPanel.shared.close() }
     }
 
-    private func closeCards() { close(&cardsPanel) }
+    /// A panel closing under the pointer sends no exit, so the countdowns go on without one.
+    private func closeCards() {
+        close(&cardsPanel)
+        guard cardsHover != nil else { return }
+        cardsHover = nil
+        PilotNotifications.shared.hoverPopups(false)
+    }
 
     private func close(_ panel: inout KeyPanel?) {
         panel?.contentView = nil
         panel?.orderOut(nil)
         panel = nil
     }
+}
+
+/// A tracking area's owner: the pointer coming over the cards and leaving them.
+private final class PopupHover: NSResponder {
+    let changed: @MainActor (Bool) -> Void
+    init(_ changed: @escaping @MainActor (Bool) -> Void) { self.changed = changed; super.init() }
+    required init?(coder: NSCoder) { nil }
+    override func mouseEntered(with event: NSEvent) { changed(true) }
+    override func mouseExited(with event: NSEvent) { changed(false) }
 }
 
 /// The bell, with a count of what arrived since the drawer last opened. A click opens the drawer, a drag takes it anywhere,
