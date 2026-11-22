@@ -57,7 +57,8 @@ extension ControlVerbs {
                                 aliases: AliasBook.shared.aliases, root: MenuRootSettings.shared.root.listed)
         // As the menu's open and its `hist` search read them (T9): bookmarks while on (the read looks up the installed
         // browsers either way), history pages (or the off row).
-        nav.provide(.bookmark, await BrowserReader.shared.bookmarks(listed: Set(entries.map(\.target))))
+        let marks = await BrowserReader.shared.bookmarks(listed: Set(entries.map(\.target)))
+        if BrowserSettings.shared.bookmarks { nav.provide(.bookmark, marks) }
         nav.query = query
         if let words = BrowserBookmarks.historyWords(query) {
             nav.provide(.history, await BrowserReader.shared.history(words, on: BrowserSettings.shared.history))
