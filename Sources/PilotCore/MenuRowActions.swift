@@ -58,6 +58,8 @@ public enum RowAction: String, Equatable, Sendable {
         case .action where row.leadsRoot: return [.run, .copyID]
         // A row on the selection the menu opened over (T11): no bind, as its id is no registered action.
         case .action where row.onSelection: return [.run, .copyID]
+        // A browser history page (T9): no bind and no id to copy, so a visited address is never written to binds.json.
+        case .action where row.ownKind == .history: return [.run]
         case .action: return [.run] + (row.kind == .command ? [.openApp] : []) + [.setBind, .copyID] + aliased
         case .package: return [.install] + aliased
         case .branch: return [.open] + (row.extensionID == nil ? [] : [.uninstall]) + aliased

@@ -91,7 +91,7 @@ extension ControlVerbs {
         var nav = MenuNavigator(entries: entries, frecency: PilotMenu.shared.frecency ?? Frecency(), favourites: FavouriteBook.shared.rows,
                                 aliases: AliasBook.shared.aliases, root: MenuRootSettings.shared.root.listed)
         // As the menu's open and its `hist` search read them (T9): bookmarks while on, history pages (or the off row).
-        if BrowserSettings.shared.bookmarks { nav.provide(.bookmark, await BrowserReader.shared.bookmarks()) }
+        if BrowserSettings.shared.bookmarks { nav.provide(.bookmark, await BrowserReader.shared.bookmarks(listed: Set(entries.map(\.target)))) }
         if let held {
             let commands = AICommandBook.shared.commands.map { (id: $0.id, title: $0.title) }
             nav.provide(.selection, SelectionActions.rows(held, buffer: [], commands: commands))

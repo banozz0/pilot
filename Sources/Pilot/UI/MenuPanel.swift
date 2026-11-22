@@ -251,7 +251,7 @@ final class PilotMenu {
         show(nav)
         historyShown = false
         provideCall()
-        provideBookmarks()
+        provideBookmarks(listed: entries)
         model?.onFileQuery = { [weak self] in self?.searchFiles($0) }
         model?.onQuery = { [weak self] in
             self?.searchEmoji($0)
@@ -435,10 +435,11 @@ final class PilotMenu {
 
     /// The browsers' bookmarks (T9), read off the main thread as the menu opens while Launcher › More rows has them on;
     /// a file read again only when it changed (BrowserReader). Counts only in the log, never a title or an address.
-    private func provideBookmarks() {
+    private func provideBookmarks(listed: [MenuEntry]) {
         guard let model, BrowserSettings.shared.bookmarks else { return }
+        let targets = Set(listed.map(\.target))
         Task { [weak self] in
-            let rows = await BrowserReader.shared.bookmarks()
+            let rows = await BrowserReader.shared.bookmarks(listed: targets)
             guard self?.model === model else { return }
             model.nav.provide(.bookmark, rows)
             mlog.notice("menu: \(rows.count) bookmarks listed")
@@ -450,7 +451,7 @@ final class PilotMenu {
     private func provideHistory(_ query: String) {
         historyRead?.cancel()
         guard let model else { return }
-        guard model.nav.branch == nil, let words = BrowserBookmarks.historyWords(query) else {
+        guard model.nav.branch == nil, model.nav.only == nil, let words = BrowserBookmarks.historyWords(query) else {
             // Dropped once on leaving `hist`, not on every keystroke (a scan of every entry).
             if historyShown { historyShown = false; model.nav.provide(.history, []) }
             return

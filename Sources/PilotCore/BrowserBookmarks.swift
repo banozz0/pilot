@@ -202,6 +202,17 @@ public enum BrowserBookmarks {
         }
     }
 
+    /// `hist` while history is on but Pilot lacks Full Disk Access: the Files view's row, Return opening that setting.
+    public static let historyNeedsAccess: MenuEntry = {
+        var row = MenuEntries.allowFullDiskAccess(search: "")
+        row.title = "Allow Full Disk Access to search browser history"
+        row.subtitle = "macOS keeps your browsers' history from Pilot until you allow it"
+        row.keywords = nil
+        row.inSearch = false
+        row.ownKind = .history
+        return row
+    }()
+
     /// `hist` while history is off (Q328): the one row, Return opening Launcher › More rows where it is switched on.
     public static let historyOff = MenuEntry(title: "Browser history is off", target: .openPage(AppPlace(.menuExtras)),
                                              detail: "Return opens Launcher › More rows to switch it on", inSearch: false, ownKind: .history)
