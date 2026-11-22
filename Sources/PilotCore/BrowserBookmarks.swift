@@ -59,9 +59,11 @@ public enum BrowserBookmarks {
 
     // MARK: Files
 
-    /// A profile's files: its bookmarks file and its history database, one file in Firefox's.
+    /// A profile's files: its bookmarks files and its history database, one file in Firefox's. A Chromium profile keeps
+    /// two bookmarks files: `Bookmarks`, and `AccountBookmarks`, where newer Chrome keeps a signed-in account's synced ones
+    /// (Sven's Default profile: 0 in Bookmarks, 99 there; same JSON). Its `Encrypted*Bookmarks2` files are never read.
     public struct Profile: Equatable, Sendable {
-        public let bookmarks: URL, history: URL
+        public let bookmarks: [URL], history: URL
     }
 
     /// `browser`'s profiles under `home` that hold a bookmarks file or a history database. Chromium's are `Default` and
@@ -75,14 +77,14 @@ public enum BrowserBookmarks {
         switch browser.family {
         case .safari:
             let root = home.appending(path: "Library/Safari")
-            return [Profile(bookmarks: root.appending(path: "Bookmarks.plist"), history: root.appending(path: "History.db"))]
+            return [Profile(bookmarks: [root.appending(path: "Bookmarks.plist")], history: root.appending(path: "History.db"))]
         case .chromium(let folder):
             return folders(support.appending(path: folder))
                 .filter { $0.lastPathComponent == "Default" || $0.lastPathComponent.hasPrefix("Profile ") }
-                .map { Profile(bookmarks: $0.appending(path: "Bookmarks"), history: $0.appending(path: "History")) }
+                .map { Profile(bookmarks: [$0.appending(path: "Bookmarks"), $0.appending(path: "AccountBookmarks")], history: $0.appending(path: "History")) }
         case .firefox(let folder):
             return folders(support.appending(path: folder).appending(path: "Profiles"))
-                .map { $0.appending(path: "places.sqlite") }.map { Profile(bookmarks: $0, history: $0) }
+                .map { $0.appending(path: "places.sqlite") }.map { Profile(bookmarks: [$0], history: $0) }
         }
     }
 
@@ -93,7 +95,7 @@ public enum BrowserBookmarks {
 
     // MARK: Reading
 
-    /// A Chromium profile's `Bookmarks` file: every bookmark in its bar, Other and Mobile folders, depth first.
+    /// A Chromium profile's `Bookmarks` or `AccountBookmarks` file: every bookmark in its bar, Other and Mobile folders, depth first.
     public static func chromium(_ data: Data) -> [Page] {
         guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any], let roots = json["roots"] as? [String: Any] else { return [] }
         var pages: [Page] = []

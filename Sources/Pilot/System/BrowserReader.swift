@@ -109,11 +109,11 @@ actor BrowserReader {
         guard on, let home = Self.readableHome() else { kept = [:]; return [] }
         var rows: [MenuEntry] = [], paths = Set<String>(), seen = listed
         for browser in browsers {
-            for profile in BrowserBookmarks.profiles(browser, home: home) {
-                let path = profile.bookmarks.path
-                guard let stamp = Self.stamp(profile.bookmarks) else { kept[path] = nil; continue }
+            for file in BrowserBookmarks.profiles(browser, home: home).flatMap(\.bookmarks) {
+                let path = file.path
+                guard let stamp = Self.stamp(file) else { kept[path] = nil; continue }
                 paths.insert(path)
-                if kept[path]?.stamp != stamp { kept[path] = (stamp, BrowserBookmarks.rows(Self.pages(browser, profile), browser: browser, kind: .bookmark)) }
+                if kept[path]?.stamp != stamp { kept[path] = (stamp, BrowserBookmarks.rows(Self.pages(browser, file), browser: browser, kind: .bookmark)) }
                 rows += (kept[path]?.rows ?? []).filter { seen.insert($0.target).inserted }
             }
         }
@@ -148,12 +148,12 @@ actor BrowserReader {
         return Array(found.flatMap { BrowserBookmarks.rows([$0.page], browser: $0.browser, kind: .history) }.prefix(BrowserBookmarks.historyCap))
     }
 
-    /// A profile's bookmarks: Chromium's JSON, Safari's plist, Firefox's from a copy of its database.
-    private static func pages(_ browser: BrowserBookmarks.Browser, _ profile: BrowserBookmarks.Profile) -> [BrowserBookmarks.Page] {
+    /// A bookmarks file's pages: Chromium's JSON, Safari's plist, Firefox's from a copy of its database.
+    private static func pages(_ browser: BrowserBookmarks.Browser, _ file: URL) -> [BrowserBookmarks.Page] {
         switch browser.family {
-        case .chromium: (try? Data(contentsOf: profile.bookmarks)).map(BrowserBookmarks.chromium) ?? []
-        case .safari: (try? Data(contentsOf: profile.bookmarks)).map(BrowserBookmarks.safari) ?? []
-        case .firefox: copied(profile.bookmarks, BrowserBookmarks.firefoxBookmarks) ?? []
+        case .chromium: (try? Data(contentsOf: file)).map(BrowserBookmarks.chromium) ?? []
+        case .safari: (try? Data(contentsOf: file)).map(BrowserBookmarks.safari) ?? []
+        case .firefox: copied(file, BrowserBookmarks.firefoxBookmarks) ?? []
         }
     }
 
