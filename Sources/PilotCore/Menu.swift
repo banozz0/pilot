@@ -572,7 +572,7 @@ public struct MenuEntry: Identifiable, Equatable, Sendable {
         case command
         /// An action on what is selected in the app in front, Finder's folders (P43): its provider never replaces the actions.
         case selection
-        /// A browser's bookmark, and a page from its history behind `hist` (BrowserBookmarks, spec launcher-best T9).
+        /// A browser's bookmark, and a page from its history (BrowserBookmarks, spec launcher-best T9).
         case bookmark, history
 
         /// Tab's cycle at the root search, as the wireframe orders it: every kind (nil), then each with a chip; branches,
@@ -1111,7 +1111,7 @@ public struct MenuNavigator: Sendable {
             }
             // Browser history while its switch is on (T9; the panel provides pages only then): up to 3 pages, under History
             // after everything else matched, leading only when nothing else did.
-            let pages = only == nil ? BrowserBookmarks.searchWords(query).map { BrowserBookmarks.searchPages(entries, words: $0) } ?? [] : []
+            let pages = searchHistoryWords.map { BrowserBookmarks.searchPages(entries, words: $0) } ?? []
             let pagesLead = rows.isEmpty && !pages.isEmpty
             if pagesLead { rows = pages }
             let files = searchFiles.map { [$0] } ?? []
@@ -1196,6 +1196,15 @@ public struct MenuNavigator: Sendable {
 
     /// The row the query's first word is the alias of, and the words after it, at the root (T40); nil while a kind tab
     /// shows, for a query starting with no alias, or for an alias alone (aliasFirst lists its row first).
+    /// The words a root search reads browser history with (T9): a plain search of 3 characters or more, never a folder
+    /// browsed or a path typed, an alias's words (an emoji alias's too) or an inline answer's, which list no history; nil
+    /// reads nothing. The panel and `pilot menu search` ask this before a read.
+    public var searchHistoryWords: [String]? {
+        guard branch == nil, only == nil, !isList, browse == nil, FolderBrowse.typed(query, home: home) == nil, aliasScope == nil,
+              !RootAnswers.asksInline(query) else { return nil }
+        return BrowserBookmarks.searchWords(query)
+    }
+
     public var aliasScope: (key: String, words: String)? { branch == nil && !isList && only == nil ? aliases.scope(of: query) : nil }
 
     /// What the query's alias does with its words (AliasRoute, T42), and the words; nil as for aliasScope, or when the

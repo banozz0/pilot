@@ -62,7 +62,7 @@ extension ControlVerbs {
         nav.query = query
         if let words = BrowserBookmarks.historyWords(query) {
             nav.provide(.history, await BrowserReader.shared.history(words, on: BrowserSettings.shared.history))
-        } else if BrowserSettings.shared.history, let words = BrowserBookmarks.searchWords(query) {
+        } else if BrowserSettings.shared.history, let words = nav.searchHistoryWords {
             nav.provide(.history, BrowserBookmarks.searchPages(await BrowserReader.shared.history(words, on: true), words: words))
         }
         nav.provideSettings(query, developer: DeveloperPages.on)

@@ -49,9 +49,9 @@ final class PilotMenu {
     private var appMenus: [String: [MenuEntry]] = [:]
     private var boundMenuRoutes: Set<String> = []
     private var appMenuRead: Task<Void, Never>?
-    /// The `hist` search in flight (T9); a newer keystroke cancels it.
+    /// The history read in flight (T9), `hist`'s or a plain search's; a newer keystroke cancels it.
     private var historyRead: Task<Void, Never>?
-    /// History rows (or the off row) were provided for this menu, so leaving `hist` drops them.
+    /// History rows (or the off row) were provided for this menu, so a search that reads none drops them.
     private var historyShown = false
     /// The GIFs folder's pictures, read each time Stickers and GIFs opens.
     private var stickerFiles: [StickerFile] = []
@@ -456,9 +456,9 @@ final class PilotMenu {
         historyRead?.cancel()
         guard let model else { return }
         let typed = BrowserBookmarks.historyWords(query)
-        let words = typed ?? (BrowserSettings.shared.history ? BrowserBookmarks.searchWords(query) : nil)
+        let words = typed ?? (BrowserSettings.shared.history ? model.nav.searchHistoryWords : nil)
         guard model.nav.branch == nil, model.nav.only == nil, let words else {
-            // Dropped once on leaving `hist`, not on every keystroke (a scan of every entry).
+            // Dropped once on leaving a search that read them, not on every keystroke (a scan of every entry).
             if historyShown { historyShown = false; model.nav.provide(.history, []) }
             return
         }
