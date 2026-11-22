@@ -180,6 +180,12 @@ def hhmm(t):
     return time.strftime("%H:%M", time.localtime(t))
 
 
+def ahead(t, now):
+    """As main.py's stamp_ahead writes a day ahead: 29 Oct 19:35, with the year when it is not now's."""
+    day = time.localtime(t)
+    return time.strftime("%-d %b %H:%M" if day.tm_year == time.localtime(now).tm_year else "%-d %b %Y %H:%M", day)
+
+
 class AIUsageTests(ExtensionTestCase):
     EXTENSION = "ai-usage"
 
@@ -308,7 +314,7 @@ class AIUsageTests(ExtensionTestCase):
         self.sven_like()
         limit = self.sven_resets()
         n = self.now
-        day = lambda t: time.strftime("%-d %b %H:%M", time.localtime(t))
+        day = lambda t: ahead(t, n)
         expiry = "%s, %s, %s" % (day(n + 10 * DAY), day(n + 30 * DAY), day(n + 40 * DAY))
         blocks = self.popover(home=self.box.home)
         self.check_quiet(json.dumps(blocks))
@@ -430,7 +436,7 @@ class AIUsageTests(ExtensionTestCase):
         blocks = self.popover(home=self.box.home)
         codex = card(blocks, "Codex")
         self.assertIn({"type": "markdown", "text": "**Limit reset credits:** 1 available · expire "
-                       + time.strftime("%-d %b %H:%M", time.localtime(n + 27 * DAY))}, codex["blocks"],
+                       + ahead(n + 27 * DAY, n)}, codex["blocks"],
                       "the card shows the answer read after the reset")
         self.assertEqual(codex["blocks"][0]["percent"], 100)
         self.run_account("redeem-reset", home=self.box.home / ".codex")
@@ -580,7 +586,7 @@ class AIUsageTests(ExtensionTestCase):
              "markTone": "fine", "resetsAt": n + 150 * MIN, "note": "39% in reserve · Lasts until reset · 1.5× headroom"},
             {"type": "meter", "label": "Weekly", "percent": 87, "value": "87% left", "tone": "fine", "mark": 57.1,
              "markTone": "fine", "resetsAt": n + 4 * DAY, "note": "30% in reserve · Lasts until reset · 1.5× headroom"}])
-        day = lambda t: time.strftime("%-d %b %H:%M", time.localtime(t))
+        day = lambda t: ahead(t, n)
         self.assertEqual(codex["blocks"][2:], [{"type": "markdown", "text": "**Limit reset credits:** 2 available · expire "
                                                 "%s, %s" % (day(n + 19 * DAY), day(n + 27 * DAY))},
                                                self.redeem(EMAIL, 2)],
@@ -620,7 +626,7 @@ class AIUsageTests(ExtensionTestCase):
         self.assertFalse([m for c in cards(blocks, "Claude") + cards(blocks, "Codex") for m in c["blocks"] if "note" in m])
         codex = card(blocks, "Codex")
         self.assertEqual((codex["icon"], codex["aside"], codex["asideNote"], codex.get("subtitle")), ("openai", "sven", "Plus", None))
-        day = lambda t: time.strftime("%-d %b %H:%M", time.localtime(t))
+        day = lambda t: ahead(t, n)
         self.assertEqual(codex["blocks"][2], {"type": "note", "icon": "reset", "text": "2 reset credits",
                                               "aside": "next expires " + time.strftime("%-d %b", time.localtime(n + 19 * DAY)),
                                               "help": "Expire %s, %s" % (day(n + 19 * DAY), day(n + 27 * DAY))})
