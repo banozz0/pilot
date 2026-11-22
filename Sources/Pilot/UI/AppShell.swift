@@ -84,7 +84,7 @@ struct PageView: View {
     var body: some View {
         let key = Self.key(model)
         // The pages switched to most, built ahead while the window idles (PageDeck.buildAhead), each on its part picked last.
-        let ahead = model.visits.likeliest(PageDeck.cap - 1).map { page in
+        let ahead = model.visits.likeliest(PageDeck.cap - 1, besides: model.page).map { page in
             let section = model.section(of: page)
             return PageDeck.Ahead(key: Self.key(page, section: section, extensionPage: nil), page: page, section: section)
         }
@@ -304,7 +304,10 @@ struct KeptPages<Content: View>: NSViewRepresentable {
         proposal.replacingUnspecifiedDimensions()
     }
     func updateNSView(_ deck: PageDeck, context: Context) {
-        deck.show(key, root(model.page, model.section(of: model.page), model.extensionPage), page: model.page)
+        // A landing, a ring or an edit asked for waits on its block: that part is built whole.
+        let whole = model.blockFocus != nil || model.ringed != nil || model.setupSection != nil || model.wallpaperFocus != nil
+            || model.editBind != nil || model.editAlias != nil || model.editSnippet != nil || model.extensionFocus != nil
+        deck.show(key, root(model.page, model.section(of: model.page), model.extensionPage), page: model.page, whole: whole)
         deck.buildAhead(ahead) { root($0.page, $0.section, nil) }
     }
 
@@ -333,17 +336,27 @@ final class PageDeck: NSView {
     /// What a part's frame shows beyond its page, for `page` (KeptPages).
     var chrome: (AppPage) -> String = { _ in "" }
 
-    func show(_ key: String, _ root: AnyView, page: AppPage) {
+    /// Shows part `key`. A part not built yet is built in view a few pieces a frame (`buildInView`), unless `whole` (a
+    /// landing or a ring waits on a block that would not be there yet).
+    func show(_ key: String, _ root: AnyView, page: AppPage, whole: Bool = false) {
         let host: PageHost
-        // A part still being built ahead is finished in this switch, as a first visit.
-        let built = hosts[key] == nil || staging?.key == key
-        if staging?.key == key { finishStaging() }
+        // A part still being built (in view, or ahead) is a first visit, and goes on being built in view.
+        let built = hosts[key] == nil || building[key] != nil
+        if whole, let half = building[key] { finish(key, half) }
         if let kept = hosts[key] {
-            // A part built ahead keeps its stage: without it every Staged container would be another view, built again.
+            // A part built a piece at a time keeps its stage: without it every Staged container would be another view, built
+            // again.
             kept.rootView = PageHost.root(kept.stage.map { AnyView(root.environment(\.buildStage, $0)) } ?? root, kept.slot)
             host = kept
-        } else {
+        } else if whole {
             host = PageHost(root)
+        } else {
+            let stage = BuildStage()
+            host = PageHost(AnyView(root.environment(\.buildStage, stage)))
+            host.stage = stage
+            building[key] = Building(stage: stage)
+        }
+        if hosts[key] == nil {
             // Sized by this view, never by its content: no constraints, no intrinsic size to work out.
             host.sizingOptions = []
             hosts[key] = host
@@ -361,14 +374,77 @@ final class PageDeck: NSView {
         while order.count > Self.cap {
             // Its tree goes with it: emptied first, so nothing the views hold keeps the host alive.
             let goes = order.removeFirst()
-            if staging?.key == goes { staging = nil }
+            building[goes] = nil
             guard let gone = hosts.removeValue(forKey: goes) else { continue }
             gone.removeFromSuperview()
             gone.rootView = AnyView(EmptyView())
         }
+        // Its first frame: as many pieces as fit now, the rest in the frames after.
+        if let half = building[key] { buildInView(key, half, host) }
     }
 
-    // MARK: Building ahead (page-first)
+    // MARK: Building a piece at a time (page-first, page-instant)
+
+    /// A part not whole yet: its stage, and each turn's main-thread time so far.
+    final class Building {
+        let stage: BuildStage
+        var turns: [Duration] = []
+        /// When its first piece was built, for the time it took to be whole.
+        let began = ContinuousClock.now
+        init(stage: BuildStage) { self.stage = stage }
+    }
+    /// The parts not whole yet: the one shown is built in view, the others hidden while the window is quiet.
+    private var building: [String: Building] = [:]
+
+    /// How long a frame of a part built in view may spend adding pieces: the next piece starts only within it (Sven on
+    /// build 3142, "pages still lag the same": every switch was a first visit, 100 to 330 ms in one frame).
+    static let frameBudget: Duration = .milliseconds(8)
+
+    /// One frame of part `key`, shown: pieces top down, each block whole before the next (BuildStage), until the frame's
+    /// budget is spent; the next frame goes on once this one is committed (AfterCommit), so each frame draws more of the
+    /// page and nothing drawn moves. A switch away leaves the rest to `buildNextAhead`, hidden.
+    private func buildInView(_ key: String, _ half: Building, _ host: PageHost) {
+        let start = ContinuousClock.now
+        let stage = half.stage
+        stage.inView = true
+        // At least a pass a frame: the first has the part's frame and the page's top, whatever they cost.
+        repeat {
+            step(stage, host)
+        } while stage.held && ContinuousClock.now - start < Self.frameBudget && stage.step < Self.turnsMost
+        half.turns.append(ContinuousClock.now - start)
+        guard stage.held && stage.step < Self.turnsMost else { return finish(key, half) }
+        let main = CFRunLoopGetMain()
+        AfterCommit.observe(repeats: false) { [weak self, weak host] in
+            CFRunLoopPerformBlock(main, CFRunLoopMode.commonModes.rawValue) {
+                MainActor.assumeIsolated {
+                    guard let self, let host, self.shown == key, let half = self.building[key] else { return }
+                    self.buildInView(key, half, host)
+                }
+            }
+            CFRunLoopWakeUp(main)
+        }
+        CFRunLoopWakeUp(main)
+    }
+
+    /// One pass: the container holding children back built last adds one, and the part is laid out with it.
+    private func step(_ stage: BuildStage, _ host: PageHost) {
+        stage.step += 1
+        stage.held = false
+        stage.tickets = 1
+        host.layoutSubtreeIfNeeded()
+        // Held back, yet no container took the piece: the one built last went (a branch not taken any more).
+        if stage.held, stage.tickets == 1, !stage.holders.isEmpty { stage.holders.removeLast() }
+    }
+
+    /// Part `key` is whole from now on: every container shows all its children.
+    private func finish(_ key: String, _ half: Building) {
+        half.stage.step = .max
+        building[key] = nil
+        guard let host = hosts[key] else { return }
+        if host.isHidden, let window { host.left = left(host, in: window) }
+        if half.stage.inView { PageSwitchTiming.builtInView(key, turns: half.turns, whole: ContinuousClock.now - half.began) }
+        else { PageSwitchTiming.builtAhead(key, turns: half.turns) }
+    }
 
     /// A part to build ahead: its key, its page and part.
     struct Ahead { let key: String; let page: AppPage; let section: AppSection? }
@@ -387,8 +463,8 @@ final class PageDeck: NSView {
     /// The window's likeliest next parts (Sven, 2026-11-22, Q341 A): once the window has drawn its page and stays quiet,
     /// each is built hidden and never past `cap`, so its first visit is a return visit. A part is built a piece a run loop
     /// turn (BuildStage, Q344 B), so a press waits at most one piece; a key, click, scroll or switch puts the next piece
-    /// off until the window is quiet again. A half-built part is finished in the switch that shows it, as a first visit,
-    /// or goes on at the next quiet. They go with the window's tree as it closes, as every kept part does.
+    /// off until the window is quiet again. A part left half built in view goes on the same way. A half-built part shown
+    /// goes on in view. They go with the window's tree as it closes, as every kept part does.
     func buildAhead(_ parts: [Ahead], root: @escaping (Ahead) -> AnyView) {
         ahead = parts
         aheadRoot = root
@@ -401,17 +477,18 @@ final class PageDeck: NSView {
         order.count < Self.cap ? ahead.first { hosts[$0.key] == nil } : nil
     }
 
+    /// A part half built and hidden, the one shown longest ago first.
+    private var hiddenHalf: String? { order.first { $0 != shown && building[$0] != nil } }
+
     /// The most turns a part is built in a piece at a time.
     static let turnsMost = 400
     /// A press arrived: the next piece waits for the window to be quiet again.
     private var quietAgain = false
-    /// The part being built ahead a piece a turn (BuildStage), and each turn's main-thread time so far.
-    private var staging: (key: String, stage: BuildStage, turns: [Duration])?
 
     private func armAhead() {
         aheadTimer?.invalidate()
         aheadTimer = nil
-        guard window != nil, staging != nil || nextAhead != nil else { return stopAhead() }
+        guard window != nil, hiddenHalf != nil || nextAhead != nil else { return stopAhead() }
         if aheadInput == nil {
             aheadInput = NSEvent.addLocalMonitorForEvents(matching: Self.input) { [weak self] event in
                 MainActor.assumeIsolated {
@@ -422,7 +499,7 @@ final class PageDeck: NSView {
             }
         }
         // A part half built goes on at the next turn the run loop has free; a new one after the window was quiet.
-        let timer = Timer(timeInterval: staging == nil || quietAgain ? Self.quiet : 0.001, repeats: false) { [weak self] _ in
+        let timer = Timer(timeInterval: hiddenHalf == nil || quietAgain ? Self.quiet : 0.001, repeats: false) { [weak self] _ in
             MainActor.assumeIsolated { self?.buildNextAhead() }
         }
         quietAgain = false
@@ -439,7 +516,7 @@ final class PageDeck: NSView {
 
     private func buildNextAhead() {
         aheadTimer = nil
-        guard let window, staging != nil || nextAhead != nil else { return stopAhead() }
+        guard let window, hiddenHalf != nil || nextAhead != nil else { return stopAhead() }
         guard showing() else { stopAhead(); return waitToShow() }
         // A press already waiting goes first.
         if NSApp.nextEvent(matching: Self.input, until: .distantPast, inMode: .default, dequeue: false) != nil {
@@ -447,7 +524,10 @@ final class PageDeck: NSView {
             return armAhead()
         }
         let start = ContinuousClock.now
-        if staging == nil {
+        let key: String
+        if let half = hiddenHalf {
+            key = half
+        } else {
             guard let next = nextAhead else { return stopAhead() }
             let stage = BuildStage()
             let host = PageHost(AnyView(aheadRoot(next).environment(\.buildStage, stage)), shown: false)
@@ -461,37 +541,24 @@ final class PageDeck: NSView {
             // Shown longest ago: the first to go past `cap`, before any part the user opened.
             order.insert(next.key, at: 0)
             addSubview(host, positioned: .below, relativeTo: nil)
-            staging = (next.key, stage, [])
-        } else {
-            staging?.stage.step += 1
+            building[next.key] = Building(stage: stage)
+            key = next.key
         }
-        guard let staging, let host = hosts[staging.key] else { return armAhead() }
-        // This turn's pieces built and drawn, then hidden before its commit, so no frame shows them and no event reaches
-        // them; the keyboard stays where it was.
+        guard let half = building[key], let host = hosts[key] else { return armAhead() }
+        // This turn's piece built and drawn, then hidden before its commit, so no frame shows it and no event reaches it;
+        // the keyboard stays where it was.
         let responder = window.firstResponder
-        staging.stage.held = false
-        staging.stage.tickets = 1
+        half.stage.inView = false
         host.isHidden = false
-        host.layoutSubtreeIfNeeded()
+        step(half.stage, host)
         host.displayIfNeeded()
         host.isHidden = true
         if window.firstResponder !== responder { window.makeFirstResponder(responder) }
-        self.staging?.turns.append(ContinuousClock.now - start)
+        half.turns.append(ContinuousClock.now - start)
         // Nothing held back: the part is whole, drawn at its size, so its first visit flips to it (picture). A part still
         // held back after `turnsMost` turns is finished whole in the next.
-        if !staging.stage.held || staging.stage.step >= Self.turnsMost {
-            let turns = self.staging?.turns ?? []
-            finishStaging()
-            host.left = left(host, in: window)
-            PageSwitchTiming.builtAhead(staging.key, turns: turns)
-        }
+        if !half.stage.held || half.stage.step >= Self.turnsMost { finish(key, half) }
         armAhead()
-    }
-
-    /// The part being built ahead is whole from now on: every container shows all its children.
-    private func finishStaging() {
-        staging?.stage.step = .max
-        staging = nil
     }
 
     private var waitingToShow = false
@@ -522,7 +589,8 @@ final class PageDeck: NSView {
     private func hide(_ host: PageHost) {
         if let responder = window?.firstResponder as? NSView, responder.isDescendant(of: host) { window?.makeFirstResponder(nil) }
         host.isHidden = true
-        host.left = window.map { left(host, in: $0) }
+        // A part left half built has no picture: shown again, it is built on in view (`finish` takes one once it is whole).
+        host.left = host.stage.map { $0.step != .max } == true ? nil : window.map { left(host, in: $0) }
     }
 
     /// How `host` is left: under which look and frame, where in the window and at what window size (picture).
@@ -597,16 +665,21 @@ final class PageDeck: NSView {
     }
 }
 
-/// A part built ahead a piece at a time (PageDeck.buildAhead; Sven, 2026-11-22, Q344 B: "no key waits more than one
-/// frame"): each run loop turn the first Staged container in it, top down, still holding children back shows one more,
-/// until none holds any back. A part built in view has none, and shows everything at once.
+/// A part built a piece at a time: ahead, hidden (PageDeck.buildAhead; Sven, 2026-11-22, Q344 B: "no key waits more than
+/// one frame"), or in view on its first visit (PageDeck.buildInView; Sven on build 3142: "pages still lag the same").
+/// Each pass the Staged container that began holding children back last shows one more, so a block is whole before the
+/// next one comes and nothing drawn moves, until none holds any back. A part built whole has no stage.
 @MainActor @Observable final class BuildStage {
-    /// The run loop turn the part's build is at; `.max` once it is whole.
+    /// The pass the part's build is at; `.max` once it is whole.
     var step = 1
-    /// Pieces this turn may still add: one, so a turn builds one child of one container.
+    /// Pieces this pass may still add: one, so a pass builds one child of one container.
     @ObservationIgnored var tickets = 1
     /// Whether a container held children back in the last pass: the part is not whole yet.
     @ObservationIgnored var held = false
+    /// The containers holding children back, by when they began to: the last goes on first.
+    @ObservationIgnored var holders: [ObjectIdentifier] = []
+    /// Built in view: containers side by side show all their children at once (Staged.inView).
+    @ObservationIgnored var inView = false
 }
 
 extension EnvironmentValues {
@@ -614,12 +687,15 @@ extension EnvironmentValues {
     @Entry var buildStage: BuildStage?
 }
 
-/// `content`'s children: all of them, or in a part built ahead one more on a turn this container is the first still
-/// holding some back (BuildStage). Staged and whole are one view, so the part never builds again once it is whole.
+/// `content`'s children: all of them, or in a part built a piece at a time one more on a pass this container is the last
+/// to have begun holding some back (BuildStage). Staged and whole are one view, so the part never builds again once it
+/// is whole.
 struct Staged<Content: View>: View {
     @Environment(\.buildStage) private var stage
-    /// Children added a turn: more for many small ones (a board's keys).
+    /// Children added a pass: more for many small ones (a board's keys).
     var by = 1
+    /// Whether it adds them a piece at a time in view too: not children side by side, which each one added would resize.
+    var inView = true
     @ViewBuilder var content: Content
     /// How many children it shows, and the turn it last added one in.
     @State private var shownSoFar = Shown()
@@ -638,12 +714,17 @@ struct Staged<Content: View>: View {
     private func shown(of count: Int, _ stage: BuildStage) -> Int {
         guard stage.step != .max else { return count }
         let so = shownSoFar
-        if so.count < count, so.turn != stage.step, stage.tickets > 0 {
-            stage.tickets -= 1
-            so.turn = stage.step
-            so.count = min(count, so.count + by)
+        let id = ObjectIdentifier(so)
+        if !inView && stage.inView { so.count = count }
+        if so.count < count {
+            if !stage.holders.contains(id) { stage.holders.append(id) }
+            if so.turn != stage.step, stage.tickets > 0, stage.holders.last == id {
+                stage.tickets -= 1
+                so.turn = stage.step
+                so.count = min(count, so.count + by)
+            }
         }
-        if so.count < count { stage.held = true }
+        if so.count < count { stage.held = true } else if let at = stage.holders.lastIndex(of: id) { stage.holders.remove(at: at) }
         return so.count
     }
 }

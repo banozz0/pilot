@@ -86,16 +86,17 @@ struct PartFrame<Content: View>: View {
 
     var body: some View {
         let (list, bar) = InstrumentFrame.frame(page, section: section)
-        // Built a piece a turn while the part is built ahead (Staged): the bar, the list, the toolbar, the page.
-        VStack(spacing: 0) { Staged {
+        // Built a piece a turn while the part is built ahead (Staged): the bar, the list, the toolbar, the page. In view all
+        // in its first frame, so a first visit's first frame names the page (page-instant).
+        VStack(spacing: 0) { Staged(inView: false) {
             PanelTabBar(model: model, more: more, open: page.area)
-            HStack(spacing: 0) { Staged {
+            HStack(spacing: 0) { Staged(inView: false) {
                 if list {
                     InstrumentPageList(model: model, page: page, extensionPage: extensionPage)
                         .frame(width: InstrumentFrame.listWidth).background(style.color(\.sidebar))
                     InstrumentRule(vertical: true)
                 }
-                VStack(spacing: 0) { Staged {
+                VStack(spacing: 0) { Staged(inView: false) {
                     if bar {
                         InstrumentToolbar(model: model, page: page, extensionPage: extensionPage, listed: list)
                         InstrumentRule()
@@ -166,8 +167,7 @@ private struct InstrumentPageList: View {
 
     var body: some View {
         let area = page.area
-        return
-        VStack(alignment: .leading, spacing: 0) {
+        return VStack(alignment: .leading, spacing: 0) {
             HStack {
                 Text(area.title).accessibilityAddTraits(.isHeader)
                 Spacer(minLength: 4)

@@ -97,8 +97,9 @@ struct InstrumentBlock<Trailing: View, Content: View>: View {
             if let note {
                 Text(note).styleText(\.caption).foregroundStyle(style.color(\.text3)).fixedSize(horizontal: false, vertical: true).padding(.bottom, 10)
             }
-            // A row a turn while the part is built ahead (Staged).
-            Staged { content }
+            // A row a turn while the part is built ahead (Staged); in view the block comes whole, so it never grows under
+            // what is drawn beside and below it.
+            Staged(inView: false) { content }
         }
         .padding(.horizontal, style.density.padding).padding(.vertical, InstrumentKitPage.blockPadding)
         .frame(maxHeight: fill ? .infinity : nil, alignment: .top)
