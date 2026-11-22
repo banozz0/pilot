@@ -60,8 +60,9 @@ extension ControlVerbs {
                 switch await Task.detached(operation: { await ExtensionRun.noView(command, input: input, inputs: inputs) }).value {
                 case .hud(let line, _): answer["shows"] = .string(line ?? "\(command.title) ran")
                 case .error(let message): throw ControlError(.badValue, "\(ext.title) says: \(message)")
-                case .actions(let actions, let dropped):
+                case .actions(let actions, let dropped, let line, _):
                     answer["actions"] = .array(actions.map(Self.action))
+                    if let line { answer["shows"] = .string(line) }
                     answer["note"] = .string("not performed\(dropped > 0 ? "; \(dropped) past \(ExtensionRun.mostActions) dropped" : ""): pilot run \(command.actionID) performs them")
                 case .timedOut: throw ControlError(.timeout, "\(command.actionID) \(Self.late(ExtensionRun.noViewTimeout))")
                 case .failed(let why): throw tools.failed(command, why)

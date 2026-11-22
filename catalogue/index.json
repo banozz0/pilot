@@ -394,6 +394,69 @@
       ]
     },
     {
+      "id": "news",
+      "title": "News",
+      "icon": "📰",
+      "version": "1.1.0",
+      "description": "Headlines from the sources you pick, Malta first (Times of Malta, MaltaToday, Newsbook, Lovin Malta, TVM and more), then world and tech, or any RSS or Atom feed you add, newest first in Hyper+Space and on its page. Press Summarise the last 24 hours for a newspaper front page made by Pilot's AI from the day's headlines, saved as an HTML file and opened in your browser; it never runs on its own.",
+      "examples": [
+        "Type news, Return on a headline: the article opens in your browser",
+        "On the News page, tick MaltaToday and press Summarise the last 24 hours: a front page with the lead story, sections and every article opens in your browser"
+      ],
+      "requires": [
+        "python3",
+        "curl"
+      ],
+      "commands": [
+        {
+          "name": "news",
+          "title": "News",
+          "mode": "list"
+        },
+        {
+          "name": "summarise",
+          "title": "Summarise the last 24 hours of news",
+          "mode": "no-view"
+        }
+      ],
+      "permissions": {
+        "network": [
+          "the feeds you pick (timesofmalta.com, maltatoday.com.mt, newsbook.com.mt, lovinmalta.com, tvmnews.mt, feeds.bbci.co.uk, news.ycombinator.com, news.google.com and others)"
+        ],
+        "clipboard": false,
+        "files": [
+          "~/Downloads/Pilot News"
+        ],
+        "actions": []
+      },
+      "files": [
+        {
+          "path": "extension.json",
+          "sha256": "a6ab3f5f7467fc79885a7536c1f3d2d020e9aebffcd4a76408ee1160448f6440",
+          "size": 2512,
+          "executable": false
+        },
+        {
+          "path": "feeds.py",
+          "sha256": "d3e8da345e83ef61f1fc8368ae8597c60e6ea69125237440a67579acec83bbef",
+          "size": 14386,
+          "executable": false
+        },
+        {
+          "path": "main.py",
+          "sha256": "067545244f147ec61214047c609b026518b96a3863cb7db9b72b8e8edab56edb",
+          "size": 28628,
+          "executable": true
+        },
+        {
+          "path": "paper.py",
+          "sha256": "df90e283d98819d97a330e37f87213f7daeab75273073315984e74ca076f48e5",
+          "size": 15301,
+          "executable": false
+        }
+      ]
+    },
+    {
       "id": "now-playing",
       "title": "Now playing",
       "icon": "🎵",

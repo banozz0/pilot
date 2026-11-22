@@ -36,6 +36,9 @@ TIMEOUTS = {"list": 2.0, "detail": 2.0, "no-view": 30.0, "page": 5.0, "bar": 2.0
 ITEM_ACTIONS = {"open": "url", "copy": "text", "paste": "text", "push": "command", "run": "command", "hud": "text",
                 "pilot": "action"}
 ACTIONS = dict(ITEM_ACTIONS, timer="seconds", alert="text", ai="prompt")
+# What a row, an inline button, a link or a button may run: an item's actions and an `ai` (ADR 0010 amended 2026-10-25:
+# "from a no-view command's output, a row, a button or an input block"; an input block's are runs only).
+RUNNABLE = dict(ITEM_ACTIONS, ai="prompt")
 # Pilot's Extension.Item.Action.icons: one list for an inline button, a note and a link (chart, plus, reset, info: Q138).
 INLINE_ICONS = {"bubble", "moon", "sun", "pencil", "tag", "xmark", "arrow.up", "arrow.down", "terminal", "refresh", "chart",
                 "plus", "reset", "info", "circle", "checkmark.circle"}  # circle, checkmark.circle: To-do B, 2026-10-17
@@ -208,7 +211,7 @@ class ExtensionTestCase(unittest.TestCase):
                 self.assertIsInstance(accessory if isinstance(accessory, str) else accessory.get("text"), str)
                 self.assertIn(None if isinstance(accessory, str) else accessory.get("tone"), self.TONES)
             for action in item.get("actions", []):
-                self.assertActionShape(action, ITEM_ACTIONS)
+                self.assertActionShape(action, RUNNABLE)
             self.assertLessEqual(len(item.get("badges", [])), 3)  # story 165: badges and inline buttons, 3 each
             for badge in item.get("badges", []):
                 self.assertIsInstance(badge.get("text"), str)
@@ -217,7 +220,7 @@ class ExtensionTestCase(unittest.TestCase):
             if "image" in item:  # Pilot 2026-10-16: a row's picture, base64, up to 64 KB
                 self.assertLessEqual(len(base64.b64decode(item["image"], validate=True)), 64 * 1024)
             for action in item.get("inline", []):
-                self.assertActionShape(action, ITEM_ACTIONS)
+                self.assertActionShape(action, RUNNABLE)
                 self.assertTrue(action.get("icon") in INLINE_ICONS or check.is_emoji(action.get("icon")), action)
 
     def assertActionShape(self, action, fields=ACTIONS):
@@ -242,6 +245,10 @@ class ExtensionTestCase(unittest.TestCase):
                     self.assertIsInstance(choice.get("value"), str)
             else:
                 self.assertIsInstance(ask.get("text", ask.get("confirm")), str, ask)
+        if action["type"] == "ai":  # Pilot drops one without a text, or whose then is no run of a no-view command
+            self.assertTrue(isinstance(action.get("text"), str) and action["text"], action)
+            self.assertEqual(action.get("then", {}).get("type"), "run", action)
+            self.assertActionShape(action["then"], ITEM_ACTIONS)
         if action["type"] in ("run", "push"):
             names = {c["name"]: c for c in manifest(self.EXTENSION)["commands"]}
             self.assertIn(action["command"], names, "names a command the extension lacks")
@@ -304,7 +311,7 @@ class ExtensionTestCase(unittest.TestCase):
                         self.assertIsInstance(link.get(key, ""), str)
                     self.assertTrue(link["actions"])
                     for action in link["actions"]:
-                        self.assertActionShape(action, ITEM_ACTIONS)
+                        self.assertActionShape(action, RUNNABLE)
             elif kind == "hero":
                 self.assertIsInstance(block.get("value"), (str, int, float))
                 for key in ("glyph", "unit", "place"):
@@ -343,7 +350,7 @@ class ExtensionTestCase(unittest.TestCase):
             else:
                 self.assertTrue(block["actions"])
                 for action in block["actions"]:
-                    self.assertActionShape(action, ITEM_ACTIONS)
+                    self.assertActionShape(action, RUNNABLE)
 
     def assertGaugesShape(self, gauges):
         """A bar line's gauges (story 165): up to 3, a label of at most 5 characters (2 before Pilot's 2026-10-16), 1 or 2 meters 0 to 100, a tone; or

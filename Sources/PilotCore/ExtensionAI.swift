@@ -3,7 +3,9 @@ import Foundation
 /// An extension's `ai` action (Summarise, Sven 2026-10-25; ADR 0010 amended): Pilot asks the AI page's provider about the
 /// extension's text under its task, so an extension never holds a key or a login of its own, and asks only as one of its
 /// actions runs (Q478: never on a page's or a bar's pace). The answer goes to the action's `then`, one of the extension's
-/// runs, as its `input`; a failure goes there as its context's `error`, so the extension can say why.
+/// runs, as its `input`; a failure goes there as its context's `error`, so the extension can say why. A success also names
+/// the AI that answered in its context's `answeredBy` (the AI page's pick, or the fallback when it took over), so an extension
+/// can say who wrote its text (News's paper, Sven 2026-11-22).
 public enum ExtensionAI {
     /// The most of an extension's text one ask sends; past it the text is cut, and the AI told so.
     public static let longest = 150_000
@@ -32,9 +34,10 @@ public enum ExtensionAI {
         adding("error", why.message, to: then).map { Extension.Item.Action(kind: $0, title: then.title) } ?? then
     }
 
-    /// `then` with its context's `notice` saying which AI answered, when the fallback did (AIFallback).
-    static func noted(_ then: Extension.Item.Action, _ line: String) -> Extension.Item.Action {
-        adding("notice", line, to: then).map {
+    /// `then` with `key` in its context (`notice`: which AI answered when the fallback did, AIFallback; `answeredBy`: the
+    /// AI's name), its title and the rest kept.
+    static func noted(_ then: Extension.Item.Action, _ line: String, as key: String = "notice") -> Extension.Item.Action {
+        adding(key, line, to: then).map {
             Extension.Item.Action(kind: $0, title: then.title, icon: then.icon, destructive: then.destructive, key: then.key, stay: then.stay, clear: then.clear)
         } ?? then
     }
@@ -48,15 +51,19 @@ public enum ExtensionAI {
     }
 
     /// Asks `runner`, the AI page's provider or why there is none, and answers with `then` ready to run: the answer as its
-    /// input, or `failed`; `heard`, the runner's, adds its `notice`. Off the caller's actor, so a long text is never read on
-    /// the main thread.
+    /// input, or `failed`; `heard`, the runner's, adds its `notice`, and `answeredBy` names the fallback it heard or else
+    /// `chosen`, the AI page's pick the runner was built for. Off the caller's actor, so a long text is never read on the
+    /// main thread.
     @concurrent
     public static func ask(_ task: String, _ text: String, then: Extension.Item.Action, runner: Result<QuickAI.Runner, QuickAI.Failure>,
-                           heard: AIFallback.Heard? = nil) async -> Extension.Item.Action {
+                           heard: AIFallback.Heard? = nil, chosen: AIProvider? = nil) async -> Extension.Item.Action {
         do throws(QuickAI.Failure) {
             let run = try runner.get()
             let answer = try await run(job(task: task, text: text)) { _ in }
-            return (heard?.notice.map { noted(then, $0.line) } ?? then).answered(answer)
+            let notice = heard?.notice
+            var next = notice.map { noted(then, $0.line) } ?? then
+            if let by = notice?.answered ?? chosen { next = noted(next, by.name, as: "answeredBy") }
+            return next.answered(answer)
         } catch {
             return failed(then, error)
         }

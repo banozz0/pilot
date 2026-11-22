@@ -1,0 +1,29 @@
+{
+  "id": "news",
+  "title": "News",
+  "icon": "📰",
+  "version": "1.1.0",
+  "description": "Headlines from the sources you pick, Malta first (Times of Malta, MaltaToday, Newsbook, Lovin Malta, TVM and more), then world and tech, or any RSS or Atom feed you add, newest first in Hyper+Space and on its page. Press Summarise the last 24 hours for a newspaper front page made by Pilot's AI from the day's headlines, saved as an HTML file and opened in your browser; it never runs on its own.",
+  "examples": ["Type news, Return on a headline: the article opens in your browser", "On the News page, tick MaltaToday and press Summarise the last 24 hours: a front page with the lead story, sections and every article opens in your browser"],
+  "runtime": "process",
+  "requires": ["python3", "curl"],
+  "permissions": { "network": ["the feeds you pick (timesofmalta.com, maltatoday.com.mt, newsbook.com.mt, lovinmalta.com, tvmnews.mt, feeds.bbci.co.uk, news.ycombinator.com, news.google.com and others)"], "files": ["~/Downloads/Pilot News"] },
+  "preferences": [
+    { "name": "language", "type": "dropdown", "title": "Summary language", "default": "english",
+      "description": "The language the 24-hour summary is written in; headlines in other languages are translated.",
+      "data": [ { "title": "English", "value": "english" }, { "title": "Malti", "value": "maltese" } ] },
+    { "name": "folder", "type": "folder", "title": "Save summaries in", "default": "",
+      "description": "Where each summary's HTML file goes, named by its date. Empty: Downloads › Pilot News." }
+  ],
+  "surfaces": { "page": { "command": "page", "every": 300 } },
+  "commands": [
+    { "name": "news", "title": "News", "mode": "list", "run": "main.py" },
+    { "name": "summarise", "title": "Summarise the last 24 hours of news", "mode": "no-view", "run": "main.py" },
+    { "name": "summarised", "title": "News summary", "mode": "no-view", "hidden": true, "run": "main.py" },
+    { "name": "refresh", "title": "Refresh the headlines", "mode": "no-view", "hidden": true, "run": "main.py" },
+    { "name": "toggle", "title": "Switch a source on or off", "mode": "no-view", "hidden": true, "run": "main.py" },
+    { "name": "add-feed", "title": "Add a feed", "mode": "no-view", "hidden": true, "run": "main.py" },
+    { "name": "remove-feed", "title": "Remove a feed", "mode": "no-view", "hidden": true, "run": "main.py" },
+    { "name": "page", "title": "News page", "mode": "no-view", "hidden": true, "run": "main.py" }
+  ]
+}
