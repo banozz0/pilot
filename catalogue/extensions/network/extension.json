@@ -2,8 +2,8 @@
   "id": "network",
   "title": "Network",
   "icon": "🌐",
-  "version": "1.0.1",
-  "description": "Your network in one place: Wi-Fi, local and public IP, the router and DNS; the devices on your network; your Tailscale devices with Connect and Disconnect; the ports your programs hold, freed in a click; your SSH hosts, opened in a terminal; and a speed test on macOS's own networkQuality.",
+  "version": "1.1.0",
+  "description": "Your network in one place: Wi-Fi, local and public IP, the router and DNS; the devices on your network; your Tailscale devices with Connect and Disconnect; the ports your programs hold, freed in a click; your SSH hosts, opened in a terminal; a speed test on macOS's own networkQuality; and a menu-bar item with a short section of each.",
   "examples": ["Type network overview: your Wi-Fi and its signal, your local and public IP and DNS; Return on Router opens its admin page", "Type kill port, then 3000: the node process holding it; Return quits it. Tailscale devices, SSH hosts and Speedtest are found by their names too"],
   "runtime": "process",
   "requires": ["python3", "lsof", "networkQuality"],
@@ -24,6 +24,6 @@
     { "name": "speedtest", "title": "Speedtest", "icon": "⚡", "mode": "detail", "run": "main.py" },
     { "name": "step", "title": "A step of Network's lists and page", "mode": "no-view", "hidden": true, "run": "main.py" },
     { "name": "page", "title": "Network page", "mode": "no-view", "hidden": true, "run": "main.py" },
-    { "name": "bar", "title": "Tailscale in the menu bar", "mode": "no-view", "hidden": true, "run": "main.py" }
+    { "name": "bar", "title": "Network in the menu bar", "mode": "no-view", "hidden": true, "run": "main.py" }
   ]
 }

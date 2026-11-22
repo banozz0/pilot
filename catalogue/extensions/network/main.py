@@ -697,8 +697,9 @@ def device_rows(run, now):
 
 LOOK_AGAIN = step_action("devices-scan", "Look again")
 HIDDEN_ROW = {"title": "No devices: macOS may be keeping them from Pilot", "icon": "🔒",
-              "subtitle": "If Pilot is off in Privacy & Security › Local Network, turn it on, then look again",
-              "actions": [{"type": "open", "url": SETTINGS_LOCAL_NETWORK, "title": "Open Local Network settings"}]}
+              "subtitle": "Return opens Privacy & Security › Local Network: turn Pilot on there, then look again",
+              "actions": [{"type": "open", "url": SETTINGS_LOCAL_NETWORK, "title": "Open Local Network settings"},
+                          dict(LOOK_AGAIN, stay=True)]}
 NOT_ON_A_NETWORK = {"title": "This Mac is not on a network", "icon": "📡"}
 NONE_YET = {"title": "No devices found yet", "icon": "📡", "subtitle": "Looking now; open this again in a moment"}
 
@@ -713,10 +714,16 @@ def devices_found(run):
     return now, rows, named, hidden, start_scan(run, now)
 
 
+def empty_row(rows, hidden, looking):
+    """The one row of a Devices view with no devices to list: off a network; macOS hiding them, once a look has finished
+    and still found nobody; else none yet, a look running."""
+    return NOT_ON_A_NETWORK if rows is None else HIDDEN_ROW if hidden and not looking else NONE_YET
+
+
 def devices(run):
-    _, rows, _, hidden, _ = devices_found(run)
+    _, rows, _, hidden, looking = devices_found(run)
     if rows is None or hidden or not rows:
-        return send({"type": "list", "items": [NOT_ON_A_NETWORK if rows is None else HIDDEN_ROW if hidden else NONE_YET]})
+        return send({"type": "list", "items": [empty_row(rows, hidden, looking)]})
     look = {"title": "Look for more devices", "icon": "🔎", "subtitle": "Wakes the network and asks each device its name",
             "actions": [dict(LOOK_AGAIN, stay=True)]}
     send({"type": "list", "items": rows + [look]})
@@ -727,7 +734,7 @@ def devices_blocks(run):
     now, rows, named, hidden, looking = devices_found(run)
     refresh = 3 if looking else None
     if rows is None or hidden or not rows:
-        return [{"type": "list", "items": [NOT_ON_A_NETWORK if rows is None else HIDDEN_ROW if hidden else NONE_YET]}], refresh
+        return [{"type": "list", "items": [empty_row(rows, hidden, looking)]}], refresh
     lan = now["lan"]
     stats = {"type": "stats", "items": [{"label": "Devices", "value": str(len(rows))}, {"label": "Named", "value": str(named)},
                                         {"label": "Network", "value": "%s on %s" % (lan["kind"], lan["interface"])}]}
@@ -923,17 +930,18 @@ def tailscale_blocks(run):
 
 
 def bar(run):
-    """🛜 and how many Tailscale devices are online, this Mac counted; a click (surface popover) lists them."""
-    popover = run.get("surface") == "popover"
-    data, why = ts_status(TS_WAIT["popover"] if popover else TS_LIST_WAIT)
-    if why:
-        blocks = [{"type": "list", "items": [ts_reason_row(why)]}] + ts_switch(why)
-        line = {"type": "bar", "text": "🛜", "tone": "warn", "blocks": blocks}
+    """The menu-bar item: 🛜 and how many Tailscale devices are online (🌐 without Tailscale); a click (surface popover)
+    shows Network's popover (popover_blocks)."""
+    if run.get("surface") == "popover":
+        return send({"type": "blocks", "blocks": popover_blocks(run)})
+    data, why = ts_status(TS_LIST_WAIT)
+    if why == TS_NOT_INSTALLED:
+        line = {"type": "bar", "text": "🌐"}
+    elif why:
+        line = {"type": "bar", "text": "🛜", "tone": "warn"}
     else:
-        rows = ts_device_rows(data)
-        blocks = ts_switch(None) + ts_lists(rows, MOST_ROWS)
-        line = {"type": "bar", "text": "🛜 %d" % sum(1 for _, on in rows if on), "blocks": blocks}
-    send({"type": "blocks", "blocks": blocks} if popover else line)
+        line = {"type": "bar", "text": "🛜 %d" % sum(1 for _, on in ts_device_rows(data) if on)}
+    send(line)
 
 
 def ts_settle(want, deadline):
@@ -1627,6 +1635,130 @@ def speedtest_stop(run):
         return send({"type": "hud", "text": "No speed test is running"})
     os.kill(job["pid"], signal.SIGTERM)
     send({"type": "hud", "text": "Stopped the speed test"})
+
+
+# MARK: - The menu-bar item's popover: Overview's line, then a short section each; Pilot adds Open page last
+
+POPOVER_ROWS = 5  # rows a popover section lists; the page lists them all
+
+
+def gather(jobs, wait):
+    """{name: work()} for each of `jobs`, all run at once in threads; None for one that failed or ran past `wait` s, so
+    one slow read (system_profiler, a hung Tailscale) costs the popover only its own section."""
+    found = {}
+
+    def one(name, work):
+        try:
+            found[name] = work()
+        except Exception:  # a section that fails says so; the others still show
+            found[name] = None
+
+    threads = [threading.Thread(target=one, args=job, daemon=True) for job in jobs.items()]
+    for thread in threads:
+        thread.start()
+    end = time.monotonic() + wait
+    for thread in threads:
+        thread.join(max(0.0, end - time.monotonic()))
+    return {name: found.get(name) for name in jobs}
+
+
+def popover_connection():
+    """connection(), with Wi-Fi read only when the local network is Wi-Fi (system_profiler is the slow read)."""
+    now = connection()
+    now["wifi"] = wifi(now["ports"]) if now["lan"]["kind"] == "Wi-Fi" else None
+    return now
+
+
+def overview_note(now):
+    """One quiet line: what the Mac is on (the Wi-Fi's name and signal), its local IP at the right."""
+    if not now or not now["kind"]:
+        return {"type": "note", "text": "Not connected" if now else "The network did not answer in time"}
+    air = now.get("wifi")
+    if air and air["connected"]:
+        words, _ = signal_words(air["signal"])
+        text = "Wi-Fi %s" % (air["name"] or "(macOS hides its name)") + (" · %s signal" % words if words else "")
+    else:
+        text = "On %s" % (now["lan"]["kind"] or now["kind"])
+    if now["kind"] == "VPN":
+        text += " · through a VPN"
+    return {"type": "note", "text": text, "aside": now["ip"] or "No local IP"}
+
+
+def section(title, aside=None, subtitle=None, blocks=()):
+    found = {"type": "section", "title": title, "blocks": list(blocks)}
+    found.update({k: v for k, v in (("aside", aside), ("subtitle", subtitle)) if v})
+    return found
+
+
+def ts_section(found):
+    """Tailscale's online devices and its switch; None when Tailscale isn't installed."""
+    if found is None:
+        return section("Tailscale", subtitle="Tailscale did not answer in time")
+    data, why = found
+    if why == TS_NOT_INSTALLED:
+        return None
+    if why:
+        return section("Tailscale", subtitle=why[0], blocks=ts_switch(why))
+    online = [item for item, on in ts_device_rows(data) if on]
+    rows = online[:POPOVER_ROWS] or [{"title": "No device online", "icon": "🛜"}]
+    return section("Tailscale", aside="%d online" % len(online), blocks=[{"type": "list", "items": rows}] + ts_switch(None))
+
+
+def ports_section(found):
+    """The listening ports, each quitting after its ask, as on the page."""
+    if found is None:
+        return section("Ports", subtitle="lsof did not answer in time")
+    if isinstance(found, str):
+        return section("Ports", subtitle=found)
+    if not found:
+        return section("Ports", subtitle=NO_PORT["title"])
+    return section("Ports", aside="%d listening" % len(found),
+                   blocks=[{"type": "list", "items": [port_page_item(r) for r in found[:POPOVER_ROWS]]}])
+
+
+def listening_or_why():
+    try:
+        return listening()
+    except RuntimeError as e:
+        return str(e)
+
+
+def speed_section(run):
+    """The last result and Run, or Stop while a test runs."""
+    paths = Paths(run)
+    job = read_json(paths.job)
+    if speed_alive(job):
+        return section("Speedtest", aside="Testing…",
+                       blocks=[{"type": "buttons", "actions": [step_action("speedtest-stop", "Stop", destructive=True)]}])
+    if not speed_tool():
+        return section("Speedtest", subtitle="This Mac has no networkQuality")
+    result = speed_last(paths)
+    if not result:
+        return section("Speedtest", subtitle="No test yet",
+                       blocks=[{"type": "buttons", "actions": [step_action("speedtest-start", "Run speed test")]}])
+    return section("Speedtest", aside="%s ↓ · %s ↑ Mbps" % (mbps(result.get("download")), mbps(result.get("upload"))),
+                   subtitle="Tested %s" % when(result.get("at")),
+                   blocks=[{"type": "buttons", "actions": [step_action("speedtest-start", "Run again")]}])
+
+
+def ssh_section(run):
+    """The SSH hosts, each connecting in the terminal on a click, as on the page."""
+    rows = host_items(run)
+    if not rows:
+        return section("SSH hosts", subtitle=NO_HOSTS["title"])
+    for row in rows:
+        row["inline"] = [dict(row["actions"][0], icon="terminal")]
+    return section("SSH hosts", aside=str(len(rows)), blocks=[{"type": "list", "items": rows[:POPOVER_ROWS]}])
+
+
+def popover_blocks(run):
+    """Overview's line, then Tailscale, Ports, Speedtest and SSH hosts, a short section each, their reads run at once
+    within the popover's time."""
+    found = gather({"now": popover_connection, "tailscale": lambda: ts_status(TS_WAIT["popover"]),
+                    "ports": listening_or_why}, left(4.0, 0.3))
+    blocks = [overview_note(found["now"]), ts_section(found["tailscale"]), ports_section(found["ports"]),
+              speed_section(run), ssh_section(run)]
+    return [b for b in blocks if b]
 
 
 # MARK: - The page

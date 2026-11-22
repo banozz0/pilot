@@ -397,8 +397,8 @@
       "id": "network",
       "title": "Network",
       "icon": "🌐",
-      "version": "1.0.1",
-      "description": "Your network in one place: Wi-Fi, local and public IP, the router and DNS; the devices on your network; your Tailscale devices with Connect and Disconnect; the ports your programs hold, freed in a click; your SSH hosts, opened in a terminal; and a speed test on macOS's own networkQuality.",
+      "version": "1.1.0",
+      "description": "Your network in one place: Wi-Fi, local and public IP, the router and DNS; the devices on your network; your Tailscale devices with Connect and Disconnect; the ports your programs hold, freed in a click; your SSH hosts, opened in a terminal; a speed test on macOS's own networkQuality; and a menu-bar item with a short section of each.",
       "examples": [
         "Type network overview: your Wi-Fi and its signal, your local and public IP and DNS; Return on Router opens its admin page",
         "Type kill port, then 3000: the node process holding it; Return quits it. Tailscale devices, SSH hosts and Speedtest are found by their names too"
@@ -465,14 +465,14 @@
       "files": [
         {
           "path": "extension.json",
-          "sha256": "3bf6ef734dade401de3c1bf40020ca6abc34ebb52557526a50931b3d7a58dc6e",
-          "size": 2421,
+          "sha256": "a5454cc4c1e4d8613ed43de7ce64af2ac949387a324aa8c4ea6b13c0caa0e85e",
+          "size": 2465,
           "executable": false
         },
         {
           "path": "main.py",
-          "sha256": "759762b745e77af5b1bba91506ac6294fa106bacf7fc968314f04acf3ebbc95c",
-          "size": 74011,
+          "sha256": "6ccdea381fd79267543fe7ad053ffe030b18c84ab47666209918a59d67c42a92",
+          "size": 79586,
           "executable": true
         }
       ]

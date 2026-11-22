@@ -30,6 +30,24 @@ class NetworkCase(ExtensionTestCase):
         # A look ran just now, so no run starts one (it would send packets).
         (self.box.data / "scan.json").write_text(json.dumps({"status": "done", "pid": None, "at": time.time() + 3600}))
 
+    QUIET = ("networksetup", "system_profiler", "route", "ipconfig", "scutil", "arp", "curl")
+
+    def popover(self, **kwargs):
+        """The bar item's popover, the network's tools quiet where the test shimmed none (LocalNetworkCase.net does)."""
+        if not (self.box.shims / "quietshim").exists():
+            self.box.shim("quietshim", "exit 1")
+        for tool in self.QUIET:
+            link = self.box.shims / tool
+            if not (link.is_symlink() or link.exists()):
+                link.symlink_to("quietshim")
+        return super().popover(**kwargs)
+
+    def section(self, title, **kwargs):
+        """The popover's section `title`."""
+        found = [b for b in self.popover(**kwargs) if b["type"] == "section" and b["title"] == title]
+        self.assertEqual(len(found), 1, title)
+        return found[0]
+
     def run_ext(self, command, **kwargs):
         """A step (main.STEPS) by the name its own command had: the hidden step command, the step named in its context."""
         if command in network.STEPS:
@@ -161,18 +179,19 @@ class TailscaleTests(NetworkCase):
         line = self.bar()
         self.assertEqual(line["text"], "🛜 2")
         self.assertNotIn("tone", line)
-        popover = self.popover()
-        self.assertEqual([b["type"] for b in popover], ["buttons", "list", "list"])
-        self.assertEqual(popover[0]["actions"][0]["command"], "tailscale-disconnect")
-        self.assertEqual([b["title"] for b in popover[1:]], ["Online", "Offline"])
-        self.assertEqual([i["title"] for i in popover[1]["items"]], ["Studio Mac", "raspberrypi"])
+        # Under Network the click shows Network's popover: Tailscale is its section, its online devices and the switch.
+        ts = self.section("Tailscale")
+        self.assertEqual(ts["aside"], "2 online")
+        self.assertEqual([b["type"] for b in ts["blocks"]], ["list", "buttons"])
+        self.assertEqual([i["title"] for i in ts["blocks"][0]["items"]], ["Studio Mac", "raspberrypi"])
+        self.assertEqual(ts["blocks"][1]["actions"], [DISCONNECT])
 
     def test_bar_and_page_say_when_tailscale_is_not_running(self):
         """test_tailscale: test_bar_and_page_say_when_tailscale_is_not_running."""
         self.answer(stdout="failed to connect\n", code=1)
         line = self.bar()
         self.assertEqual((line["text"], line["tone"]), ("🛜", "warn"))
-        self.assertEqual(line["blocks"][0]["items"][0]["title"], "Tailscale isn't running")
+        self.assertEqual(self.section("Tailscale")["subtitle"], "Tailscale isn't running")
         self.assertEqual(self.part("tailscale")[0]["items"][0]["title"], "Tailscale isn't running")
 
     def test_not_installed_says_so_and_offers_no_switch(self):
@@ -304,7 +323,7 @@ esac""".format(log=self.box.log, root=root))
             with self.subTest(state=state, app=app):
                 self.box.log.unlink() if self.box.log.exists() else None
                 self.fake(state, app=app)
-                for blocks in (self.part("tailscale"), self.popover(), self.bar()["blocks"]):
+                for blocks in (self.part("tailscale"), self.section("Tailscale")["blocks"]):
                     buttons = [b for b in blocks if b["type"] == "buttons"]
                     self.assertEqual(buttons, [{"type": "buttons", "actions": [button]}])
                     for action in buttons[0]["actions"]:
@@ -934,6 +953,18 @@ class DevicesTests(LocalNetworkCase):
         self.assertEqual(len(items), 1)
         self.assertEqual(items[0]["title"], "No devices: macOS may be keeping them from Pilot")
         self.assertEqual(items[0]["actions"][0]["url"], network.SETTINGS_LOCAL_NETWORK)
+        self.assertEqual(items[0]["actions"][1]["context"], {"step": "devices-scan"})
+
+    def test_a_hidden_looking_table_says_looking_while_a_look_runs(self):
+        """Round 5: the first look after a new Pilot build may run while macOS renews its entry for Pilot, so an empty
+        table is said to be hidden only once a look has finished."""
+        self.net(arp="? (192.0.2.10) at 0:0:5e:0:53:2 on en1 ifscope permanent [ethernet]\n")
+        (self.box.data / "scan.json").write_text(json.dumps({"status": "running", "pid": os.getpid(), "at": time.time()}))
+        with mock.patch.object(network, "ours", return_value=True):
+            self.assertEqual(network.empty_row([], True, network.Scan({"paths": {"data": str(self.box.data)}}).running()),
+                             network.NONE_YET)
+        self.assertEqual(network.empty_row([], True, False), network.HIDDEN_ROW)
+        self.assertEqual(network.empty_row(None, False, False), network.NOT_ON_A_NETWORK)
 
     def test_a_hidden_looking_table_still_starts_a_look(self):
         """A cold table holds only this Mac too: a look fills it where macOS lets it through."""
@@ -1035,6 +1066,74 @@ class DevicesTests(LocalNetworkCase):
 
 
 # MARK: - The extension as a whole
+
+class PopoverTests(LocalNetworkCase):
+    """New (round 5): the bar item's click shows Network's popover, Overview's line then a short section each."""
+
+    def fill(self):
+        self.net()
+        status = self.box.root / "status.json"
+        status.write_text(json.dumps(FIXTURE))
+        self.box.shim("tailscale", 'cat "%s"' % status)
+        self.box.shim("lsof", 'printf "p4242\\ncnode\\nn*:3000\\np4343\\ncpython3\\nn127.0.0.1:8000\\n"')
+        (self.box.data / "speedtest-last.json").write_text(json.dumps(network.result_of(RESULT, time.time())))
+        (self.box.home / ".ssh").mkdir(exist_ok=True)
+        (self.box.home / ".ssh" / "config").write_text("Host prod\n  HostName 203.0.113.7\n  User deploy\n")
+
+    def test_overview_then_tailscale_ports_speedtest_and_ssh(self):
+        self.fill()
+        started = time.monotonic()
+        blocks = self.popover()
+        self.assertLess(time.monotonic() - started, 5, "Pilot stops a popover after 5 s")
+        self.assertEqual([(b["type"], b.get("title")) for b in blocks],
+                         [("note", None), ("section", "Tailscale"), ("section", "Ports"), ("section", "Speedtest"),
+                          ("section", "SSH hosts")])
+        self.assertEqual((blocks[0]["text"], blocks[0]["aside"]), ("Wi-Fi Harbour · strong signal", "192.0.2.10"))
+        ports = blocks[2]
+        self.assertEqual(ports["aside"], "2 listening")
+        quit_ = ports["blocks"][0]["items"][0]["actions"][0]
+        self.assertEqual((quit_["context"]["step"], quit_["context"]["port"]), ("kill", 3000))
+        self.assertEqual(quit_["ask"], {"confirm": "Quit node on port 3000?"})
+        speed = blocks[3]
+        self.assertEqual(speed["aside"], "200 ↓ · 50.0 ↑ Mbps")
+        self.assertEqual(speed["blocks"][0]["actions"][0]["context"], {"step": "speedtest-start"})
+        ssh = blocks[4]
+        self.assertEqual([i["title"] for i in ssh["blocks"][0]["items"]], ["prod"])
+        self.assertEqual(ssh["blocks"][0]["items"][0]["actions"][0]["context"], {"host": "prod", "step": "ssh-connect"})
+        self.assertLessEqual(len(blocks), 24, "Pilot draws 24 blocks of a popover")
+        for section in blocks[1:]:
+            for block in section["blocks"]:
+                self.assertLessEqual(len(block.get("items", [])), network.POPOVER_ROWS)
+                for action in block.get("actions", []) + [a for i in block.get("items", []) for a in i.get("actions", [])]:
+                    self.assertActionShape(action)
+        self.assertEqual(self.curl_calls(), [], "the popover never asks the internet for the public IP")
+
+    def test_with_nothing_found_each_section_is_one_quiet_line(self):
+        self.net(online=False)
+        self.box.shim("lsof", "exit 1")
+        blocks = self.popover()
+        self.assertEqual(blocks[0], {"type": "note", "text": "Not connected"})
+        found = {b["title"]: b for b in blocks[1:]}
+        self.assertEqual(found["Ports"], {"type": "section", "title": "Ports", "subtitle": "No TCP port is listening", "blocks": []})
+        self.assertEqual(found["SSH hosts"]["subtitle"], "No hosts in ~/.ssh/config")
+        self.assertEqual(found["Speedtest"]["subtitle"], "No test yet")
+
+    def test_a_read_that_runs_late_costs_only_its_section(self):
+        found = network.gather({"quick": lambda: 1, "slow": lambda: time.sleep(2), "broken": lambda: 1 / 0}, 0.3)
+        self.assertEqual(found, {"quick": 1, "slow": None, "broken": None})
+        self.assertEqual(network.ts_section(None)["subtitle"], "Tailscale did not answer in time")
+        self.assertEqual(network.ports_section(None)["subtitle"], "lsof did not answer in time")
+        self.assertEqual(network.overview_note(None)["text"], "The network did not answer in time")
+
+    def test_without_tailscale_the_item_is_a_globe_and_the_popover_skips_it(self):
+        sent = []
+        with mock.patch.object(network.shutil, "which", return_value=None), \
+                mock.patch.object(network, "TS_CLI", str(self.box.root / "no-tailscale")), \
+                mock.patch.object(network, "send", sent.append):
+            network.bar({})
+        self.assertEqual(sent, [{"type": "bar", "text": "🌐"}])
+        self.assertIsNone(network.ts_section((None, network.TS_NOT_INSTALLED)))
+
 
 class ManifestTests(NetworkCase):
     def test_every_old_command_is_found_by_its_own_name(self):
