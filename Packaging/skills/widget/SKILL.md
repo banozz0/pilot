@@ -73,7 +73,7 @@ To show the user's Pilot notes, use `"data": {"notes": "note"}` with a `note` se
 shows in full. Pilot draws them itself; no page or program ever gets them.
 
 To show the user's repos in ~/code with changes not committed or commits not pushed, use `"data": {"repos": true}`:
-each such repo's name, branch and counts, a click opening it, read every 5 minutes while it shows. Pilot draws them
+each such repo's name, branch and counts, a click showing it in Finder, read every 5 minutes while it shows. Pilot draws them
 itself, as it does the notes.
 
 To show what the Mac plays, use `"data": {"nowPlaying": true}`: the track with its cover, previous, play or pause and
