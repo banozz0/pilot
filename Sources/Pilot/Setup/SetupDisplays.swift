@@ -40,7 +40,8 @@ final class SetupDisplays {
     private(set) var turning: Turn?
     private(set) var problem: String?
     @ObservationIgnored private var modesByDisplay: [CGDirectDisplayID: [DisplayMode]] = [:]
-    @ObservationIgnored private var rotatable: Set<CGDirectDisplayID> = []
+    /// Observed: a rotation read off the main thread (startOnPage) lands after the page drew.
+    private var rotatable: Set<CGDirectDisplayID> = []
     /// The app's model offers Revert in a tip; the tests' models do not.
     @ObservationIgnored private let offersRevert: Bool
     @ObservationIgnored private var revertTip: TipModel?
@@ -77,17 +78,41 @@ final class SetupDisplays {
     /// The screens as they are now. Each screen's modes and whether it turns are read once per screen and kept until
     /// macOS says the screens changed (page-perf: a fresh MonitorPanel manager per screen held each System visit ~110 ms).
     func start() {
-        displays = system.displays()
-        followScreenChanges()
-        for display in displays where !probed.contains(display.id) {
-            modesByDisplay[display.id] = system.modes(display.id)
-            if system.canRotate(display.id) { rotatable.insert(display.id) } else { rotatable.remove(display.id) }
-            probed.insert(display.id)
+        let unread = readScreens() + turnsUnread
+        for id in unread { if system.canRotate(id) { rotatable.insert(id) } else { rotatable.remove(id) } }
+        turnsUnread.subtract(unread)
+    }
+
+    /// `start` for System's page as it is built: whether each screen turns is read off the main thread and shows a moment
+    /// later (page-first: MonitorPanel listing every screen's modes held System's first visit ~440 ms of ~1,080).
+    func startOnPage() {
+        guard let reader = system.rotationReader else { return start() }
+        turnsUnread.formUnion(readScreens())
+        let ids = Array(turnsUnread)
+        guard !ids.isEmpty else { return }
+        Task { [weak self] in
+            let turns = await Task.detached(priority: .userInitiated) { reader(ids) }.value
+            guard let self else { return }
+            // A `start` meanwhile read them already.
+            for id in ids where turnsUnread.contains(id) { if turns.contains(id) { rotatable.insert(id) } else { rotatable.remove(id) } }
+            turnsUnread.subtract(ids)
         }
     }
 
-    /// The screens whose modes and rotation `start` has read since the screens last changed.
+    /// The screens as they are now, and the modes of each screen not read since the screens last changed: those screens.
+    private func readScreens() -> [CGDirectDisplayID] {
+        displays = system.displays()
+        followScreenChanges()
+        let unread = displays.map(\.id).filter { !probed.contains($0) }
+        for id in unread { modesByDisplay[id] = system.modes(id) }
+        probed.formUnion(unread)
+        return unread
+    }
+
+    /// The screens whose modes `start` has read since the screens last changed.
     @ObservationIgnored private var probed: Set<CGDirectDisplayID> = []
+    /// The screens whose rotation `startOnPage` is still reading off the main thread.
+    @ObservationIgnored private var turnsUnread: Set<CGDirectDisplayID> = []
     @ObservationIgnored private var screensMoved: NSObjectProtocol?
 
     /// A screen added, removed, turned or given another mode: its modes and rotation are read again at the next start.

@@ -61,6 +61,8 @@ protocol DisplaySystem: AnyObject {
     func apply(_ mode: DisplayMode, to display: CGDirectDisplayID, permanently: Bool) throws
     /// Whether macOS lets Pilot turn this screen; false hides Rotate.
     func canRotate(_ display: CGDirectDisplayID) -> Bool
+    /// The same for several screens at once, safe off the main thread; nil asks `canRotate` on the main thread instead.
+    var rotationReader: (@Sendable ([CGDirectDisplayID]) -> Set<CGDirectDisplayID>)? { get }
     /// Turns the screen to 0, 90, 180 or 270 degrees; macOS keeps a rotation by itself.
     func rotate(_ display: CGDirectDisplayID, to degrees: Int) throws
     /// Puts each screen's top-left corner at its point in the global space, for good, as System Settings' arrangement does.
@@ -69,6 +71,7 @@ protocol DisplaySystem: AnyObject {
 
 extension DisplaySystem {
     func canRotate(_ display: CGDirectDisplayID) -> Bool { false }
+    var rotationReader: (@Sendable ([CGDirectDisplayID]) -> Set<CGDirectDisplayID>)? { nil }
     func rotate(_ display: CGDirectDisplayID, to degrees: Int) throws { throw DisplayRotation.Unavailable() }
     func arrange(_ origins: [CGDirectDisplayID: CGPoint]) throws { throw CoreGraphicsDisplays.Refused(status: .notImplemented) }
 }
@@ -88,7 +91,7 @@ enum DisplayRotation {
     private typealias Flag = @convention(c) (AnyObject, Selector) -> Bool
 
     /// MPDisplayMgr's class with every selector Pilot calls, nil when this macOS lacks any of them.
-    private static let manager: NSObject.Type? = {
+    nonisolated private static let manager: NSObject.Type? = {
         guard dlopen("/System/Library/PrivateFrameworks/MonitorPanel.framework/MonitorPanel", RTLD_LAZY) != nil,
               let manager = NSClassFromString("MPDisplayMgr") as? NSObject.Type, let display = NSClassFromString("MPDisplay"),
               ["displays", "tryLockAccess", "unlockAccess"].allSatisfy({ manager.instancesRespond(to: NSSelectorFromString($0)) }),
@@ -105,6 +108,18 @@ enum DisplayRotation {
 
     static func canRotate(_ id: CGDirectDisplayID) -> Bool {
         (display(id)?.display.value(forKey: "canChangeOrientation") as? NSNumber)?.boolValue == true
+    }
+
+    /// Which of `ids` turn, from one manager: a manager lists every screen with all its modes, so one per screen cost
+    /// System's first visit ~440 ms of the main thread with three screens (page-first). Its own objects only, so it
+    /// reads off the main thread.
+    nonisolated static func rotatable(_ ids: [CGDirectDisplayID]) -> Set<CGDirectDisplayID> {
+        guard let manager = manager?.init(), let all = manager.value(forKey: "displays") as? [NSObject] else { return [] }
+        return Set(all.compactMap { display in
+            guard let id = (display.value(forKey: "displayID") as? NSNumber)?.uint32Value, ids.contains(id),
+                  (display.value(forKey: "canChangeOrientation") as? NSNumber)?.boolValue == true else { return nil }
+            return id
+        })
     }
 
     /// setOrientation: takes a plain int, so it is called through its implementation; the manager's access lock is
@@ -166,6 +181,7 @@ final class CoreGraphicsDisplays: DisplaySystem {
     }
 
     func canRotate(_ display: CGDirectDisplayID) -> Bool { DisplayRotation.canRotate(display) }
+    var rotationReader: (@Sendable ([CGDirectDisplayID]) -> Set<CGDirectDisplayID>)? { { DisplayRotation.rotatable($0) } }
     func rotate(_ display: CGDirectDisplayID, to degrees: Int) throws { try DisplayRotation.rotate(display, to: degrees) }
 
     func arrange(_ origins: [CGDirectDisplayID: CGPoint]) throws {
