@@ -139,6 +139,15 @@ def ours(pid):
     return os.path.join(os.path.basename(os.path.dirname(os.path.abspath(__file__))), "main.py") in command
 
 
+def step_action(name, title, context=None, **fields):
+    """A run action for one of Network's steps (quit a port's program, connect an SSH host, switch the page's part…):
+    the one hidden `step` command, the step named in its context, so Pilot's install question lists one command, not
+    seven (1474 of its 1200 characters with each its own)."""
+    action = {"type": "run", "command": "step", "title": title, "context": dict(context or {}, step=name)}
+    action.update(fields)
+    return action
+
+
 # MARK: - The local network: interfaces, Wi-Fi, router, DNS, public IP
 
 def hardware_ports():
@@ -686,7 +695,7 @@ def device_rows(run, now):
     return [item for _, item in rows], named, False
 
 
-LOOK_AGAIN = {"type": "run", "command": "devices-scan", "title": "Look again"}
+LOOK_AGAIN = step_action("devices-scan", "Look again")
 HIDDEN_ROW = {"title": "No devices: macOS may be keeping them from Pilot", "icon": "🔒",
               "subtitle": "If Pilot is off in Privacy & Security › Local Network, turn it on, then look again",
               "actions": [{"type": "open", "url": SETTINGS_LOCAL_NETWORK, "title": "Open Local Network settings"}]}
@@ -1048,8 +1057,8 @@ def port_item(row):
         "icon": "🔌",
         "keywords": "%s %d %d" % (name, pid, port),
         "actions": [
-            {"type": "run", "command": "kill", "title": "Quit %s" % name, "context": dict(context, signal="TERM")},
-            {"type": "run", "command": "kill", "title": "Force quit %s" % name, "context": dict(context, signal="KILL")},
+            step_action("kill", "Quit %s" % name, dict(context, signal="TERM")),
+            step_action("kill", "Force quit %s" % name, dict(context, signal="KILL")),
             {"type": "open", "url": url, "title": "Open %s" % url},
             {"type": "copy", "text": str(pid), "title": "Copy PID"},
             {"type": "copy", "text": url, "title": "Copy URL"},
@@ -1245,7 +1254,7 @@ def host_items(run, words=""):
             "subtitle": " · ".join(x for x in (where, tilde(settings["source"])) if x),
             "keywords": " ".join(x for x in ("ssh", settings.get("hostname"), settings.get("user")) if x),
             "actions": [
-                {"type": "run", "command": "ssh-connect", "title": "Connect in %s" % terminal, "context": {"host": name}},
+                step_action("ssh-connect", "Connect in %s" % terminal, {"host": name}),
                 {"type": "copy", "text": "ssh %s" % name, "title": "Copy ssh %s" % name},
                 {"type": "open", "url": settings["source"], "title": "Open %s" % os.path.basename(settings["source"])},
             ]})
@@ -1287,10 +1296,10 @@ def ssh_blocks(run):
     for row in rows:
         row["inline"] = [dict(row["actions"][0], icon="terminal")]
     box = {"type": "input", "placeholder": "Filter hosts by name, address or user", "live": True,
-           "action": {"type": "run", "command": "ssh-filter", "title": "Filter"}}
+           "action": step_action("ssh-filter", "Filter")}
     blocks = [box]
     if words:
-        blocks.append({"type": "buttons", "actions": [{"type": "run", "command": "ssh-filter", "title": "Show all hosts"}]})
+        blocks.append({"type": "buttons", "actions": [step_action("ssh-filter", "Show all hosts")]})
         title = "%d host%s matching “%s”" % (len(rows), "" if len(rows) == 1 else "s", words)
         rows = rows or [{"title": "No host matches “%s”" % words, "icon": "🔎"}]
     else:
@@ -1497,12 +1506,6 @@ def speed_test(paths, job):
     write_json(paths.job, job)
 
 
-def run_action(command, title, **fields):
-    action = {"type": "run", "command": command, "title": title}
-    action.update(fields)
-    return action
-
-
 def copy_result(result):
     return {"type": "copy", "text": summary(result), "title": "Copy result", "key": "cmd+shift+c"}
 
@@ -1544,7 +1547,7 @@ def running_blocks(run, job):
           stat("Moved", job.get("upload_moved") if uploading else "–")]
     return speed_blocks(run, job.get("download"), job.get("upload") if uploading else None, down, up,
                         "Download" if uploading else "Download · " + testing, "Upload · " + testing if uploading else "Upload") + [
-        {"type": "buttons", "actions": [run_action("speedtest-stop", "Stop", destructive=True)]}]
+        {"type": "buttons", "actions": [step_action("speedtest-stop", "Stop", destructive=True)]}]
 
 
 def result_blocks(run, result):
@@ -1554,7 +1557,7 @@ def result_blocks(run, result):
     up = [stat("Responsiveness", rest["Upload responsiveness"], tone(result.get("upload_rpm")))]
     blocks = speed_blocks(run, result.get("download"), result.get("upload"), down, up)
     blocks.append({"type": "stats", "items": [stat(k, rest[k]) for k in ("Server", "Interface", "Tested")]})
-    blocks.append({"type": "buttons", "actions": [run_action("speedtest-start", "Run again"), copy_result(result)]})
+    blocks.append({"type": "buttons", "actions": [step_action("speedtest-start", "Run again"), copy_result(result)]})
     return blocks
 
 
@@ -1575,7 +1578,7 @@ def speedtest_page(run):
         blocks += result_blocks(run, result)
     else:
         blocks += [{"type": "markdown", "text": "No test yet. A test takes about 30 s and moves about 1 GB at gigabit speed."},
-                   {"type": "buttons", "actions": [run_action("speedtest-start", "Run speed test")]}]
+                   {"type": "buttons", "actions": [step_action("speedtest-start", "Run speed test")]}]
     return blocks, None
 
 
@@ -1590,18 +1593,18 @@ def speedtest(run):
         markdown = "# ⚡ Testing…\n\n**Download** %s Mbps · **Upload** %s Mbps" % (
             mbps(job.get("download")), mbps(job.get("upload")) if job.get("phase") == "upload" else "–")
         return send({"type": "detail", "markdown": markdown, "blocks": running_blocks(run, job)[:-1],
-                     "actions": [show, run_action("speedtest-stop", "Stop speed test", key="cmd+delete")]})
+                     "actions": [show, step_action("speedtest-stop", "Stop speed test", key="cmd+delete")]})
     result = speed_last(paths)
     if not result:
         text = "# ⚡ Speedtest\n\nNo test yet. Return runs one against Apple's servers (about 30 s), live on its page."
         if job.get("status") == "failed":
             text += "\n\nThe last test failed: %s" % job.get("error", "")
-        return send({"type": "detail", "markdown": text, "actions": [run_action("speedtest-start", "Run speed test")]})
+        return send({"type": "detail", "markdown": text, "actions": [step_action("speedtest-start", "Run speed test")]})
     markdown = "# ↓ %s Mbps · ↑ %s Mbps\n\nDownload and upload, %s." % (
         mbps(result.get("download")), mbps(result.get("upload")), when(result.get("at")))
     send({"type": "detail", "markdown": markdown, "blocks": result_blocks(run, result)[:-1],
           "metadata": [{"label": label, "text": value} for label, value in facts(result)],
-          "actions": [run_action("speedtest-start", "Run again"), copy_result(result),
+          "actions": [step_action("speedtest-start", "Run again"), copy_result(result),
                       {"type": "open", "url": PAGE, "title": "Open page", "key": "cmd+o"}]})
 
 
@@ -1663,7 +1666,7 @@ def view(run):
 
 def nav(run, shown):
     """A link per part, the shown one marked; buttons where this Pilot draws no links."""
-    actions = [{"type": "run", "command": "view", "title": title, "context": {"view": name}} for name, title in VIEWS.items()]
+    actions = [step_action("view", title, {"view": name}) for name, title in VIEWS.items()]
     if not drawn(run, "links"):
         return {"type": "buttons", "actions": actions}
     return {"type": "links", "items": [dict({"title": a["title"], "actions": [a]},
@@ -1691,14 +1694,27 @@ def page(run):
     send(message)
 
 
+STEPS = {
+    "devices-scan": devices_scan, "kill": kill, "ssh-connect": ssh_connect, "ssh-filter": ssh_filter,
+    "speedtest-start": speedtest_start, "speedtest-stop": speedtest_stop, "view": view,
+}
+
+
+def step(run):
+    """The hidden command every step's action runs (step_action): the step its context names."""
+    context = run.get("context") if isinstance(run.get("context"), dict) else {}
+    work = STEPS.get(context.get("step"))
+    if work is None:
+        return send({"type": "error", "text": "has no step %s" % context.get("step")})
+    work(run)
+
+
 COMMANDS = {
-    "overview": overview, "devices": devices, "devices-scan": devices_scan,
+    "overview": overview, "devices": devices,
     "tailscale": lambda run: send({"type": "list", "items": ts_devices()}),
     "tailscale-connect": ts_connect, "tailscale-disconnect": ts_disconnect,
-    "kill-port": kill_port, "kill": kill,
-    "ssh-hosts": ssh_hosts, "ssh-connect": ssh_connect, "ssh-filter": ssh_filter,
-    "speedtest": speedtest, "speedtest-start": speedtest_start, "speedtest-stop": speedtest_stop,
-    "view": view, "page": page, "bar": bar,
+    "kill-port": kill_port, "ssh-hosts": ssh_hosts, "speedtest": speedtest,
+    "step": step, "page": page, "bar": bar,
 }
 
 

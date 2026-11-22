@@ -397,7 +397,7 @@
       "id": "network",
       "title": "Network",
       "icon": "🌐",
-      "version": "1.0.0",
+      "version": "1.0.1",
       "description": "Your network in one place: Wi-Fi, local and public IP, the router and DNS; the devices on your network; your Tailscale devices with Connect and Disconnect; the ports your programs hold, freed in a click; your SSH hosts, opened in a terminal; and a speed test on macOS's own networkQuality.",
       "examples": [
         "Type network overview: your Wi-Fi and its signal, your local and public IP and DNS; Return on Router opens its admin page",
@@ -465,14 +465,14 @@
       "files": [
         {
           "path": "extension.json",
-          "sha256": "e09f7a8a7e96de176a024bacb1bc2db4c7b1aa61381c5775f5cb41665a56de26",
-          "size": 3101,
+          "sha256": "3bf6ef734dade401de3c1bf40020ca6abc34ebb52557526a50931b3d7a58dc6e",
+          "size": 2421,
           "executable": false
         },
         {
           "path": "main.py",
-          "sha256": "fd1ff71364e93f6266f458183a0cbc9e62a11644763db53fe9ce25c10daffde5",
-          "size": 73477,
+          "sha256": "759762b745e77af5b1bba91506ac6294fa106bacf7fc968314f04acf3ebbc95c",
+          "size": 74011,
           "executable": true
         }
       ]

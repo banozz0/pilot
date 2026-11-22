@@ -30,6 +30,13 @@ class NetworkCase(ExtensionTestCase):
         # A look ran just now, so no run starts one (it would send packets).
         (self.box.data / "scan.json").write_text(json.dumps({"status": "done", "pid": None, "at": time.time() + 3600}))
 
+    def run_ext(self, command, **kwargs):
+        """A step (main.STEPS) by the name its own command had: the hidden step command, the step named in its context."""
+        if command in network.STEPS:
+            kwargs["context"] = dict(kwargs.get("context") or {}, step=command)
+            command = "step"
+        return super().run_ext(command, **kwargs)
+
     def part(self, name, **kwargs):
         """The page with `name` shown: its nav first (a link per part, this one marked), then that part's blocks."""
         self.run_ext("view", context={"view": name}, home=kwargs.get("home"))
@@ -411,7 +418,7 @@ class PortsPageTests(NetworkCase):
         quit_, force = rows[0]["actions"][:2]
         self.assertEqual(quit_["ask"], {"confirm": "Quit node on port 3000?"})
         self.assertTrue(quit_["destructive"] and force["destructive"])
-        self.assertEqual(force["context"], {"pid": 4242, "port": 3000, "name": "node", "signal": "KILL"})
+        self.assertEqual(force["context"], {"pid": 4242, "port": 3000, "name": "node", "signal": "KILL", "step": "kill"})
         self.assertEqual(rows[0]["inline"], [dict(quit_, icon="xmark")])
         self.assertEqual(rows[0]["subtitle"], "node · pid 4242 · *, [::1]")
 
@@ -477,8 +484,8 @@ class SSHHostsTests(NetworkCase):
         prod = self.hosts()["prod"]
         actions = prod["actions"]
         self.assertEqual([a["type"] for a in actions], ["run", "copy", "open"])
-        self.assertEqual(actions[0]["command"], "ssh-connect")
-        self.assertEqual(actions[0]["context"], {"host": "prod"})
+        self.assertEqual(actions[0]["context"]["step"], "ssh-connect")
+        self.assertEqual(actions[0]["context"], {"host": "prod", "step": "ssh-connect"})
         self.assertTrue(actions[0]["title"].startswith("Connect in "))
         self.assertEqual(actions[1]["text"], "ssh prod")
         self.assertEqual(os.path.realpath(actions[2]["url"]), os.path.realpath(self.box.home / ".ssh" / "config.d" / "work"))
@@ -536,12 +543,12 @@ class SSHHostsTests(NetworkCase):
         blocks = self.part("ssh", home=self.box.home)
         self.assertEqual(blocks[0]["type"], "input")
         self.assertTrue(blocks[0]["live"])
-        self.assertEqual(blocks[0]["action"]["command"], "ssh-filter")
+        self.assertEqual(blocks[0]["action"]["context"]["step"], "ssh-filter")
         rows = blocks[1]["items"]
         self.assertEqual(blocks[1]["title"], "Hosts")
         self.assertEqual([r["title"] for r in rows], ["gitbox", "mac", "prod", "prod-alias"])
         self.assertEqual(rows[2]["inline"], [dict(rows[2]["actions"][0], icon="terminal")])
-        self.assertEqual(rows[2]["actions"][0]["context"], {"host": "prod"})
+        self.assertEqual(rows[2]["actions"][0]["context"], {"host": "prod", "step": "ssh-connect"})
 
     def test_typed_words_narrow_the_page_and_show_all_clears_them(self):
         """test_ssh_hosts: test_typed_words_narrow_the_page_and_show_all_clears_them."""
@@ -598,7 +605,7 @@ cp "{root}/result.json" "$out"
         r = self.run_ext("speedtest")
         detail = r.detail
         self.assertIn("No test yet", detail["markdown"])
-        self.assertEqual(detail["actions"], [{"type": "run", "command": "speedtest-start", "title": "Run speed test"}])
+        self.assertEqual(detail["actions"], [{"type": "run", "command": "step", "title": "Run speed test", "context": {"step": "speedtest-start"}}])
         self.assertEqual((self.box.data / "view.txt").read_text(), "speedtest", "Open page lands on Speedtest")
 
     def test_a_kept_result_shows_with_copy_and_the_page(self):
@@ -627,7 +634,7 @@ cp "{root}/result.json" "$out"
                 running = blocks
             time.sleep(0.2)
         self.assertIsNotNone(running, "the page counts the live reading (100 MiB-Mbps = 105 Mbps), asked every 2 s")
-        self.assertEqual(running[-1]["actions"][0]["command"], "speedtest-stop")
+        self.assertEqual(running[-1]["actions"][0]["context"]["step"], "speedtest-stop")
         self.assertTrue(self.wait_for(self.box.data / "speedtest-last.json"))
         blocks = self.part("speedtest")
         self.assertIsNone(self.refresh)
@@ -913,7 +920,7 @@ class DevicesTests(LocalNetworkCase):
         self.assertEqual(me["subtitle"], "192.0.2.10 · 00:00:5e:00:53:02")
         self.assertEqual([a["title"] for a in printer["actions"]], ["Copy IP 192.0.2.20", "Copy MAC", "Copy name"])
         self.assertEqual(phone["subtitle"], "192.0.2.30 · 02:00:5e:00:53:30 · private address")
-        self.assertEqual(look["actions"], [{"type": "run", "command": "devices-scan", "title": "Look again", "stay": True}])
+        self.assertEqual(look["actions"], [{"type": "run", "command": "step", "title": "Look again", "context": {"step": "devices-scan"}, "stay": True}])
 
     def test_skips_incomplete_broadcast_multicast_and_other_interfaces(self):
         self.net()
@@ -946,7 +953,7 @@ class DevicesTests(LocalNetworkCase):
         blocks = self.part("devices")
         self.assertEqual({s["label"]: s["value"] for s in blocks[0]["items"]},
                          {"Devices": "4", "Named": "0", "Network": "Wi-Fi on en1"})
-        self.assertEqual(blocks[1], {"type": "buttons", "actions": [{"type": "run", "command": "devices-scan", "title": "Look again"}]})
+        self.assertEqual(blocks[1], {"type": "buttons", "actions": [{"type": "run", "command": "step", "title": "Look again", "context": {"step": "devices-scan"}}]})
         self.assertEqual(blocks[2]["title"], "On en1")
         self.assertIsNone(self.refresh)
 
@@ -1038,8 +1045,13 @@ class ManifestTests(NetworkCase):
                       "Speedtest", "Network overview", "Devices on the network"):
             self.assertIn(title, shown)
         self.assertEqual(manifest("network")["preferences"][0]["name"], "terminal", "SSH hosts' preference, its name kept")
+        # Pilot's install question names every command twice, so the steps share one: seven of their own ran it to 1474
+        # of its 1200 characters (ExtensionToolingTests' catalogueQuestions).
+        self.assertEqual([c["name"] for c in manifest("network")["commands"] if c.get("hidden")], ["step", "page", "bar"])
 
     def test_a_part_the_page_lacks_is_refused(self):
         r = self.run_ext("view", context={"view": "nope"})
         self.assertEqual(r.of_type("error"), [{"type": "error", "text": "has no part nope"}])
+        r = super().run_ext("step", context={"step": "nope"})
+        self.assertEqual(r.of_type("error"), [{"type": "error", "text": "has no step nope"}])
         self.assertEqual(network.held_view({"paths": {"data": str(self.box.data)}}), "overview")
