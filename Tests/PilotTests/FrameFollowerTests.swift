@@ -13,7 +13,7 @@ import Testing
 struct FrameFollowerTests {
     /// What a drag costs: AX calls on the main thread and off it, full reads, border redraws.
     final class Costs {
-        var mainAX = 0, offMainAX = 0, fullReads = 0, frameReads = 0, shows = 0, boundsReads = 0, settleReads = 0
+        var mainAX = 0, offMainAX = 0, fullReads = 0, frameReads = 0, shows = 0, boundsReads = 0, settleReads = 0, threadMoves = 0
     }
 
     final class CountingSurface: WindowBorderSurface {
@@ -22,6 +22,8 @@ struct FrameFollowerTests {
         init(_ costs: Costs) { self.costs = costs }
         func show(frame: CGRect, width: Int, color: UInt32, above: CGWindowID?) { shown = frame; costs.shows += 1 }
         func hide() { shown = nil }
+        /// The line a drag moves from its own thread (DragFollower), as the panel's is.
+        func lend(above: CGWindowID) -> UInt32? { shown == nil ? nil : 99 }
     }
 
     /// A clock the test moves, and the work FrameFollower parks until a time on it: each runs at its own time, in
@@ -50,6 +52,8 @@ struct FrameFollowerTests {
         var held = false
         var tick: (@MainActor () -> Void)?
         var links = 0
+        /// Where the drag's thread last put the border's corner (window-server coordinates).
+        var corner: CGPoint?
     }
 
     struct Rig {
@@ -66,7 +70,8 @@ struct FrameFollowerTests {
 
     static func rig(frame fps: Double = 120, settle: [TimeInterval] = FrameFollower.settleDelays) -> Rig {
         let clock = Clock(), costs = Costs()
-        var current = CGRect(x: 100, y: 50, width: 800, height: 600)
+        nonisolated(unsafe) let shared = costs
+        nonisolated(unsafe) var current = CGRect(x: 100, y: 50, width: 800, height: 600)
         var drawn: CGRect?? // nil: where AX says; .some(nil): drawn nowhere
         let follower = FrameFollower(reader: { element, done in
             costs.offMainAX += 1; costs.frameReads += 1
@@ -74,9 +79,12 @@ struct FrameFollowerTests {
         }, now: { clock.now }, after: { delay, work in clock.due.append((clock.now + delay, work)) }, frame: 1 / fps,
            bounds: { id, done in costs.settleReads += 1; done(id == 7 ? drawn ?? current : otherWindows[id]) }, settleDelays: settle)
         let mouse = Mouse()
-        let drag = DragFollower(reader: { id, done in costs.boundsReads += 1; done(id == 7 ? current : nil) },
+        // The test ticks on the main thread, so the drag's own thread is this one; the pointer holds the title bar.
+        let drag = DragFollower(reader: { id, done in shared.boundsReads += 1; done(id == 7 ? current : nil) },
                                 ticker: { tick in mouse.tick = tick; mouse.links += 1; return { mouse.tick = nil } },
-                                held: { mouse.held }, now: { clock.now })
+                                mover: { _, corner in shared.threadMoves += 1; MainActor.assumeIsolated { mouse.corner = corner } },
+                                held: { MainActor.assumeIsolated { mouse.held } }, pointer: { CGPoint(x: current.minX + 400, y: current.minY + 14) },
+                                now: { MainActor.assumeIsolated { clock.now } })
         let observers = EngineObservers(follower: follower, drag: drag)
         observers.seed(focusedApp: .current)
         observers.readFocusedWindow = { _ in
@@ -87,6 +95,8 @@ struct FrameFollowerTests {
         let border = WindowBorderController(surface: surface, look: WindowBorderControllerTests.look(),
                                             screens: { [CGRect(x: 0, y: 0, width: 3840, height: 2160)] }, primaryHeight: { 2160 })
         observers.onFocusedWindow = { border.update($0) }
+        drag.border = { border.lend($0, revoke: $1) }
+        drag.giveBack = { border.giveBack() }
         observers.refreshFocusedWindow() // focus lands on it, as kAXFocusedWindowChanged does
         return Rig(observers: observers, clock: clock, costs: costs, surface: surface, mouse: mouse, frame: { current }, move: { current = $0 },
                    draw: { drawn = .some($0) })
@@ -126,8 +136,9 @@ struct FrameFollowerTests {
 
     /// Sven on build 62: the border did not stick to a dragged window. A 200 ms drag whose app reports a move only every
     /// 50 ms (the pace a busy app may send AX moves at; the real pace is unmeasured): through AX the border moves at
-    /// the app's pace; held by the mouse it moves every display frame, from the window server, and never asks the app.
-    @Test("Held by the mouse, the border moves every display frame from the window server, whatever pace AX reports moves at")
+    /// the app's pace; held by the mouse it moves every display frame, from the drag's own thread, led by the pointer
+    /// and corrected by the window server's reads (drag-3), and never asks the app.
+    @Test("Held by the mouse, the border moves every display frame from the drag's thread, whatever pace AX reports moves at")
     func heldFollowsEveryFrame() {
         func run(held: Bool) -> (costs: Costs, rig: Rig) {
             let rig = Self.rig()
@@ -147,11 +158,14 @@ struct FrameFollowerTests {
         }
         let ax = run(held: false), held = run(held: true)
         print("[border-drag] AX moves every 50 ms, through AX: \(ax.costs.shows) border moves in 200 ms")
-        print("[border-drag] held: \(held.costs.shows) border moves, \(held.costs.boundsReads) window server reads, \(held.costs.frameReads) AX frame reads (the release's), \(held.costs.mainAX) AX calls on main")
+        print("[border-drag] held: \(held.costs.threadMoves) border moves on the drag's thread, \(held.costs.shows) on main, \(held.costs.boundsReads) window server reads, \(held.costs.frameReads) AX frame reads (the release's), \(held.costs.mainAX) AX calls on main")
         // Four AX moves, and the settle read after the last puts the border where the window went on to (tester bug 9)
         #expect(ax.costs.shows == 5)
         #expect(ax.rig.surface.shown == Self.border(ax.rig.frame()))
-        #expect(held.costs.boundsReads == 24 && held.costs.shows == 24, "every 120 Hz frame")
+        // Every 120 Hz frame reads; every one after the first read moves the border, on the drag's thread
+        #expect(held.costs.boundsReads == 24 && held.costs.threadMoves == 23, "every 120 Hz frame")
+        #expect(held.costs.shows <= 2, "on main only at the release: its last spot, then the settle's AX read")
+        #expect(held.rig.observers.drag.lastDrag?.led == 23, "each led by the pointer")
         #expect(held.costs.mainAX == 0 && held.costs.frameReads == 1, "the app is asked once, at the release")
         #expect(held.rig.surface.shown == Self.border(held.rig.frame()))
         #expect(held.rig.mouse.tick == nil && held.rig.mouse.links == 1, "one display link per drag, stopped at the release")
@@ -167,7 +181,7 @@ struct FrameFollowerTests {
         #expect(rig.clock.due.isEmpty, "idle once the drag stopped")
     }
 
-    @Test("A move read while focus went to another window is dropped; a move of another window re-reads the focused one, once per frame")
+    @Test("A move read while focus went to another window is dropped, held by the mouse too; a move of another window re-reads the focused one, once per frame")
     func staleAndOtherWindows() {
         let rig = Self.rig()
         rig.costs.fullReads = 0
@@ -187,6 +201,37 @@ struct FrameFollowerTests {
         rig.observers.windowMoved(Self.dragged) // its frame read lands for a window no longer focused
         rig.clock.advance(to: 2)
         #expect(rig.surface.shown == Self.border(CGRect(x: 1000, y: 50, width: 800, height: 600)))
+        focusMovesMidDrag()
+    }
+
+    /// drag-3: the drag's thread moves the border it was lent; focus moving on mid-drag takes it back, so the line
+    /// stays on the newly focused window and the drag moves it no more.
+    private func focusMovesMidDrag() {
+        let rig = Self.rig()
+        rig.mouse.held = true
+        rig.observers.windowMoved(Self.dragged)
+        for ms in 1...40 {
+            rig.clock.advance(to: Double(ms) / 1000)
+            rig.move(CGRect(x: 100 + 4 * ms, y: 50, width: 800, height: 600))
+            if ms % 8 == 0 { rig.mouse.tick?() }
+        }
+        let lent = rig.costs.threadMoves
+        let other = CGRect(x: 1000, y: 50, width: 800, height: 600)
+        rig.observers.readFocusedWindow = { _ in
+            ("Other", WindowBorder.Window(frame: other, subrole: "AXStandardWindow", fullScreen: false, minimised: false, windowID: 8), Self.other)
+        }
+        rig.observers.refreshFocusedWindow()
+        for ms in 41...80 {
+            rig.clock.advance(to: Double(ms) / 1000)
+            rig.move(CGRect(x: 100 + 4 * ms, y: 50, width: 800, height: 600))
+            if ms % 8 == 0 { rig.mouse.tick?() }
+        }
+        rig.mouse.held = false
+        rig.mouse.tick?()
+        rig.clock.advance(to: 2)
+        #expect(lent >= 3, "the drag moved the lent border: \(lent)")
+        #expect(rig.costs.threadMoves == lent, "none once focus moved on")
+        #expect(rig.surface.shown == Self.border(other))
     }
 
     /// Live bug 2026-11-16 and tester bug 9 (2026-11-19): a move read takes the app's frame, which it has at once (the

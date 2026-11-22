@@ -23,7 +23,8 @@ final class FrameFollower {
     private var busy = false
     private var lastStart = -TimeInterval.infinity
     /// The window server's frame for window `id` while it draws it, off the main thread, handed back on it; tests run it in place.
-    private let bounds: DragFollower.Reader
+    typealias BoundsReader = @MainActor (_ id: CGWindowID, _ done: @escaping @MainActor (CGRect?) -> Void) -> Void
+    private let bounds: BoundsReader
     /// After the focused window was read (a move, a whole read), its frame is read again from the window server this
     /// long after the last such read, then this much later again (tester bug 9, 2026-11-19): AX has an app's frame at
     /// once, the window server only once the app commits it, and it alone knows a window drawn off its AX frame
@@ -41,7 +42,7 @@ final class FrameFollower {
 
     init(reader: @escaping Reader = FrameFollower.readOffMain, now: @escaping () -> TimeInterval = { ProcessInfo.processInfo.systemUptime },
          after: @escaping @MainActor (TimeInterval, @escaping @MainActor () -> Void) -> Void = FrameFollower.mainAfter,
-         frame: TimeInterval = FrameFollower.displayFrame(), bounds: @escaping DragFollower.Reader = FrameFollower.drawnOffMain,
+         frame: TimeInterval = FrameFollower.displayFrame(), bounds: @escaping BoundsReader = FrameFollower.drawnOffMain,
          settleDelays: [TimeInterval] = FrameFollower.settleDelays) {
         self.reader = reader; self.now = now; self.after = after; self.frame = frame; self.bounds = bounds
         settleGaps = zip(settleDelays, [0] + settleDelays).map { $0 - $1 }
