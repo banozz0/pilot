@@ -115,13 +115,15 @@ struct ExtensionCatalogueModelTests {
 
     // MARK: The menu
 
-    @Test("The menu's catalogue shows its loading row, then a row per entry saying where it stands, with Cmd+K's actions by standing")
+    @Test("The menu's catalogue shows its loading row, then a row per entry not installed or installed older, with Cmd+K's actions by standing")
     func menuRows() async throws {
         let (model, dir) = try Self.model()
         defer { try? FileManager.default.removeItem(at: dir) }
-        // Ports installed older than the catalogue's: an update.
+        // Ports installed older than the catalogue's: an update. Pomodoro installed newer: left out, as the Get tab leaves it.
         try Self.write(#"{"id": "ports", "title": "Ports", "version": "0.9.0", "commands": [{"name": "go", "title": "Go", "mode": "no-view", "run": "run"}]}"#,
                        as: "ports", in: model.installer.extensions)
+        try Self.write(#"{"id": "pomodoro", "title": "Pomodoro", "version": "99.0.0", "commands": [{"name": "go", "title": "Go", "mode": "no-view", "run": "run"}]}"#,
+                       as: "pomodoro", in: model.installer.extensions)
         let menu = ExtensionCatalogueMenu(model: model, hud: { _ in }, page: { _, _ in })
         var shown: [[MenuEntry]] = []
         menu.show = { shown.append($0) }
@@ -131,10 +133,10 @@ struct ExtensionCatalogueModelTests {
         menu.search("po")
         let rows = try #require(shown.last)
         #expect(shown.count == 2, "a later search is Pilot's to rank, not a new read")
-        #expect(rows.map(\.title) == ["Claude Sessions", "Pomodoro", "Ports"] && rows.allSatisfy { !$0.isAnswer })
-        #expect(rows[2].subtitle == "See which program holds a listening TCP port and quit it: the dev server you forgot. · Update to 1.0.0")
-        #expect(rows[2].ownActions == ["Update to 1.0.0", "Uninstall", "Show on Extensions page"])
-        #expect(rows[1].ownActions == ["Install", "Show on Extensions page"] && rows[1].subtitle?.hasSuffix(" · Install") == true)
+        #expect(rows.map(\.title) == ["Claude Sessions", "Ports"] && rows.allSatisfy { !$0.isAnswer })
+        #expect(rows[1].subtitle == "See which program holds a listening TCP port and quit it: the dev server you forgot. · Update to 1.0.0")
+        #expect(rows[1].ownActions == ["Update to 1.0.0", "Uninstall", "Show on Extensions page"])
+        #expect(rows[0].ownActions == ["Install", "Show on Extensions page"] && rows[0].subtitle?.hasSuffix(" · Install") == true)
         #expect(rows[0].keywords?.contains("Claude sessions") == true)
         #expect(ExtensionCatalogueMenu.actions(.installed) == [.show, .remove])
     }
@@ -167,7 +169,8 @@ struct ExtensionCatalogueModelTests {
     func menuUninstallAsks() async throws {
         let (model, dir) = try Self.model()
         defer { try? FileManager.default.removeItem(at: dir) }
-        try Self.write(#"{"id": "ports", "title": "Ports", "version": "1.0.0", "commands": [{"name": "go", "title": "Go", "mode": "no-view", "run": "run"}]}"#,
+        // Older than the catalogue's, so the picker lists it (one installed as offered is left out).
+        try Self.write(#"{"id": "ports", "title": "Ports", "version": "0.9.0", "commands": [{"name": "go", "title": "Go", "mode": "no-view", "run": "run"}]}"#,
                        as: "ports", in: model.installer.extensions)
         var said: [String] = [], asked: [(String, String)] = [], yes: (@MainActor () -> Void)?
         let menu = ExtensionCatalogueMenu(model: model, hud: { said.append($0) }, page: { _, _ in },

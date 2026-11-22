@@ -2,8 +2,9 @@ import Foundation
 import PilotCore
 
 /// The menu's Extension catalogue (2026-10-10): a live picker that shows a row saying the catalogue is being read, then
-/// a row per entry (its emoji, title, and "description · Installed | Update to 1.1 | Install"), which Pilot ranks as
-/// Sven types. Return installs or updates an entry, or opens an installed one on the Extensions page; Cmd+K offers
+/// a row per entry not installed or installed older (its emoji, title, and "description · Update to 1.1 | Install"), as
+/// the Extensions page's Get tab leaves installed ones out (Sven, 2026-11-22), which Pilot ranks as Sven types. Return
+/// installs or updates an entry, or opens one installed meanwhile on the Extensions page; Cmd+K offers
 /// Install or Update, Uninstall (asked first, as the page asks; to the Trash, settings kept, as its HUD says) and Show on
 /// Extensions page. The index is read only now, as the picker opens.
 @MainActor
@@ -51,8 +52,9 @@ final class ExtensionCatalogueMenu: MenuSource {
         case .failed(let why): show([Self.status(why)])
         case .idle, .loading: show([Self.status(Self.reading)])
         case .loaded:
-            let entries = model.entries()
-            show(entries.isEmpty ? [Self.status("Pilot's catalogue lists no extensions yet.")] : entries.map(row))
+            let all = model.entries(), entries = all.filter { model.standing(of: $0) != .installed }
+            show(entries.isEmpty ? [Self.status(all.isEmpty ? "Pilot's catalogue lists no extensions yet."
+                                                            : "Every extension in Pilot's catalogue is installed.")] : entries.map(row))
         }
     }
 
