@@ -13,6 +13,8 @@ enum CleanModule {
     nonisolated static var mole: String? { standIn?.mole ?? Helper.mole.path() }
     /// The home Mole runs in and lists.
     nonisolated static var home: String { standIn?.home ?? NSHomeDirectory() }
+    /// How the finished preview's tip shows: a HUD tip on a Mac; the sandbox host prints it instead (PILOT_SANDBOX_CLEAN).
+    static var showTip: @MainActor (String, HUD.TipAction) -> Void = { HUD.tip($0, seconds: 6, action: $1) }
 
     static let previewer: CleanPreviewer = {
         let previewer = CleanPreviewer(list: { started in readList(since: started) }) { lines in
@@ -26,12 +28,16 @@ enum CleanModule {
                 return nil
             }
         }
-        // The run ends whether or not a menu waits (card agent-bo-95423002): logged only. With Clean closed it says nothing,
-        // so it never reads as a scan Pilot started by itself; the kept preview shows when Clean opens next (Sven, Q246).
+        // The run ends whether or not a menu waits (card agent-bo-95423002): logged, and with Clean not on screen a tip, as
+        // Update's check raises (Sven, 2026-11-22), whose button opens Clean's ticked list. Only a Clean open or
+        // `pilot clean` starts a preview, so the tip always follows a scan someone asked for.
         previewer.onStart = { caller in ilog.notice("clean: preview started by \(caller, privacy: .public)") }
         previewer.onFinish = { preview in
             if let preview {
                 ilog.notice("clean: preview ready, \(preview.items.count) items, \(preview.list.rows.count) paths, \(preview.total ?? "no total", privacy: .public)")
+            }
+            if let tip = CleanMenu.tip(preview, showing: PilotMenu.shared.branch?.browsed == .clean) {
+                showTip(tip, HUD.TipAction(title: CleanMenu.tipButton) { PilotMenu.shared.open(branch: .clean) })
             }
         }
         return previewer

@@ -316,6 +316,11 @@ struct CleanTests {
         await gate.open()
         try await Self.until { previewer.ready != nil }
         #expect(reports.map { $0?.total } == ["28.75GB"], "one report for one run, with two menus having waited")
+        // With Clean closed the finished run raises Update's kind of tip, its button opening Clean; with Clean showing, none.
+        #expect(CleanMenu.tip(reports[0], showing: false) == "Mole's preview is ready: Clean 28.75GB in Pilot's menu")
+        #expect(CleanMenu.tip(reports[0], showing: true) == nil && CleanMenu.tipButton == "Open Clean")
+        #expect(CleanMenu.tip(CleanPreview(items: [], total: nil, systemSkipped: false), showing: false)
+                == "Mole's preview is ready: nothing to clean")
         #expect(await previewer.preview()?.total == "28.75GB")
         #expect(runs == 1)
     }
@@ -327,6 +332,8 @@ struct CleanTests {
         failing.onFinish = { reports.append($0) }
         #expect(await failing.preview() == nil)
         #expect(reports.count == 1 && reports[0] == nil)
+        #expect(CleanMenu.tip(nil, showing: false) == "Mole's preview did not finish; open Clean to try again")
+        #expect(CleanMenu.tip(nil, showing: true) == nil, "the menu says it failed itself")
         let gate = Gate()
         let dropped = CleanPreviewer(now: { .now }) { _ in
             await gate.wait()

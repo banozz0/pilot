@@ -290,6 +290,7 @@ struct LauncherFilmRenders {
         if let tip = UpdateList.tip(rows, includeSelfUpdating: true, showing: false) {
             try InstrumentPanelsRenders.render(TipView(text: tip), .hud, "tip-update", in: dir)
         }
+        if let tip = CleanMenu.tip(preview, showing: false) { try InstrumentPanelsRenders.render(TipView(text: tip), .hud, "tip-clean", in: dir) }
     }
 
     /// Summarise opened from the menu (Sven's cut 4 note: show the link going in): empty, it offers the copied link; with the

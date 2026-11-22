@@ -302,6 +302,17 @@ public enum CleanMenu {
         let items = progress?.items ?? 0
         return "Mole is checking \(section), \(items) item\(items == 1 ? "" : "s") so far; \(keeps)"
     }
+
+    /// The tip when a preview ends with Clean not on screen, as Update's when its check ends (Sven, 2026-11-22: "clean should
+    /// show like the popup that it used to show like update does when it finishes searching"); nil while Clean or one of
+    /// its parts shows, since its rows (or its failure) say it. Its button, `tipButton`, opens Clean's ticked list.
+    public static func tip(_ preview: CleanPreview?, showing: Bool) -> String? {
+        guard !showing else { return nil }
+        guard let preview else { return "Mole's preview did not finish; open Clean to try again" }
+        return "Mole's preview is ready: " + (preview.total.map { "Clean \($0) in Pilot's menu" } ?? "nothing to clean")
+    }
+
+    public static let tipButton = "Open Clean"
 }
 
 /// Mole's preview, run once and kept for 15 minutes (it takes a minute or two and keeps going when the menu closes);
