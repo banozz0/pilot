@@ -10,6 +10,13 @@ protocol WindowBorderSurface: AnyObject {
     /// window `above`, the focused one.
     func show(frame: CGRect, width: Int, color: UInt32, above: CGWindowID?)
     func hide()
+    /// The line lent to a drag of window `id`, which moves it from its own thread (DragFollower): its window server
+    /// number while it is shown above that window and can be moved so (WindowServerMove). Nil by default.
+    func lend(above id: CGWindowID) -> UInt32?
+}
+
+extension WindowBorderSurface {
+    func lend(above id: CGWindowID) -> UInt32? { nil }
 }
 
 /// The focused-window border (card agent-bo-95422950, story 125): EngineObservers hands it each read of the focused
@@ -37,6 +44,16 @@ final class WindowBorderController {
         guard look.windowBorder, let window, let frame = WindowBorder.frame(for: window, on: look.windowBorder, width: look.windowBorderWidth,
                                                                          screens: screens(), primaryHeight: primaryHeight()) else { return surface.hide() }
         surface.show(frame: frame, width: look.windowBorderWidth, color: look.windowBorderColour.resolved(look.theme.accent), above: window.windowID)
+    }
+
+    /// The border to move for a drag of window `id`, and how far its corner sits out from the window's: nil when it is
+    /// off, shown for another window, or cannot be moved off the main thread.
+    func dragTarget(_ id: CGWindowID) -> DragFollower.DragBorder? {
+        guard look.windowBorder, let window, window.windowID == id,
+              let frame = WindowBorder.frame(for: window, on: true, width: look.windowBorderWidth, screens: screens(), primaryHeight: primaryHeight()),
+              let number = surface.lend(above: id) else { return nil }
+        // WindowBorder.frame's own reach out from the window's corner, read back in window-server coordinates
+        return (number, window.frame.minX - frame.minX)
     }
 
     /// Follows Look's settings from now on; the focused window arrives through `update`.
@@ -122,6 +139,15 @@ final class WindowBorderPanel: WindowBorderSurface {
         if let stacked { window.order(.above, relativeTo: Int(stacked)) } else { window.orderFrontRegardless() }
     }
 
+    /// A pending AppKit catch-up is dropped: it would put the line back where the drag found it, under the drag's moves.
+    /// The drag's end places the line through `show`, which catches AppKit up.
+    func lend(above id: CGWindowID) -> UInt32? {
+        guard window.isVisible, above == id, WindowServerMove.available, let number = WindowServerMove.number(window.windowNumber) else { return nil }
+        sync?.cancel()
+        sync = nil
+        return number
+    }
+
     func hide() {
         syncAppKit()
         if window.isVisible { window.orderOut(nil) }
@@ -132,17 +158,24 @@ final class WindowBorderPanel: WindowBorderSurface {
     /// still showed 1.3 frames behind a 240 Hz drag (move-lag). A resize, or the first show, is AppKit's.
     private func place(_ frame: CGRect) {
         let current = placed ?? window.frame
-        guard current != frame else { return }
+        guard current != frame else {
+            if placed != nil, sync == nil { syncLater() } // a lent line's drag ended where it began
+            return
+        }
         if window.isVisible, current.size == frame.size, WindowServerMove.move(window.windowNumber, to: frame) {
             placed = frame
-            sync?.cancel()
-            let item = DispatchWorkItem { [weak self] in MainActor.assumeIsolated { self?.syncAppKit() } }
-            sync = item
-            DispatchQueue.main.asyncAfter(deadline: .now() + Self.syncAfter, execute: item)
+            syncLater()
         } else {
             placed = nil
             window.setFrame(frame, display: false)
         }
+    }
+
+    private func syncLater() {
+        sync?.cancel()
+        let item = DispatchWorkItem { [weak self] in MainActor.assumeIsolated { self?.syncAppKit() } }
+        sync = item
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.syncAfter, execute: item)
     }
 
     /// AppKit's frame where the window server already has the panel: no move on screen.
@@ -161,7 +194,7 @@ final class WindowBorderPanel: WindowBorderSurface {
 enum WindowServerMove {
     private typealias Connection = @convention(c) () -> Int32
     private typealias Move = @convention(c) (Int32, UInt32, UnsafePointer<CGPoint>) -> Int32
-    private static let calls: (Connection, Move)? = {
+    private nonisolated static let calls: (Connection, Move)? = {
         guard let connection = CursorCalls.symbol("CGSMainConnectionID"), let move = CursorCalls.symbol("CGSMoveWindow") else {
             wlog.error("border: CGSMoveWindow not found, moves go through AppKit")
             return nil
@@ -169,10 +202,21 @@ enum WindowServerMove {
         return (unsafeBitCast(connection, to: Connection.self), unsafeBitCast(move, to: Move.self))
     }()
 
+    nonisolated static var available: Bool { calls != nil }
+
+    /// An NSWindow's number as the window server's id: nil while it has none.
+    static func number(_ window: Int) -> UInt32? { UInt32(exactly: window).flatMap { $0 > 0 ? $0 : nil } }
+
     /// `frame` in AppKit coordinates; the window server takes its top-left corner, y down from the primary screen's top.
     static func move(_ window: Int, to frame: CGRect) -> Bool {
-        guard let (connection, move) = calls, let id = UInt32(exactly: window), id > 0 else { return false }
-        var corner = WindowGeometry.flip(frame, primaryHeight: Screens.primaryHeight).origin
+        guard let id = number(window) else { return false }
+        return move(id, corner: WindowGeometry.flip(frame, primaryHeight: Screens.primaryHeight).origin)
+    }
+
+    /// Window `id`'s top-left corner to `corner`, window-server coordinates; from any thread (a drag's, DragFollower).
+    nonisolated static func move(_ id: UInt32, corner: CGPoint) -> Bool {
+        guard let (connection, move) = calls else { return false }
+        var corner = corner
         return move(connection(), id, &corner) == 0
     }
 }
