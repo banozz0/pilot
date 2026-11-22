@@ -425,7 +425,8 @@ final class PageDeck: NSView {
 
     private func buildNextAhead() {
         aheadTimer = nil
-        guard let window, showing(), let next = nextAhead else { return stopAhead() }
+        guard let window, let next = nextAhead else { return stopAhead() }
+        guard showing() else { stopAhead(); return waitToShow() }
         // A press already waiting goes first.
         if NSApp.nextEvent(matching: Self.input, until: .distantPast, inMode: .default, dequeue: false) != nil { return armAhead() }
         let start = ContinuousClock.now
@@ -445,6 +446,24 @@ final class PageDeck: NSView {
         if window.firstResponder !== responder { window.makeFirstResponder(responder) }
         PageSwitchTiming.builtAhead(next.key, in: ContinuousClock.now - start)
         armAhead()
+    }
+
+    private var waitingToShow = false
+
+    /// The window not key yet (it becomes key a moment after it opens) or left: building ahead goes on once it is again.
+    private func waitToShow() {
+        guard !waitingToShow else { return }
+        waitingToShow = true
+        // A run loop block, not the main queue's, so a nested run loop (a test's) runs it too.
+        withObservationTracking { _ = showing() } onChange: { [weak self] in
+            CFRunLoopPerformBlock(CFRunLoopGetMain(), CFRunLoopMode.commonModes.rawValue) {
+                MainActor.assumeIsolated {
+                    self?.waitingToShow = false
+                    self?.armAhead()
+                }
+            }
+            CFRunLoopWakeUp(CFRunLoopGetMain())
+        }
     }
 
     /// SwiftUI shows the first part before the deck is in the window: building ahead waits for the window.

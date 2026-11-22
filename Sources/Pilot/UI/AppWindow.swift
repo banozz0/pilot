@@ -218,9 +218,10 @@ final class AppWindowModel {
 struct PageVisits {
     static let key = "appWindow.visits"
     static let most = 200
-    /// Never built ahead: an extension's page or the Extensions list runs extension programs, and Repos reads every repo
-    /// on disk; nothing a page opened unasked should start.
-    static let notAhead: Set<AppPage> = [.extensions, .repos]
+    /// The pages built ahead, those whose build reads only Pilot's own data or what a visit reads while hidden and paused
+    /// (page-first's audit). Not the rest: Extensions runs extension programs, Repos reads every repo on disk, General
+    /// reads the update count and Full Disk Access as it is built; nothing a page opened unasked should start.
+    static let ahead: Set<AppPage> = [.binds, .menuBar, .look, .system, .dock, .widgets, .tiling, .workspaces, .home]
     let defaults: UserDefaults
 
     var counts: [String: Int] { defaults.dictionary(forKey: Self.key) as? [String: Int] ?? [:] }
@@ -232,13 +233,10 @@ struct PageVisits {
         defaults.set(counts, forKey: Self.key)
     }
 
-    /// The `count` pages switched to most, most first (ties by name), none of `notAhead` and no developer page while the
-    /// Developer switch is off.
+    /// The `count` pages of `ahead` switched to most, most first (ties by name).
     func likeliest(_ count: Int) -> [AppPage] {
         let counts = counts
-        let pages: [AppPage] = counts.keys.compactMap(AppPage.init(rawValue:)).filter { page in
-            !Self.notAhead.contains(page) && (!page.isDeveloper || DeveloperPages.on)
-        }
+        let pages: [AppPage] = counts.keys.compactMap(AppPage.init(rawValue:)).filter(Self.ahead.contains)
         let sorted = pages.sorted { a, b in
             let na = counts[a.rawValue, default: 0], nb = counts[b.rawValue, default: 0]
             return na != nb ? na > nb : a.rawValue < b.rawValue
