@@ -110,8 +110,8 @@ struct MenuBrowseRenders {
     /// Install as a search starts: only the Searching row, naming the sources still asked.
     static func installSearching() -> MenuNavigator {
         var nav = MenuNavigator(entries: [], branch: .install)
-        nav.query = "raycast"
-        nav.provide(.package, home: .homebrew, MenuEntries.searching(InstallSearch.Query("raycast")!, waiting: [.homebrew, .appStore, .github, .tools]))
+        nav.query = "zellij"
+        nav.provide(.package, home: .homebrew, MenuEntries.searching(InstallSearch.Query("zellij")!, waiting: [.homebrew, .appStore, .github, .tools]))
         return nav
     }
 

@@ -1,6 +1,6 @@
 import Foundation
 
-/// The calculator's money, time zones and dates (card agent-bo-95423047; Raycast's and SuperCmd's calculator, ideas
+/// The calculator's money, time zones and dates (card agent-bo-95423047; SuperCmd's calculator, ideas
 /// only): "40 eur in usd", "5pm london in malta", "time in tokyo", "today + 30 days", "days until 2026-12-25". A root
 /// answer of its own after Calculator's sums and units (RootAnswers), so nothing the calculator answered before changes.
 public enum CalculatorWorld {

@@ -45,12 +45,12 @@ struct MenuFileSearchTests {
     func installSearchAsked() {
         let model = MenuModel(nav: MenuNavigator(entries: [MenuEntry(title: "Bitwarden", target: .app("com.bitwarden.desktop"), home: .apps)]))
         var asked: [String] = []
-        model.nav.query = "raycast"
+        model.nav.query = "zellij"
         model.onQuery = { asked.append($0) }
-        #expect(model.noMatch && model.nav.selected?.target == .ask("raycast"))
-        while model.nav.selected?.target != .searchInstall("raycast") { _ = model.nav.handle(.down) }
+        #expect(model.noMatch && model.nav.selected?.target == .ask("zellij"))
+        while model.nav.selected?.target != .searchInstall("zellij") { _ = model.nav.handle(.down) }
         #expect(model.nav.handle(.return) == .handled)
-        #expect(model.nav.branch == .homebrew && asked == ["raycast"])
+        #expect(model.nav.branch == .homebrew && asked == ["zellij"])
     }
 
     @Test("Each file row says where it came from, and from:whatsapp asks the index for those files alone (Homy-style Files, check 3)")

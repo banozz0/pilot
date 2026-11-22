@@ -1,16 +1,16 @@
 import Foundation
 
-/// A script command (card agent-bo-95423029, audit gap 3, after Raycast's Script Commands): an executable file in Pilot's
-/// Scripts folder, listed in Hyper+Space and bindable as `scripts.run:<file name>`. Its Raycast-style header comments
-/// (`# @raycast.title …`, after `#`, `//` or `--`) name its title, an emoji icon and how it runs; a file without them
-/// is titled from its name and shows its last output line. It runs through the drive shell route. Its arguments
-/// (`@raycast.argument1` to 3, card agent-bo-95423048) are typed after its title in Hyper+Space and reach it as $1 $2 $3.
+/// A script command (card agent-bo-95423029, audit gap 3): an executable file in Pilot's Scripts folder, listed in
+/// Hyper+Space and bindable as `scripts.run:<file name>`. Its header comments (`# @pilot.title …`, after `#`, `//` or
+/// `--`) name its title, an emoji icon and how it runs; a file without them is titled from its name and shows its last
+/// output line. It runs through the drive shell route. Its arguments (`@pilot.argument1` to 3, card agent-bo-95423048)
+/// are typed after its title in Hyper+Space and reach it as $1 $2 $3.
 public struct ScriptCommand: Equatable, Sendable {
-    /// Raycast's silent (the last line in a HUD when one was printed); its compact and inline as a HUD line, "<title> ran"
-    /// when nothing was printed; its fullOutput in a visible terminal.
+    /// The header's mode: silent (the last line in a HUD when one was printed); compact and inline as a HUD line, "<title>
+    /// ran" when nothing was printed; fullOutput in a visible terminal.
     public enum Mode: Equatable, Sendable { case silent, hud, terminal }
 
-    /// One `@raycast.argument<n>` line: a JSON object with its type, placeholder, and optional and percentEncoded flags.
+    /// One `@pilot.argument<n>` line: a JSON object with its type, placeholder, and optional and percentEncoded flags.
     public struct Argument: Equatable, Sendable {
         public enum Kind: Equatable, Sendable { case text, password, dropdown([Choice]) }
         public struct Choice: Equatable, Sendable, Decodable {
@@ -78,7 +78,7 @@ public struct ScriptCommand: Equatable, Sendable {
     public init(file: String, header: String) {
         var fields: [String: String] = [:]
         for line in header.split(whereSeparator: \.isNewline) {
-            if let m = line.wholeMatch(of: /\s*(?:#|\/\/|--)\s*@raycast\.(\w+)\s+(.+?)\s*/) { fields[String(m.1)] = String(m.2) }
+            if let m = line.wholeMatch(of: /\s*(?:#|\/\/|--)\s*@pilot\.(\w+)\s+(.+?)\s*/) { fields[String(m.1)] = String(m.2) }
         }
         self.file = file
         title = fields["title"] ?? Self.title(file: file)
@@ -197,7 +197,7 @@ public struct ScriptCommand: Equatable, Sendable {
         return words.prefix(1).uppercased() + words.dropFirst()
     }
 
-    /// One emoji, as Raycast's icon field holds it besides a path or a URL.
+    /// One emoji; a path or a URL in the icon field draws nothing.
     static func isEmoji(_ s: String) -> Bool {
         s.count == 1 && s.unicodeScalars.contains { $0.properties.isEmojiPresentation || $0.value == 0xFE0F }
     }

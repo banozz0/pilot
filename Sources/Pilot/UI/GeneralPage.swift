@@ -4,7 +4,7 @@ import PilotCore
 import SwiftUI
 
 /// The Pilot page (General until simplify-pages T4): Pilot's own page as an app, the way an About and General pane open
-/// in Raycast and Ice (Sven 2026-10-10: "it should be like the Pilot general app"). Its front (simplify-pages T8): who Pilot
+/// in Ice (Sven 2026-10-10: "it should be like the Pilot general app"). Its front (simplify-pages T8): who Pilot
 /// is, its mark, name, version and build, whether this build is current with Check for updates, and Support; the
 /// permission when it is missing (Home links here); then, back from its More (pages round 4, Sven's Q106), the Hyper key
 /// with where it sits and its options, Startup, what runs, a pointer to Notifications on Menu bar, every permission Pilot asks for

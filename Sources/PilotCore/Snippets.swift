@@ -1,7 +1,7 @@
 import Foundation
 
 /// Saved text Sven pastes by typing its keyword in any app or picking it in Hyper+Space's Snippets branch (card
-/// agent-bo-95423044, audit gap 2; Raycast's Snippets the reference, no code). Its text may hold placeholders, filled
+/// agent-bo-95423044, audit gap 2). Its text may hold placeholders, filled
 /// as it is pasted (Placeholders): {date +7d format="d MMM"}, {time}, {clipboard} and {clipboard N}, {selection}, {argument}
 /// or {argument name} (asked for first), {cursor} (where the caret ends up), each with | uppercase, lowercase, trim or encode.
 public struct Snippet: Codable, Equatable, Identifiable, Sendable {

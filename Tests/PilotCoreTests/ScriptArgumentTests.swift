@@ -2,30 +2,30 @@ import Foundation
 import Testing
 @testable import PilotCore
 
-/// Card agent-bo-95423048 (after Raycast's @raycast.argument1 to 3): a script command that takes arguments asks for them
+/// Card agent-bo-95423048 (@pilot.argument1 to 3): a script command that takes arguments asks for them
 /// in Hyper+Space, the words typed after its title, and gets them as $1 $2 $3. Nothing here runs a script.
 @Suite("Script arguments")
 struct ScriptArgumentTests {
     static let flights = ScriptCommand(file: "flights.sh", header: """
         #!/bin/bash
-        # @raycast.title Flights
-        # @raycast.argument1 { "type": "text", "placeholder": "from city", "percentEncoded": true }
-        # @raycast.argument2 { "type": "text", "placeholder": "to city", "optional": true }
+        # @pilot.title Flights
+        # @pilot.argument1 { "type": "text", "placeholder": "from city", "percentEncoded": true }
+        # @pilot.argument2 { "type": "text", "placeholder": "to city", "optional": true }
         """)
     static let size = ScriptCommand(file: "size.sh", header: """
-        # @raycast.title Window size
-        # @raycast.argument1 { "type": "dropdown", "placeholder": "size", "data": [{"title": "Small", "value": "s"}, {"title": "Large", "value": "l"}] }
+        # @pilot.title Window size
+        # @pilot.argument1 { "type": "dropdown", "placeholder": "size", "data": [{"title": "Small", "value": "s"}, {"title": "Large", "value": "l"}] }
         """)
     static let login = ScriptCommand(file: "login.sh", header: """
-        # @raycast.title Log in
-        # @raycast.argument1 { "type": "password", "placeholder": "password" }
+        # @pilot.title Log in
+        # @pilot.argument1 { "type": "password", "placeholder": "password" }
         """)
     static let tag = ScriptCommand(file: "tag.sh", header: """
-        # @raycast.title Tag
-        # @raycast.argument1 { "type": "text", "placeholder": "tag", "optional": true }
+        # @pilot.title Tag
+        # @pilot.argument1 { "type": "text", "placeholder": "tag", "optional": true }
         """)
 
-    @Test("Raycast's argument lines parse in order with their placeholder, optional and percentEncoded; bad ones are left out")
+    @Test("The header's argument lines parse in order with their placeholder, optional and percentEncoded; bad ones are left out")
     func parse() {
         let args = Self.flights.arguments
         #expect(args.map(\.placeholder) == ["from city", "to city"])
@@ -35,19 +35,19 @@ struct ScriptArgumentTests {
         #expect(Self.flights.needsArguments && !Self.flights.takesPassword)
         #expect(Self.size.arguments.first?.kind == .dropdown([.init(title: "Small", value: "s"), .init(title: "Large", value: "l")]))
         #expect(Self.login.takesPassword)
-        // Raycast's deprecated secure flag is a password too.
-        #expect(ScriptCommand(file: "a.sh", header: "# @raycast.argument1 { \"type\": \"text\", \"placeholder\": \"pin\", \"secure\": true }").takesPassword)
+        // The older secure flag is a password too.
+        #expect(ScriptCommand(file: "a.sh", header: "# @pilot.argument1 { \"type\": \"text\", \"placeholder\": \"pin\", \"secure\": true }").takesPassword)
         #expect(!Self.tag.needsArguments && Self.tag.arguments.count == 1)
         // Bad JSON, a fourth argument, a dropdown without data and a gap all leave the script listed with what came before.
         let odd = ScriptCommand(file: "odd.sh", header: """
-            # @raycast.title Odd
-            # @raycast.argument1 { "type": "text", "placeholder": "one" }
-            # @raycast.argument2 { not json }
-            # @raycast.argument3 { "type": "text", "placeholder": "three" }
-            # @raycast.argument4 { "type": "text", "placeholder": "four" }
+            # @pilot.title Odd
+            # @pilot.argument1 { "type": "text", "placeholder": "one" }
+            # @pilot.argument2 { not json }
+            # @pilot.argument3 { "type": "text", "placeholder": "three" }
+            # @pilot.argument4 { "type": "text", "placeholder": "four" }
             """)
         #expect(odd.title == "Odd" && odd.arguments.map(\.placeholder) == ["one"])
-        #expect(ScriptCommand(file: "d.sh", header: "# @raycast.argument1 { \"type\": \"dropdown\", \"placeholder\": \"x\" }").arguments.isEmpty)
+        #expect(ScriptCommand(file: "d.sh", header: "# @pilot.argument1 { \"type\": \"dropdown\", \"placeholder\": \"x\" }").arguments.isEmpty)
         #expect(ScriptCommand(file: "n.sh", header: "").arguments.isEmpty)
     }
 
@@ -99,9 +99,9 @@ struct ScriptArgumentTests {
     func unfilled() throws {
         #expect(ScriptCommand.answers(for: "window size huge", in: [Self.size]).isEmpty)
         let two = ScriptCommand(file: "two.sh", header: """
-            # @raycast.title Two
-            # @raycast.argument1 { "type": "text", "placeholder": "name" }
-            # @raycast.argument2 { "type": "dropdown", "placeholder": "size", "data": [{"title": "Small", "value": "s"}, {"title": "Large", "value": "l"}] }
+            # @pilot.title Two
+            # @pilot.argument1 { "type": "text", "placeholder": "name" }
+            # @pilot.argument2 { "type": "dropdown", "placeholder": "size", "data": [{"title": "Small", "value": "s"}, {"title": "Large", "value": "l"}] }
             """)
         let row = try #require(ScriptCommand.answers(for: "two ana", in: [two]).first)
         #expect(row.title == "Run Two" && row.detail == "size: Small or Large")
@@ -113,8 +113,8 @@ struct ScriptArgumentTests {
     @Test("A run's values count only by presence, so an encoded dropdown value runs (Moody EcNC-D0gD9g)")
     func encodedDropdown() throws {
         let city = ScriptCommand(file: "city.sh", header: """
-            # @raycast.title City
-            # @raycast.argument1 { "type": "dropdown", "placeholder": "city", "percentEncoded": true, "data": [{"title": "NY", "value": "new york"}] }
+            # @pilot.title City
+            # @pilot.argument1 { "type": "dropdown", "placeholder": "city", "percentEncoded": true, "data": [{"title": "NY", "value": "new york"}] }
             """)
         let run = try #require(ScriptCommand.answers(for: "city ny", in: [city]).first)
         guard case .action(let id) = run.target else { Issue.record("not an action"); return }

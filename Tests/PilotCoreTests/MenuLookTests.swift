@@ -127,7 +127,7 @@ struct MenuLookTests {
 
     @Test("Instrument's menu is 750 wide (Q130) and as tall as its rows and headings in every shape, two rows at least, up to each shape's tallest, which Cmd+K takes (card agent-bo-95423181)")
     func instrumentHeight() {
-        // Mockup A's heights, one scale step up (C3), rows a step taller and every shape Raycast's 750 wide (Q130).
+        // Mockup A's heights, one scale step up (C3), rows a step taller and every shape 750 wide (Q130).
         let s = MenuPanelSize.s, w: CGFloat = 750
         let rows = MenuPanelSize.instrument(.wide, rows: 6, headings: 3), more = MenuPanelSize.instrument(.wide, rows: 7, headings: 3)
         #expect(rows == CGSize(width: w, height: s(112) + 6 * s(44) + 3 * s(28)), "search line, foot and insets 112, rows 44, headings 28")

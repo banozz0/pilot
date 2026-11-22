@@ -2,7 +2,7 @@ import AppKit
 import PilotCore
 import SwiftUI
 
-/// Cmd+K's actions on a note (Sven 2026-10-15) in the menu's Cmd+K look, searchable as Raycast's action panel
+/// Cmd+K's actions on a note (Sven 2026-10-15) in the menu's Cmd+K look, searchable as an action panel
 /// (direction B): what is typed over the actions, then those that match in groups split by rules, each with its key
 /// (the formats', ⌘N, ⌘⌫), the Trash in the problem colour, ↵ on the highlighted one; typing, ↑↓ and Return from the
 /// panel's keys (NotesKey), a click runs one. Over the note's corner, on the style's pop face.

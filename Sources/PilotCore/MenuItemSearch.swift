@@ -23,7 +23,7 @@ public struct MenuItemNode: Equatable, Sendable, Codable {
     public var key: String? { MenuItemSearch.key(char: char, modifiers: modifiers, virtualKey: virtualKey) }
 }
 
-/// The front app's menu items found by typing at the menu's root (card agent-bo-95423046; Raycast's and SuperCmd's
+/// The front app's menu items found by typing at the menu's root (card agent-bo-95423046; SuperCmd's
 /// Search Menu Items, ideas only). The panel reads the menu bar through Accessibility as the menu opens; each row is the
 /// drive route action that presses its item by title path (DriveRoute.menu), so Return is an AXPress, never a keystroke
 /// (ADR 0001) and Cmd+K binds it as any drive route.

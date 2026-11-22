@@ -56,8 +56,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         Look.shared.followSystem()
         CursorSets.shared.start()  // the saved cursor set, re-applied at login, wake and display changes (P84)
         CursorEffects.shared.start()  // the saved trail and halos; with none on, nothing is made (P84)
-        // A folder in Extensions that is not an extension: one line each at launch, off the main thread; every reader skips
-        // it. Old Raycast installs are not logged: the Extensions page offers them to the Trash in one line.
+        // A folder in Extensions whose extension.json does not read: one line each at launch, off the main thread; every
+        // reader skips it. A folder without one is no extension and is never logged.
         Task.detached(priority: .utility) {
             for broken in Extension.find().broken {
                 dlog.notice("extension: \(broken.folder, privacy: .public) skipped: \(broken.problem.reason, privacy: .public)")

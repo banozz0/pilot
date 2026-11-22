@@ -6,7 +6,7 @@ import Testing
 @testable import Pilot
 
 /// The Extensions page (card agent-bo-95423247) drawn offscreen on a folder of its own: three extensions whose
-/// preferences cover all seven types, a required folder left unset, and two folders that are not extensions. Its values
+/// preferences cover all seven types, a required folder left unset, one folder whose manifest does not read and one without any. Its values
 /// sit in a temporary data folder and a fake Keychain, so nothing reads or writes Sven's Extensions folder, defaults or
 /// Keychain. The whole window's renders (inside Instrument's frame, dark and light) are opt-in like the
 /// others:
@@ -18,7 +18,7 @@ struct ExtensionsPageViewTests {
     nonisolated static let env = ProcessInfo.processInfo.environment
 
     /// The manifests by folder name: GitHub (text, password, checkbox, dropdown), Daily notes (folder, file, app), Dice
-    /// (nothing to set, touches nothing); `weather` has a bad id and `scratch` no manifest.
+    /// (nothing to set, touches nothing); `weather` has a bad id and `scratch` no manifest, so it is no extension at all.
     static let manifests: [(folder: String, json: String)] = [
         ("github", #"""
             {"id": "github", "title": "GitHub", "icon": "🐙",
@@ -81,13 +81,13 @@ struct ExtensionsPageViewTests {
         FileManager.default.temporaryDirectory.appendingPathComponent("pilot-ext-page-\(UUID().uuidString)").resolvingSymlinksInPath()
     }
 
-    @Test("The fixture reads as three extensions by title with every preference type, Daily notes' folder needed, and two folders not read")
+    @Test("The fixture reads as three extensions by title with every preference type, Daily notes' folder needed, and one folder not read")
     func fixtureReads() async throws {
         let dir = Self.folder()
         defer { try? FileManager.default.removeItem(at: dir) }
         let settings = try await Self.fixture(in: dir)
         #expect(settings.rows.map(\.id) == ["notes", "dice", "github"])
-        #expect(Set(settings.broken.map(\.folder)) == ["scratch", "weather"])
+        #expect(settings.broken.map(\.folder) == ["weather"])
         let kinds = settings.rows.flatMap(\.fields).map { "\($0.preference.kind)".prefix { $0 != "(" } }
         #expect(Set(kinds) == ["text", "password", "checkbox", "dropdown", "app", "file", "folder"])
         #expect(settings.rows.flatMap(\.fields).filter(\.isMissing).map(\.id) == ["vault"])

@@ -61,7 +61,7 @@ struct MenuKindCountsTests {
     @Test("Offers never count: a search that finds nothing reads 0 for every kind")
     func offersNeverCount() {
         var nav = navigator()
-        nav.query = "raycast"
+        nav.query = "zellij"
         #expect(nav.rows.count == 4 && nav.rows.allSatisfy { $0.isOffer }, "Ask AI, Search the web, Search to install and Search files")
         #expect(counts(nav) == [0, 0, nil, 0, 0])
     }

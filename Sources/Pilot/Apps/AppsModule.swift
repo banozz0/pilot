@@ -237,7 +237,7 @@ enum AppsModule {
     /// installedApps with each app's file, unsorted; reads only the disk, so it runs off the main actor too.
     nonisolated static func installedAppFiles() -> [(name: String, bundle: String, url: URL)] { scan().map { ($0.name, $0.bundle, $0.url) } }
 
-    /// Apps kept elsewhere in the home folder, as Raycast lists them (OpenRGB left in Downloads), with the folders read:
+    /// Apps kept elsewhere in the home folder (OpenRGB left in Downloads), with the folders read:
     /// a bundle in any folder of home, or one folder further down Downloads, Desktop and Documents (an unzipped release's
     /// folder); never inside a package, ~/Library, a dot folder (the Trash), a link or a build tool's tree. Spotlight is
     /// off on Sven's Mac (2026-10-24) and the file index runs only while the menu is used, so this reads the disk: about 30 folders,

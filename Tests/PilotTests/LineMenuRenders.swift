@@ -398,7 +398,7 @@ struct LineMenuRenders {
     [{"window-id": 412, "app-name": "Ghostty", "app-bundle-id": "com.mitchellh.ghostty", "app-pid": 2, "workspace": "3", "monitor-id": 1,
       "window-layout": "h_tiles", "window-title": "~/notes — zsh"},
      {"window-id": 418, "app-name": "Zen", "app-bundle-id": "app.zen-browser.zen", "app-pid": 4, "workspace": "1", "monitor-id": 1,
-      "window-layout": "h_tiles", "window-title": "Raycast — styles.refero.design"},
+      "window-layout": "h_tiles", "window-title": "Refero — styles.refero.design"},
      {"window-id": 7, "app-name": "Ghostex", "app-bundle-id": "com.madda.ghostex.host", "app-pid": 1, "workspace": "2", "monitor-id": 1,
       "window-layout": "h_tiles", "window-title": "notes round 2"}]
     """

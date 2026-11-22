@@ -3,7 +3,7 @@ import PilotCore
 import SwiftUI
 
 /// Story 160's folders, each under the ability it configures on Launcher › Abilities (page map, Sven 2026-10-17: a
-/// command's settings under the command, as Raycast keeps them; Menu's Folders block until then): `.repos`, where
+/// command's settings under the command; Menu's Folders block until then): `.repos`, where
 /// lazygit's repo picker looks, under lazygit; `.gifs`, the GIFs folder Stickers and GIFs lists, the GIPHY key that
 /// searches the web's and the highest rating it shows (story 164), under Stickers and GIFs. `.repos` heads Developer ›
 /// Repos too (tester's feedback 2026-11-18). Each folder has Change…,

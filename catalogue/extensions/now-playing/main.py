@@ -46,7 +46,7 @@ CURL_TIMEOUT = 3
 # The hosts artwork is fetched from, and a YouTube address's video id (watch, shorts, live, youtu.be, music.youtube.com).
 ART_HOSTS = ("https://i.scdn.co/", "https://i.ytimg.com/")
 YOUTUBE = re.compile(r"^https://(?:(?:www|m|music)\.)?(?:youtube\.com/(?:watch\?(?:[^#]*&)?v=|shorts/|live/)|youtu\.be/)([A-Za-z0-9_-]{11})")
-# A bar title without what only clutters it (Raycast's Spotify Player cleans the same way): (feat. …), […], remasters.
+# A bar title without what only clutters it: (feat. …), […], remasters.
 CLUTTER = re.compile(r"\s*(\((feat|ft|with)\.?\s[^)]*\)|\[[^\]]*\]|\([^)]*remaster[^)]*\)|\s-\s[^-]*remaster.*$)", re.I)
 
 # The read, after an optional command (argv[1], then SETTLE s for the player to move): one JSON object, {} when nothing

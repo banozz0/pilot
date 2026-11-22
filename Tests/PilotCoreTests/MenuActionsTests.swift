@@ -49,14 +49,14 @@ struct MenuActionsTests {
     @Test("A search nothing matches offers Search to install as well as Search files, install first for an app's name (Sven 2026-10-12)")
     func noMatchOffersInstall() {
         var nav = Self.navigator()
-        nav.query = "raycast"
+        nav.query = "zellij"
         // Ask AI and Search the web lead (Sven 2026-10-16), then the install offer.
-        #expect(nav.rows.map(\.target) == [.ask("raycast"), .searchWeb("raycast"), .searchInstall("raycast"), .searchFiles])
-        #expect(nav.rows[2].title == "Search to install \"raycast\"" && nav.rows[2].returnLabel == "Open")
+        #expect(nav.rows.map(\.target) == [.ask("zellij"), .searchWeb("zellij"), .searchInstall("zellij"), .searchFiles])
+        #expect(nav.rows[2].title == "Search to install \"zellij\"" && nav.rows[2].returnLabel == "Open")
         // Return on it opens Search packages searching the text.
         _ = nav.handle(.down); _ = nav.handle(.down)
         #expect(nav.handle(.return) == .handled)
-        #expect(nav.branch == .homebrew && nav.query == "raycast")
+        #expect(nav.branch == .homebrew && nav.query == "zellij")
         // A file's name puts Search files first.
         nav = Self.navigator()
         nav.query = "budget.xlsx"
@@ -67,7 +67,7 @@ struct MenuActionsTests {
         #expect(nav.rows.firstIndex { $0.target == .searchFiles }.map { nav.rows[$0 + 1].target } == .searchInstall("vault"))
         nav.query = "bitwa"
         #expect(!nav.rows.contains { $0.target == .searchInstall("bitwa") })
-        nav.query = "raycast"
+        nav.query = "zellij"
         _ = nav.handle(.tab)
         #expect(!nav.rows.contains { $0.isOffer })
         // One letter: no install or files offer, but Ask AI and Search the web, as for anything typed.

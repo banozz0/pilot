@@ -2,8 +2,9 @@ import AppKit
 import PilotCore
 import SwiftUI
 
-/// The Extensions page (card agent-bo-95423247, story 141; pilot-1-1 T7, Q600 and Q601): one list, the installed
-/// extensions A to Z, then the catalogue's others as it sorts them, filtered by All, Installed or Updates and a search;
+/// The Extensions page (card agent-bo-95423247, story 141; pilot-1-1 T7, Q600 and Q601): one list, under Installed the
+/// installed extensions A to Z, under Get the catalogue's others as it sorts them (never an installed one, Sven
+/// 2026-11-22), under Updates the installed ones it has newer, narrowed by a search;
 /// the picked row's detail beside it. A row the catalogue has newer wears an Update button that updates it in place, and
 /// Update all heads the list while any does. An installed one's detail is its version and where it shows, Open page and ⋯
 /// (Update, Uninstall), then its Settings (the form its page shows too, Q637), its Keys and what it touches; a catalogue
@@ -26,11 +27,9 @@ struct ExtensionsPageView: View {
     /// Opens an extension's own page (story 161).
     var openPage: (String) -> Void = { _ in }
     @State private var settings: ExtensionsSettings
-    @State private var filter = ExtensionsPage.Filter.all
+    @State private var filter: ExtensionsPage.Filter
     @State private var query = ""
     @State private var picked: String?
-    /// Move to Trash on the old Raycast line was pressed once: it asks Sure? before the folders go.
-    @State private var trashingRaycast = false
     /// The row the page just landed on, lit for a moment.
     @State private var lit: String?
     /// Measured, never assumed: starting wide would hold the side column open and the page past a narrow window.
@@ -48,9 +47,9 @@ struct ExtensionsPageView: View {
     /// From this page width the detail puts Keys and It touches beside Settings; narrower, they stack under it.
     static func halves(width: CGFloat) -> Bool { width >= 860 }
 
-    /// `pick` the row picked first (a render's); the first row otherwise.
+    /// `tab` and `pick` the tab shown and the row picked first (a render's); Installed and its first row otherwise.
     init(onScreen: Bool = true, focus: Binding<String?> = .constant(nil), toCatalogue: Bool = false, landedCatalogue: @escaping () -> Void = {},
-         settings: ExtensionsSettings? = nil, pick: String? = nil, editBind: @escaping (String) -> Void = { _ in },
+         settings: ExtensionsSettings? = nil, tab: ExtensionsPage.Filter = .installed, pick: String? = nil, editBind: @escaping (String) -> Void = { _ in },
          openPage: @escaping (String) -> Void = { _ in }) {
         self.onScreen = onScreen
         _focus = focus
@@ -59,6 +58,7 @@ struct ExtensionsPageView: View {
         self.editBind = editBind
         self.openPage = openPage
         _settings = State(initialValue: settings ?? Self.make())
+        _filter = State(initialValue: tab)
         _picked = State(initialValue: pick)
     }
 
@@ -70,8 +70,7 @@ struct ExtensionsPageView: View {
 
     var body: some View {
         let listing = listing
-        let rows = listing.installed + listing.catalogue
-        let current = rows.first { $0.id == picked } ?? rows.first
+        let current = listing.shown.first { $0.id == picked } ?? listing.shown.first
         VStack(spacing: 0) {
             toolbar(listing)
             ink.line.frame(height: 1)
@@ -101,6 +100,10 @@ struct ExtensionsPageView: View {
             guard focus != nil else { return }
             Task { await settings.load(); land() }
         }
+        // Got from the Get tab: the card follows it to Installed rather than jumping to the next one to get.
+        .onChange(of: settings.rows.map(\.id)) { _, ids in
+            if filter == .get, let picked, ids.contains(picked) { filter = .installed }
+        }
         .task(id: lit) {
             guard lit != nil, (try? await Task.sleep(for: Self.litFor)) != nil else { return }
             withAnimation(Kit.change) { lit = nil }
@@ -111,11 +114,12 @@ struct ExtensionsPageView: View {
     /// the catalogue has is dropped, once the catalogue has answered or will not be read.
     private func land() {
         guard let id = focus else { return }
-        let known = settings.rows.contains { $0.id == id } || (catalogue.load == .loaded && catalogue.index?.entry(id) != nil)
+        let mine = settings.rows.contains { $0.id == id }
+        let known = mine || (catalogue.load == .loaded && catalogue.index?.entry(id) != nil)
         guard known || !(onScreen && [.idle, .loading].contains(catalogue.load)) else { return }
         focus = nil
         guard known else { return }
-        (filter, query) = (.all, "")
+        (filter, query) = (mine ? .installed : .get, "")
         picked = id
         lit = id
     }
@@ -123,8 +127,8 @@ struct ExtensionsPageView: View {
     /// `tab=catalogue`: once the catalogue is read, its first row is picked and scrolled to.
     private func landCatalogue(_ proxy: ScrollViewProxy) {
         guard toCatalogue, focus == nil, catalogue.load != .loading, catalogue.load != .idle else { return }
-        (filter, query) = (.all, "")
-        if let first = listing.catalogue.first { picked = first.id }
+        (filter, query) = (.get, "")
+        if let first = listing.shown.first { picked = first.id }
         withAnimation(Kit.change) { proxy.scrollTo(Self.catalogueAnchor, anchor: .top) }
         landedCatalogue()
     }
@@ -133,7 +137,7 @@ struct ExtensionsPageView: View {
 
     // MARK: The toolbar
 
-    /// All, Installed and Updates with their counts, the search over both, and the Extensions folder.
+    /// Installed, Get and Updates with their counts, the search over the tab's rows, and the Extensions folder.
     private func toolbar(_ listing: ExtensionsPage.Listing) -> some View {
         HStack(spacing: 8) {
             HStack(spacing: 6) {
@@ -145,7 +149,7 @@ struct ExtensionsPageView: View {
                 }
             }
             Spacer(minLength: 12)
-            SearchBox(prompt: "Search \(ExtensionsPageView.plural(listing.total, "extension"))", text: $query).frame(maxWidth: 220)
+            SearchBox(prompt: "Search \(ExtensionsPageView.plural(listing.count(filter), "extension"))", text: $query).frame(maxWidth: 220)
             Button { ScriptsModule.openFolder(Extension.folder) } label: { Label("Folder", systemImage: "folder") }
                 .buttonStyle(.pilot)
                 .help("Opens \(Self.folderPath)")
@@ -160,20 +164,22 @@ struct ExtensionsPageView: View {
     private func list(_ listing: ExtensionsPage.Listing, current: String?) -> some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 2) {
-                HStack {
-                    PartHeading(text: "Installed · \(listing.installedCount)")
-                    Spacer(minLength: 6)
-                    if listing.updates > 0, catalogue.load == .loaded { updateAll(listing) }
+                if filter == .get {
+                    catalogueRows(listing, current: current)
+                } else {
+                    HStack {
+                        PartHeading(text: "Installed · \(listing.installedCount)")
+                        Spacer(minLength: 6)
+                        if listing.updates > 0, catalogue.load == .loaded { updateAll(listing) }
+                    }
+                    .padding(.horizontal, 10)
+                    if settings.loaded, settings.rows.isEmpty {
+                        Text("None yet. Get one from the Get tab, or put one in the Extensions folder.").font(ink.ui(12)).foregroundStyle(ink.muted)
+                            .fixedSize(horizontal: false, vertical: true).padding(.horizontal, 10).padding(.vertical, 6)
+                    }
+                    ForEach(listing.shown) { entry in row(entry, current: current) }
+                    if !settings.broken.isEmpty, filter == .installed, query.isEmpty { broken }
                 }
-                .padding(.horizontal, 10)
-                if settings.loaded, settings.rows.isEmpty {
-                    Text("None yet. Get one below, or put one in the Extensions folder.").font(ink.ui(12)).foregroundStyle(ink.muted)
-                        .fixedSize(horizontal: false, vertical: true).padding(.horizontal, 10).padding(.vertical, 6)
-                }
-                ForEach(listing.installed) { entry in row(entry, current: current) }
-                if filter == .all { catalogueRows(listing, current: current) }
-                if !settings.broken.isEmpty, filter == .all, query.isEmpty { broken }
-                if !settings.raycast.isEmpty, filter == .all, query.isEmpty { raycast }
             }
             .padding(.horizontal, 8).padding(.top, 6).padding(.bottom, 14)
         }
@@ -196,9 +202,9 @@ struct ExtensionsPageView: View {
             }
             .padding(.horizontal, 10).padding(.vertical, 6)
         case .loaded:
-            eyebrow("Catalogue · \(listing.total - listing.installedCount)").id(Self.catalogueAnchor)
-            ForEach(listing.catalogue) { entry in row(entry, current: current) }
-            if listing.catalogue.isEmpty {
+            eyebrow("Catalogue · \(listing.catalogueCount)").id(Self.catalogueAnchor)
+            ForEach(listing.shown) { entry in row(entry, current: current) }
+            if listing.shown.isEmpty {
                 Text(query.isEmpty ? "You have every extension it lists." : "Nothing in the catalogue matches.")
                     .font(ink.ui(12)).foregroundStyle(ink.muted).padding(.horizontal, 10).padding(.vertical, 6)
             }
@@ -309,29 +315,6 @@ struct ExtensionsPageView: View {
             }
         }
         .padding(.top, 8)
-    }
-
-    /// Old Raycast folders an earlier test build left: one quiet line, never a row each, whose Move to Trash asks first.
-    private var raycast: some View {
-        let n = settings.raycast.count
-        return HStack(spacing: 8) {
-            if trashingRaycast {
-                Text("Move \(Self.plural(n, "folder")) to the Trash?").font(ink.ui(11.5)).foregroundStyle(ink.text)
-                Spacer(minLength: 6)
-                Button("Cancel") { trashingRaycast = false }.buttonStyle(.pilot)
-                Button("Yes, Move") {
-                    trashingRaycast = false
-                    Task { await settings.trashRaycast() }
-                }
-                .buttonStyle(PilotButtonStyle(primary: true, destructive: true))
-            } else {
-                Text(Self.plural(n, "old Raycast extension")).font(ink.ui(11.5)).foregroundStyle(ink.muted)
-                    .help(settings.raycast.joined(separator: ", "))
-                Spacer(minLength: 6)
-                Button("Move to Trash") { trashingRaycast = true }.buttonStyle(.pilot)
-            }
-        }
-        .padding(.horizontal, 10).padding(.top, 10)
     }
 
     // MARK: The detail

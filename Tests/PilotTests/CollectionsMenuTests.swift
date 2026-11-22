@@ -136,7 +136,7 @@ struct CollectionsMenuTests {
 
     @Test("Scripts: list reads the Scripts folder; add and remove are read-only")
     func scripts() async throws {
-        try "#!/bin/bash\n# @raycast.title Say hi\n# @raycast.mode silent\necho hi\n".write(to: home.appending(path: "Scripts/hi.sh"), atomically: true, encoding: .utf8)
+        try "#!/bin/bash\n# @pilot.title Say hi\n# @pilot.mode silent\necho hi\n".write(to: home.appending(path: "Scripts/hi.sh"), atomically: true, encoding: .utf8)
         try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: home.appending(path: "Scripts/hi.sh").path(percentEncoded: false))
         #expect(await rows("scripts").first { $0["file"] == .string("hi.sh") }?["title"] == .string("Say hi"))
         #expect(await answer("add", ["scripts", "--file", "x"]).error == ControlError(.badValue, "scripts is read-only"))

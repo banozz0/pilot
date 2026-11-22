@@ -1,7 +1,7 @@
 import PilotCore
 import SwiftUI
 
-/// Snippets, its own page since 2026-10-10 (card agent-bo-95423044; Raycast's Snippets the reference, no code): the snippets on the left,
+/// Snippets, its own page since 2026-10-10 (card agent-bo-95423044): the snippets on the left,
 /// the picked one on the right with its name, keyword and text, the placeholders that go in at the caret, and what it
 /// pastes as. Every edit is saved as it is typed (SnippetLibrary); nothing here reads the pasteboard.
 struct SnippetsSettingsView: View {

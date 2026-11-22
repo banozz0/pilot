@@ -488,10 +488,14 @@ struct ExtensionToolingTests {
                                            "does": .string("Runs and shows one line"), "keyword": .string("say")]))
         #expect(await rig.ask("ext", "show", "nope").error?.message.contains("installed: probe") == true)
 
+        // A folder without extension.json is no extension and never listed; one whose extension.json does not read is.
+        try FileManager.default.createDirectory(at: rig.tools.extensions.appending(path: "notes"), withIntermediateDirectories: true)
         let broken = rig.tools.extensions.appending(path: "junk")
         try FileManager.default.createDirectory(at: broken, withIntermediateDirectories: true)
+        try Data("{".utf8).write(to: broken.appending(path: Extension.manifestName))
         guard case .array(let rows)? = await rig.ask("ext", "broken").result, case .object(let row)? = rows.first else { Issue.record("no broken row"); return }
-        #expect(rows.count == 1 && row["why"] == .string("no extension.json"))
+        #expect(rows.count == 1 && row["folder"] == .string("junk"))
+        if case .string(let why)? = row["why"] { #expect(why.hasPrefix("extension.json does not read"), "\(why)") } else { Issue.record("no why: \(row)") }
         #expect(rig.asked.isEmpty)
     }
 
@@ -556,7 +560,7 @@ struct ExtensionToolingTests {
         #expect(rig.keychain.reads.withLock { $0 } == 1, "only the one page run read it, to hand it to the program")
     }
 
-    @Test("ext catalogue lists and searches the catalogue with each entry's standing; ext get asks, installs, then updates; offline is not-ready")
+    @Test("ext catalogue lists and searches what is not installed with each entry's standing, the installed newer under updates; ext get asks, installs, then updates; offline is not-ready")
     func catalogueInstall() async throws {
         let rig = try Rig()
         defer { rig.clean() }
@@ -585,8 +589,11 @@ struct ExtensionToolingTests {
         #expect(Self.field(again, "changed") == .bool(false))
 
         try rig.offer(version: "1.1.0")
-        guard case .array(let now)? = Self.field(await rig.ask("ext", "catalogue", "--refresh"), "entries"), case .object(let row)? = now.first else { Issue.record("no entries"); return }
+        // Installed, it leaves the entries (the page's Get tab) for updates (Sven, 2026-11-22).
+        let offered = await rig.ask("ext", "catalogue", "--refresh")
+        guard case .array(let now)? = Self.field(offered, "updates"), case .object(let row)? = now.first else { Issue.record("no updates"); return }
         #expect(row["standing"] == .string("update") && row["installedVersion"] == .string("1.0.0"))
+        #expect(Self.field(offered, "entries") == .array([]) && Self.field(offered, "installed") == .number(1))
         let updated = await rig.ask("ext", "get", "cat")
         #expect(Self.field(updated, "updatedFrom") == .string("1.0.0") && Self.field(updated, "version") == .string("1.1.0"))
         #expect(rig.asked.last?.detail.contains("updates 1.0.0 at") == true)

@@ -1,4 +1,4 @@
-// Written from scratch for Pilot (card agent-bo-95423070); Raycast's and SuperCmd's image text are the behaviour reference.
+// Written from scratch for Pilot (card agent-bo-95423070); SuperCmd's image text is the behaviour reference.
 import Foundation
 import os
 import Vision

@@ -33,7 +33,7 @@ struct ScriptsModuleTests {
 
     @Test("A HUD script runs through the shell route, its path quoted, and shows its last line")
     func hud() async throws {
-        let dir = try folder(["zip.sh": "# @raycast.title Zip downloads\n# @raycast.mode compact\n"])
+        let dir = try folder(["zip.sh": "# @pilot.title Zip downloads\n# @pilot.mode compact\n"])
         defer { try? FileManager.default.removeItem(at: dir) }
         let runs = ScriptRuns()
         runs.output = "zipping\n12 files zipped\n"
@@ -47,12 +47,12 @@ struct ScriptsModuleTests {
 
     @Test("A silent script shows only a line it printed or its failure; a fullOutput one opens a visible terminal")
     func modes() async throws {
-        let dir = try folder(["mute.sh": "# @raycast.mode silent\n", "pr.sh": "# @raycast.title PRs\n# @raycast.mode fullOutput\n"])
+        let dir = try folder(["mute.sh": "# @pilot.mode silent\n", "pr.sh": "# @pilot.title PRs\n# @pilot.mode fullOutput\n"])
         defer { try? FileManager.default.removeItem(at: dir) }
         let silent = ScriptRuns()
         try await perform("scripts.run:mute.sh", in: dir, silent)
         #expect(silent.shell.count == 1 && silent.hud.isEmpty)
-        // Raycast's silent: the last line in a HUD when the script printed one.
+        // Silent: the last line in a HUD when the script printed one.
         let said = ScriptRuns()
         said.output = "muted\n"
         try await perform("scripts.run:mute.sh", in: dir, said)
@@ -81,8 +81,8 @@ struct ScriptsModuleTests {
 
     @Test("Arguments reach the script quoted after its path, in a terminal too (card agent-bo-95423048)")
     func arguments() async throws {
-        let dir = try folder(["f.sh": "# @raycast.title Flights\n# @raycast.argument1 { \"type\": \"text\", \"placeholder\": \"from\" }\n",
-                              "t.sh": "# @raycast.mode fullOutput\n# @raycast.argument1 { \"type\": \"text\", \"placeholder\": \"tag\", \"optional\": true }\n"])
+        let dir = try folder(["f.sh": "# @pilot.title Flights\n# @pilot.argument1 { \"type\": \"text\", \"placeholder\": \"from\" }\n",
+                              "t.sh": "# @pilot.mode fullOutput\n# @pilot.argument1 { \"type\": \"text\", \"placeholder\": \"tag\", \"optional\": true }\n"])
         defer { try? FileManager.default.removeItem(at: dir) }
         let runs = ScriptRuns()
         let flights = try #require(ScriptCommand.named("f.sh", in: dir))
@@ -98,8 +98,8 @@ struct ScriptsModuleTests {
 
     @Test("A bind or link missing a required argument opens Hyper+Space with the title typed and runs nothing; a password one says so")
     func asks() async throws {
-        let dir = try folder(["f.sh": "# @raycast.title Flights\n# @raycast.argument1 { \"type\": \"text\", \"placeholder\": \"from\" }\n",
-                              "p.sh": "# @raycast.title Log in\n# @raycast.argument1 { \"type\": \"password\", \"placeholder\": \"pw\" }\n"])
+        let dir = try folder(["f.sh": "# @pilot.title Flights\n# @pilot.argument1 { \"type\": \"text\", \"placeholder\": \"from\" }\n",
+                              "p.sh": "# @pilot.title Log in\n# @pilot.argument1 { \"type\": \"password\", \"placeholder\": \"pw\" }\n"])
         defer { try? FileManager.default.removeItem(at: dir) }
         let runs = ScriptRuns()
         try await perform("scripts.run:f.sh", in: dir, runs)
