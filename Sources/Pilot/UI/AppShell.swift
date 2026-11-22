@@ -72,6 +72,8 @@ private struct PageKeys: View {
 /// visited stays built while the window is open (KeptPages), so a return visit shows it again instead of building it.
 struct PageView: View {
     @Bindable var model: AppWindowModel
+    /// More's card and the tabs' count, the window's, which each part's bar reads (PartFrame).
+    let more: PanelMore
     @Environment(Engine.self) private var engine
     @Environment(\.searchHits) private var hits
     // What the window's own host sets above the page (renders set the last three), carried into each kept page's host.
@@ -84,11 +86,12 @@ struct PageView: View {
         // The pages switched to most, built ahead while the window idles (PageDeck.buildAhead), each on its part picked last.
         let ahead = model.visits.likeliest(PageDeck.cap - 1).map { page in
             let section = model.section(of: page)
-            return PageDeck.Ahead(key: Self.key(page, section: section, extensionPage: nil), page: page, section: section,
-                                  frame: Self.frame(page, section: section))
+            return PageDeck.Ahead(key: Self.key(page, section: section, extensionPage: nil), page: page, section: section)
         }
-        KeptPages(key: key, frame: Self.frame(model.page, section: model.section(of: model.page)), model: model, ahead: ahead) { page, section, extensionPage in
-            PagePart(model: model, page: page, section: section, extensionPage: extensionPage)
+        KeptPages(key: key, model: model, more: more, ahead: ahead) { page, section, extensionPage in
+            PartFrame(model: model, more: more, page: page, section: section, extensionPage: extensionPage) {
+                PagePart(model: model, page: page, section: section, extensionPage: extensionPage)
+            }
                 .environment(model).environment(\.searchHits, hits)
                 .styled(.window).pilotWindowStyles().pilotTheme()
                 .environment(engine).environment(\.homeSources, homeSources).environment(\.aiPageSources, aiPageSources)
@@ -116,12 +119,6 @@ struct PageView: View {
         case .extensions: extensionPage.map { "extension." + $0 } ?? "extensions"
         default: page.rawValue
         }
-    }
-
-    /// The frame a part shows in: with or without the page list and the toolbar, so a deck of another size.
-    static func frame(_ page: AppPage, section: AppSection?) -> String {
-        let (listed, barred) = InstrumentFrame.frame(page, section: section)
-        return "\(listed ? "listed" : "wide") \(barred ? "barred" : "bare")"
     }
 }
 
@@ -281,10 +278,10 @@ private struct HeldSearch<Content: View>: View {
 /// shown longest ago goes, its views disappearing as before.
 struct KeptPages<Content: View>: NSViewRepresentable {
     let key: String
-    /// The frame the part shows in (PageView.frame).
-    var frame = ""
     /// Its picks reach the deck before SwiftUI does (PageDeck.picture).
     let model: AppWindowModel
+    /// What each part's bar reads beside its page (PageDeck.chrome).
+    let more: PanelMore
     /// The parts to build ahead, the likeliest first (PageDeck.buildAhead).
     var ahead: [PageDeck.Ahead] = []
     /// A part's view: its page, its part and the extension whose page it is.
@@ -294,6 +291,10 @@ struct KeptPages<Content: View>: NSViewRepresentable {
         let deck = PageDeck()
         model.picking = { [weak deck] in deck?.picture($0) }
         deck.showing = { [weak model] in model?.live == true }
+        // What a part's frame (PartFrame) shows beyond its page: its picture is stale once any of it changed while hidden.
+        deck.chrome = { [weak model, more] page in
+            "\(DeveloperPages.on) \(more.tabs) \(more.open) \(ExtensionPages.shared.entries.map(\.id)) \(String(describing: model?.section(of: page)))"
+        }
         return deck
     }
 
@@ -303,7 +304,7 @@ struct KeptPages<Content: View>: NSViewRepresentable {
         proposal.replacingUnspecifiedDimensions()
     }
     func updateNSView(_ deck: PageDeck, context: Context) {
-        deck.show(key, root(model.page, model.section(of: model.page), model.extensionPage), frame: frame)
+        deck.show(key, root(model.page, model.section(of: model.page), model.extensionPage), page: model.page)
         deck.buildAhead(ahead) { root($0.page, $0.section, nil) }
     }
 
@@ -327,19 +328,12 @@ final class PageDeck: NSView {
     /// Only the shown part follows the window's size; a kept one keeps the size it was shown at until it shows again.
     override func resizeSubviews(withOldSize oldSize: NSSize) {
         if let shown, let host = hosts[shown], host.frame != bounds { host.frame = bounds }
-        noteSize()
     }
 
-    /// The frame the shown part is in (PageView.frame).
-    private var shownFrame = ""
+    /// What a part's frame shows beyond its page, for `page` (KeptPages).
+    var chrome: (AppPage) -> String = { _ in "" }
 
-    private func noteSize() {
-        if let window, !shownFrame.isEmpty { Self.sizes[shownFrame] = (window.frame.size, bounds.size) }
-    }
-
-    func show(_ key: String, _ root: AnyView, frame: String = "") {
-        shownFrame = frame
-        noteSize()
+    func show(_ key: String, _ root: AnyView, page: AppPage) {
         let host: PageHost
         let built = hosts[key] == nil
         if let kept = hosts[key] {
@@ -351,6 +345,7 @@ final class PageDeck: NSView {
             host.sizingOptions = []
             hosts[key] = host
         }
+        host.page = page
         guard shown != key || host.superview !== self || host.isHidden else { return }
         PageSwitchTiming.showed(from: shown, to: key, first: built)
         if let shown, let old = hosts[shown], old !== host { hide(old) }
@@ -370,14 +365,11 @@ final class PageDeck: NSView {
 
     // MARK: Building ahead (page-first)
 
-    /// A part to build ahead: its key, its page and part, and the frame it shows in (PageView.frame).
-    struct Ahead { let key: String; let page: AppPage; let section: AppSection?; let frame: String }
+    /// A part to build ahead: its key, its page and part.
+    struct Ahead { let key: String; let page: AppPage; let section: AppSection? }
     /// The parts to build ahead, the likeliest first, and their views.
     private var ahead: [Ahead] = []
     private var aheadRoot: (Ahead) -> AnyView = { _ in AnyView(EmptyView()) }
-    /// The deck's size in each frame (PageView.frame), at the window size it was seen at: a part built ahead is built at
-    /// the size it will show at, so showing it lays nothing out again. Kept across the window's closes, as its frame is.
-    private static var sizes: [String: (window: NSSize, deck: NSSize)] = [:]
     /// Whether the window shows and is key: nothing is built ahead behind a closed, covered or left window.
     var showing: () -> Bool = { false }
     private var aheadTimer: Timer?
@@ -433,8 +425,9 @@ final class PageDeck: NSView {
         let responder = window.firstResponder
         let host = PageHost(aheadRoot(next), shown: false)
         host.sizingOptions = []
-        let seen = Self.sizes[next.frame]
-        host.frame = NSRect(origin: .zero, size: seen?.window == window.frame.size ? seen?.deck ?? bounds.size : bounds.size)
+        // Every part, frame and all, fills the deck: built at the size it will show at.
+        host.frame = bounds
+        host.page = next.page
         hosts[next.key] = host
         // Shown longest ago: the first to go past `cap`, before any part the user opened.
         order.insert(next.key, at: 0)
@@ -443,6 +436,8 @@ final class PageDeck: NSView {
         host.layoutSubtreeIfNeeded()
         host.displayIfNeeded()
         host.isHidden = true
+        // Drawn whole at its size: its first visit flips to it as a return visit does (picture).
+        host.left = left(host, in: window)
         if window.firstResponder !== responder { window.makeFirstResponder(responder) }
         PageSwitchTiming.builtAhead(next.key, in: ContinuousClock.now - start)
         armAhead()
@@ -476,7 +471,12 @@ final class PageDeck: NSView {
     private func hide(_ host: PageHost) {
         if let responder = window?.firstResponder as? NSView, responder.isDescendant(of: host) { window?.makeFirstResponder(nil) }
         host.isHidden = true
-        host.left = window.map { PageHost.Left(look: Self.look(host), at: host.convert(host.bounds, to: nil), window: $0.frame.size) }
+        host.left = window.map { left(host, in: $0) }
+    }
+
+    /// How `host` is left: under which look and frame, where in the window and at what window size (picture).
+    private func left(_ host: PageHost, in window: NSWindow) -> PageHost.Left {
+        PageHost.Left(look: Self.look(host), chrome: host.page.map(chrome) ?? "", at: host.convert(host.bounds, to: nil), window: window.frame.size)
     }
 
     /// The part `picture` drew as it was left, before SwiftUI puts it back.
@@ -486,25 +486,20 @@ final class PageDeck: NSView {
     /// part `key`'s own layers, as it drew when it was left, shown in place of the part showing now and committed at once,
     /// before the model's change reaches SwiftUI. The live switch (`show`) follows in the same run loop turn, so the next
     /// event reaches the live part, never the picture, and the picture is the part itself, glass and all: nothing is
-    /// captured and nothing more is held. Not while the window's size or the look changed since it was left (the part
-    /// keeps the size and theme it was shown at until it shows again), nor on a first visit (nothing to show yet). The
-    /// frame around it (the tabs, the page list, the toolbar) follows with the live switch.
+    /// captured and nothing more is held. The part carries the frame that names its page (PartFrame), so this one frame is
+    /// the whole switch: the page, its tab's mark, its list and its bar (page-frame). Not while the window's size, the look
+    /// or what the part's frame reads changed since it was left (the part keeps them as they were until it shows again),
+    /// nor on a first visit (nothing to show yet); a part built ahead was drawn whole, so it has one.
     func picture(_ key: String) {
         guard key != shown, let host = hosts[key], host.superview === self, host.isHidden, let left = host.left,
-              left.window == window?.frame.size, left.look == Self.look(host), left.at.size == host.frame.size,
-              let shown, let old = hosts[shown], let layer = host.layer, let oldLayer = old.layer
+              left.window == window?.frame.size, left.look == Self.look(host), left.chrome == (host.page.map(chrome) ?? ""),
+              left.at.size == host.frame.size, let shown, let old = hosts[shown], let layer = host.layer, let oldLayer = old.layer
         else { return }
         PageSwitchTiming.began()
-        // Where it was left in the window: a full-width part (Binds, Home) reaches past the deck of a part beside the list.
-        // Its layer moves there, not its view: a view moved would have the commit lay the window out first.
-        let at = convert(left.at, from: nil)
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         oldLayer.isHidden = true
         layer.isHidden = false
-        if at.origin != host.frame.origin {
-            layer.setAffineTransform(CGAffineTransform(translationX: at.minX - host.frame.minX, y: at.minY - host.frame.minY))
-        }
         CATransaction.commit()
         CATransaction.flush()
         pictured = key
@@ -517,10 +512,7 @@ final class PageDeck: NSView {
     private func matchLayers() {
         guard pictured != nil else { return }
         pictured = nil
-        for host in hosts.values {
-            if host.layer?.isHidden != host.isHidden { host.layer?.isHidden = host.isHidden }
-            if host.layer?.affineTransform() != .identity { host.layer?.setAffineTransform(.identity) }
-        }
+        for host in hosts.values where host.layer?.isHidden != host.isHidden { host.layer?.isHidden = host.isHidden }
     }
 
     /// What a kept part was drawn under: its picture is stale once the theme, the style, the glass or the appearance change.
@@ -557,9 +549,11 @@ final class PageDeck: NSView {
 /// A kept part's host: its slot says whether it shows, and no key equivalent reaches it while hidden.
 final class PageHost: NSHostingView<AnyView> {
     let slot = PageSlot()
-    /// How it was hidden: under which look, where in the window and at what window size (PageDeck.picture).
+    /// How it was hidden: under which look and frame, where in the window and at what window size (PageDeck.picture).
     var left: Left?
-    struct Left: Equatable { let look: String; let at: NSRect; let window: NSSize }
+    struct Left: Equatable { let look: String; let chrome: String; let at: NSRect; let window: NSSize }
+    /// The page it shows (PageDeck.chrome).
+    var page: AppPage?
 
     /// `shown` false for a part built ahead (PageDeck.buildAhead): its views start as a hidden part's.
     convenience init(_ root: AnyView, shown: Bool = true) {

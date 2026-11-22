@@ -6,10 +6,10 @@ import SwiftUI
 /// the top (PanelTabBar), the window's search in it; under it the open tab's pages listed by name down the left, the
 /// tab's name over them; beside the list the page under its bar, which holds its name and its parts. An area of one page
 /// takes the whole width (Home, Keys, Launcher, AI, Pilot). More's card and what the search finds drop over the page.
-/// Binds draws its own bar (InstrumentBindsPage).
+/// Binds draws its own bar (InstrumentBindsPage). What names the page is each kept part's own (PartFrame); the window
+/// draws the search, the Hyper cap and More's card over them.
 struct InstrumentFrame: View {
     @Environment(Engine.self) private var engine
-    @Environment(\.style) private var style
     @Environment(\.homeSources) private var sources
     @Bindable var model: AppWindowModel
     var more = PanelMore()
@@ -17,37 +17,12 @@ struct InstrumentFrame: View {
     @State private var hits = SearchHitsModel()
     /// The page open now and its settings' values as it opened, for Jump back in (HomeVisit); none on Home.
     @State private var visit: HomeVisit?
-    /// What the page list and the toolbar showed last, kept while a page without them shows.
-    @State private var held = Held()
 
     var body: some View {
-        let (list, bar) = Self.frame(model.page, section: model.section(of: model.page))
-        let (area, toolbar) = held.note(area: model.page.area, listed: list,
-                                        bar: .init(page: model.page, extensionPage: model.extensionPage, listed: list), barred: bar)
-        VStack(spacing: 0) {
-            PanelTabBar(model: model, more: more)
-            HStack(spacing: 0) {
-                // The list and the toolbar stay in the window while a page without them shows (Binds and Home have none),
-                // folded away with what they showed last, so Binds <-> Menu bar only folds and unfolds them instead of
-                // taking them out and building them again (page-switch-4).
-                HStack(spacing: 0) {
-                    InstrumentPageList(model: model, area: area).frame(width: Self.listWidth).background(style.color(\.sidebar))
-                    InstrumentRule(vertical: true)
-                }
-                .folded(away: !list, .horizontal)
-                VStack(spacing: 0) {
-                    VStack(spacing: 0) {
-                        InstrumentToolbar(model: model, page: toolbar.page, extensionPage: toolbar.extensionPage, listed: toolbar.listed)
-                        InstrumentRule()
-                    }
-                    .folded(away: !bar, .vertical)
-                    PageView(model: model)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-                }
-                // The ground draws once: whole when solid, else at its strength over Tinted's blur, Glass's tint carrying it.
-                .background(Theme.windowFill(style.color(\.canvas)))
-            }
-        }
+        // Each kept part draws the frame that names its page (PartFrame), so a switch shows the new page, its tab's mark,
+        // its list and its bar in one frame (page-frame); the window keeps what is the same on every page over them.
+        PageView(model: model, more: more)
+            .overlay(alignment: .top) { PanelTabTop(model: model, more: more) }
         // What the top bar's search finds, under it; Home lists the same results in its own place.
         .overlay(alignment: .topTrailing) {
             if model.page != .home && !model.query.trimmingCharacters(in: .whitespaces).isEmpty {
@@ -80,33 +55,6 @@ struct InstrumentFrame: View {
 
     /// The page list's width, as drawn: Tools' six pages by name without scrolling.
     static let listWidth: CGFloat = 156
-
-    /// The area the list showed last and the page the toolbar named last.
-    private final class Held {
-        struct Bar { let page: AppPage; let extensionPage: String?; let listed: Bool }
-        var area: AppArea?
-        var bar: Bar?
-
-        /// The list's area and the toolbar's page: noted while each shows, the last one noted while it is folded away
-        /// (today's until one was).
-        func note(area: AppArea, listed: Bool, bar: Bar, barred: Bool) -> (AppArea, Bar) {
-            if listed { self.area = area }
-            if barred { self.bar = bar }
-            return (self.area ?? area, self.bar ?? bar)
-        }
-    }
-}
-
-extension View {
-    /// Kept in the window but folded to nothing along `axis` while `away`: drawn nowhere, out of clicks, the keyboard
-    /// and accessibility.
-    func folded(away: Bool, _ axis: Axis) -> some View {
-        frame(width: away && axis == .horizontal ? 0 : nil, height: away && axis == .vertical ? 0 : nil, alignment: .topLeading)
-            .clipped()
-            .disabled(away)
-            .allowsHitTesting(!away)
-            .accessibilityHidden(away)
-    }
 }
 
 extension InstrumentFrame {
@@ -120,6 +68,43 @@ extension InstrumentFrame {
     /// (pilot-ui-redesign T6, shot 7c-home): no bar over it.
     static func frame(_ page: AppPage, section: AppSection?) -> (listed: Bool, barred: Bool) {
         (!RailLayout.fullWidth(page.area), !pageOwnsBar(page, section: section) && page != .home)
+    }
+}
+
+/// A kept part in the frame that names its page: its tab marked in the bar, its area's pages down the left with it
+/// raised, its bar over it (page-frame; Sven, 2026-11-22: "theres like a small frame lag when switching pages makes the app
+/// look cheap"). All of it is the part's own and reads the part's page, never the window's, so a part kept hidden stays as
+/// it was left and a switch flips the whole picture at once (PageDeck.picture).
+struct PartFrame<Content: View>: View {
+    @Environment(\.style) private var style
+    @Bindable var model: AppWindowModel
+    let more: PanelMore
+    let page: AppPage
+    let section: AppSection?
+    let extensionPage: String?
+    @ViewBuilder var content: Content
+
+    var body: some View {
+        let (list, bar) = InstrumentFrame.frame(page, section: section)
+        VStack(spacing: 0) {
+            PanelTabBar(model: model, more: more, open: page.area)
+            HStack(spacing: 0) {
+                if list {
+                    InstrumentPageList(model: model, page: page, extensionPage: extensionPage)
+                        .frame(width: InstrumentFrame.listWidth).background(style.color(\.sidebar))
+                    InstrumentRule(vertical: true)
+                }
+                VStack(spacing: 0) {
+                    if bar {
+                        InstrumentToolbar(model: model, page: page, extensionPage: extensionPage, listed: list)
+                        InstrumentRule()
+                    }
+                    content.frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                }
+                // The ground draws once: whole when solid, else at its strength over Tinted's blur, Glass's tint carrying it.
+                .background(Theme.windowFill(style.color(\.canvas)))
+            }
+        }
     }
 }
 
@@ -173,9 +158,14 @@ struct InstrumentHyperCap: View {
 private struct InstrumentPageList: View {
     @Environment(\.style) private var style
     @Bindable var model: AppWindowModel
-    let area: AppArea
+    /// The part's page and extension page, raised; its area's pages listed.
+    let page: AppPage
+    let extensionPage: String?
+    var extensionPages = ExtensionPages.shared
 
     var body: some View {
+        let area = page.area
+        return
         VStack(alignment: .leading, spacing: 0) {
             HStack {
                 Text(area.title).accessibilityAddTraits(.isHeader)
@@ -193,10 +183,16 @@ private struct InstrumentPageList: View {
     }
 
     @ViewBuilder private func pages(_ area: AppArea) -> some View {
-        ForEach(area.shown, id: \.self) { page in
-            InstrumentPageRow(model: model, page: page)
-            // Extension pages under Extensions (story 161): pages of their own, so they stay rows (P36).
-            if page == .extensions { ExtensionPageRows(model: model) { InstrumentExtensionRow(link: $0, on: $1, open: $2) } }
+        ForEach(area.shown, id: \.self) { row in
+            InstrumentPageRow(model: model, page: row, on: row == page && extensionPage == nil)
+            // Extension pages under Extensions (story 161): pages of their own, so they stay rows (P36), the part's raised.
+            if row == .extensions {
+                ForEach(extensionPages.entries) { link in
+                    InstrumentExtensionRow(link: link, on: extensionPage == link.id) {
+                        link.opens ? model.goExtensionPage(link.id) : model.focusExtension(link.id)
+                    }
+                }
+            }
         }
     }
 }
@@ -206,9 +202,9 @@ private struct InstrumentPageRow: View {
     @Environment(\.style) private var style
     @Bindable var model: AppWindowModel
     let page: AppPage
+    let on: Bool
 
     var body: some View {
-        let on = model.shows(page)
         let shape = RoundedRectangle(cornerRadius: style.radii.control + 1, style: .continuous)
         Button { model.go(AppPlace(page)) } label: {
             Text(page.title).styleText(\.body).foregroundStyle(style.color(on ? \.text : \.text2))
@@ -546,7 +542,7 @@ extension AppWindowModel {
 struct InstrumentToolbar: View {
     @Environment(\.style) private var style
     @Bindable var model: AppWindowModel
-    /// The page it names: the window's, or the one it named last while folded away (InstrumentFrame).
+    /// The page it names: its part's (PartFrame).
     let page: AppPage
     let extensionPage: String?
     /// The page list shows beside: the area's pages are there, not here. The page's parts are here at every width.
@@ -585,7 +581,7 @@ struct InstrumentToolbar: View {
     /// Folded (no list beside): the area's pages as a segmented control, so every page stays a click away.
     private func areaPages(_ area: AppArea) -> some View {
         let options = area.shown.map { (value: $0, title: $0.title) }
-        let selection = Binding(get: { model.page }, set: { model.go(AppPlace($0)) })
+        let selection = Binding(get: { page }, set: { model.go(AppPlace($0)) })
         return ViewThatFits(in: .horizontal) {
             InstrumentSegments(options: options, selection: selection).fixedSize()
             InstrumentSegments(options: options, selection: selection, tight: true)
