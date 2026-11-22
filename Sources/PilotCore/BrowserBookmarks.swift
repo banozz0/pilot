@@ -1,8 +1,8 @@
 import Foundation
 import SQLite3
 
-/// Browser bookmarks in Hyper+Space's search, and pages from a browser's history behind `hist <words>` (spec launcher-best
-/// T9; history off until switched on, Q328). Pure: what each browser family keeps where, how its files read, and the rows
+/// Browser bookmarks in Hyper+Space's search, and pages from a browser's history: up to 3 in a plain search, and only
+/// those behind `hist <words>` (spec launcher-best T9; history off until switched on, Q328). Pure: what each browser family keeps where, how its files read, and the rows
 /// they make. The reading itself (Full Disk Access, copies of the SQLite files, the cache) is BrowserReader's. Titles and
 /// URLs are another app's private record: nothing here logs them.
 public enum BrowserBookmarks {
@@ -54,14 +54,16 @@ public enum BrowserBookmarks {
         "com.brave.Browser": "Brave", "com.microsoft.edgemac": "Edge", "company.thebrowser.Browser": "Arc",
     ]
 
-    /// The most bookmarks the menu keeps, and the most history pages one `hist` search lists.
-    public static let bookmarkCap = 5000, historyCap = 50
+    /// The most bookmarks the menu keeps, the most history pages one `hist` search lists, and the most a plain search does.
+    public static let bookmarkCap = 5000, historyCap = 50, searchHistoryCap = 3
 
     // MARK: Files
 
-    /// A profile's files: its bookmarks file and its history database, one file in Firefox's.
+    /// A profile's files: its bookmarks files and its history database, one file in Firefox's. A Chromium profile keeps
+    /// two bookmarks files: `Bookmarks`, and `AccountBookmarks`, where newer Chrome keeps a signed-in account's synced ones
+    /// (Sven's Default profile: 0 in Bookmarks, 99 there; same JSON). Its `Encrypted*Bookmarks2` files are never read.
     public struct Profile: Equatable, Sendable {
-        public let bookmarks: URL, history: URL
+        public let bookmarks: [URL], history: URL
     }
 
     /// `browser`'s profiles under `home` that hold a bookmarks file or a history database. Chromium's are `Default` and
@@ -75,14 +77,14 @@ public enum BrowserBookmarks {
         switch browser.family {
         case .safari:
             let root = home.appending(path: "Library/Safari")
-            return [Profile(bookmarks: root.appending(path: "Bookmarks.plist"), history: root.appending(path: "History.db"))]
+            return [Profile(bookmarks: [root.appending(path: "Bookmarks.plist")], history: root.appending(path: "History.db"))]
         case .chromium(let folder):
             return folders(support.appending(path: folder))
                 .filter { $0.lastPathComponent == "Default" || $0.lastPathComponent.hasPrefix("Profile ") }
-                .map { Profile(bookmarks: $0.appending(path: "Bookmarks"), history: $0.appending(path: "History")) }
+                .map { Profile(bookmarks: [$0.appending(path: "Bookmarks"), $0.appending(path: "AccountBookmarks")], history: $0.appending(path: "History")) }
         case .firefox(let folder):
             return folders(support.appending(path: folder).appending(path: "Profiles"))
-                .map { $0.appending(path: "places.sqlite") }.map { Profile(bookmarks: $0, history: $0) }
+                .map { $0.appending(path: "places.sqlite") }.map { Profile(bookmarks: [$0], history: $0) }
         }
     }
 
@@ -93,7 +95,7 @@ public enum BrowserBookmarks {
 
     // MARK: Reading
 
-    /// A Chromium profile's `Bookmarks` file: every bookmark in its bar, Other and Mobile folders, depth first.
+    /// A Chromium profile's `Bookmarks` or `AccountBookmarks` file: every bookmark in its bar, Other and Mobile folders, depth first.
     public static func chromium(_ data: Data) -> [Page] {
         guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any], let roots = json["roots"] as? [String: Any] else { return [] }
         var pages: [Page] = []
@@ -187,6 +189,33 @@ public enum BrowserBookmarks {
         return query.dropFirst(5).split(separator: " ").map(String.init)
     }
 
+    /// The words a plain root search looks for in history while its switch is on (the coordinator's call on Sven's
+    /// combined-11): 3 characters typed or more, not a `hist` search; nil otherwise.
+    public static func searchWords(_ query: String) -> [String]? {
+        guard historyWords(query) == nil, query.trimmingCharacters(in: .whitespaces).count >= 3 else { return nil }
+        return query.split(separator: " ").map(String.init)
+    }
+
+    /// A history page's address, from its row's `apps.url:<browser>:<address>`; nil for the off and Full Disk Access rows.
+    static func address(_ row: MenuEntry) -> String? {
+        guard row.kind == .history, case .action(let id) = row.target, case .url(_, let address)? = AppLink(id: id) else { return nil }
+        return address
+    }
+
+    /// Whether a history row answers every word typed now: a page by its title or its address, as the read's LIKE did, so
+    /// an older read's page (one for fewer letters, listed during the pause) goes once it stops matching; never by the
+    /// row's id, whose `apps.url:<browser>:` would keep it for "chrome" or "com". The off and Full Disk Access rows always.
+    public static func answers(_ row: MenuEntry, words: [String]) -> Bool {
+        guard let address = address(row) else { return true }
+        return words.allSatisfy { row.title.localizedCaseInsensitiveContains($0) || address.localizedCaseInsensitiveContains($0) }
+    }
+
+    /// The history pages of a plain root search, from what its read found: pages only (never the off or Full Disk Access
+    /// row) that `answers` the words typed now, the last visited first, at most `searchHistoryCap`.
+    public static func searchPages(_ rows: [MenuEntry], words: [String]) -> [MenuEntry] {
+        Array(rows.filter { address($0) != nil && answers($0, words: words) }.prefix(searchHistoryCap))
+    }
+
     /// Web pages only, once each by address, in the order given: a `javascript:` bookmarklet or a `file:` link never
     /// becomes a row Return opens.
     public static func web(_ pages: [Page]) -> [Page] {
@@ -199,8 +228,8 @@ public enum BrowserBookmarks {
 
     /// The menu's rows for `pages` kept by `browser`: the title (else the address's host), the browser as its subtitle and
     /// icon, Return opening the page in that browser. A bookmark is found by its title and host as any row is and ranks
-    /// with picks; a history page is listed only behind `hist` and is never a pick (MenuEntry.frecencyKey), so no visited
-    /// address lands in Pilot's ranking.
+    /// with picks; a history page is listed only as its read found it (up to 3 in a plain search, all behind `hist`) and
+    /// is never a pick (MenuEntry.frecencyKey), so no visited address lands in Pilot's ranking.
     public static func rows(_ pages: [Page], browser: Browser, kind: MenuEntry.Kind) -> [MenuEntry] {
         web(pages).map { page in
             let host = URL(string: page.url)?.host() ?? page.url

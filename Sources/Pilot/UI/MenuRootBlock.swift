@@ -238,7 +238,7 @@ struct MenuExtrasBlock: View {
 
     static let bookmarksInfo = "A search lists the bookmarks of " + BrowserBookmarks.browsers.map(\.name).formatted(.list(type: .and))
         + ", read as the menu opens while Pilot has Full Disk Access."
-    static let historyInfo = "hist and words search the pages you visited in those browsers, read only then, never saved or logged. Off until you switch it on."
+    static let historyInfo = "Search lists up to 3 pages you visited in those browsers, after the rest, or first when nothing else matches; hist and words lists only those. Read only then, never saved or logged. Off until you switch it on."
 
     /// A row's symbol, title, info and switch, muted while off.
     private func switchRow(_ title: String, _ symbol: String, _ info: String, isOn: Binding<Bool>) -> some View {

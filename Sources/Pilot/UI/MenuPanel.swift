@@ -49,9 +49,9 @@ final class PilotMenu {
     private var appMenus: [String: [MenuEntry]] = [:]
     private var boundMenuRoutes: Set<String> = []
     private var appMenuRead: Task<Void, Never>?
-    /// The `hist` search in flight (T9); a newer keystroke cancels it.
+    /// The history read in flight (T9), `hist`'s or a plain search's; a newer keystroke cancels it.
     private var historyRead: Task<Void, Never>?
-    /// History rows (or the off row) were provided for this menu, so leaving `hist` drops them.
+    /// History rows (or the off row) were provided for this menu, so a search that reads none drops them.
     private var historyShown = false
     /// The GIFs folder's pictures, read each time Stickers and GIFs opens.
     private var stickerFiles: [StickerFile] = []
@@ -449,12 +449,16 @@ final class PilotMenu {
     }
 
     /// `hist <words>` at the root (T9): once typing pauses for 0.2 s, the history pages they find, read from copies of the
-    /// browsers' databases; while history is off (Q328) only the row saying so, nothing read. Any other search drops them.
+    /// browsers' databases; while history is off (Q328) only the row saying so, nothing read. While it is on, a plain root
+    /// search of 3 characters or more reads them too, and the navigator lists up to 3 after the rest. Any other search
+    /// drops them.
     private func provideHistory(_ query: String) {
         historyRead?.cancel()
         guard let model else { return }
-        guard model.nav.branch == nil, model.nav.only == nil, let words = BrowserBookmarks.historyWords(query) else {
-            // Dropped once on leaving `hist`, not on every keystroke (a scan of every entry).
+        let typed = BrowserBookmarks.historyWords(query)
+        let words = typed ?? (BrowserSettings.shared.history ? model.nav.searchHistoryWords : nil)
+        guard model.nav.branch == nil, model.nav.only == nil, let words else {
+            // Dropped once on leaving a search that read them, not on every keystroke (a scan of every entry).
             if historyShown { historyShown = false; model.nav.provide(.history, []) }
             return
         }
@@ -464,7 +468,8 @@ final class PilotMenu {
         historyRead = Task { [weak self] in
             try? await Task.sleep(for: .milliseconds(200))
             guard !Task.isCancelled else { return }
-            let rows = await BrowserReader.shared.history(words, on: true)
+            let read = await BrowserReader.shared.history(words, on: true)
+            let rows = typed == nil ? BrowserBookmarks.searchPages(read, words: words) : read
             guard !Task.isCancelled, let self, self.model === model else { return }
             model.nav.provide(.history, rows)
             mlog.notice("menu: \(rows.count) history pages listed")

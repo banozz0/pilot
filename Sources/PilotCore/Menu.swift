@@ -572,7 +572,7 @@ public struct MenuEntry: Identifiable, Equatable, Sendable {
         case command
         /// An action on what is selected in the app in front, Finder's folders (P43): its provider never replaces the actions.
         case selection
-        /// A browser's bookmark, and a page from its history behind `hist` (BrowserBookmarks, spec launcher-best T9).
+        /// A browser's bookmark, and a page from its history (BrowserBookmarks, spec launcher-best T9).
         case bookmark, history
 
         /// Tab's cycle at the root search, as the wireframe orders it: every kind (nil), then each with a chip; branches,
@@ -1067,7 +1067,11 @@ public struct MenuNavigator: Sendable {
             if only == nil, emojiWords != nil { rows = entries.filter { $0.kind == .emoji && $0.home == nil }; return }
             // `hist <words>` (BrowserBookmarks, spec launcher-best T9): only the history pages its provider found, the last
             // visited first, or the row saying history is off; no offers, as nothing else is searched.
-            if only == nil, BrowserBookmarks.historyWords(query) != nil { rows = entries.filter { $0.kind == .history }; return }
+            // During the pause an older read's pages are still listed, each only while it answers the words typed now.
+            if only == nil, let words = BrowserBookmarks.historyWords(query) {
+                rows = entries.filter { $0.kind == .history && BrowserBookmarks.answers($0, words: words) }
+                return
+            }
             // An app's alias and words ("bw generate password", T40): that app's actions the words find, best first; none
             // found is today's search, so an alias that is also a word ("am") still searches.
             switch aliasRoute {
@@ -1115,6 +1119,11 @@ public struct MenuNavigator: Sendable {
                 rows = [rows[0]] + own + rows.dropFirst().filter { !Self.belongs($0, to: bundle) }
                 owned = own.count
             }
+            // Browser history while its switch is on (T9; the panel provides pages only then): up to 3 pages, under History
+            // after everything else matched, leading only when nothing else did.
+            let pages = only == nil ? BrowserBookmarks.searchWords(query).map { BrowserBookmarks.searchPages(entries, words: $0) } ?? [] : []
+            let pagesLead = rows.isEmpty && !pages.isEmpty
+            if pagesLead { rows = pages }
             let files = searchFiles.map { [$0] } ?? []
             // Under All, Ask AI and Search the web for what was typed always, Search files with them: after the best match's
             // group, or first when nothing matched (Sven 2026-10-16, Q174; Search files joined them, Q182).
@@ -1135,7 +1144,7 @@ public struct MenuNavigator: Sendable {
                 // offered to install.
                 let installs = only == nil && rows.first?.kind != .app && Self.looksLikeApp(query)
                 let end = owned > 0 ? 1 + owned : Self.bestMatchEnd(rows), offers = fallbacks + files + (installs ? install : [])
-                rows = Array(rows.prefix(end)) + offers + rows.dropFirst(end)
+                rows = Array(rows.prefix(end)) + offers + rows.dropFirst(end) + (pagesLead ? [] : pages)
             }
             return
         }
@@ -1193,6 +1202,21 @@ public struct MenuNavigator: Sendable {
     public var gifWords: String? {
         guard branch == nil else { return nil }
         return Aliases.words(after: Stickers.gifWord, in: query) ?? routed(aliases.scope(of: query), .gifs)
+    }
+
+    /// The words a root search reads browser history with (T9): a plain search of 3 characters or more, and any that falls
+    /// through to it (an app's alias whose words find none of its actions, "am invoice"; Clipboard's alias with no row; an
+    /// alias with no route; an inline answer's word while no answer is listed, "calc invoice"). Never one that always
+    /// leaves the plain search: a folder browsed or a path typed, `gif` words, an alias that asks AI, lists emoji or opens
+    /// GIFs, a branch or Files. Nil reads nothing; the panel and `pilot menu search` ask this before a read.
+    public var searchHistoryWords: [String]? {
+        guard branch == nil, only == nil, !isList, browse == nil, FolderBrowse.typed(query, home: home) == nil, gifWords == nil else { return nil }
+        switch aliasRoute?.route {
+        case .ask?, .emoji?, .gifs?, .branch?, .files?: return nil
+        case .app?, .clipboard?, nil: break
+        }
+        if RootAnswers.asksInline(query), entries.contains(where: \.isAnswer) { return nil }
+        return BrowserBookmarks.searchWords(query)
     }
 
     /// The row the query's first word is the alias of, and the words after it, at the root (T40); nil while a kind tab

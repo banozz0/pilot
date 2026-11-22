@@ -13,7 +13,7 @@ public enum MenuGroups {
         /// A root search's offers: Ask AI, Search the web, Search files, and Search to install when nothing matched
         /// (MenuNavigator.fallbacks, Q182).
         case askOrSearch
-        /// Browsers' bookmarks, and their history pages behind `hist` (spec launcher-best T9).
+        /// Browsers' bookmarks, and their history pages (spec launcher-best T9).
         case bookmarks, history
         /// A branch's section, by title (MenuLayout.sections).
         case section(String)

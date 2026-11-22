@@ -91,7 +91,7 @@ extension ControlVerbs {
         var nav = MenuNavigator(entries: entries, frecency: PilotMenu.shared.frecency ?? Frecency(), favourites: FavouriteBook.shared.rows,
                                 aliases: AliasBook.shared.aliases, root: MenuRootSettings.shared.root.listed)
         // As the menu's open and its `hist` search read them (T9): bookmarks while on (the read looks up the installed
-        // browsers either way), history pages (or the off row).
+        // browsers either way), history pages at `hist` (or the off row), and up to 3 in a plain search while on.
         let marks = await BrowserReader.shared.bookmarks(listed: Set(entries.map(\.target)))
         if BrowserSettings.shared.bookmarks { nav.provide(.bookmark, marks) }
         if let held {
@@ -101,6 +101,8 @@ extension ControlVerbs {
         nav.query = query
         if let words = BrowserBookmarks.historyWords(query) {
             nav.provide(.history, await BrowserReader.shared.history(words, on: BrowserSettings.shared.history))
+        } else if BrowserSettings.shared.history, let words = nav.searchHistoryWords {
+            nav.provide(.history, BrowserBookmarks.searchPages(await BrowserReader.shared.history(words, on: true), words: words))
         }
         nav.provideSettings(query, developer: DeveloperPages.on)
         return nav

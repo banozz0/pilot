@@ -67,7 +67,7 @@ extension SettingsSchema {
             // The browsers (spec launcher-best T9, Q328), on Launcher › More rows: bookmarks on, history off until switched on.
             .bool("menu.bookmarks", "Hyper+Space search lists your browsers' bookmarks (read with Full Disk Access)", page: "menu", standard: true,
                   read: { BrowserSettings.shared.bookmarks }, write: { BrowserSettings.shared.bookmarks = $0 }),
-            .bool("menu.browserHistory", "hist <words> in Hyper+Space searches your browsers' history; off until you switch it on", page: "menu",
+            .bool("menu.browserHistory", "Hyper+Space's search lists up to 3 pages from your browsers' history, and hist <words> only those; off until you switch it on", page: "menu",
                   standard: false, read: { BrowserSettings.shared.history }, write: { BrowserSettings.shared.history = $0 }),
         ])
     }
