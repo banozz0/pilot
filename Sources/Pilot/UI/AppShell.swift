@@ -81,8 +81,14 @@ struct PageView: View {
 
     var body: some View {
         let key = Self.key(model)
-        KeptPages(key: key, model: model) {
-            PagePart(model: model, page: model.page, section: model.section(of: model.page), extensionPage: model.extensionPage)
+        // The pages switched to most, built ahead while the window idles (PageDeck.buildAhead), each on its part picked last.
+        let ahead = model.visits.likeliest(PageDeck.cap - 1).map { page in
+            let section = model.section(of: page)
+            return PageDeck.Ahead(key: Self.key(page, section: section, extensionPage: nil), page: page, section: section,
+                                  frame: Self.frame(page, section: section))
+        }
+        KeptPages(key: key, frame: Self.frame(model.page, section: model.section(of: model.page)), model: model, ahead: ahead) { page, section, extensionPage in
+            PagePart(model: model, page: page, section: section, extensionPage: extensionPage)
                 .environment(model).environment(\.searchHits, hits)
                 .styled(.window).pilotWindowStyles().pilotTheme()
                 .environment(engine).environment(\.homeSources, homeSources).environment(\.aiPageSources, aiPageSources)
@@ -110,6 +116,12 @@ struct PageView: View {
         case .extensions: extensionPage.map { "extension." + $0 } ?? "extensions"
         default: page.rawValue
         }
+    }
+
+    /// The frame a part shows in: with or without the page list and the toolbar, so a deck of another size.
+    static func frame(_ page: AppPage, section: AppSection?) -> String {
+        let (listed, barred) = InstrumentFrame.frame(page, section: section)
+        return "\(listed ? "listed" : "wide") \(barred ? "barred" : "bare")"
     }
 }
 
@@ -269,13 +281,19 @@ private struct HeldSearch<Content: View>: View {
 /// shown longest ago goes, its views disappearing as before.
 struct KeptPages<Content: View>: NSViewRepresentable {
     let key: String
+    /// The frame the part shows in (PageView.frame).
+    var frame = ""
     /// Its picks reach the deck before SwiftUI does (PageDeck.picture).
     let model: AppWindowModel
-    @ViewBuilder var content: () -> Content
+    /// The parts to build ahead, the likeliest first (PageDeck.buildAhead).
+    var ahead: [PageDeck.Ahead] = []
+    /// A part's view: its page, its part and the extension whose page it is.
+    @ViewBuilder var content: (AppPage, AppSection?, String?) -> Content
 
     func makeNSView(context: Context) -> PageDeck {
         let deck = PageDeck()
         model.picking = { [weak deck] in deck?.picture($0) }
+        deck.showing = { [weak model] in model?.live == true }
         return deck
     }
 
@@ -285,14 +303,19 @@ struct KeptPages<Content: View>: NSViewRepresentable {
         proposal.replacingUnspecifiedDimensions()
     }
     func updateNSView(_ deck: PageDeck, context: Context) {
-        deck.show(key, AnyView(content().frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading).ignoresSafeArea()))
+        deck.show(key, root(model.page, model.section(of: model.page), model.extensionPage), frame: frame)
+        deck.buildAhead(ahead) { root($0.page, $0.section, nil) }
+    }
+
+    private func root(_ page: AppPage, _ section: AppSection?, _ extensionPage: String?) -> AnyView {
+        AnyView(content(page, section, extensionPage).frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading).ignoresSafeArea())
     }
 }
 
 /// KeptPages' view: the shown part's host, and the other parts kept, hidden.
 final class PageDeck: NSView {
-    /// How many parts stay built: about 6 to 8 MB each while the window is open (perf-round: 149 MB with one, 169 with
-    /// four, 193 with eight, 344 with every page), all of them gone with the window's tree when it closes.
+    /// How many parts stay built: 27 to 49 MB each while the window is open (page-switch-3, release), all of them gone with
+    /// the window's tree when it closes.
     static let cap = 4
     private var hosts: [String: PageHost] = [:]
     /// The parts by when they showed, the one showing last.
@@ -304,9 +327,19 @@ final class PageDeck: NSView {
     /// Only the shown part follows the window's size; a kept one keeps the size it was shown at until it shows again.
     override func resizeSubviews(withOldSize oldSize: NSSize) {
         if let shown, let host = hosts[shown], host.frame != bounds { host.frame = bounds }
+        noteSize()
     }
 
-    func show(_ key: String, _ root: AnyView) {
+    /// The frame the shown part is in (PageView.frame).
+    private var shownFrame = ""
+
+    private func noteSize() {
+        if let window, !shownFrame.isEmpty { Self.sizes[shownFrame] = (window.frame.size, bounds.size) }
+    }
+
+    func show(_ key: String, _ root: AnyView, frame: String = "") {
+        shownFrame = frame
+        noteSize()
         let host: PageHost
         let built = hosts[key] == nil
         if let kept = hosts[key] {
@@ -333,6 +366,91 @@ final class PageDeck: NSView {
             gone.removeFromSuperview()
             gone.rootView = AnyView(EmptyView())
         }
+    }
+
+    // MARK: Building ahead (page-first)
+
+    /// A part to build ahead: its key, its page and part, and the frame it shows in (PageView.frame).
+    struct Ahead { let key: String; let page: AppPage; let section: AppSection?; let frame: String }
+    /// The parts to build ahead, the likeliest first, and their views.
+    private var ahead: [Ahead] = []
+    private var aheadRoot: (Ahead) -> AnyView = { _ in AnyView(EmptyView()) }
+    /// The deck's size in each frame (PageView.frame), at the window size it was seen at: a part built ahead is built at
+    /// the size it will show at, so showing it lays nothing out again. Kept across the window's closes, as its frame is.
+    private static var sizes: [String: (window: NSSize, deck: NSSize)] = [:]
+    /// Whether the window shows and is key: nothing is built ahead behind a closed, covered or left window.
+    var showing: () -> Bool = { false }
+    private var aheadTimer: Timer?
+    private var aheadInput: Any?
+    /// How long the window stays quiet (no switch, key, click or scroll) before the next part is built ahead.
+    static let quiet: TimeInterval = 0.3
+    /// What a press is: any of these waiting or arriving puts the next part off until the window is quiet again.
+    private static let input: NSEvent.EventTypeMask = [.keyDown, .leftMouseDown, .rightMouseDown, .otherMouseDown, .scrollWheel]
+
+    /// The window's likeliest next parts (Sven, 2026-11-22, Q341 A): once the window has drawn its page and stays quiet,
+    /// each is built hidden, one a run loop turn and never past `cap`, so its first visit is a return visit. A key, click,
+    /// scroll or switch puts the next one off until the window is quiet again; a part is built whole in its turn or not at
+    /// all, never half. They go with the window's tree as it closes, as every kept part does.
+    func buildAhead(_ parts: [Ahead], root: @escaping (Ahead) -> AnyView) {
+        ahead = parts
+        aheadRoot = root
+        armAhead()
+    }
+
+    private var nextAhead: Ahead? {
+        order.count < Self.cap ? ahead.first { hosts[$0.key] == nil } : nil
+    }
+
+    private func armAhead() {
+        aheadTimer?.invalidate()
+        aheadTimer = nil
+        guard window != nil, nextAhead != nil else { return stopAhead() }
+        if aheadInput == nil {
+            aheadInput = NSEvent.addLocalMonitorForEvents(matching: Self.input) { [weak self] event in
+                MainActor.assumeIsolated { self?.armAhead() }
+                return event
+            }
+        }
+        let timer = Timer(timeInterval: Self.quiet, repeats: false) { [weak self] _ in MainActor.assumeIsolated { self?.buildNextAhead() } }
+        RunLoop.main.add(timer, forMode: .common)
+        aheadTimer = timer
+    }
+
+    private func stopAhead() {
+        aheadTimer?.invalidate()
+        aheadTimer = nil
+        if let aheadInput { NSEvent.removeMonitor(aheadInput) }
+        aheadInput = nil
+    }
+
+    private func buildNextAhead() {
+        aheadTimer = nil
+        guard let window, showing(), let next = nextAhead else { return stopAhead() }
+        // A press already waiting goes first.
+        if NSApp.nextEvent(matching: Self.input, until: .distantPast, inMode: .default, dequeue: false) != nil { return armAhead() }
+        let start = ContinuousClock.now
+        let responder = window.firstResponder
+        let host = PageHost(aheadRoot(next), shown: false)
+        host.sizingOptions = []
+        let seen = Self.sizes[next.frame]
+        host.frame = NSRect(origin: .zero, size: seen?.window == window.frame.size ? seen?.deck ?? bounds.size : bounds.size)
+        hosts[next.key] = host
+        // Shown longest ago: the first to go past `cap`, before any part the user opened.
+        order.insert(next.key, at: 0)
+        addSubview(host, positioned: .below, relativeTo: nil)
+        // Built and drawn in this turn, then hidden before its commit, so no frame shows it and no event reaches it.
+        host.layoutSubtreeIfNeeded()
+        host.displayIfNeeded()
+        host.isHidden = true
+        if window.firstResponder !== responder { window.makeFirstResponder(responder) }
+        PageSwitchTiming.builtAhead(next.key, in: ContinuousClock.now - start)
+        armAhead()
+    }
+
+    /// SwiftUI shows the first part before the deck is in the window: building ahead waits for the window.
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        if window == nil { stopAhead() } else { armAhead() }
     }
 
     /// A part left: hidden and out of the keyboard's way at once; its views are told with the shown one's (`tellSoon`).
@@ -424,8 +542,10 @@ final class PageHost: NSHostingView<AnyView> {
     var left: Left?
     struct Left: Equatable { let look: String; let at: NSRect; let window: NSSize }
 
-    convenience init(_ root: AnyView) {
+    /// `shown` false for a part built ahead (PageDeck.buildAhead): its views start as a hidden part's.
+    convenience init(_ root: AnyView, shown: Bool = true) {
         self.init(rootView: AnyView(EmptyView()))
+        slot.shown = shown
         rootView = Self.root(root, slot)
     }
 
@@ -460,15 +580,25 @@ extension View {
         onDisappear(perform: action).modifier(PageShownChange(shown: {}, hidden: action))
     }
 
-    /// `action` as this view appears and each time its kept page shows again: onAppear's twin of `onPageLeave`.
+    /// `action` as this view appears on its page shown and each time its kept page shows again: onAppear's twin of
+    /// `onPageLeave`. A part built ahead, hidden (PageDeck.buildAhead), arrives as it first shows, so it never takes the
+    /// keyboard from the page shown.
     func onPageArrive(_ action: @escaping () -> Void) -> some View {
-        onAppear(perform: action).onPageReturn(action)
+        modifier(ShownAppear(action: action)).onPageReturn(action)
     }
 
     /// `action` each time this view's kept page shows again, after the switch has drawn: a one-shot read a `.task` makes
     /// as the page is built, again on each return visit, as when a removed page was put back.
     func onPageReturn(_ action: @escaping () -> Void) -> some View {
         modifier(PageShownChange(shown: action, hidden: {}))
+    }
+}
+
+private struct ShownAppear: ViewModifier {
+    @Environment(\.pageShown) private var pageShown
+    let action: () -> Void
+    func body(content: Content) -> some View {
+        content.onAppear { if pageShown { action() } }
     }
 }
 

@@ -21,10 +21,7 @@ struct InstrumentFrame: View {
     @State private var held = Held()
 
     var body: some View {
-        let list = !RailLayout.fullWidth(model.page.area)
-        let owns = Self.pageOwnsBar(model.page, section: model.section(of: model.page))
-        // Home draws its own head and search (pilot-ui-redesign T6, shot 7c-home): no bar over it.
-        let bar = !owns && model.page != .home
+        let (list, bar) = Self.frame(model.page, section: model.section(of: model.page))
         let (area, toolbar) = held.note(area: model.page.area, listed: list,
                                         bar: .init(page: model.page, extensionPage: model.extensionPage, listed: list), barred: bar)
         VStack(spacing: 0) {
@@ -117,6 +114,12 @@ extension InstrumentFrame {
     /// under the frame's bar, whose tabs lead back to the keyboard (story 56).
     static func pageOwnsBar(_ page: AppPage, section: AppSection? = nil) -> Bool {
         page == .binds && section?.isPlainBindsPage != true
+    }
+
+    /// Whether the page list shows beside `page` and the toolbar over it; Home draws its own head and search
+    /// (pilot-ui-redesign T6, shot 7c-home): no bar over it.
+    static func frame(_ page: AppPage, section: AppSection?) -> (listed: Bool, barred: Bool) {
+        (!RailLayout.fullWidth(page.area), !pageOwnsBar(page, section: section) && page != .home)
     }
 }
 

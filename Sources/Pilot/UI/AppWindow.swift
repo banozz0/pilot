@@ -14,6 +14,7 @@ final class AppWindowModel {
         didSet {
             guard page != oldValue else { return }
             defaults.set(page.rawValue, forKey: Self.lastPageKey)
+            visits.opened(page)
             PageSwitchTiming.began()
         }
     }
@@ -71,9 +72,12 @@ final class AppWindowModel {
     /// part draws in the next frame (PageDeck.picture, page-switch-5). Before, never after: Core Animation's commit lays
     /// out what SwiftUI has heard of, so a picture committed after the change would wait for the whole switch.
     @ObservationIgnored var picking: ((String) -> Void)?
+    /// How often each page was switched to: the window builds the likeliest ahead (PageDeck.buildAhead).
+    @ObservationIgnored let visits: PageVisits
 
     init(defaults: UserDefaults = .pilot()) {
         self.defaults = defaults
+        visits = PageVisits(defaults: defaults)
         // A page saved before the cut opens where it went; a developer page saved while the switch was on, its area's first.
         let saved = defaults.string(forKey: Self.lastPageKey).flatMap { AppPlace.named($0)?.page } ?? .home
         page = saved.isDeveloper && !DeveloperPages.on ? saved.area.shown.first ?? .home : saved
@@ -204,6 +208,42 @@ final class AppWindowModel {
         else if let pane = SettingsSearch.panes(query).first { openPane(pane) }
         else { return }
         query = ""
+    }
+}
+
+/// How often the window switched to each page, in its own defaults: the parts PageDeck builds ahead while the window idles
+/// are the likeliest next (page-first; Sven, 2026-11-22, Q341 A: "1st time opening a page is still slow and laggy but then
+/// when going to a previously opened page its fast"). A count past `most` halves them all, so a new habit overtakes an old.
+@MainActor
+struct PageVisits {
+    static let key = "appWindow.visits"
+    static let most = 200
+    /// Never built ahead: an extension's page or the Extensions list runs extension programs, and Repos reads every repo
+    /// on disk; nothing a page opened unasked should start.
+    static let notAhead: Set<AppPage> = [.extensions, .repos]
+    let defaults: UserDefaults
+
+    var counts: [String: Int] { defaults.dictionary(forKey: Self.key) as? [String: Int] ?? [:] }
+
+    func opened(_ page: AppPage) {
+        var counts = counts
+        counts[page.rawValue, default: 0] += 1
+        if counts[page.rawValue, default: 0] > Self.most { counts = counts.mapValues { $0 / 2 }.filter { $0.value > 0 } }
+        defaults.set(counts, forKey: Self.key)
+    }
+
+    /// The `count` pages switched to most, most first (ties by name), none of `notAhead` and no developer page while the
+    /// Developer switch is off.
+    func likeliest(_ count: Int) -> [AppPage] {
+        let counts = counts
+        let pages: [AppPage] = counts.keys.compactMap(AppPage.init(rawValue:)).filter { page in
+            !Self.notAhead.contains(page) && (!page.isDeveloper || DeveloperPages.on)
+        }
+        let sorted = pages.sorted { a, b in
+            let na = counts[a.rawValue, default: 0], nb = counts[b.rawValue, default: 0]
+            return na != nb ? na > nb : a.rawValue < b.rawValue
+        }
+        return Array(sorted.prefix(count))
     }
 }
 
@@ -631,6 +671,11 @@ enum PageSwitchTiming {
 
     /// PageDeck committed the kept part's picture.
     static func pictured() { picture = .now }
+
+    /// PageDeck built part `key` ahead, hidden, in `took` of the main thread (page-first).
+    static func builtAhead(_ key: String, in took: Duration) {
+        log.notice("page built ahead: \(key, privacy: .public), \(Int(took / .milliseconds(1))) ms")
+    }
 
     private static func arm() {
         turns = 0
