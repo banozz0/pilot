@@ -211,6 +211,7 @@ public enum Abilities {
         "apps.agent": "Opens a coding agent, Claude Code or Codex, in a new terminal window (Open with › Apps for keys).",
         "apps.ai": "Opens your AI app or site (Open with › Apps for keys).",
         "apps.appsMenu": "Opens the menu on Apps.",
+        "apps.selectionActions": "Offers what to do with what you selected: text gets Translate, Ask AI and Send to an app; Finder files and the file buffer get the file actions.",
         "apps.nextApp": "Brings forward the app you were in before, as a Command-Tab tap; again goes back.",
         "apps.previousApp": "Brings forward the app you used longest ago, as a Command-Shift-Tab tap; again walks back through them all.",
         "apps.reports": "Shows every Update and Clean run kept: what ran, how it ended, its output.",
