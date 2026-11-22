@@ -196,16 +196,24 @@ public enum BrowserBookmarks {
         return query.split(separator: " ").map(String.init)
     }
 
-    /// The history pages of a plain root search, from what its read found: only pages (never the off or Full Disk Access
-    /// row), each still matching every word typed now in its title or its address, as the read's LIKE did (a read for
-    /// fewer letters may still be listed), the last visited first, at most `searchHistoryCap`. Never the row's id, whose
-    /// `apps.url:<browser>:` would keep an older read's page for "chrome" or "com".
+    /// A history page's address, from its row's `apps.url:<browser>:<address>`; nil for the off and Full Disk Access rows.
+    static func address(_ row: MenuEntry) -> String? {
+        guard row.kind == .history, case .action(let id) = row.target, case .url(_, let address)? = AppLink(id: id) else { return nil }
+        return address
+    }
+
+    /// Whether a history row answers every word typed now: a page by its title or its address, as the read's LIKE did, so
+    /// an older read's page (one for fewer letters, listed during the pause) goes once it stops matching; never by the
+    /// row's id, whose `apps.url:<browser>:` would keep it for "chrome" or "com". The off and Full Disk Access rows always.
+    public static func answers(_ row: MenuEntry, words: [String]) -> Bool {
+        guard let address = address(row) else { return true }
+        return words.allSatisfy { row.title.localizedCaseInsensitiveContains($0) || address.localizedCaseInsensitiveContains($0) }
+    }
+
+    /// The history pages of a plain root search, from what its read found: pages only (never the off or Full Disk Access
+    /// row) that `answers` the words typed now, the last visited first, at most `searchHistoryCap`.
     public static func searchPages(_ rows: [MenuEntry], words: [String]) -> [MenuEntry] {
-        let pages = rows.filter { row in
-            guard row.kind == .history, case .action(let id) = row.target, case .url(_, let address)? = AppLink(id: id) else { return false }
-            return words.allSatisfy { row.title.localizedCaseInsensitiveContains($0) || address.localizedCaseInsensitiveContains($0) }
-        }
-        return Array(pages.prefix(searchHistoryCap))
+        Array(rows.filter { address($0) != nil && answers($0, words: words) }.prefix(searchHistoryCap))
     }
 
     /// Web pages only, once each by address, in the order given: a `javascript:` bookmarklet or a `file:` link never
@@ -220,9 +228,8 @@ public enum BrowserBookmarks {
 
     /// The menu's rows for `pages` kept by `browser`: the title (else the address's host), the browser as its subtitle and
     /// icon, Return opening the page in that browser. A bookmark is found by its title and host as any row is and ranks
-    /// with picks; a history page is listed only as its read found it (up to 3 in a plain search, all behind `hist`) and is
-    /// never a pick (MenuEntry.frecencyKey), so no visited
-    /// address lands in Pilot's ranking.
+    /// with picks; a history page is listed only as its read found it (up to 3 in a plain search, all behind `hist`) and
+    /// is never a pick (MenuEntry.frecencyKey), so no visited address lands in Pilot's ranking.
     public static func rows(_ pages: [Page], browser: Browser, kind: MenuEntry.Kind) -> [MenuEntry] {
         web(pages).map { page in
             let host = URL(string: page.url)?.host() ?? page.url
