@@ -55,8 +55,9 @@ extension ControlVerbs {
         let entries = PilotMenu.entries(engine, scripts: scripts, extensions: extensions)
         var nav = MenuNavigator(entries: entries, frecency: PilotMenu.shared.frecency ?? Frecency(), favourites: FavouriteBook.shared.rows,
                                 aliases: AliasBook.shared.aliases, root: MenuRootSettings.shared.root.listed)
-        // As the menu's open and its `hist` search read them (T9): bookmarks while on, history pages (or the off row).
-        if BrowserSettings.shared.bookmarks { nav.provide(.bookmark, await BrowserReader.shared.bookmarks(listed: Set(entries.map(\.target)))) }
+        // As the menu's open and its `hist` search read them (T9): bookmarks while on (the read looks up the installed
+        // browsers either way), history pages (or the off row).
+        nav.provide(.bookmark, await BrowserReader.shared.bookmarks(listed: Set(entries.map(\.target))))
         nav.query = query
         if let words = BrowserBookmarks.historyWords(query) {
             nav.provide(.history, await BrowserReader.shared.history(words, on: BrowserSettings.shared.history))

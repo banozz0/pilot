@@ -14,6 +14,8 @@ extension MenuGroups.Group {
         case .commands: "Commands"
         case .install: "Install"
         case .emoji: "Emoji"
+        case .bookmarks: "Bookmarks"
+        case .history: "History"
         case .goTo: goTo ? "Go to" : "Browse"
         case .askOrSearch: "Ask or search"
         case .section(let title): title

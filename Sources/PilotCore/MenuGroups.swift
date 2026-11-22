@@ -13,6 +13,8 @@ public enum MenuGroups {
         /// A root search's offers: Ask AI, Search the web, Search files, and Search to install when nothing matched
         /// (MenuNavigator.fallbacks, Q182).
         case askOrSearch
+        /// Browsers' bookmarks, and their history pages behind `hist` (spec launcher-best T9).
+        case bookmarks, history
         /// A branch's section, by title (MenuLayout.sections).
         case section(String)
     }
@@ -20,7 +22,7 @@ public enum MenuGroups {
     /// A table, not a switch, so a kind added later heads with the actions until it has a row here.
     private static let groups: [MenuEntry.Kind: Group] = [
         .app: .apps, .window: .windowsAndFiles, .file: .windowsAndFiles, .action: .actions, .package: .install, .emoji: .emoji, .branch: .goTo,
-        .answer: .bestMatch, .menuItem: .menuItems, .command: .commands,
+        .answer: .bestMatch, .menuItem: .menuItems, .command: .commands, .bookmark: .bookmarks, .history: .history,
     ]
 
     static func group(_ kind: MenuEntry.Kind) -> Group { groups[kind] ?? .actions }

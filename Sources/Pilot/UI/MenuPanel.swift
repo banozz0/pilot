@@ -434,9 +434,10 @@ final class PilotMenu {
     }
 
     /// The browsers' bookmarks (T9), read off the main thread as the menu opens while Launcher › More rows has them on;
-    /// a file read again only when it changed (BrowserReader). Counts only in the log, never a title or an address.
+    /// a file read again only when it changed (BrowserReader). Asked with the switch off too, as the reader looks up the
+    /// installed browsers then for `hist`. Counts only in the log, never a title or an address.
     private func provideBookmarks(listed: [MenuEntry]) {
-        guard let model, BrowserSettings.shared.bookmarks else { return }
+        guard let model else { return }
         let targets = Set(listed.map(\.target))
         Task { [weak self] in
             let rows = await BrowserReader.shared.bookmarks(listed: targets)
