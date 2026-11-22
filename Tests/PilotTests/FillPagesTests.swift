@@ -118,14 +118,6 @@ struct FillPagesTests {
         return Double(longest) / Double(max(1, rows.count))
     }
 
-    @Test("A config card's preview is the file's first lines that say something: blank lines skipped, secrets as dots")
-    func configHead() {
-        let text = "\n# Ghostty\n\nfont-size = 14   \napi_key = abc123\ntheme = nightwatch\nwindow-padding-x = 8\n"
-        #expect(AppConfigs.head(text, 3) == ["# Ghostty", "font-size = 14", "api_key = ••••••"])
-        #expect(AppConfigs.head(text, 9).count == 5)
-        #expect(AppConfigs.head("\n\n", 4).isEmpty)
-    }
-
     @Test("A growing card grid shares the window's spare height among its rows, so Stats' charts reach the foot")
     func cardGridGrows() async throws {
         func grid(grow: Bool) -> some View {

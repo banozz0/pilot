@@ -31,16 +31,16 @@ struct WindowRailRenders {
 
         // The count that fits: the strip's own width at each count, the More tab named for the widest area it can hold.
         let room = PanelTabBar.room(AppWindowController.minSize.width)
-        for developer in [false, true] {
+        do {
             func width(_ count: Int) -> CGFloat {
-                let split = AppArea.tabs(count: count, developer: developer)
+                let split = AppArea.tabs(count: count)
                 let widest = split.more.map(\.title).max { $0.count < $1.count } ?? "More"
                 let strip = PanelTabStrip(tabs: split.tabs, open: .home, moreTitle: widest, moreOn: true, moreShown: !split.more.isEmpty)
                     .styled(.window, look: look).environment(engine)
                 return NSHostingView(rootView: strip).fittingSize.width
             }
             let fits = width(AppArea.tabCount), more = width(AppArea.tabCount + 1)
-            print("panel tabs: room \(room) pt, developer \(developer): \(AppArea.tabCount) tabs \(fits) pt, \(AppArea.tabCount + 1) tabs \(more) pt")
+            print("panel tabs: room \(room) pt: \(AppArea.tabCount) tabs \(fits) pt, \(AppArea.tabCount + 1) tabs \(more) pt")
             #expect(fits <= room && more > room, "\(AppArea.tabCount) tabs: \(fits) pt, \(AppArea.tabCount + 1): \(more) pt, room \(room) pt")
         }
 
@@ -62,8 +62,8 @@ struct WindowRailRenders {
             try #require(rep.representation(using: .png, properties: [:])).write(to: dir.appendingPathComponent("\(file).png"))
         }
         // More open over an area it holds at the narrowest, so the More tab carries that area's name.
-        let held = try #require(AppArea.tabs(developer: false).more.first)
-        let all = AppArea.tabs(count: .max, developer: false).tabs.count
+        let held = try #require(AppArea.tabs().more.first)
+        let all = AppArea.tabs(count: .max).tabs.count
         for (name, theme) in Self.looks {
             look.themeID = theme
             AppWindowController.applyLook(look, to: window)

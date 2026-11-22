@@ -20,16 +20,15 @@ public struct MenuRoot: Equatable, Sendable {
     }
 
     /// A row the root can list among its branches, off until switched on (Sven 2026-10-20): a branch that lives deeper
-    /// (Trigger › Notes), which opens where it lives, or Config, which only this row lists; an action with no branch of
+    /// (Trigger › Notes), which opens where it lives; an action with no branch of
     /// its own (Dictation), which runs; a screen of its own in the menu (Activity), or the Files view.
     public struct Extra: Identifiable, Equatable, Sendable {
         public let id: String, title: String, symbol: String, target: MenuEntry.Target
     }
 
-    /// Every extra, in the order the root lists them by default, after System. Config was a root branch until Sven
-    /// 2026-10-21; its branch lives nowhere else, so it opens at the root.
+    /// Every extra, in the order the root lists them by default, after System. Config, one until 2026-11-22, left with
+    /// the Developer pages; a saved `config` is an unknown id.
     public static let extraRows: [Extra] = [
-        Extra(id: "config", title: "Config", symbol: "doc.text", target: .branch(.config)),
         Extra(id: "files", title: "Files", symbol: "doc.text.magnifyingglass", target: .searchFiles),
         Extra(id: "notes", title: "Notes", symbol: "note.text", target: .branch(.notes)),
         Extra(id: "qr", title: "QR", symbol: "qrcode", target: .branch(.qr)),

@@ -29,7 +29,7 @@ struct PanelTabBar: View {
 
     var body: some View {
         // As many tabs as the window's bar measured (PanelTabTop).
-        let split = AppArea.tabs(count: more.tabs, developer: DeveloperPages.on)
+        let split = AppArea.tabs(count: more.tabs)
         HStack(spacing: 0) {
             Color.clear.frame(width: Self.lights, height: 1)
             Spacer(minLength: 0)
@@ -60,8 +60,8 @@ struct PanelTabTop: View {
     @State private var widths = PanelTabWidths()
 
     var body: some View {
-        let shown = AppArea.tabs(count: .max, developer: DeveloperPages.on).tabs
-        let split = AppArea.tabs(count: count(shown), developer: DeveloperPages.on)
+        let shown = AppArea.tabs(count: .max).tabs
+        let split = AppArea.tabs(count: count(shown))
         HStack(spacing: 0) {
             Spacer(minLength: 0)
             // The window's search on every page (Sven, 2026-11-21): Home's own search, its words and results. Cmd+F
@@ -203,7 +203,7 @@ struct PanelMoreMenu: View {
     @FocusState private var focused: Bool
 
     var body: some View {
-        let areas = AppArea.tabs(count: more.tabs, developer: DeveloperPages.on).more
+        let areas = AppArea.tabs(count: more.tabs).more
         let shape = RoundedRectangle(cornerRadius: style.radii.pop, style: .continuous)
         VStack(alignment: .leading, spacing: 0) {
             ForEach(areas, id: \.self) { row($0) }

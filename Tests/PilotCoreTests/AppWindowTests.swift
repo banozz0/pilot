@@ -4,12 +4,12 @@ import Testing
 
 @Suite("App window")
 struct AppWindowTests {
-    @Test("Twenty-nine pages in Home, eleven areas, Developer while its switch is on, and Pilot at the foot (the pages split, Sven 2026-11-15); Cmd+1 to 9 and 0 open the first ten, Cmd+, Pilot; the menu's page is Launcher in an area of its own (P37), Windows under Keys (Q289), AI and Extensions areas of their own (build 19 notes), Agent instructions Configs' Agents tab (page map, Sven 2026-10-17)")
+    @Test("Twenty-nine pages in Home, eleven areas and Pilot at the foot (the pages split, Sven 2026-11-15); Cmd+1 to 9 and 0 open the first ten, Cmd+, Pilot; the menu's page is Launcher in an area of its own (P37), Windows under Keys (Q289), AI and Extensions areas of their own (build 19 notes)")
     func pages() {
         #expect(AppPage.allCases.map(\.title) == ["Home", "Binds", "Launcher", "Workspaces", "Tiling", "Menu bar", "Dock", "Look", "System",
                                                    "Update & Clean", "Clipboard", "Captures", "Snippets", "Notes", "Files", "AI", "Voice", "Install", "Open with",
-                                                   "Configs", "Repos", "Fonts", "Pilot", "Extensions", "Widgets"])
-        #expect(AppArea.allCases.map(\.title) == ["Home", "Keys", "Windows", "Launcher", "Desktop", "Look", "Mac", "Tools", "Apps", "AI", "Extensions", "Developer", "Pilot"])
+                                                   "Fonts", "Pilot", "Extensions", "Widgets"])
+        #expect(AppArea.allCases.map(\.title) == ["Home", "Keys", "Windows", "Launcher", "Desktop", "Look", "Mac", "Tools", "Apps", "AI", "Extensions", "Pilot"])
         // Every page in exactly one area.
         #expect(AppArea.allCases.flatMap(\.pages).sorted { $0.rawValue < $1.rawValue } == AppPage.allCases.sorted { $0.rawValue < $1.rawValue })
         for page in AppPage.allCases { #expect(page.area.pages.contains(page), "\(page)") }
@@ -24,23 +24,20 @@ struct AppWindowTests {
         #expect(AppArea.mac.pages == [.upkeep, .system] && AppArea.mac.key == "7")
         #expect(AppArea.tools.pages == [.clipboard, .notes, .files, .voice, .captures, .snippets])
         #expect(AppArea.apps.pages == [.openWith, .install])
-        // Configs and Repos are Developer's, an area shown only while the switch is on (Q715; the split): off, the rail,
-        // Ctrl+Tab and the search leave them out.
-        #expect(AppArea.developer.pages == [.configs, .repos] && AppArea.developer.pages(developer: false).isEmpty)
-        #expect(AppArea.main(developer: false) == AppArea.main.filter { $0 != .developer } && AppArea.main(developer: true) == AppArea.main)
-        #expect(AppArea.next(after: .install, developer: false) == .openWith && AppPlace.search("zshrc", developer: false).isEmpty)
+        // The Developer area, Configs and Repos, left Pilot (Sven, 2026-11-22, Q351): nothing finds them.
+        #expect(AppArea.next(after: .install) == .openWith && AppPlace.search("zshrc").isEmpty && AppPlace.named("configs") == nil)
         // AI is an area of its own (Sven 2026-10-16), on Cmd+0.
         #expect(AppArea.ai.pages == [.ai] && AppArea.ai.key == "0")
         #expect(AppArea.pilot.pages == [.general])
-        #expect(AppArea.allCases.map(\.key) == ["1", "2", "3", "4", "5", "6", "7", "8", "9", "0", nil, nil, ","])
-        #expect(AppArea.main.count == 12 && !AppArea.main.contains(.pilot))
+        #expect(AppArea.allCases.map(\.key) == ["1", "2", "3", "4", "5", "6", "7", "8", "9", "0", nil, ","])
+        #expect(AppArea.main.count == 11 && !AppArea.main.contains(.pilot))
         // Ctrl+Tab steps through the area's pages, round to the first; a page alone stays.
         #expect(AppArea.next(after: .dock) == .widgets && AppArea.next(after: .look) == .fonts && AppArea.next(after: .widgets) == .menuBar)
         #expect(AppArea.next(after: .menu) == .menu && AppArea.next(after: .extensions) == .extensions && AppArea.next(after: .workspaces) == .tiling && AppArea.next(after: .tiling) == .workspaces)
         #expect(AppArea.next(after: .home) == .home && AppArea.next(after: .general) == .general)
         // The window layout went with the panel (pilot-ui-redesign T3); under the panel's More a page's own More reads once.
-        #expect(AppPlace(.reports).tabPath(count: 8, developer: false) == "More › Mac › Update & Clean › Reports")
-        #expect(AppPlace(.reports).tabPath(count: 9, developer: false) == "Mac › Update & Clean › More › Reports")
+        #expect(AppPlace(.reports).tabPath(count: 8) == "More › Mac › Update & Clean › Reports")
+        #expect(AppPlace(.reports).tabPath(count: 9) == "Mac › Update & Clean › More › Reports")
         // Direction 1: Home takes the width, any other page has its area's list, which folds under 900 pt; a search shows it.
         #expect(!RailLayout.showsList(.home, width: 1440, searching: false) && RailLayout.showsList(.home, width: 1440, searching: true))
         // AI takes the width as Home does, its tabs in the header; Windows lists its pages, Extensions its extensions.
@@ -57,7 +54,6 @@ struct AppWindowTests {
         #expect(RailLayout.hint(.mac) == "⌘7 Mac · ⌃Tab next page" && RailLayout.hint(.keys) == "⌘2 Keys" && RailLayout.hint(.pilot) == "⌘, Pilot")
         #expect(RailLayout.hint(.ai) == "⌘0 AI" && RailLayout.hint(.windows) == "⌘3 Windows · ⌃Tab next page" && RailLayout.hint(.launcher) == "⌘4 Launcher")
         #expect(RailLayout.hint(.extensions) == "Extensions" && RailLayout.hint(.extensions, rows: 3) == "Extensions · ⌃Tab next page")
-        #expect(RailLayout.hint(.developer) == "Developer · ⌃Tab next page")
         // The parts as tabs in the page's header, the sidebar listing pages only (P36): Launcher's and Files' own content first.
         #expect(AppPage.menu.tabs.map(\.title) == ["Your menu", "Abilities", "Rings", "More"])
         #expect(AppPage.files.tabs.map(\.title) == ["Files", "Folders"])
@@ -70,8 +66,8 @@ struct AppWindowTests {
         #expect(AppPage.install.tabs.map(\.title) == ["Search", "Web apps", "More"])
         // Overlay, Swap keys and Export and import are places on More (simplify-pages T14, Sven's Q1; Overlay was a tab, story 56).
         #expect(AppPage.binds.tabs.map(\.title) == ["Keyboard", "Mouse", "More"])
-        // The page map (Sven 2026-10-17): Configs holds the agents' files, AI its setup, Captures its recording.
-        #expect(AppPage.configs.tabs.map(\.title) == ["Apps", "Agents"] && AppPage.ai.tabs.map(\.title) == ["Chat", "Setup"])
+        // The page map (Sven 2026-10-17): AI holds its setup, Captures its recording.
+        #expect(AppPage.ai.tabs.map(\.title) == ["Chat", "Setup"])
         #expect(AppPage.captures.tabs.map(\.title) == ["Capture", "Recording", "History", "More"])
         #expect(AppPage.workspaces.tabs.map(\.title) == ["Workspaces", "More"])
         // System's parts are cards on its front, no More (Sven, 2026-11-11, after 2276).
@@ -90,7 +86,7 @@ struct AppWindowTests {
         ("conflicts", AppPlace(.binds, .conflicts)), ("workspaces", AppPlace(.workspaces)),
         ("snapshots", AppPlace(.workspaceRules)), ("tiling", AppPlace(.tiling)), ("topBar", AppPlace(.menuBar)),
         ("webApps", AppPlace(.install, .webApps)), ("installCatalogue", AppPlace(.install, .catalogue)),
-        ("configs", AppPlace(.configs)), ("defaultApps", AppPlace(.openWith)), ("clipboard", AppPlace(.clipboard)),
+        ("defaultApps", AppPlace(.openWith)), ("clipboard", AppPlace(.clipboard)),
         // Pomodoro became an extension (2026-10-10): its old link opens the Extensions page's catalogue, where it is installed.
         ("pomodoro", AppPlace(.extensions, .extensionCatalogue)), ("setup", AppPlace(.system)), ("general", AppPlace(.general)), ("look", AppPlace(.look)),
         ("permissions", AppPlace(.general, .permissions)), ("exportImport", AppPlace(.binds, .exportImport)),
@@ -106,13 +102,13 @@ struct AppWindowTests {
         ("snippets", AppPlace(.snippets)), ("convert", AppPlace(.files)),
         // AI was Ask (2026-10-11 to the page map); its raw name stays, so page=ai still opens it.
         ("ask", AppPlace(.ai)),
-        // The page map (Sven 2026-10-17): Agent instructions is Configs › Agents, Launcher names the menu's page.
-        ("instructions", AppPlace(.configs, .agents)), ("launcher", AppPlace(.menu)),
+        // The page map (Sven 2026-10-17): Launcher names the menu's page.
+        ("launcher", AppPlace(.menu)),
     ]
 
     @Test("Every old page name still opens: pilot://open lands on the page and part it went to, and a tab that moved follows it")
     func oldLinks() {
-        #expect(Self.moved.count == 34 && Set(Self.moved.map(\.0)).count == 34)
+        #expect(Self.moved.count == 32 && Set(Self.moved.map(\.0)).count == 32)
         for (name, place) in Self.moved {
             #expect(AppPlace.linked(URL(string: "pilot://open?page=\(name)")!) == place, "\(name)")
             if let section = place.section { #expect(place.page.sections.contains(section), "\(name)") }
@@ -128,7 +124,7 @@ struct AppWindowTests {
             // Tiling's links, and build 19's Windows page (Workspaces with a Tiling tab): each lands on Tiling or its block.
             ("page=tiling&tab=motion", AppPlace(.motion)), ("page=windows&tab=tiling", AppPlace(.tiling)),
             ("page=tiling&tab=floatApps", AppPlace(.floatApps)), ("page=windows", AppPlace(.workspaces)), ("page=binds&tab=abilities", AppPlace(.menu, .abilities)),
-            ("page=install&tab=reports", AppPlace(.upkeep, .reports)), ("page=defaults&tab=configs", AppPlace(.configs)),
+            ("page=install&tab=reports", AppPlace(.upkeep, .reports)),
             ("page=defaults&tab=defaultApps", AppPlace(.openWith)), ("page=workspaces&tab=snapshots", AppPlace(.workspaceRules)),
             ("page=pilot&tab=about", AppPlace(.general, .about)), ("page=setup&section=wifi", AppPlace(.system)),
             ("page=extensions&tab=catalogue", AppPlace(.extensions, .extensionCatalogue)), ("page=install&tab=catalogue", AppPlace(.install, .catalogue)),
@@ -156,7 +152,6 @@ struct AppWindowTests {
         "topBar": ["menu bar", "status bar", "waybar", "hide", "autohide", "clock", "workspaces"],
         "webApps": ["web app", "url", "site", "sign out"],
         "installCatalogue": ["install", "homebrew", "cask", "formula"],
-        "configs": ["config", "dotfiles", "ghostty", "neovim", "zshrc", "gitconfig", "starship", "tmux"],
         "defaultApps": ["default app", "open with", "main editor", "editor", "vs code"],
         "clipboard": ["clipboard", "history", "paste", "keep", "never record", "images"],
         "pomodoro": ["focus", "break", "timer"],
@@ -196,7 +191,7 @@ struct AppWindowTests {
 
     @Test("Every word that found a page before the cut finds where that page went, and its old title does too")
     func oldKeywordsFindTheirPlace() {
-        #expect(Self.oldKeywords.count == 20 && Set(Self.oldKeywords.keys).isSubset(of: Set(Self.moved.map(\.0))))
+        #expect(Self.oldKeywords.count == 19 && Set(Self.oldKeywords.keys).isSubset(of: Set(Self.moved.map(\.0))))
         for (name, place) in Self.moved where Self.oldKeywords[name] != nil {
             for word in Self.oldKeywords[name] ?? [] {
                 // A word whose control moved to a More tab finds its block there (simplify-pages T8).
@@ -214,10 +209,9 @@ struct AppWindowTests {
         #expect(AppPlace.search("clip") == [AppPlace(.clipboard)])
         #expect(AppPlace.search("caps lock") == [AppPlace(.general)])
         #expect(AppPlace.search("editor") == [AppPlace(.openWith)])
-        #expect(AppPlace.search("zshrc") == [AppPlace(.configs)])
         #expect(AppPlace.search("api key") == [AppPlace(.ai, .aiSetup)] && AppPlace.search("claude").first == AppPlace(.ai))
         #expect(AppPlace.search("ask").contains(AppPlace(.ai)), "Ask was AI's name")
-        #expect(AppPlace.search("launcher") == [AppPlace(.menu)] && AppPlace.search("agents.md") == [AppPlace(.configs, .agents)])
+        #expect(AppPlace.search("launcher") == [AppPlace(.menu)] && AppPlace.search("agents.md").isEmpty)
         #expect(AppPlace.search("homebrew").contains(AppPlace(.install, .helpers)) && AppPlace.search("export") == [AppPlace(.binds, .exportImport)])
         #expect(AppPlace.search("border").contains(AppPlace(.tiling)) && AppPlace.search("fps") == [AppPlace(.captures, .recordingQuality)])
         #expect(AppPlace.search("alias").first == AppPlace(.menu, .aliases) && AppPlace.search("never index") == [AppPlace(.files, .fileSearch)])

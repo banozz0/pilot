@@ -2,8 +2,8 @@ import AppKit
 import PilotCore
 
 /// Script commands (card agent-bo-95423029, audit gap 3): `scripts.run:<file name>` runs that file in Pilot's Scripts
-/// folder through the drive shell route, in the mode its header names (ScriptCommand). Not in the registry, like
-/// ConfigsModule's rows: the folder is read again as the menu opens and as a script runs, so a file added, edited or
+/// folder through the drive shell route, in the mode its header names (ScriptCommand). Not in the registry: the folder
+/// is read again as the menu opens and as a script runs, so a file added, edited or
 /// removed since is followed. Open Scripts folder is registered, so it binds and is found by search.
 @MainActor
 enum ScriptsModule {

@@ -9,7 +9,7 @@ import Testing
 /// Aliases (card agent-bo-95423037) for Sven and Moody. Defaults › Aliases alone at the page widths of a 1000 and a 760
 /// window, Tokyo Night and Folio: six aliases, the mouse over Ghostty, Ghostty open in the editor, Safari
 /// refused Ghostty's alias, Finder asked for by the menu (new), the menu's ask on an empty list, and empty; then the
-/// whole page as the menu opens it, 900 pt high over mockup D's configs, the asked editor brought into view. The menu with alias chips: a root
+/// whole page as the menu opens it, 900 pt high, the asked editor brought into view. The menu with alias chips: a root
 /// search for an alias (its row first and current, another aliased row at rest) and the root's quiet list with Install
 /// current. Each book lives in a temporary folder, in a moved home. Opt-in like the other renders:
 /// `CFFIXED_USER_HOME=/tmp/pilot-render-home PILOT_RENDER_DIR=/tmp/pilot-renders swift test --filter AliasesRenders`
@@ -36,8 +36,6 @@ struct AliasesRenders {
         DisplayFaces.directory = LookThemeTests.fonts
         DisplayFaces.register()
         Look.shared.glass = false
-        // Mockup D's twelve configs, so the page runs past 900 pt and the asked editor must be brought into view.
-        try RestyledRenders.seedConfigs(home: URL(fileURLWithPath: home))
         let folder = FileManager.default.temporaryDirectory.appending(path: "pilot-render-aliases-\(UUID().uuidString)")
         defer { try? FileManager.default.removeItem(at: folder) }
         func book(_ aliases: [Alias] = Self.saved) throws -> AliasBook {

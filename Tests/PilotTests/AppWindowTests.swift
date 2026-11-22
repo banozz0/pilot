@@ -38,7 +38,7 @@ struct AppWindowFrameTests {
     @Test("Every old page name opens where it went: its page, its part as the tab picked, conflicts as the sheet (card agent-bo-95422892, C3)")
     func oldPagesLand() {
         let names = ["home", "binds", "plainCombos", "conflicts", "workspaces", "snapshots", "tiling", "topBar", "webApps", "installCatalogue",
-                     "configs", "defaultApps", "clipboard", "pomodoro", "setup", "general", "look", "permissions", "exportImport", "onOff", "about",
+                     "defaultApps", "clipboard", "pomodoro", "setup", "general", "look", "permissions", "exportImport", "onOff", "about",
                      "pilot", "stats", "defaults", "otherApps", "abilities", "reports"]
         for name in names {
             let model = AppWindowModel(defaults: UserDefaults(suiteName: testSuite())!)
@@ -113,7 +113,7 @@ struct AppWindowFrameTests {
             RunLoop.main.run(until: Date().addingTimeInterval(0.3))
             return FillPagesTests.labels(in: try #require(window.contentView))
         }
-        let tabs = try labels(), split = AppArea.tabs(count: PanelTabs.count, developer: false)
+        let tabs = try labels(), split = AppArea.tabs(count: PanelTabs.count)
         // More plain, or naming the open area once the top bar's search leaves it no tab (topbar-search).
         #expect(tabs.contains("Tabs") && split.tabs.allSatisfy { tabs.contains($0.title) } && tabs.contains { $0 == "More" || $0.hasPrefix("More, ") }, "\(tabs)")
         model.go(AppPlace(.general))
@@ -343,10 +343,8 @@ struct AppWindowRenders {
                 document.scroll(NSPoint(x: 0, y: top))
             }
             // Instrument draws these as plain lists, empty on the fakes (Activity's processes, Login & Background's items, the
-            // catalogue, instructions, extensions, Look's theme catalogue before its index reads): no card to find. Configs and
-            // its Agents part, and Repos, read this Mac's files off the main thread, which never hands back while this test
-            // holds it: ConfigsListTests and ReposPageRenders draw their cards from a home of their own.
-            let lists: Set = ["install-catalogue", "configs", "configs-agents", "repos", "extensions", "look-themeCatalogue"]
+            // catalogue, extensions, Look's theme catalogue before its index reads): no card to find.
+            let lists: Set = ["install-catalogue", "extensions", "look-themeCatalogue"]
             if cards < enough && !lists.contains(name) { withoutCards.append(name) }
         }
         // The Binds page searched (card agent-bo-95422785): each hit under its own layer's heading.

@@ -220,7 +220,7 @@ private struct AliasCard: View {
     }
 }
 
-/// The open row, under the cards as Configs' preview: its title and kind with Remove, Cancel and Save, then the alias
+/// The open row, under the cards: its title and kind with Remove, Cancel and Save, then the alias
 /// field and under it what typing the alias does, or why Save refused it. Return saves, Escape cancels.
 private struct AliasEditor: View {
     @Environment(\.ink) private var ink

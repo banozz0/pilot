@@ -44,7 +44,7 @@ public enum BindSearch {
         public var groups: [Group] {
             switch self {
             case .app, .menu: [.apps]
-            case .action: [.actions, .scripts, .extensions, .quicklinks, .configs, .soundOutputs, .focusPresets]
+            case .action: [.actions, .scripts, .extensions, .quicklinks, .soundOutputs, .focusPresets]
             case .web: [.website]
             case .shell: [.shell]
             case .shortcut: [.shortcuts]
@@ -60,7 +60,7 @@ public enum BindSearch {
 
     /// A heading in the results, in the order they list: typed intents first, the shell row last.
     public enum Group: CaseIterable, Sendable {
-        case website, appURL, apps, actions, scripts, extensions, quicklinks, configs, soundOutputs, focusPresets, shortcuts, suggest, shell
+        case website, appURL, apps, actions, scripts, extensions, quicklinks, soundOutputs, focusPresets, shortcuts, suggest, shell
 
         public var title: String {
             switch self {
@@ -71,7 +71,6 @@ public enum BindSearch {
             case .scripts: "Your scripts"
             case .extensions: "Extension commands"
             case .quicklinks: "Quicklinks"
-            case .configs: "Configs"
             case .soundOutputs: "Sound outputs"
             case .focusPresets: "Focus presets"
             case .shortcuts: "Shortcuts"
@@ -89,18 +88,18 @@ public enum BindSearch {
         public var apps: [(name: String, bundle: String)], browsers: [(name: String, bundle: String)]
         public var actions: [BindsPage.ActionInfo], catalogue: DriveCatalogue
         public var scripts: [BindsPage.ActionInfo], extensions: [BindsPage.ActionInfo], quicklinks: [BindsPage.ActionInfo]
-        public var configs: [BindsPage.ActionInfo], soundOutputs: [BindsPage.ActionInfo], focusPresets: [BindsPage.ActionInfo]
+        public var soundOutputs: [BindsPage.ActionInfo], focusPresets: [BindsPage.ActionInfo]
         /// The Shortcuts app's names, from `shortcuts list` in a child.
         public var shortcuts: [String]
 
         public init(apps: [(name: String, bundle: String)] = [], browsers: [(name: String, bundle: String)] = [],
                     actions: [BindsPage.ActionInfo] = [], catalogue: DriveCatalogue = DriveCatalogue(),
                     scripts: [BindsPage.ActionInfo] = [], extensions: [BindsPage.ActionInfo] = [], quicklinks: [BindsPage.ActionInfo] = [],
-                    configs: [BindsPage.ActionInfo] = [], soundOutputs: [BindsPage.ActionInfo] = [],
+                    soundOutputs: [BindsPage.ActionInfo] = [],
                     focusPresets: [BindsPage.ActionInfo] = [], shortcuts: [String] = []) {
             self.apps = apps; self.browsers = browsers; self.actions = actions; self.catalogue = catalogue
             self.scripts = scripts; self.extensions = extensions; self.quicklinks = quicklinks
-            self.configs = configs; self.soundOutputs = soundOutputs; self.focusPresets = focusPresets; self.shortcuts = shortcuts
+            self.soundOutputs = soundOutputs; self.focusPresets = focusPresets; self.shortcuts = shortcuts
         }
     }
 
@@ -182,7 +181,7 @@ public enum BindSearch {
             }
         }
         let own = info(s.scripts, .scripts) + info(s.extensions, .extensions) + info(s.quicklinks, .quicklinks)
-            + info(s.configs, .configs) + info(s.soundOutputs, .soundOutputs, subtitle: "Sound output")
+            + info(s.soundOutputs, .soundOutputs, subtitle: "Sound output")
             + info(s.focusPresets, .focusPresets, subtitle: "Focus preset")
             + s.shortcuts.map { Row(id: DriveRoute.shortcut($0).id, title: $0, subtitle: "Shortcut", group: .shortcuts) }
         let listed = Set((apps + catalogue + own).map(\.id))

@@ -416,12 +416,12 @@ struct SearchHits {
 
     init() {}
 
-    init(_ query: String, engine: Engine, schema: SettingsSchema, developer: Bool = DeveloperPages.on) {
+    init(_ query: String, engine: Engine, schema: SettingsSchema) {
         let trimmed = query.trimmingCharacters(in: .whitespaces)
         guard !trimmed.isEmpty else { return }
         words = trimmed.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: nil)
             .split { !$0.isLetter && !$0.isNumber }.map(String.init)
-        for found in SettingsSearch.grouped(trimmed, settings: schema.sorted, developer: developer) {
+        for found in SettingsSearch.grouped(trimmed, settings: schema.sorted) {
             let page = found.page
             var rows = found.settings.map { setting in
                 let place = AppPlace.named(setting.page) ?? AppPlace(page)
@@ -431,12 +431,12 @@ struct SearchHits {
             }
             rows += found.parts.map { Hit(id: "part:" + $0.rawValue, title: $0.title, value: .none, target: .place(AppPlace(page, $0))) }
             if rows.isEmpty { rows = [Hit(id: "page:" + page.rawValue, title: page.title, value: .none, target: .place(AppPlace(page)))] }
-            groups.append(Group(id: page.rawValue, title: found.path(count: PanelTabs.count, developer: developer), rows: rows))
+            groups.append(Group(id: page.rawValue, title: found.path(count: PanelTabs.count), rows: rows))
         }
         let sections = BindsPage.sections(store: engine.binds.store, actions: engine.bindActions, search: trimmed)
         let bound = sections.flatMap(\.rows).filter { $0.key != nil }
         if !bound.isEmpty {
-            groups.append(Group(id: "binds", title: AppPlace(.binds).tabPath(count: PanelTabs.count, developer: developer),
+            groups.append(Group(id: "binds", title: AppPlace(.binds).tabPath(count: PanelTabs.count),
                                 rows: bound.prefix(Self.binds).map { Hit(id: "bind:" + $0.id, title: $0.label, value: $0.key.map(Value.keys) ?? .none, target: .bind($0.id)) }))
         }
         let panes = SettingsSearch.panes(trimmed)

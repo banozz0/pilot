@@ -38,9 +38,6 @@ extension SettingsSchema {
                   read: { settings.overlayEnabled }, write: { settings.overlayEnabled = $0 }),
             .bool("launchAtLogin", "Launch at login", page: "general", standard: PilotSettings.launchAtLoginDefault,
                   read: { settings.launchAtLogin }, write: { settings.launchAtLogin = $0 }),
-            // Q715: Configs, its Agents tab and Repos. Off for a new install; an existing one started on once (PilotSettings).
-            .bool("general.developer", "Developer pages: Configs, Agents and Repos", page: "general", standard: false,
-                  read: { settings.developer }, write: { settings.developer = $0 }),
             // The feature trim (2026-11-19): System and Fonts in the sidebar. Off for a new install; an existing one started on.
             .bool("general.morePages", "More pages: System and Fonts in the sidebar", page: "general", standard: false,
                   read: { settings.morePages }, write: { settings.morePages = $0 }),

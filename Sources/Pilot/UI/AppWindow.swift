@@ -39,10 +39,6 @@ final class AppWindowModel {
     var extensionPage: String? { didSet { if extensionPage != oldValue { PageSwitchTiming.began() } } }
     /// What Install's search opens with, from Fonts' Get more fonts; going anywhere else clears it.
     var installQuery: String?
-    /// The repo Developer › Repos opens on, from a Repos widget's row; going anywhere else clears it. `repoOpens` counts the
-    /// opens, so a second open of the same repo starts the page on it again.
-    var repoPick: String?
-    var repoOpens = 0
     /// The block a link or the search asked for on a More tab (simplify-pages T7); More scrolls there, marks it in its
     /// index and clears it. Going anywhere else clears it too.
     var blockFocus: AppSection?
@@ -78,9 +74,8 @@ final class AppWindowModel {
     init(defaults: UserDefaults = .pilot()) {
         self.defaults = defaults
         visits = PageVisits(defaults: defaults)
-        // A page saved before the cut opens where it went; a developer page saved while the switch was on, its area's first.
-        let saved = defaults.string(forKey: Self.lastPageKey).flatMap { AppPlace.named($0)?.page } ?? .home
-        page = saved.isDeveloper && !DeveloperPages.on ? saved.area.shown.first ?? .home : saved
+        // A page saved before the cut opens where it went; one gone since (Configs, Repos) opens Home.
+        page = defaults.string(forKey: Self.lastPageKey).flatMap { AppPlace.named($0)?.page } ?? .home
     }
 
     /// The part of `page` showing now: the one picked, else its first (a page's own content is nil).
@@ -113,7 +108,6 @@ final class AppWindowModel {
         // reads it, the frame's and every kept page's, on every switch (perf-round).
         if extensionPage != nil { extensionPage = nil }
         if installQuery != nil { installQuery = nil }
-        if repoPick != nil { repoPick = nil }
         if wallpaperFocus != nil { wallpaperFocus = nil }
         if blockFocus != nil { blockFocus = nil }
         ringEnd?.cancel()
@@ -150,13 +144,6 @@ final class AppWindowModel {
         extensionPage = id
     }
 
-    /// Shows Developer › Repos on repo `name`, as a Repos widget's row opens it.
-    func goRepo(_ name: String) {
-        go(AppPlace(.repos))
-        repoPick = name
-        repoOpens += 1
-    }
-
     /// Opens the Extensions list on extension `id`'s row: an extension with nothing to show as a page.
     func focusExtension(_ id: String) {
         go(AppPlace(.extensions))
@@ -166,7 +153,7 @@ final class AppWindowModel {
     /// ⌃Tab: the next page in the area, round to the first; on Extensions, Installed then each extension that opens a page,
     /// as the sidebar lists them, round to Installed.
     func nextPage(entries: [ExtensionPages.Link] = ExtensionPages.shared.pageEntries) {
-        let after = AppPlace(AppArea.next(after: page, developer: DeveloperPages.on, more: MorePages.on))
+        let after = AppPlace(AppArea.next(after: page, more: MorePages.on))
         guard page == .extensions, !entries.isEmpty else { return go(after) }
         let at = extensionPage.flatMap { id in entries.firstIndex { $0.id == id } }
         let next = at.map { $0 + 1 } ?? 0
@@ -204,7 +191,7 @@ final class AppWindowModel {
 
     /// The search's Return: the first place it finds, else the first System Settings pane, as the list orders them.
     func goToFirstResult() {
-        if let first = AppPlace.search(query, developer: DeveloperPages.on).first { go(first) }
+        if let first = AppPlace.search(query).first { go(first) }
         else if let pane = SettingsSearch.panes(query).first { openPane(pane) }
         else { return }
         query = ""
@@ -219,7 +206,7 @@ struct PageVisits {
     static let key = "appWindow.visits"
     static let most = 200
     /// The pages built ahead, those whose build reads only Pilot's own data or what a visit reads while hidden and paused
-    /// (page-first's audit). Not the rest: Extensions runs extension programs, Repos reads every repo on disk, General
+    /// (page-first's audit). Not the rest: Extensions runs extension programs, General
     /// reads the update count and Full Disk Access as it is built; nothing a page opened unasked should start.
     static let ahead: Set<AppPage> = [.binds, .menuBar, .look, .system, .dock, .widgets, .tiling, .workspaces, .home]
     let defaults: UserDefaults
@@ -292,8 +279,7 @@ final class AppWindowController: NSObject {
     /// Launcher › Aliases' editor on that row (Set alias…, card agent-bo-95423037), `editSnippet` Snippets on that snippet's name.
     func open(_ place: AppPlace? = nil, setup: SetupSection? = nil, extension focus: String? = nil, editBind: String? = nil, editAlias: Alias? = nil,
               editSnippet: UUID? = nil) {
-        // A developer page while the Developer switch is off (a link, a bind) opens General, where the switch is.
-        var place = place.map { $0.page.isDeveloper && !DeveloperPages.on ? AppPlace(.general) : $0 }
+        var place = place
         // System's section (Hyper+Ctrl+A, B and W, card agent-bo-95422805) and the bind to edit, kept through a locked
         // screen's wait; the keyboard layout and the mouse are places on its front.
         if place?.page == .system, let setup {
@@ -334,12 +320,6 @@ final class AppWindowController: NSObject {
         model.goExtensionPage(id)
     }
     func open(_ section: AppSection) { open(AppPlace(section)) }
-
-    /// Opens the window on Developer › Repos at repo `name`: a Repos widget's row.
-    func openRepo(_ name: String) {
-        open(AppPlace(.repos))
-        model.goRepo(name)
-    }
 
     /// Opens the window on Look › Wallpaper, `focus`'s row lit: the desktop's Hyper + right-click › Wallpaper settings….
     /// A screen's or a workspace's own folders are on Look's More (simplify-pages T20), so while they have their own it
@@ -599,13 +579,6 @@ final class MaterialBackdrop: NSView {
     }
 }
 
-/// General's Developer switch as the window, the searches and `pilot open` read it (AppPage.isDeveloper, Pilot 1.0.2, Sven
-/// Q715): the app's own settings, off where there are none (a test).
-@MainActor enum DeveloperPages {
-    static var on: Bool { PilotSettings.live?.developer ?? false }
-    static let help = "Developer pages: Configs, Agents and Repos, for people who live in config files and repos."
-}
-
 /// General's More pages switch as the sidebar and Ctrl+Tab read it (the feature trim, 2026-11-19): System and Fonts listed
 /// only while it is on; on where there are no settings (a test), so a test's areas stay whole.
 @MainActor enum MorePages {
@@ -614,22 +587,10 @@ final class MaterialBackdrop: NSView {
 }
 
 extension AppArea {
-    /// Its pages the window lists now: the developer pages only while the switch is on.
-    @MainActor var shown: [AppPage] { pages(developer: DeveloperPages.on, more: MorePages.on) }
-    /// The areas the rail lists above Pilot now: Developer only while the switch is on.
-    @MainActor static var shownMain: [AppArea] { main(developer: DeveloperPages.on) }
-    /// Every area the toolbar tabs list now, Pilot last.
-    @MainActor static var shownAll: [AppArea] { shownMain + [.pilot] }
-}
-
-extension MenuRoot {
-    /// The root Hyper+Space and the Ring menu list now: the Config row only while the Developer switch is on.
-    @MainActor var listed: MenuRoot {
-        guard !DeveloperPages.on else { return self }
-        var root = self
-        root.extras.remove("config")
-        return root
-    }
+    /// Its pages the window lists now: System and Fonts only while the More pages switch is on.
+    @MainActor var shown: [AppPage] { pages(more: MorePages.on) }
+    /// Every area the toolbar tabs list, Pilot last.
+    @MainActor static var shownAll: [AppArea] { main + [.pilot] }
 }
 
 /// How long each page switch takes to draw (page-switch-3; Sven on combined-6, build 2995: "swapping from pilot pages is

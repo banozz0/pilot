@@ -137,7 +137,7 @@ struct StyleTests {
         let (look, _) = LookPageTests().look()
         let pages: [(AppPage, AnyView)] = [
             (.workspaces, AnyView(RestyledPagesTests.workspacesBody())), (.install, AnyView(CataloguePage())),
-            (.openWith, AnyView(OpenWithPage())), (.configs, AnyView(ConfigsPage(configs: ConfigsListTests.fixture))),
+            (.openWith, AnyView(OpenWithPage())),
             (.menu, AnyView(RestyledPagesTests.menuPage(.quicklinks))), (.system, AnyView(SettingsPagesTests.setup())),
             (.clipboard, AnyView(SettingsPagesTests.clipboard())),
         ]
@@ -197,7 +197,7 @@ struct StyleTests {
         let pinned = NSScroller.preferredScrollerStyle
         // Two pages hosted, their run loops turned 0.3 s each: long enough for macOS to tell the process about the mouse.
         // A fixed wait on purpose: what it waits for comes from outside the process, unasked (pump would end at quiet).
-        try LookPageTests().hosted(ConfigsPage(configs: ConfigsListTests.fixture)) { _ in RunLoop.current.run(until: .now + 0.3) }
+        try LookPageTests().hosted(CataloguePage()) { _ in RunLoop.current.run(until: .now + 0.3) }
         try LookPageTests().hosted(OpenWithPage()) { _ in RunLoop.current.run(until: .now + 0.3) }
         #expect(NSScroller.preferredScrollerStyle == pinned, "the scroll bars moved after testApp() pinned them")
         // Every test host starts the app through testApp(), which pins them.

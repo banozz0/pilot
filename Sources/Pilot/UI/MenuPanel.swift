@@ -246,7 +246,7 @@ final class PilotMenu {
         extensions = found.extensions
         let entries = Self.entries(engine, scripts: scripts, extensions: extensions)
         var nav = MenuNavigator(entries: entries, branch: branch, frecency: frecency ?? Frecency(), favourites: FavouriteBook.shared.rows,
-                                aliases: AliasBook.shared.aliases, root: MenuRootSettings.shared.root.listed)
+                                aliases: AliasBook.shared.aliases, root: MenuRootSettings.shared.root)
         nav.fileFilters.hidden = FileSearchSettings.shared.showHidden
         show(nav)
         historyShown = false
@@ -256,7 +256,7 @@ final class PilotMenu {
         model?.onQuery = { [weak self] in
             self?.searchEmoji($0)
             self?.provideEmojiGrid($0)
-            self?.model?.nav.provideSettings($0, developer: DeveloperPages.on)
+            self?.model?.nav.provideSettings($0)
             self?.searchStickers($0)
             self?.openGifs($0)
             self?.openAliasedBranch($0)
@@ -404,8 +404,7 @@ final class PilotMenu {
         let installed = Extension.menu(extensions, catalogue: ExtensionCatalogueMenu.actionID), apps = AppsModule.installedApps()
         let built = MenuEntries.build(apps: apps, actions: Extension.actions(ScriptCommand.actions(engine.bindActions, with: scripts), with: extensions),
                                  store: engine.binds.store, roleApps: roleApps, menu: AppsModule.menuID, openID: AppsModule.openID(bundle:),
-                                 running: running, extras: [MenuLayout.system("Sound"): SystemModule.outputRows(excluding: HiddenRows.shared.ids[.soundOutput] ?? []),
-                                                         .config: DeveloperPages.on ? ConfigsModule.menuRows() : []].merging(installed.extras) { mine, _ in mine },
+                                 running: running, extras: [MenuLayout.system("Sound"): SystemModule.outputRows(excluding: HiddenRows.shared.ids[.soundOutput] ?? [])].merging(installed.extras) { mine, _ in mine },
                                  branches: installed.branches,
                                  switches: SystemModule.switchStates(), fills: ScriptCommand.fills(scripts))
         // Each app's own commands (P38), from the drive catalogue.

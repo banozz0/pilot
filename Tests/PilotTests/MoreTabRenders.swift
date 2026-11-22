@@ -150,7 +150,6 @@ private struct MorePage {
         MoreSection(id: "Data", symbol: "folder", rows: [
             .titled("Pilot's folder", detail: "Binds, settings and history", info: "Opens the folder in Finder.", buttons: ["Show in Finder"]),
             .chip("pilot command", info: "Links the pilot command into ~/.local/bin.", chip: "in ~/.local/bin", live: true),
-            .toggle("Developer pages", on: false, info: DeveloperPages.help),
             .titled("Uninstall", detail: "Speech models, caches, your data or Pilot itself", info: "Ticked items go to the Trash.", buttons: ["Uninstall…"]),
             .titled("Terminal", detail: "Ghostty for Hyper+T, downloaded on its first press", info: "Remove ends its shell and deletes it.", buttons: ["Download"]),
         ]),

@@ -12,7 +12,7 @@ final class PilotFolders {
     static let standardRepos = NSHomeDirectory() + "/code"
     static var standardGIFs: String { Stickers.standardFolder.path }
 
-    /// The folder whose repos Developer › Repos, its widgets and lazygit's picker list (the tester keeps them in ~/dev).
+    /// The folder whose repos the Repos widget and lazygit's picker list (the tester keeps them in ~/dev).
     var repos: String {
         didSet { defaults.set(repos == Self.standardRepos ? nil : repos, forKey: Self.reposKey) }
     }

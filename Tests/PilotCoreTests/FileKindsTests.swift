@@ -28,4 +28,15 @@ struct FileKindsTests {
         #expect(files.filter { !$0.roles.isEmpty }.map(\.handlers) == [[.contentType("public.plain-text")], [.contentType("public.source-code")]])
         #expect(files.allSatisfy { $0.roles.allSatisfy { $0 == .editor } && $0.confirmNote == nil })
     }
+
+    // From the Configs page's tests, removed with the page (2026-11-22).
+    @Test("A kind's name splits into its title and what it covers: Web links over http, https; Markdown over .md")
+    func kindTitles() throws {
+        let kinds = FileKinds.groups.flatMap(\.kinds)
+        let web = try #require(kinds.first { $0.id == "web" }), md = try #require(kinds.first { $0.id == "net.daringfireball.markdown" })
+        #expect(web.title == "Web links" && web.detail == "http, https")
+        #expect(md.title == "Markdown" && md.detail == ".md")
+        let png = try #require(kinds.first { $0.id == "public.png" })
+        #expect(png.title == "PNG" && png.detail == nil)
+    }
 }

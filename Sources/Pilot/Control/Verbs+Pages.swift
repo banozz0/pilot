@@ -4,9 +4,8 @@ import PilotCore
 extension ControlVerbs {
     /// `pilot open`: Pilot's window on a page or a part of one, by the names pilot://open takes, old names included.
     func registerPages(_ app: ControlActions) {
-        // The developer pages and their parts only while General's Developer switch is on (Q715).
-        func pages() -> [String] { AppPage.allCases.filter { DeveloperPages.on || !$0.isDeveloper }.map(\.rawValue) }
-        func parts() -> [JSONValue] { AppSection.allCases.filter { DeveloperPages.on || !$0.page.isDeveloper }.map { .string($0.rawValue) } }
+        func pages() -> [String] { AppPage.allCases.map(\.rawValue) }
+        func parts() -> [JSONValue] { AppSection.allCases.map { .string($0.rawValue) } }
         let sections = SetupSection.allCases.map(\.rawValue)
         register(ControlVerb("open", help: "Opens Pilot's window on a page or a part of one; --where and --find only say where, opening nothing.",
                              usage: "pilot open <page|part|pilot://open link> [--section <\(sections.joined(separator: "|"))>] [--where] | pilot open --find <words>",
@@ -21,9 +20,9 @@ extension ControlVerbs {
             // A search answers Home's grouped results (pilot-ui-redesign T5): each page under its tab path, what `pilot
             // open` takes to open it, and the parts and settings found, each setting with its value, read after the match.
             if let words = args.value("find") {
-                let developer = DeveloperPages.on, schema = SettingsSchema.live
-                return .array(SettingsSearch.grouped(words, settings: schema.sorted, developer: developer).map { group in
-                    .object(["group": .string(group.path(count: PanelTabs.count, developer: developer)), "open": .string(group.page.rawValue),
+                let schema = SettingsSchema.live
+                return .array(SettingsSearch.grouped(words, settings: schema.sorted).map { group in
+                    .object(["group": .string(group.path(count: PanelTabs.count)), "open": .string(group.page.rawValue),
                              "parts": .array(group.parts.map { .object(["title": .string($0.title), "open": .string($0.rawValue)]) }),
                              "settings": .array(group.settings.map { setting in
                                  .object(["key": .string(setting.key), "label": .string(setting.label),
@@ -35,16 +34,10 @@ extension ControlVerbs {
             if args.flags.contains("where") {
                 let place = name.hasPrefix("pilot://") ? URL(string: name).flatMap(AppPlace.linked) : AppPlace.named(name)
                 guard let place else { throw ControlError(.unknownPage, "\(name) lands nowhere: no page, part or old name") }
-                guard DeveloperPages.on || !place.page.isDeveloper else {
-                    throw ControlError(.unknownPage, "\(place.path) is a developer page and the Developer switch is off: pilot set general.developer on")
-                }
-                return .string(place.tabPath(count: PanelTabs.count, developer: DeveloperPages.on))
+                return .string(place.tabPath(count: PanelTabs.count))
             }
             guard let place = AppPlace.named(name) else {
                 throw ControlError(.unknownPage, "no page \(name); pages: \(pages().joined(separator: ", ")); pilot schema lists the parts")
-            }
-            guard DeveloperPages.on || !place.page.isDeveloper else {
-                throw ControlError(.unknownPage, "\(place.path) is a developer page and the Developer switch is off: pilot set general.developer on")
             }
             let section = args.value("section")
             let setup = section.flatMap(SetupSection.init(rawValue:))

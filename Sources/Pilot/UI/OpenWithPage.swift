@@ -2,7 +2,7 @@ import PilotCore
 import SwiftUI
 
 /// Open with (C3, Sven 2026-10-10: Defaults' settings were good but too hidden, so each job got a page named for it;
-/// Configs is its own page, and Aliases, Quicklinks, File search and the menu's rows went to Menu). Mockup D's Opens with
+/// Configs was its own page until 2026-11-22, and Aliases, Quicklinks, File search and the menu's rows went to Menu). Mockup D's Opens with
 /// (card agent-bo-95422980): a card per main kind (the editor with its key, web links, plain text, Markdown), each with a
 /// picker showing the chosen app's icon, changed on Sven's pick as Finder's Open With › Change All does (cards
 /// agent-bo-95422840 and 842); every other kind folds under All kinds.
@@ -70,12 +70,12 @@ struct OpenWithPage: View {
         }
     }
 
-    /// The main editor, which its key opens and Configs open files in.
+    /// The main editor, which its key opens.
     private var editorCard: some View {
         @Bindable var editor = editor
         let app = editor.app, automatic = editor.automatic
         return KindCardFrame(title: "Editor", detail: editor.pick == nil ? "automatic" : "your pick", symbol: "pencil", colour: .accent,
-                             info: "The app the editor key opens, and the one Configs open their files in.") {
+                             info: "The app the editor key opens.") {
             BindKey(action: "apps.editor")
         } picker: {
             AppPickerField(bundle: app, name: AppsModule.appName(app) ?? app, label: "Editor") {
@@ -117,7 +117,7 @@ struct OpenWithPage: View {
     var currentName: String? { current.map { bundle in choices.first { $0.bundle == bundle }?.name ?? AppsModule.appName(bundle) ?? bundle } }
 }
 
-/// One section of a page (Open with's, Configs', Menu's Aliases and Quicklinks): a heading on the page that says in
+/// One section of a page (Open with's, Menu's Aliases and Quicklinks): a heading on the page that says in
 /// one line what it is for, `link` at its right, then the content.
 struct DefaultsSection<Link: View, Content: View>: View {
     let title: String
@@ -260,28 +260,5 @@ private struct NameWidth: PreferenceKey {
     static let defaultValue: CGFloat? = nil
     static func reduce(value: inout CGFloat?, nextValue: () -> CGFloat?) {
         if let next = nextValue() { value = max(value ?? 0, next) }
-    }
-}
-
-/// Configs (C3, was Defaults' second section): the app configs on this Mac as cards (ConfigsList, card agent-bo-95422841),
-/// each opened in the main editor Open with picks.
-struct ConfigsPage: View {
-    var editor: EditorChoice = .shared
-    var configs: ConfigsList.Start = .init()
-
-    /// No intro of its own: the list's heading and note say what it is, once.
-    var body: some View {
-        KitPage { ConfigsList(editor: editor, start: configs) }
-    }
-}
-
-/// Configs › Agents (Sven 2026-10-10, 2026-10-19): the agents' settings, CLAUDE.md, AGENTS.md and the Hermes souls as
-/// Configs' cards, opened the same way.
-struct InstructionsPage: View {
-    var editor: EditorChoice = .shared
-    var start: ConfigsList.Start = .init()
-
-    var body: some View {
-        KitPage { ConfigsList(editor: editor, kind: .instructions, start: start) }
     }
 }

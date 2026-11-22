@@ -40,15 +40,6 @@ struct MenuRootTests {
         #expect(!listed(nav).contains(.clean))
         nav.query = "clean"
         #expect(nav.rows.first?.target == .branch(.clean))
-        // Config is an extra, off by default (Sven 2026-10-21): not listed, found by name all the same, once when on.
-        var config = MenuNavigator(entries: [], root: MenuRoot())
-        #expect(!listed(config).contains(.config))
-        config.query = "config"
-        #expect(config.rows.first?.target == .branch(.config))
-        var on = MenuNavigator(entries: [], root: MenuRoot(extras: ["config"]))
-        #expect(on.rows.last?.target == .branch(.config))
-        on.query = "config"
-        #expect(on.rows.count { $0.target == .branch(.config) } == 1)
         // A deeper branch an extra opened goes back to the root, its row selected (Sven 2026-10-21); through its parent,
         // back to the parent.
         var notes = MenuNavigator(entries: [], root: MenuRoot(extras: ["notes"]))
@@ -70,8 +61,9 @@ struct MenuRootTests {
         // Remove, Extensions and About were never saved: each follows the branch it follows by default. "config", saved while
         // Config was a branch, is an unknown id now.
         #expect(root.arranged() == [.system, .apps, .learn, .trigger, .install, .remove, .update, .clean, .extensions, .about])
+        // The Config extra left with the Developer pages (Sven, 2026-11-22, Q351): one saved while it was on lists nothing.
         let withConfig = MenuRoot(order: ["config", "system", "extra:config"], extras: ["config"]).rows()
-        #expect(withConfig.filter { $0.title == "Config" }.count == 1 && withConfig.last?.extra?.id == "config")
+        #expect(!withConfig.contains { $0.title == "Config" || $0.extra?.id == "config" })
         #expect(root.shown() == root.arranged())
         // A list with a new first branch the saved order never named puts it first.
         let withNew: [MenuBranch] = [.snippets] + Self.today

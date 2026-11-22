@@ -1,7 +1,7 @@
 import PilotCore
 import SwiftUI
 
-/// Launcher › Quicklinks (card agent-bo-95423030) as Configs draws its cards: each link a card with its keyword's key cap,
+/// Launcher › Quicklinks (card agent-bo-95423030) as cards: each link a card with its keyword's key cap,
 /// its name, and its URL in mono with {query} lit. A click opens the editor under the cards, as a config's preview opens
 /// under its group; Add quicklink opens it empty. Save refuses, in one line, an empty name or keyword, a keyword other
 /// than lowercase letters and digits or another link's, and a URL Pilot can not open. Remove asks nothing.
@@ -166,7 +166,7 @@ private struct QuicklinkURL: View {
     }
 }
 
-/// The open link, under the cards as Configs' preview: its name with Remove, Cancel and Save, then its fields (name,
+/// The open link, under the cards: its name with Remove, Cancel and Save, then its fields (name,
 /// keyword and URL on one line when they fit), and under them what typing it in Hyper+Space opens, or the refusal.
 /// Return saves, Escape cancels.
 private struct QuicklinkEditor: View {
