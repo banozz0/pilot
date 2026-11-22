@@ -3,7 +3,7 @@ import Carbon.HIToolbox
 import Observation
 import PilotCore
 
-/// Your own AI command (launcher-best T10; the idea from Raycast's AI Commands and Tinycast's Quick Actions, their docs
+/// Your own AI command (launcher-best T10; the idea from Tinycast's Quick Actions, its docs
 /// only): a title, a prompt that may hold the snippets' placeholders, the AI that answers it (the AI page's pick with its
 /// fallback, or one provider) and where the answer goes. Its prompt is the instruction; the selection goes with it as
 /// data, never as an instruction (SelectionPrompt), so `{selection}` in a prompt reads "the selected text".

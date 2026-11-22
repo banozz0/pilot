@@ -1,6 +1,6 @@
 import Foundation
 
-/// The placeholders snippets and quicklinks fill as they paste or open (launcher-best T6; the idea from Raycast's, Alfred's
+/// The placeholders snippets and quicklinks fill as they paste or open (launcher-best T6; the idea from Alfred's
 /// and LaunchBar's docs, no code): `{date}` and `{time}`, each with an offset (`+7d`, `-2w`, `+1mo`, `+1y`, `+3h`, `+30m`)
 /// and a `format="d MMM"`; `{clipboard}`, and `{clipboard N}` for the copy N before it; `{selection}`; `{argument}` and
 /// `{argument name}`; `{cursor}`; a quicklink's `{query}`. Any but `{cursor}` takes `| uppercase`, `| lowercase`, `| trim`

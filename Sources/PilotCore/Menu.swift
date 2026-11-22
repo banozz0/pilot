@@ -1895,7 +1895,7 @@ extension FileSearch.Ask {
     }
 }
 
-/// Your fallbacks (spec launcher-best T4, after Raycast's Fallback Commands and Alfred's fallback searches): what a root
+/// Your fallbacks (spec launcher-best T4, after Alfred's fallback searches): what a root
 /// search that found nothing offers for the words, in the order picked on Launcher › Your menu (`menu.fallbacks`). Each
 /// is one of Pilot's four offers (`ai.ask`, `web`, `files`, `install`), a quicklink that takes words
 /// (`quicklinks.<keyword>`, opened with them) or a script that asks for them (its action id, the words typed after its

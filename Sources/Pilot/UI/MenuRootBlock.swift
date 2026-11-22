@@ -86,7 +86,7 @@ struct MenuRootBlock: View {
     }
 }
 
-/// Launcher › Your menu's When nothing matches (spec launcher-best T4, after Raycast's Fallback Commands): what Hyper+Space
+/// Launcher › Your menu's When nothing matches (spec launcher-best T4): what Hyper+Space
 /// offers for your words when nothing on the Mac matches, in your order, each moved with its arrows and taken off with its
 /// minus; Add lists the rest (MenuFallbacks: Pilot's four offers, each quicklink taking words, each script asking for
 /// them). Until you change it the list is Pilot's own four. `pilot set menu.fallbacks` sets the same list.
