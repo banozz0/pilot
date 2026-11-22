@@ -3,7 +3,7 @@ import Testing
 @testable import PilotCore
 
 /// Card agent-bo-95423029 (audit gap 3): every executable in Pilot's Scripts folder is a Hyper+Space command, titled,
-/// iconed and run as its Raycast-style header says. Nothing here runs a script.
+/// iconed and run as its header says. Nothing here runs a script.
 @Suite("Script commands")
 struct ScriptCommandTests {
     private func folder() throws -> URL {
@@ -18,15 +18,15 @@ struct ScriptCommandTests {
         try FileManager.default.setAttributes([.posixPermissions: executable ? 0o755 : 0o644], ofItemAtPath: url.path)
     }
 
-    @Test("Raycast's header names the title, the emoji icon and the mode, whatever the comment marker")
+    @Test("The header names the title, the emoji icon and the mode, whatever the comment marker")
     func header() {
         let bash = ScriptCommand(file: "pr.sh", header: """
             #!/bin/bash
             # Required parameters:
-            # @raycast.schemaVersion 1
-            # @raycast.title Open my pull requests
-            # @raycast.mode fullOutput
-            # @raycast.icon 🐙
+            # @pilot.schemaVersion 1
+            # @pilot.title Open my pull requests
+            # @pilot.mode fullOutput
+            # @pilot.icon 🐙
             echo hi
             """)
         #expect(bash.title == "Open my pull requests")
@@ -34,13 +34,13 @@ struct ScriptCommandTests {
         #expect(bash.mode == .terminal)
         #expect(bash.actionID == "scripts.run:pr.sh")
 
-        let js = ScriptCommand(file: "a.js", header: "#!/usr/bin/env node\n// @raycast.title Count tabs\n// @raycast.mode compact\n")
+        let js = ScriptCommand(file: "a.js", header: "#!/usr/bin/env node\n// @pilot.title Count tabs\n// @pilot.mode compact\n")
         #expect(js.title == "Count tabs" && js.mode == .hud && js.icon == nil)
-        let lua = ScriptCommand(file: "b.lua", header: "-- @raycast.title Mute\n-- @raycast.mode silent\n-- @raycast.icon images/mute.png\n")
+        let lua = ScriptCommand(file: "b.lua", header: "-- @pilot.title Mute\n-- @pilot.mode silent\n-- @pilot.icon images/mute.png\n")
         #expect(lua.title == "Mute" && lua.mode == .silent)
-        // A path or a URL is Raycast's too, but Pilot draws only an emoji.
+        // A path or a URL in the icon field draws nothing: Pilot draws only an emoji.
         #expect(lua.icon == nil)
-        #expect(ScriptCommand(file: "c.sh", header: "# @raycast.mode inline").mode == .hud)
+        #expect(ScriptCommand(file: "c.sh", header: "# @pilot.mode inline").mode == .hud)
     }
 
     @Test("With no header the file name is the title and the last output line shows as a HUD line")
@@ -56,9 +56,9 @@ struct ScriptCommandTests {
     func find() throws {
         let dir = try folder()
         defer { try? FileManager.default.removeItem(at: dir) }
-        try write("# @raycast.title Zip downloads\n", "zip.sh", in: dir)
+        try write("# @pilot.title Zip downloads\n", "zip.sh", in: dir)
         try write("echo\n", "brew-cleanup", in: dir)
-        try write("# @raycast.title Notes\n", "notes.md", in: dir, executable: false)
+        try write("# @pilot.title Notes\n", "notes.md", in: dir, executable: false)
         try write("echo\n", ".hidden.sh", in: dir)
         try FileManager.default.createDirectory(at: dir.appendingPathComponent("lib"), withIntermediateDirectories: true)
 
@@ -88,14 +88,14 @@ struct ScriptCommandTests {
 
     @Test("A script row wears its emoji, else the terminal glyph")
     func icon() {
-        #expect(ScriptCommand(file: "a.sh", header: "# @raycast.icon 🐙").menuIcon.emoji == "🐙")
+        #expect(ScriptCommand(file: "a.sh", header: "# @pilot.icon 🐙").menuIcon.emoji == "🐙")
         let plain = ScriptCommand(file: "a.sh", header: "").menuIcon
         #expect(plain.emoji == nil && plain.symbol == "terminal")
     }
 
     @Test("Unbound scripts join the root search as action rows; a bound one keeps its Keybindings row; both wear the icon")
     func menuRows() {
-        let zip = ScriptCommand(file: "zip.sh", header: "# @raycast.title Zip downloads\n# @raycast.icon 🗜️")
+        let zip = ScriptCommand(file: "zip.sh", header: "# @pilot.title Zip downloads\n# @pilot.icon 🗜️")
         let mute = ScriptCommand(file: "mute.sh", header: "")
         let bound = BindsPage.ActionInfo(id: mute.actionID, label: "Mute", module: "drive")
         let lock = BindsPage.ActionInfo(id: "system.lock", label: "Lock", module: "system")
@@ -123,7 +123,7 @@ struct ScriptCommandTests {
     func symlink() throws {
         let dir = try folder()
         defer { try? FileManager.default.removeItem(at: dir) }
-        try write("# @raycast.title Real\n", "real.sh", in: dir)
+        try write("# @pilot.title Real\n", "real.sh", in: dir)
         try FileManager.default.createSymbolicLink(at: dir.appendingPathComponent("link.sh"), withDestinationURL: dir.appendingPathComponent("real.sh"))
         #expect(ScriptCommand.named("link.sh", in: dir)?.file == "link.sh")
     }
