@@ -60,7 +60,11 @@ struct SandboxHost {
         // PILOT_SANDBOX_CLEAN=<folder> (W89): Clean's stand-in Mac: `<folder>/mo` as Mole, run with `<folder>/home` as its
         // home, whose `.config/mole/clean-list.txt` is the file list read; `pilot clean <id>…` moves into FileOps' throwaway
         // Trash in this run's folder, never ~/.Trash. Without it the host runs the Mac's own Mole, so leave clean alone.
-        if let clean = ProcessInfo.processInfo.environment["PILOT_SANDBOX_CLEAN"] { CleanModule.standIn = ("\(clean)/mo", "\(clean)/home") }
+        // Its finished preview's tip is printed, never shown, and its button never pressed.
+        if let clean = ProcessInfo.processInfo.environment["PILOT_SANDBOX_CLEAN"] {
+            CleanModule.standIn = ("\(clean)/mo", "\(clean)/home")
+            CleanModule.showTip = { text, action in print("TIP shows: \(text) [\(action.title)]") }
+        }
         // PILOT_SANDBOX_SECURE=1: a password field holds secure input (no app named), so `status --part problems` shows
         // what the dropdown offers there.
         if ProcessInfo.processInfo.environment["PILOT_SANDBOX_SECURE"] == "1" { engine.secureInput.seed(active: true) }
