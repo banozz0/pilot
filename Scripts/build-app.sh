@@ -194,7 +194,8 @@ echo -n 'APPL????' > "$APP/Contents/PkgInfo"
 # process), library validation off (every dlopen is a system framework or the pack, signed by this same team), DYLD
 # variables (none read; MallocSpaceEfficient is libmalloc's, which reads it under the hardened runtime too). Sparkle's
 # Autoupdate and Updater.app, the Python extensions' /usr/bin/python3 children and the web-app template need nothing: a
-# stamped web app is signed again without the runtime (WebAppStamper).
+# stamped web app is signed again without the runtime (WebAppStamper). Local Network needs no entitlement on macOS, only
+# Info.plist's NSLocalNetworkUsageDescription: macOS counts an extension's child as Pilot for it (TN3179; Network's Devices).
 SIGN=(--force --sign "$ID")
 ENTITLE=() DICTATE_ENTITLE=()
 if [[ $ID == "Developer ID Application:"* ]]; then
