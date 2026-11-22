@@ -58,6 +58,8 @@ struct WidgetsAddList: View {
                 thumbnail(widget)
                 VStack(alignment: .leading, spacing: 2) {
                     HStack(spacing: 6) {
+                        // Its own icon beside its name: the small previews alone look alike.
+                        Text(widget.icon).font(.system(size: 13)).accessibilityHidden(true)
                         Text(widget.title).font(ink.ui(12.5, .semibold)).foregroundStyle(ink.text).lineLimit(1)
                         if placed > 0 {
                             HStack(spacing: 2) {
