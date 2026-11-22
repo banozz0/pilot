@@ -78,7 +78,7 @@ struct ExtensionTests {
         #expect(Extension.Problem.badID("Bad.Id").reason.contains("Bad.Id"))
     }
 
-    @Test("The Extensions folder lists each good extension by title, each bad folder with its reason, and old Raycast folders apart")
+    @Test("The Extensions folder lists each good extension by title and each bad extension.json with its reason; a folder without one is skipped")
     func find() throws {
         let dir = try folder()
         defer { try? FileManager.default.removeItem(at: dir) }
@@ -96,9 +96,8 @@ struct ExtensionTests {
 
         let found = Extension.find(in: dir)
         #expect(found.extensions.map(\.id) == ["alpha", "demo"])
-        #expect(found.broken.map(\.folder) == ["broken", "empty"])
-        // An old Raycast install is never a broken row: only the one line that offers it to the Trash (Sven, 2026-11-21).
-        #expect(found.raycast == ["speedtest"])
+        // A folder without extension.json is no extension, whatever else it holds: never a Not read row (Sven, 2026-11-22).
+        #expect(found.broken.map(\.folder) == ["broken"])
         #expect(Extension.find(in: dir.appending(path: "missing")) == Extension.Found(extensions: [], broken: []))
     }
 

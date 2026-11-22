@@ -9,8 +9,6 @@ import PilotCore
 final class ExtensionsSettings {
     private(set) var rows: [ExtensionsPage.Row] = []
     private(set) var broken: [Extension.Broken] = []
-    /// Old Raycast folders in Extensions, by name: one quiet line offers them to the Trash, never a row each.
-    private(set) var raycast: [String] = []
     /// Read once the first load finished, so the page can tell an empty folder from one not read yet.
     private(set) var loaded = false
     /// Update all runs, so a second press waits for it.
@@ -42,18 +40,9 @@ final class ExtensionsSettings {
         }.value
         rows = ExtensionsPage.rows(found, values: { values[$0.id] ?? [:] }, label: label)
         broken = found.broken
-        raycast = found.raycast
         loaded = true
         // The sidebar's extension pages follow an install or an uninstall (story 161).
         if folder == Extension.folder { ExtensionPages.shared.show(found.extensions) }
-    }
-
-    /// Move to Trash on the old Raycast line: those folders to the Trash through the catalogue's installer, off the main
-    /// thread, then the folder read again.
-    func trashRaycast() async {
-        let (installer, names) = (catalogue.installer, raycast)
-        await Task.detached { installer.trashRaycast(names) }.value
-        await load()
     }
 
     /// Saves `value` for `field` of the extension `row` shows, or clears it when nil, and shows the value a run gets now.

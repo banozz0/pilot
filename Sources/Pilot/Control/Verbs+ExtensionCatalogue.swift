@@ -6,13 +6,16 @@ import PilotCore
 /// command asks Allow first, as `ext install` does, naming every file from the index the install checks each file
 /// against, and the commands of the extension.json that check pins.
 extension ControlVerbs {
-    /// `ext catalogue [<query>] [--refresh]`: the entries the page shows for that search, each with its standing.
+    /// `ext catalogue [<query>] [--refresh]`: the entries the page's Get tab shows for that search, the installed ones left
+    /// out (Sven, 2026-11-22), each with its standing; `updates` the installed ones it has newer, as the Updates tab.
     static func catalogue(_ args: ControlArguments, _ tools: ExtensionTools) async throws(ControlError) -> JSONValue {
         let model = tools.catalogue
         try await Self.readCatalogue(model, refresh: args.has("refresh"))
         let query = args.positional.dropFirst().joined(separator: " ")
-        let entries = model.entries(query)
-        return .object(["count": .number(Double(entries.count)), "query": .string(query), "entries": .array(entries.map { entry in
+        let found = model.entries(query)
+        let entries = found.filter { model.installed[$0.id] == nil }
+        let updates = found.filter { model.standing(of: $0) == .update }
+        func card(_ entry: ExtensionCatalogue.Entry) -> JSONValue {
             let standing = model.standing(of: entry)
             var o: [String: JSONValue] = [
                 "id": .string(entry.id), "title": .string(entry.title), "version": .string(entry.version), "description": .string(entry.description),
@@ -28,7 +31,9 @@ extension ControlVerbs {
             o["busy"] = model.busy[entry.id].map(JSONValue.string)
             o["failed"] = model.failures[entry.id].map(JSONValue.string)
             return .object(o)
-        })])
+        }
+        return .object(["count": .number(Double(entries.count)), "query": .string(query), "entries": .array(entries.map(card)),
+                        "installed": .number(Double(found.count - entries.count)), "updates": .array(updates.map(card))])
     }
 
     /// `ext get <id>`: installs a catalogue entry, or updates the copy installed to its version, after Allow.

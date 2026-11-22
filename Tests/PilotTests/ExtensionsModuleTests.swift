@@ -289,7 +289,7 @@ struct ExtensionActionsAppTests {
 @MainActor
 @Suite("Extensions settings")
 struct ExtensionsSettingsTests {
-    @Test("The page lists the folder's extensions and its broken folder; an edit saves at once and shows the value a run gets")
+    @Test("The page lists the folder's extensions, a folder without extension.json left out; an edit saves at once and shows the value a run gets")
     func edits() async throws {
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent("pilot-ext-settings-\(UUID().uuidString)").resolvingSymlinksInPath()
         defer { try? FileManager.default.removeItem(at: dir) }
@@ -307,7 +307,7 @@ struct ExtensionsSettingsTests {
         let storage = ExtensionStorage(data: dir.appending(path: "data"), cache: dir.appending(path: "cache"), keychain: keychain)
         let settings = ExtensionsSettings(folder: dir.appending(path: "exts"), storage: storage, label: { _ in nil })
         await settings.load()
-        #expect(settings.rows.map(\.id) == ["demo"] && settings.broken.map(\.folder) == ["empty"])
+        #expect(settings.rows.map(\.id) == ["demo"] && settings.broken.isEmpty)
         let row = settings.rows[0]
         #expect(row.fields.map(\.value) == [.string("sven"), nil] && row.fields[1].isMissing)
 

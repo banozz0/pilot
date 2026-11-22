@@ -114,7 +114,7 @@ public struct Extension: Equatable, Sendable {
 
     /// Why a folder is not an extension, said in the log and, later, on the Extensions page.
     public enum Problem: Error, Equatable, Sendable {
-        case noManifest, raycastFormat, unreadable(String), badID(String), unknownRuntime(String), noCommands, badCommandName(String),
+        case noManifest, unreadable(String), badID(String), unknownRuntime(String), noCommands, badCommandName(String),
              duplicateCommand(String), unknownMode(command: String, mode: String), missingProgram(command: String, run: String),
              duplicateID(String), unknownFilter(command: String, filter: String), sessionNeedsOwnList(command: String),
              unknownPreferenceType(preference: String, type: String), noOptions(preference: String), duplicatePreference(String),
@@ -123,7 +123,6 @@ public struct Extension: Equatable, Sendable {
         public var reason: String {
             switch self {
             case .noManifest: "no extension.json"
-            case .raycastFormat: "a Raycast extension (package.json), which Pilot does not run: its own extensions are extension.json folders"
             case .unreadable(let why): "extension.json does not read: \(why)"
             case .badID(let id): "id \"\(id)\" must be lowercase letters, digits and hyphens"
             case .unknownRuntime(let r): "runtime \"\(r)\" is not one Pilot runs (process)"
@@ -185,10 +184,7 @@ public struct Extension: Equatable, Sendable {
     /// The extension `folder` holds; throws its Problem when it is not one.
     public init(folder: URL) throws {
         let data: Data
-        do { data = try Data(contentsOf: folder.appending(path: Self.manifestName)) } catch {
-            // A Raycast install an earlier test build left (raycast-archive branch): skipped, said so, never read.
-            throw FileManager.default.fileExists(atPath: folder.appending(path: "package.json").path) ? Problem.raycastFormat : Problem.noManifest
-        }
+        do { data = try Data(contentsOf: folder.appending(path: Self.manifestName)) } catch { throw Problem.noManifest }
         let manifest: Manifest
         do { manifest = try JSONDecoder().decode(Manifest.self, from: data) } catch { throw Problem.unreadable(Self.describe(error)) }
         guard Self.isName(manifest.id) else { throw Problem.badID(manifest.id) }
@@ -239,7 +235,7 @@ public struct Extension: Equatable, Sendable {
         return word.lowercased()
     }
 
-    /// A folder that is not an extension, by its name, and why.
+    /// A folder whose extension.json does not read, by its name, and why.
     public struct Broken: Equatable, Sendable {
         public let folder: String, problem: Problem
         public init(folder: String, problem: Problem) { self.folder = folder; self.problem = problem }
@@ -247,22 +243,18 @@ public struct Extension: Equatable, Sendable {
 
     public struct Found: Equatable, Sendable {
         public let extensions: [Extension], broken: [Broken]
-        /// Old Raycast installs an earlier test build left (package.json, no extension.json), by folder name: never
-        /// listed as broken, only offered to the Trash in one line (Sven, 2026-11-21).
-        public let raycast: [String]
-        public init(extensions: [Extension], broken: [Broken], raycast: [String] = []) {
-            self.extensions = extensions; self.broken = broken; self.raycast = raycast
-        }
+        public init(extensions: [Extension], broken: [Broken]) { self.extensions = extensions; self.broken = broken }
     }
 
     /// The extensions in `folder` by title, read in folder-name order so the first of two with one id wins, the folders
-    /// that are not, and apart from them the old Raycast ones, hidden ones and loose files left out; none when it is missing.
+    /// with an extension.json that does not read, each with why; a folder without one is no extension and is skipped, as
+    /// are hidden ones and loose files (Sven, 2026-11-22); none when it is missing.
     public static func find(in folder: URL = folder) -> Found {
         let folders = ((try? FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: [.isDirectoryKey],
                                                                      options: .skipsHiddenFiles)) ?? [])
             .filter { (try? $0.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true }
             .sorted { $0.lastPathComponent.localizedStandardCompare($1.lastPathComponent) == .orderedAscending }
-        var extensions: [Extension] = [], broken: [Broken] = [], raycast: [String] = [], ids = Set<String>()
+        var extensions: [Extension] = [], broken: [Broken] = [], ids = Set<String>()
         for url in folders {
             let name = url.lastPathComponent
             do {
@@ -270,14 +262,13 @@ public struct Extension: Equatable, Sendable {
                 let ext = try Extension(folder: folder.appending(path: name))
                 guard ids.insert(ext.id).inserted else { throw Problem.duplicateID(ext.id) }
                 extensions.append(ext)
-            } catch Problem.raycastFormat {
-                raycast.append(name)
+            } catch Problem.noManifest {
+                continue
             } catch {
                 broken.append(Broken(folder: name, problem: error as? Problem ?? .unreadable(describe(error))))
             }
         }
-        return Found(extensions: extensions.sorted { $0.title.localizedStandardCompare($1.title) == .orderedAscending }, broken: broken,
-                     raycast: raycast)
+        return Found(extensions: extensions.sorted { $0.title.localizedStandardCompare($1.title) == .orderedAscending }, broken: broken)
     }
 
     /// The extension and command an `ext.` id names.

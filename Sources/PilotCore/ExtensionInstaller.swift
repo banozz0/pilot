@@ -1,5 +1,4 @@
 import Foundation
-import os
 
 /// Installs, updates and removes catalogue extensions (2026-10-10, ADR 0010). An install fetches every file of the
 /// entry into a temporary folder beside the Extensions folder (one volume, so the last step is a rename), each checked
@@ -9,8 +8,6 @@ import os
 /// file that does not match installs nothing. ExtensionData/<id> (preferences, data) and the Keychain are never touched,
 /// so an update or a reinstall keeps its settings. Remove moves the folder to the Trash, recoverable.
 public struct ExtensionInstaller: Sendable {
-    private static let log = Logger(subsystem: "dev.banozz.pilot", category: "extensions")
-
     /// The Extensions folder, the folder the temporary one is made in, where files come from, and the Trash.
     public let extensions: URL, staging: URL, source: ExtensionCatalogue.Source
     let trash: @Sendable (URL) throws -> Void
@@ -49,9 +46,6 @@ public struct ExtensionInstaller: Sendable {
         try Task.checkCancellation()
         // Asked again: the folder may have changed while the files came.
         let old = try replaced(entry.id)
-        // A Raycast leftover in the id's place (package.json, no extension.json), read before anything moves: it goes to
-        // the Trash like an old copy, and if the Trash refuses it, it stays beside Extensions, never deleted.
-        let leftovers = Set(old.filter { (try? Extension(folder: $0)) == nil })
         try fm.createDirectory(at: extensions, withIntermediateDirectories: true)
         // Renames on one volume: the old copies go aside, not to the Trash, until the new one is in place.
         let aside = staging.appending(path: ".extension-\(entry.id)-old-\(UUID().uuidString)")
@@ -70,23 +64,13 @@ public struct ExtensionInstaller: Sendable {
             for (from, to) in moved.reversed() { try? fm.moveItem(at: to, to: from) }
             throw error
         }
-        for (from, to) in moved {
-            guard leftovers.contains(from) else { try? trash(to); continue }
-            do {
-                try trash(to)
-                Self.log.notice("ext install: \(entry.id, privacy: .public) replaces a Raycast leftover at \(from.path, privacy: .public), moved to the Trash")
-            } catch {
-                let kept = staging.appending(path: "Raycast leftover \(entry.id) \(UUID().uuidString.prefix(8))")
-                try? fm.moveItem(at: to, to: kept)
-                Self.log.error("ext install: \(entry.id, privacy: .public) replaces a Raycast leftover; the Trash refused it, kept at \(kept.path, privacy: .public)")
-            }
-        }
+        for (_, to) in moved { try? trash(to) }
         do { return try Extension(folder: target) }
         catch let problem as Extension.Problem { throw ExtensionCatalogue.Problem.notAnExtension(problem.reason) }
     }
 
     /// The folders an install of `id` replaces: the installed extension with that id, wherever it is, and a folder named
-    /// `id` that reads as it or is a Raycast leftover (Extension.Problem.raycastFormat, an earlier test build's install).
+    /// `id` that reads as it.
     /// Throws when a folder named `id` holds another extension or anything else.
     func replaced(_ id: String) throws -> [URL] {
         let found = Extension.find(in: extensions)
@@ -97,24 +81,10 @@ public struct ExtensionInstaller: Sendable {
             let other = try Extension(folder: named)
             guard other.id == id else { throw ExtensionCatalogue.Problem.folderTaken(id: id, why: "holds extension \"\(other.id)\"") }
             folders.append(named)
-        } catch Extension.Problem.raycastFormat {
-            folders.append(named)
         } catch let problem as Extension.Problem {
             throw ExtensionCatalogue.Problem.folderTaken(id: id, why: "is not an extension (\(problem.reason))")
         }
         return folders
-    }
-
-    /// Moves the old Raycast folders `names` names (Extension.Found.raycast) to the Trash, never deleting them (Sven,
-    /// 2026-11-21). The folder is read again first and each goes only while it is still one (package.json, no
-    /// extension.json), the check `find` makes; any other is left where it is. One log line says which went.
-    public func trashRaycast(_ names: [String]) {
-        let still = Set(Extension.find(in: extensions).raycast)
-        var moved: [String] = [], kept: [String] = []
-        for name in names {
-            if still.contains(name), (try? trash(extensions.appending(path: name))) != nil { moved.append(name) } else { kept.append(name) }
-        }
-        Self.log.notice("ext: \(moved.count, privacy: .public) old Raycast folders to the Trash (\(moved.joined(separator: ", "), privacy: .public)), \(kept.count, privacy: .public) kept")
     }
 
     /// Moves the installed extension `id`'s folder to the Trash and returns its title; its data and settings stay.
