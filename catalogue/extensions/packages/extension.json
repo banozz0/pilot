@@ -1,0 +1,25 @@
+{
+  "id": "packages",
+  "title": "Packages",
+  "icon": "📦",
+  "version": "1.0.0",
+  "description": "Track parcels from any carrier in Hyper+Space and on its page: type a tracking number and TrackingMore finds the carrier, then each parcel shows its status, its last event and how long ago; open one for every event. Delivered parcels move to Delivered and are not asked again. Uses your own TrackingMore API key: each new parcel takes one of your plan's credits, refreshing takes none.",
+  "examples": ["Hyper+Space › Packages, type 1Z999AA10123456784 shoes and press Return: tracked as shoes, its carrier found, under On the way", "Type track LX123456789CN in Hyper+Space and press Return: Packages starts tracking it in one step"],
+  "runtime": "process",
+  "requires": ["python3", "curl"],
+  "permissions": { "network": ["api.trackingmore.com"] },
+  "preferences": [
+    { "name": "apiKey", "type": "password", "title": "TrackingMore API key", "required": false,
+      "description": "Your own key, kept in the Keychain: make an account at trackingmore.com, open Developer › API Key and click Generate API key. Each new parcel uses one credit of your TrackingMore plan; refreshing a parcel uses none." }
+  ],
+  "surfaces": { "page": { "command": "page", "every": 300 } },
+  "commands": [
+    { "name": "packages", "title": "Packages", "mode": "list", "filter": "self", "run": "main.py" },
+    { "name": "page", "title": "Packages page", "mode": "no-view", "hidden": true, "run": "main.py" },
+    { "name": "add", "title": "Track a parcel", "mode": "no-view", "hidden": true, "keyword": "track", "run": "main.py" },
+    { "name": "pick-carrier", "title": "Pick the carrier", "mode": "list", "hidden": true, "run": "main.py" },
+    { "name": "parcel", "title": "A parcel's events", "mode": "detail", "hidden": true, "run": "main.py" },
+    { "name": "remove", "title": "Stop tracking a parcel", "mode": "no-view", "hidden": true, "run": "main.py" },
+    { "name": "refresh", "title": "Refresh the parcels", "mode": "no-view", "hidden": true, "run": "main.py" }
+  ]
+}
