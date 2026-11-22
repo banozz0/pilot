@@ -100,6 +100,10 @@ struct ExtensionsPageView: View {
             guard focus != nil else { return }
             Task { await settings.load(); land() }
         }
+        // Got from the Get tab: the card follows it to Installed rather than jumping to the next one to get.
+        .onChange(of: settings.rows.map(\.id)) { _, ids in
+            if filter == .get, let picked, ids.contains(picked) { filter = .installed }
+        }
         .task(id: lit) {
             guard lit != nil, (try? await Task.sleep(for: Self.litFor)) != nil else { return }
             withAnimation(Kit.change) { lit = nil }
@@ -145,7 +149,7 @@ struct ExtensionsPageView: View {
                 }
             }
             Spacer(minLength: 12)
-            SearchBox(prompt: "Search \(ExtensionsPageView.plural(listing.installedCount + listing.catalogueCount, "extension"))", text: $query).frame(maxWidth: 220)
+            SearchBox(prompt: "Search \(ExtensionsPageView.plural(listing.count(filter), "extension"))", text: $query).frame(maxWidth: 220)
             Button { ScriptsModule.openFolder(Extension.folder) } label: { Label("Folder", systemImage: "folder") }
                 .buttonStyle(.pilot)
                 .help("Opens \(Self.folderPath)")
