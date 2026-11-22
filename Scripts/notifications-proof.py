@@ -1005,6 +1005,17 @@ def popup(s):
     s.tree(alerts(41))
     st = popups_now(1, field='cards')
     check(st['cards'] == 1 and st['popups'] == 0, f'found again: still hidden ({st["popups"]})')
+    # Gone for good (two walks find no banner), then the same words again: an id can be their digest, so it pops up afresh.
+    for _ in range(2):
+        before = s.status()['sweeps']
+        no_host(s)
+        deadline = time.time() + 6
+        while s.status()['sweeps'] == before and time.time() < deadline:
+            time.sleep(0.05)
+    check(s.status()['cards'] == 0, 'gone: two walks with no banner')
+    s.tree(alerts(41))
+    st = popups_now(1)
+    check(st['popups'] == 1 and st['cards'] == 1 and st['unread'] == 1, f'the same alert again pops up afresh, no second row ({st["popups"]}, {st["drawer"]})')
     # Stacking: each its own countdown.
     do('clock 200')
     s.tree(alerts(42, 41))

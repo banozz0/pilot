@@ -361,7 +361,7 @@ public struct NotificationEntry: Sendable, Equatable, Identifiable {
     /// When its pop-up's countdown began: it first showed as a card, or the pointer last left the cards. Nil for a saved
     /// row until a walk finds its banner up, so a relaunch never counts from when it arrived.
     var popupSince: Date?
-    /// Its pop-up hid itself after its time (Sven, 2026-11-22): no card while its banner stays up, even after a walk that
+    /// Its pop-up hid itself after its time (Sven, 2026-11-22): no card while its banner stays up, even after one walk that
     /// missed it; still live, still in the drawer.
     public internal(set) var popupDone = false
 
@@ -493,10 +493,15 @@ public struct NotificationFeed: Sendable {
         for read in reading.banners.reversed() {
             if let index = entries.firstIndex(where: { $0.id == read.id }) {
                 // Live again after a walk that missed it (a timeout reads as nothing there): the banner never left.
+                // After two or more, it did: a repeat with the same words, whose id is their digest, pops up afresh.
+                let returned = entries[index].missed >= 2
                 entries[index].missed = 0
                 guard !entries[index].live || entries[index].differs(from: read) else { continue }
+                if !entries[index].live, returned || entries[index].popupSince == nil {
+                    entries[index].popupSince = date
+                    entries[index].popupDone = false
+                }
                 entries[index].live = true
-                if entries[index].popupSince == nil { entries[index].popupSince = date }
                 entries[index].take(read)
                 change.changed = true
             } else if !seen.contains(read.id) {
