@@ -1337,7 +1337,7 @@ public struct MenuNavigator: Sendable {
         return (asks ? [] : [ask]) + [web]
     }
 
-    /// Whether a search that found nothing reads as an app's name ("raycast", "visual studio code") rather than a file's
+    /// Whether a search that found nothing reads as an app's name ("obsidian", "visual studio code") rather than a file's
     /// ("report.pdf", "~/notes"), so Search to install leads Search files.
     public static func looksLikeApp(_ query: String) -> Bool {
         InstallSearch.Query(query)?.brewName != nil && !query.contains { ".~/".contains($0) }

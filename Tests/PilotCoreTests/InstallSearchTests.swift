@@ -265,9 +265,9 @@ struct InstallSearchTests {
 
     /// Install's rows as each answer lands, the way the panel provides them; the selected title after each.
     static func streamed(_ order: [InstallSearch.Group], move: (Int, Int)? = nil) -> [String?] {
-        let q = Q("raycast")!
+        let q = Q("zellij")!
         var nav = MenuNavigator(entries: [], branch: .install)
-        nav.query = "raycast"
+        nav.query = "zellij"
         nav.provide(.package, home: .homebrew, MenuEntries.searching(q, waiting: InstallSearch.Source.allCases))
         var landed: [InstallSearch.Group] = [], picked: [String?] = []
         for (i, g) in order.enumerated() {
@@ -282,26 +282,26 @@ struct InstallSearchTests {
 
     @Test("Return takes the first result however the sources answer: the web row only when it is the only row (Sven 2026-10-12)")
     func selectionStaysFirst() {
-        let web = Self.group(.web, "Search the web for “raycast”")
-        let brew = Self.group(.homebrew, "raycast"), hub = Self.group(.github, "raycast/extensions")
-        let tools = Self.group(.tools, "raycast-cli"), store = Self.group(.appStore)
+        let web = Self.group(.web, "Search the web for “zellij”")
+        let brew = Self.group(.homebrew, "zellij"), hub = Self.group(.github, "zellij/extensions")
+        let tools = Self.group(.tools, "zellij-cli"), store = Self.group(.appStore)
         // Web first: the Searching row stays selected (it searches the web too), then the first result once one lands.
         let webFirst = Self.streamed([web, brew, hub, tools, store])
         #expect(webFirst.first == "Searching Homebrew, App Store, GitHub, Package tools…")
-        #expect(Array(webFirst.dropFirst()) == ["raycast", "raycast", "raycast", "raycast"])
+        #expect(Array(webFirst.dropFirst()) == ["zellij", "zellij", "zellij", "zellij"])
         // Web last, as Sven saw it: never the web row.
-        #expect(Self.streamed([brew, hub, tools, store, web]) == ["raycast", "raycast", "raycast", "raycast", "raycast"])
-        #expect(Self.streamed([hub, tools, store, web, brew]).last == "raycast")
+        #expect(Self.streamed([brew, hub, tools, store, web]) == ["zellij", "zellij", "zellij", "zellij", "zellij"])
+        #expect(Self.streamed([hub, tools, store, web, brew]).last == "zellij")
         // Only the web answered anything: then it is the row.
-        #expect(Self.streamed([store, web, Self.group(.homebrew), Self.group(.github), Self.group(.tools)]).last == "Search the web for “raycast”")
+        #expect(Self.streamed([store, web, Self.group(.homebrew), Self.group(.github), Self.group(.tools)]).last == "Search the web for “zellij”")
     }
 
     @Test("A row the user moved to stays selected as later sources land")
     func movedSelectionKept() {
-        let web = Self.group(.web, "Search the web for “raycast”")
-        let brew = Self.group(.homebrew, "raycast", "raycast-beta"), hub = Self.group(.github, "raycast/extensions")
-        let picked = Self.streamed([brew, hub, web, Self.group(.tools, "raycast-cli"), Self.group(.appStore)], move: (0, 1))
-        #expect(picked == ["raycast-beta", "raycast-beta", "raycast-beta", "raycast-beta", "raycast-beta"])
+        let web = Self.group(.web, "Search the web for “zellij”")
+        let brew = Self.group(.homebrew, "zellij", "zellij-beta"), hub = Self.group(.github, "zellij/extensions")
+        let picked = Self.streamed([brew, hub, web, Self.group(.tools, "zellij-cli"), Self.group(.appStore)], move: (0, 1))
+        #expect(picked == ["zellij-beta", "zellij-beta", "zellij-beta", "zellij-beta", "zellij-beta"])
     }
 
     @Test("Nothing matches is said only once every source answered empty")

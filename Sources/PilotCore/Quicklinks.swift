@@ -1,6 +1,6 @@
 import Foundation
 
-/// A quicklink (card agent-bo-95423030, audit gap 4, after Raycast's Quicklinks): a named URL Sven opens from
+/// A quicklink (card agent-bo-95423030, audit gap 4): a named URL Sven opens from
 /// Hyper+Space, `{query}` in it filled with what he types after its keyword, so `gh pilot` searches GitHub for pilot.
 /// It opens in the default browser and binds as `links.open:<id>`.
 public struct Quicklink: Codable, Equatable, Identifiable, Sendable {

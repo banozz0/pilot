@@ -122,14 +122,14 @@ struct MenuNavigatorTests {
     @Test("Escape from Search to install goes straight back to the root search with the text kept, as Search files does (Sven 2026-10-12)")
     func escapeFromInstallSearch() {
         var nav = MenuNavigator(entries: Self.entries)
-        nav.query = "raycast"
+        nav.query = "zellij"
         // Ask AI and Search the web lead a search nothing matches (Sven 2026-10-16); Search to install follows.
-        while nav.selected?.target != .searchInstall("raycast") { _ = nav.handle(.down) }
+        while nav.selected?.target != .searchInstall("zellij") { _ = nav.handle(.down) }
         #expect(nav.handle(.return) == .handled)
-        #expect(nav.branch == .homebrew && nav.query == "raycast")
+        #expect(nav.branch == .homebrew && nav.query == "zellij")
         #expect(nav.handle(.escape) == .handled)
-        #expect(nav.branch == nil && nav.query == "raycast")
-        #expect(nav.selected?.target == .searchInstall("raycast"))
+        #expect(nav.branch == nil && nav.query == "zellij")
+        #expect(nav.selected?.target == .searchInstall("zellij"))
         // Back at the root search Escape clears and closes as before.
         nav.query = ""
         #expect(nav.handle(.escape) == .close)

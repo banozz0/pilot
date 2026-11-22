@@ -2,7 +2,7 @@ import Foundation
 import Testing
 @testable import PilotCore
 
-/// Aliases on menu rows (card agent-bo-95423037, audit gap 10, after Raycast's): typed exactly at the Hyper+Space root, an
+/// Aliases on menu rows (card agent-bo-95423037, audit gap 10): typed exactly at the Hyper+Space root, an
 /// alias puts its row first; a query that only starts with one ranks as before. Pure, no GUI; the store in a temp file.
 @Suite("Command aliases")
 struct AliasTests {

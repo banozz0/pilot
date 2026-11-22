@@ -191,7 +191,7 @@ struct ExtensionListTests {
         defer { try? FileManager.default.removeItem(at: ownDir) }
         #expect(ExtensionList.entries(items, of: own).allSatisfy { $0.isAnswer }, "the program's order is kept")
         #expect(ExtensionList.url("https://github.com/banozz0") == URL(string: "https://github.com/banozz0"))
-        #expect(ExtensionList.url("raycast://x")?.scheme == "raycast")
+        #expect(ExtensionList.url("obsidian://x")?.scheme == "obsidian")
         #expect(ExtensionList.url("/Applications") == URL(filePath: "/Applications"))
         #expect(ExtensionList.url("~/Downloads") == URL(filePath: NSHomeDirectory() + "/Downloads"))
         #expect(ExtensionList.url("just words") == nil)

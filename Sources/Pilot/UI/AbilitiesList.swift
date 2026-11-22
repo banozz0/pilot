@@ -3,8 +3,8 @@ import SwiftUI
 
 /// Launcher › Abilities (story 155, task C7; was Binds › Abilities): every ability Pilot has, grouped by module with what
 /// the menu answers when typed first, each with one line of what it does, its key or Set key, and Try where running it
-/// from here is safe. An ability's own settings sit under its row (page map, Sven 2026-10-17, as Raycast keeps a
-/// command's): Repos under lazygit, the GIFs folder and GIPHY under Stickers and GIFs, Passwords under Generate a
+/// from here is safe. An ability's own settings sit under its row (page map, Sven 2026-10-17, a
+/// command's settings under the command): Repos under lazygit, the GIFs folder and GIPHY under Stickers and GIFs, Passwords under Generate a
 /// password; they show wherever the row is drawn, under More abilities too, so a search keeps them, and their words
 /// find the row. Abilities ship minimal (Sven 2026-10-10): one that drives a single app waits under More abilities until
 /// it is added, and its app is on this Mac.

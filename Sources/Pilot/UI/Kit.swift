@@ -604,7 +604,7 @@ struct KitRowBackground: View {
     }
 }
 
-/// The pointer over a panel (card agent-bo-95422994). The selection follows it, as in Spotlight's and Raycast's lists,
+/// The pointer over a panel (card agent-bo-95422994). The selection follows it, as in Spotlight's list,
 /// but only while it moves: a list the keys scroll, or that typing or arriving results rebuild, slides another row under
 /// a still pointer, and SwiftUI tells that row it is hovered; it must not take the selection back. One per panel: the
 /// panel's own hover (`tracksPointer`) and each row's note the pointer, so it is known wherever it last moved, over a

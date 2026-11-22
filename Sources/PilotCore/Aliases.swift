@@ -1,6 +1,6 @@
 import Foundation
 
-/// An alias on a menu row (card agent-bo-95423037, audit gap 10, after Raycast's): typed exactly at the Hyper+Space root,
+/// An alias on a menu row (card agent-bo-95423037, audit gap 10): typed exactly at the Hyper+Space root,
 /// it lists that row first, `wp` for the web-app picker. The row is its frecency key (MenuEntry.Target.key); its title is
 /// kept so Launcher › Aliases can name it.
 public struct Alias: Codable, Equatable, Identifiable, Sendable {

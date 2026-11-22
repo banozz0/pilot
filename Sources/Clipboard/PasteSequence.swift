@@ -1,4 +1,4 @@
-// Written from scratch for Pilot (card agent-bo-95423071); Raycast's and SuperCmd's paste one by one are the behaviour reference.
+// Written from scratch for Pilot (card agent-bo-95423071); SuperCmd's paste one by one is the behaviour reference.
 import AppKit
 
 /// Paste in sequence: the picks go on the pasteboard one at a time, in pick order, and each paste Sven makes gives the

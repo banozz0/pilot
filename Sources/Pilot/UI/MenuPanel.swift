@@ -2096,7 +2096,7 @@ extension MenuModel {
             let page: [KeyHint] = row.extensionPage == nil ? [] : [("⌘↵", "Open page")]
             return row.ownActions?.first.map { [("↵", $0)] + page + [("⌘K", "Actions")] } ?? page
         }
-        // An extension's row, as Raycast's bar: Return's action, the second when it has a key (To-do B), then Cmd+K.
+        // An extension's row: Return's action, the second when it has a key (To-do B), then Cmd+K.
         if nav.isLive {
             guard let own = row.ownActions, let first = own.first else { return [] }
             guard own.count > 1 else { return [("↵", first)] }

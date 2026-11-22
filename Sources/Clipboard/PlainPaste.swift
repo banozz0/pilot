@@ -1,4 +1,4 @@
-// Written from scratch for Pilot (card agent-bo-95423072); Raycast's and SuperCmd's paste as plain text are the behaviour reference.
+// Written from scratch for Pilot (card agent-bo-95423072); SuperCmd's paste as plain text is the behaviour reference.
 import AppKit
 
 /// Paste as plain text, from any app: what is copied goes in as its text alone, and the copy goes back afterwards. The

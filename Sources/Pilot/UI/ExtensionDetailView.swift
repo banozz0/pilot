@@ -2,7 +2,7 @@ import PilotCore
 import SwiftUI
 
 /// An extension's detail in the menu's panel, in place of the list (card agent-bo-95423245, ADR 0008's `extensionDetail`
-/// surface), after Raycast's detail: its markdown, its facts in a quiet column beside it, each label over its value. Each
+/// surface): its markdown, its facts in a quiet column beside it, each label over its value. Each
 /// side scrolls on its own and every word can be selected; Return and Cmd+K are its row's, which the panel runs. A live
 /// picker is always the wide panel, so the facts always fit beside the words. Instrument draws its own
 /// (InstrumentExtensionDetail). A detail with blocks (pilot-1-1 T9, Q603) draws them in place of its

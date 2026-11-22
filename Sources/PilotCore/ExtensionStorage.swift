@@ -18,7 +18,7 @@ public struct KeychainItem: Sendable {
     public struct Failure: Error, Equatable { public let status: OSStatus }
 
     /// Which keychain every item is read from and written to: the login keychain; under the sandbox host only
-    /// (SandboxHost, raycast-extensions T3), a keychain file it names (`PILOT_SANDBOX_KEYCHAIN`) or none at all, so a
+    /// (SandboxHost), a keychain file it names (`PILOT_SANDBOX_KEYCHAIN`) or none at all, so a
     /// sandbox run never reaches the login keychain. Set once, before any item is asked.
     public enum Store: Sendable, Equatable { case login, file(String), none }
     nonisolated(unsafe) public static var store = Store.login
@@ -114,7 +114,7 @@ public struct ExtensionStorage: Sendable {
     /// ~/Library/Application Support/Pilot/ExtensionData
     public static let dataFolder = PilotFolder.support.appending(path: "ExtensionData")
     /// ~/Library/Caches/dev.banozz.pilot/Extensions, and in a test run a folder of the run's own, as Pilot's other caches
-    /// are (a sandbox run wrote the real one until raycast-extensions T3).
+    /// are (a sandbox run once wrote the real one).
     public static let cacheFolder = isIsolatedTestRun ? PilotFolder.support.appending(path: "Caches/Extensions", directoryHint: .isDirectory)
         : URL.cachesDirectory.appending(path: "dev.banozz.pilot/Extensions")
 

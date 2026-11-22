@@ -162,9 +162,9 @@ struct FillPagesTests {
 
     @Test("Install scans while only its Searching row lists; the first result ends it and the selection is the panel's, not the scan's")
     func installScan() throws {
-        let q = try #require(InstallSearch.Query("raycast"))
+        let q = try #require(InstallSearch.Query("zellij"))
         var nav = MenuNavigator(entries: [], branch: .install)
-        nav.query = "raycast"
+        nav.query = "zellij"
         nav.provide(.package, home: .homebrew, MenuEntries.searching(q, waiting: [.homebrew, .appStore, .github, .tools]))
         let model = MenuModel(nav: nav)
         let scan = try #require(model.scan)
@@ -177,10 +177,10 @@ struct FillPagesTests {
         #expect(model.scan != nil, "\(model.nav.rows.map(\.title))")
         #expect(model.nav.selected.map(MenuEntries.isSearching) == true)
         let brew = InstallSearch.Group(source: .homebrew, results: [
-            InstallSearch.Result(title: "raycast", via: "Homebrew", source: .homebrew, method: .download(URL(string: "https://example.com/r.dmg")!))])
+            InstallSearch.Result(title: "zellij", via: "Homebrew", source: .homebrew, method: .download(URL(string: "https://example.com/r.dmg")!))])
         model.nav.provide(.package, home: .homebrew, MenuEntries.found([brew], query: q, waiting: [.appStore, .github, .tools], hint: .npm))
         #expect(model.scan == nil)
-        #expect(model.nav.selected?.title == "raycast", "Return takes the first result")
+        #expect(model.nav.selected?.title == "zellij", "Return takes the first result")
     }
 
     @Test("Clean's waiting screen carries Mole's live line under its heading (card agent-bo-95423026: 3004 had dropped it)", .pilotFocus)

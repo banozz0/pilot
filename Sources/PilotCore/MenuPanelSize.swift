@@ -1,6 +1,6 @@
 import CoreGraphics
 
-/// The menu panel's size (card agent-bo-95422981, mockups A and B; Q130): 750 wide everywhere in Instrument, as Raycast's;
+/// The menu panel's size (card agent-bo-95422981, mockups A and B; Q130): 750 wide everywhere in Instrument;
 /// the shape sets how tall it may grow and its rows: short at the root and in Trigger and Capture, System taller for its
 /// sections, a search and every other branch in between.
 public enum MenuPanelSize {
@@ -19,7 +19,7 @@ public enum MenuPanelSize {
         return narrowBranches.contains(branch) ? .narrow : .wide
     }
 
-    /// The menu's one width in every shape and both layouts: Raycast's 750 (Sven, Q130), as drawn.
+    /// The menu's one width in every shape and both layouts: 750 (Sven, Q130), as drawn.
     public static let width: CGFloat = 750
 
     /// Instrument's menu (mockup A's menu.html, card agent-bo-95423181): a 40 pt row in a narrow list, 44 pt in the others
