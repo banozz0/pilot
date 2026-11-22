@@ -13,6 +13,9 @@ final class NotificationSettings {
     static let shared = NotificationSettings()
     static let enabledKey = "notifications.enabled", hideKey = "notifications.hideMacBanners"
     static let showInKey = "notifications.showIn", layerKey = "notifications.layer"
+    static let popupSecondsKey = "notifications.popupSeconds"
+    /// How long a pop-up shows before it hides itself (Sven, 2026-11-22: "like 15s"), and what `pilot set` takes.
+    static let popupDefault = 15, popupRange = 1...600
 
     /// Where they show (Sven, 2026-11-12): floating, the bell and cards on the desktop as they first shipped, or Pilot's top
     /// bar, a bell item there and each card dropping under it; or Pilot's dock (Sven, 2026-11-17), a bell at its right
@@ -50,6 +53,8 @@ final class NotificationSettings {
         }
     }
     var layer: Layer { didSet { defaults.set(layer.rawValue, forKey: Self.layerKey) } }
+    /// Each pop-up hides itself after this many seconds; the notification stays in the list.
+    var popupSeconds: Int { didSet { defaults.set(popupSeconds, forKey: Self.popupSecondsKey); PilotNotifications.shared.popupTick() } }
     private let defaults: UserDefaults
 
     init(defaults: UserDefaults = .pilot()) {
@@ -58,6 +63,7 @@ final class NotificationSettings {
         hideMacBanners = defaults.bool(forKey: Self.hideKey)
         showIn = defaults.string(forKey: Self.showInKey).flatMap(ShowIn.init) ?? .floating
         layer = defaults.string(forKey: Self.layerKey).flatMap(Layer.init) ?? .above
+        popupSeconds = (defaults.object(forKey: Self.popupSecondsKey) as? Int).map { min(max($0, Self.popupRange.lowerBound), Self.popupRange.upperBound) } ?? Self.popupDefault
         // A Dock saved before Q284 never put the bar's bell item on, so with Pilot's dock off it would show in the top bar
         // with no bell: once, it goes on as picking Dock now does; switched off after, it stays off.
         if showIn == .dock, !defaults.bool(forKey: Self.dockBellKey) {
@@ -136,6 +142,12 @@ final class PilotNotifications {
     private var sweepGeneration = 0
     private var sweepWanted = false
     private var restoreTask: Task<Void, Never>?
+    /// The one wait for the next pop-up to hide: none while no pop-up shows or the pointer is over them.
+    private var popupTask: Task<Void, Never>?
+    /// The pointer is over the cards: no pop-up hides until it leaves.
+    private(set) var popupsHovered = false
+    /// What pop-ups count down by, and what a walk dates arrivals with; the sandbox's fixture stands a still one in.
+    var now: @MainActor () -> Date = { .now }
     /// A move of macOS's window in flight: a walk mid-move must not read it as stranded, nor start another.
     private var moving = false
     /// Off once Pilot quits: a park move checks it last, so none lands after the quit's put-back.
@@ -252,6 +264,9 @@ final class PilotNotifications {
         sweepTask?.cancel()
         sweepTask = nil
         sweepWanted = false
+        popupTask?.cancel()
+        popupTask = nil
+        popupsHovered = false
         systemLookTask?.cancel()
         systemLookTask = nil
         emptyHost = nil
@@ -356,7 +371,7 @@ final class PilotNotifications {
         // saved drawer holds goes live again with no second row.
         let first = firstWalk && reading.answered
         if first { firstWalk = false }
-        let change = feed.update(reading, at: .now)
+        let change = feed.update(reading, at: now())
         syncParking()
         syncSystemParking()
         if feed.live.contains(where: \.isSystem) { lookAgainSoon() }
@@ -373,7 +388,8 @@ final class PilotNotifications {
     }
 
     private func publish(save: Bool = true) {
-        presenter?.update(cards: feed.cards, drawer: feed.drawer, unread: feed.unread)
+        presenter?.update(cards: feed.popups, drawer: feed.drawer, unread: feed.unread)
+        schedulePopups()
         guard save, active, feed.saved != lastSaved else { return }
         let saved = feed.saved, store = store
         lastSaved = saved
@@ -400,6 +416,40 @@ final class PilotNotifications {
             guard let self, !Task.isCancelled else { return }
             self.systemLookTask = nil
             self.sweepSoon()
+        }
+    }
+
+    // MARK: - Pop-ups
+
+    /// Hides the pop-ups whose time is up, unless the pointer is over them, and waits for the next.
+    func popupTick() {
+        guard active else { return }
+        if !popupsHovered, feed.expirePopups(at: now(), after: TimeInterval(settings.popupSeconds)) {
+            slog.notice("notifications: pop-ups hid, showing=\(self.feed.popups.count, privacy: .public)")
+            return publish(save: false)
+        }
+        schedulePopups()
+    }
+
+    /// The cards panel's pointer: over them pauses every countdown, leaving starts each one again.
+    func hoverPopups(_ over: Bool) {
+        guard over != popupsHovered else { return }
+        popupsHovered = over
+        if !over { feed.restartPopups(at: now()) }
+        schedulePopups()
+    }
+
+    /// One sleep to the soonest pop-up's end, made again at each publish; none while nothing counts down.
+    private func schedulePopups() {
+        popupTask?.cancel()
+        popupTask = nil
+        guard active, !popupsHovered, let end = feed.nextPopupEnd(after: TimeInterval(settings.popupSeconds)) else { return }
+        let wait = max(end.timeIntervalSince(now()), 0)
+        popupTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(wait), tolerance: .milliseconds(250))
+            guard let self, !Task.isCancelled else { return }
+            self.popupTask = nil
+            self.popupTick()
         }
     }
 
@@ -686,6 +736,8 @@ final class PilotNotifications {
             "accessibility": .bool(AXIsProcessTrusted()), "timers": .number(Double(timers)), "workspaceObservers": .number(Double(workspaceWatch.count)),
             "hostFound": .bool(hostFound), "panelOpen": .bool(panelOpen), "hostParked": .bool(parkedFrom != nil), "sweeps": .number(Double(sweeps)),
             "live": .number(Double(feed.live.count)), "cards": .number(Double(feed.cards.count)),
+            "popups": .number(Double(feed.popups.count)), "popupTimers": .number(popupTask == nil ? 0 : 1),
+            "popupsHovered": .bool(popupsHovered), "popupSeconds": .number(Double(settings.popupSeconds)),
             "systemCards": .number(Double(feed.systemCards.count)), "systemParked": .number(Double(systemParked.count)),
             "leftToMacOS": .number(Double(feed.live.filter(\.leftToMacOS).count)), "drawer": .number(Double(feed.drawer.count)), "unread": .number(Double(feed.unread)),
             "lastError": lastError.map(JSONValue.string) ?? .null,

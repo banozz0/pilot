@@ -765,7 +765,8 @@ def setting(s):
     settings = s.pilot('settings').stdout
     for key, words in [('notifications.enabled', "Show other apps' notifications as Pilot cards, where Show in says"),
                        ('notifications.hideMacBanners', "Hide macOS's own banner while Pilot's card shows"),
-                       ('notifications.showIn', 'Notifications show floating'), ('notifications.layer', "Floating notifications' bell and list rest")]:
+                       ('notifications.showIn', 'Notifications show floating'), ('notifications.layer', "Floating notifications' bell and list rest"),
+                       ('notifications.popupSeconds', "Seconds a notification's pop-up shows before it hides itself")]:
         check(key in settings and words in settings, f'{key} is listed, in plain words')
     check(s.get('notifications.enabled') is False and s.get('notifications.hideMacBanners') is False, 'both are off by default')
     wrong = s.pilot('set', 'notifications.enabled', '"maybe"', ok=False)
@@ -947,7 +948,113 @@ def pinned(s):
     s.tree([], bump=False)
 
 
-CASES = dict(shape=shape, probe=probe, nohost=nohost, card=card, actions=actions, drawer=drawer, bell=bell, setting=setting, system=system, pinned=pinned)
+def popup(s):
+    """Each pop-up hides itself after notifications.popupSeconds (Sven, 2026-11-22: they stayed while macOS's alert did),
+    timed on the fixture's still clock: the card goes, the notification stays live, listed and unread, and macOS's
+    window stays off screen. Each keeps its own countdown; the pointer over the cards pauses them all."""
+    def alerts(*ns):
+        return [banner(n, 'Alert', identifier=f'btm-{n}', description=f'Sekret-App-{n} Sekret-Title-{n}, Sekret-Body-{n}', subtitle=False) for n in ns]
+
+    def do(line):
+        command(s, line)
+        deadline = time.time() + 6
+        while (s.folder / 'commands').exists():
+            if time.time() > deadline:
+                raise Fail(f'{line}: not taken')
+            time.sleep(0.05)
+
+    def at(seconds):
+        do(f'clock {seconds}')
+        st = s.status()
+        print(f'clock {seconds}: popups={st["popups"]} cards={st["cards"]} drawer={st["drawer"]} unread={st["unread"]} '
+              f'parked={st["hostParked"]} popupTimers={st["popupTimers"]} hovered={st["popupsHovered"]}', flush=True)
+        return st
+
+    def popups_now(count, seconds=6, field='popups'):
+        deadline = time.time() + seconds
+        while time.time() < deadline:
+            st = s.status()
+            if st[field] == count:
+                return st
+            time.sleep(0.1)
+        return s.status()
+
+    check(s.get('notifications.popupSeconds') == 15, 'a pop-up shows 15 s by default')
+    check(s.pilot('set', 'notifications.popupSeconds', '0', ok=False).returncode != 0, '0 s is refused')
+    s.set('notifications.hideMacBanners', True)
+    s.tree([], bump=False)
+    s.set('notifications.enabled', True)
+    s.wait_event('begin')
+    st = s.status()
+    check(st['popups'] == 0 and st['popupTimers'] == 0, f'on, no pop-up: no wait running ({st["popupTimers"]})')
+    do('clock 100')
+    s.tree(alerts(41))
+    check(popups_now(1)['popups'] == 1, 'a pinned alert arrives as a pop-up')
+    st = at(100)
+    check(st['popups'] == 1 and st['popupTimers'] == 1, '0 s: shown, one wait running')
+    check(at(114.9)['popups'] == 1, '14.9 s: still shown')
+    s.new_events()
+    st = at(115.1)
+    check(st['popups'] == 0 and st['cards'] == 1 and st['drawer'] == 1 and st['unread'] == 1, '15.1 s: hidden; still live, listed, unread')
+    check(st['hostParked'] is True and st['popupTimers'] == 0, '15.1 s: macOS\'s alert stays off screen, and no wait runs')
+    e = s.wait_event('cards')
+    check(e['cards'] == [] and len(e['drawer']) == 1, 'the presenter draws no card, the list keeps it')
+    # A walk that misses it, then finds it again, doesn't bring the pop-up back.
+    s.tree([listed(alerts(41), depth=14)])
+    check(popups_now(0, field='cards')['cards'] == 0, 'a walk that misses it: no card')
+    s.tree(alerts(41))
+    st = popups_now(1, field='cards')
+    check(st['cards'] == 1 and st['popups'] == 0, f'found again: still hidden ({st["popups"]})')
+    # Gone for good (two walks find no banner), then the same words again: an id can be their digest, so it pops up afresh.
+    for _ in range(2):
+        before = s.status()['sweeps']
+        no_host(s)
+        deadline = time.time() + 6
+        while s.status()['sweeps'] == before and time.time() < deadline:
+            time.sleep(0.05)
+    check(s.status()['cards'] == 0, 'gone: two walks with no banner')
+    s.tree(alerts(41))
+    st = popups_now(1)
+    check(st['popups'] == 1 and st['cards'] == 1 and st['unread'] == 1, f'the same alert again pops up afresh, no second row ({st["popups"]}, {st["drawer"]})')
+    # Stacking: each its own countdown.
+    do('clock 200')
+    s.tree(alerts(42, 41))
+    check(popups_now(1)['popups'] == 1, '200 s: a second alert pops up')
+    do('clock 210')
+    s.tree(alerts(43, 42, 41))
+    check(popups_now(2)['popups'] == 2, '210 s: a third stacks on it')
+    check(at(214.9)['popups'] == 2, '214.9 s: both shown')
+    check(at(215.1)['popups'] == 1, '215.1 s: the older hid at its own 15 s, the newer still shows')
+    check(at(224.9)['popups'] == 1, '224.9 s: the newer still shows')
+    check(at(225.1)['popups'] == 0, '225.1 s: the newer hid at its own 15 s')
+    # The pointer over the cards pauses the countdown; leaving starts it again.
+    do('clock 300')
+    s.tree(alerts(44, 43, 42, 41))
+    check(popups_now(1)['popups'] == 1, '300 s: a fourth pops up')
+    do('hover on')
+    st = at(330)
+    check(st['popups'] == 1 and st['popupTimers'] == 0 and st['popupsHovered'] is True, '330 s hovered: still shown, no wait running')
+    do('hover off')
+    check(at(344.9)['popups'] == 1, 'left at 330 s; 344.9 s: still shown')
+    check(at(345.1)['popups'] == 0, '345.1 s: hidden, 15 s after leaving')
+    # The setting changes the time.
+    s.set('notifications.popupSeconds', 5)
+    do('clock 400')
+    s.tree(alerts(45))
+    check(popups_now(1)['popups'] == 1, '400 s: at 5 s, a fifth pops up')
+    check(at(404.9)['popups'] == 1 and at(405.1)['popups'] == 0, '5 s set: shown at 404.9 s, hidden at 405.1 s')
+    s.set('notifications.popupSeconds', 15)
+    st = s.status()
+    print('status:', json.dumps(st, sort_keys=True), flush=True)
+    check(not SECRET.search(json.dumps(st)), 'status carries counts only')
+    s.set('notifications.enabled', False)
+    s.wait_event('end')
+    s.set('notifications.hideMacBanners', False)
+    s.tree([], bump=False)
+
+
+CASES = dict(shape=shape, probe=probe, nohost=nohost, card=card, actions=actions, drawer=drawer, bell=bell, setting=setting, system=system, pinned=pinned,
+             popup=popup)
 
 
 def main():

@@ -12,7 +12,7 @@ protocol PilotSwitching: AnyObject {
 extension PilotSwitch: PilotSwitching {}
 
 extension SettingsSchema {
-    /// Other apps' notifications in Pilot: General's two switches, off by default, and where they show.
+    /// Other apps' notifications in Pilot: General's two switches, off by default, where they show and how long a pop-up stays.
     func registerNotifications(_ notifications: NotificationSettings) {
         register([
             .bool("notifications.enabled", "Show other apps' notifications as Pilot cards, where Show in says", page: "general", standard: false,
@@ -25,6 +25,9 @@ extension SettingsSchema {
             .choice(NotificationSettings.layerKey, "Floating notifications' bell and list rest above apps or below them on the desktop; a new card shows above apps either way",
                     page: "general", NotificationSettings.Layer.allCases, standard: .above,
                     read: { notifications.layer }, write: { notifications.layer = $0 }),
+            .int(NotificationSettings.popupSecondsKey, "Seconds a notification's pop-up shows before it hides itself; it stays in the bell's list",
+                 page: "general", range: NotificationSettings.popupRange, standard: NotificationSettings.popupDefault,
+                 read: { notifications.popupSeconds }, write: { notifications.popupSeconds = $0 }),
         ])
     }
 
