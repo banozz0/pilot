@@ -4,11 +4,16 @@ on the extension's page, and a 24-hour summary made only when he presses for one
 page in one HTML file.
 
 `news` is the Hyper+Space list: a row that makes the summary, then every headline (its source and age; Return opens
-it in the browser). `page` is the extension's page: the summary's button and the last one, the headlines, and the
-sources by place and kind, each switched on or off there (no list type exists among preferences, so picking lives on
-the page), with a box that adds any RSS or Atom link, or words to follow through a Google News search.
+it in the browser). `page` is the extension's page: the summary's button and the last one, the headlines and the
+sources not answering. `bar` is the menu-bar item and Pilot's dock face (ADR 0010, amended 2026-11-13): its popover has
+the latest headlines and the summary's button, Pilot drawing Open page under them.
+Sources are ticked in the extension's Settings (Sven, build 3142): a checkbox per built-in source, `source-<id>`, by
+place and kind, and Your feeds, a text of RSS or Atom links or words to follow through a Google News search. Those
+preferences alone pick what is read and summarised; 1.1.0's ticks on the page (paths.data/sources.json) are not read.
 Headlines are read from the cache alone; a view finding them older than FRESH starts one refresh, a detached child
-(`main.py --refresh`) holding a lock, so no view waits on the network and two never fetch at once. No AI reads them.
+(`main.py --refresh`) holding a lock, so no view waits on the network and two never fetch at once. The bar item is
+asked every 5 minutes while the screen is in use, so the picked feeds are read at most every FRESH then. No AI reads
+them.
 `summarise` gathers the picked sources' items of the last 24 hours and sends their headlines and short descriptions
 (never whole articles) through Pilot's AI with an `ai` action (ADR 0010, amended 2026-10-25); `summarised` gets the
 answer, writes the paper to the Save in folder (~/Downloads/Pilot News unless picked) and opens it. One press, one
@@ -25,12 +30,15 @@ import json  # noqa: E402
 import os  # noqa: E402
 import subprocess  # noqa: E402
 import time  # noqa: E402
-from collections import Counter  # noqa: E402
 from urllib.parse import urlparse  # noqa: E402
 
 import feeds  # noqa: E402
 
 PAGE = "pilot://open?tab=page&extension=news"
+SETTINGS = "pilot://open?page=extensions&extension=news"  # its Settings form, on the Extensions page
+PICK_SOURCES = {"type": "open", "url": SETTINGS, "title": "Pick sources"}
+NO_SOURCES = "No sources ticked"
+TICK_FIRST = "Tick a source in News' Settings first"
 DAY = 86400
 FRESH = 600  # seconds headlines count as fresh
 RETRY = 120  # seconds after a refresh before a view starts another
@@ -46,8 +54,11 @@ MOST_READ = 200  # items one summary sends at most
 PER_SOURCE = 40  # of them, from one source at most
 ROWS = 150  # headlines in Hyper+Space
 PAGE_ROWS = 50  # on the page (a list block's most)
+BAR_ROWS = 5  # in the bar item's popover
+LONGEST = 24  # Pilot's bar text and a dock face's value
+MINE = 20  # feeds of his own read at most
 ICONS = {"Malta": "🇲🇹", "World": "🌍", "Tech": "💻", "Business": "💼", "Reddit": "👽", "Yours": "📡"}
-CACHE, LOCK, PICKS, SUMMARY = "headlines.json", "refresh.lock", "sources.json", "summary.json"
+CACHE, LOCK, OLD_PICKS, SUMMARY = "headlines.json", "refresh.lock", "sources.json", "summary.json"
 
 
 def send(message):
@@ -110,23 +121,16 @@ def folders(run):
 # MARK: Sources
 
 class Sources:
-    """The built-in sources and his own, with what he switched on or off (paths.data/sources.json: `picked`, id to
-    true or false over each built-in's default, and `mine`, the feeds he added, each on unless picked off)."""
+    """What his Settings tick, and nothing else: each built-in source's checkbox (`source-<id>`; Pilot sends it resolved,
+    its manifest default while he never touched it, which the form shows too) and Your feeds. A missing or non-boolean
+    value is off."""
 
-    def __init__(self, data):
-        self.data = data
-        saved = load(data, PICKS)
-        self.picked = saved.get("picked") if isinstance(saved.get("picked"), dict) else {}
-        self.mine = [m for m in saved.get("mine") or [] if isinstance(m, dict) and feeds.is_feed_url(m.get("url", ""))]
-        self.all = feeds.built_in() + [dict(m, group="Yours", on=True) for m in self.mine]
-        self.by_id = {s["id"]: s for s in self.all}
-
-    def is_on(self, source):
-        value = self.picked.get(source["id"])
-        return value if isinstance(value, bool) else source["on"]
+    def __init__(self, run):
+        prefs = run.get("preferences") or {}
+        self.all = [dict(s, on=prefs.get("source-" + s["id"]) is True) for s in feeds.built_in()] + mine(prefs.get("feeds"))
 
     def on(self):
-        return [s for s in self.all if self.is_on(s)]
+        return [s for s in self.all if s["on"]]
 
     def titles(self):
         return {s["id"]: s["title"] for s in self.all}
@@ -134,8 +138,31 @@ class Sources:
     def groups(self):
         return {s["id"]: s["group"] for s in self.all}
 
-    def store(self):
-        save(self.data, PICKS, {"picked": self.picked, "mine": self.mine})
+
+def mine(text):
+    """Your feeds: the text split at commas, each an RSS or Atom link (named by its host) or words followed through a
+    Google News search; MINE at most, a repeat once."""
+    found, seen = [], set()
+    for piece in (text if isinstance(text, str) else "").split(","):
+        piece = piece.strip()
+        if not piece:
+            continue
+        if feeds.is_feed_url(piece):
+            url, title = piece, (urlparse(piece).hostname or piece).replace("www.", "", 1)
+        else:
+            url, title = feeds.google(piece), "Google News: %s" % piece[:60]
+        sid = feeds.custom_id(url)
+        if sid not in seen:
+            seen.add(sid)
+            found.append({"id": sid, "group": "Yours", "title": title[:60], "url": url, "on": True})
+    return found[:MINE]
+
+
+def old_feeds(data, sources):
+    """1.1.0's own feeds (sources.json's `mine`) not in Your feeds yet, so the page can say what to paste."""
+    have = {s["url"] for s in sources.all}
+    return [m["url"] for m in load(data, OLD_PICKS).get("mine") or []
+            if isinstance(m, dict) and feeds.is_feed_url(m.get("url", "")) and m["url"] not in have]
 
 
 # MARK: Headlines and their refresh
@@ -280,6 +307,29 @@ def lost(state):
     return None
 
 
+def askable(data, job, on):
+    """The items of a lost job (see `lost`) to ask again, when every one is from a source still ticked; else none, and a
+    press starts a new summary."""
+    if not job:
+        return []
+    items = load(os.path.join(data, "jobs"), job + ".json").get("items") or []
+    ids = {s["id"] for s in on}
+    return items if items and all(isinstance(i, dict) and i.get("source") in ids for i in items) else []
+
+
+def summary_buttons(run, data, state, sources, on):
+    """Summarise (or Ask again for a lost answer, its job's own ai, only after ASK_AGAIN_AFTER so a double click never asks
+    twice) and Open the last summary; Pick sources alone while none is ticked. With whether Ask again shows."""
+    if not on:
+        return [PICK_SOURCES], False
+    kept = askable(data, lost(state), on)
+    buttons = [ask_ai(state["job"], kept, sources.titles(), language(run), title="Ask again") if kept else
+               run_action("summarise", "Summarise the last 24 hours", icon="📰")]
+    if state.get("path") and os.path.exists(state["path"]):
+        buttons.append({"type": "open", "url": state["path"], "title": "Open the last summary"})
+    return buttons, bool(kept)
+
+
 def save_in(run):
     chosen = ((run.get("preferences") or {}).get("folder") or "").strip()
     return os.path.expanduser(chosen) if chosen else os.path.expanduser("~/Downloads/Pilot News")
@@ -303,7 +353,7 @@ def summary_line(state):
 def news(run):
     """Hyper+Space: the summary's row, then every picked source's headline, newest first."""
     data, cache = folders(run)
-    sources = Sources(data)
+    sources = Sources(run)
     on = sources.on()
     record, running = headlines(cache, on, empty_budget=1.0)
     items = picked_items(record, on)
@@ -317,9 +367,12 @@ def news(run):
     if state.get("path") and os.path.exists(state["path"]):
         row["actions"].append({"type": "open", "url": state["path"], "title": "Open the last summary", "key": "cmd+o"})
     rows = [row]
-    if not items:
+    if not on:
+        rows.append({"id": "empty", "title": NO_SOURCES, "subtitle": "Tick your sources in News' Settings",
+                     "icon": "📡", "actions": [PICK_SOURCES]})
+    elif not items:
         rows.append({"id": "empty", "title": "Fetching headlines…" if running else "No headlines yet",
-                     "subtitle": "Pick your sources on the News page", "icon": "📡",
+                     "subtitle": "From the sources ticked in News' Settings", "icon": "📡",
                      "actions": [{"type": "open", "url": PAGE, "title": "Open the News page"}]})
     now = time.time()
     for item in items[:ROWS]:
@@ -353,17 +406,17 @@ def summarise(run):
     `ai` action with their headlines and short descriptions; the answer comes back to `summarised`."""
     data, cache = folders(run)
     state = summary_state(data)
-    sources = Sources(data)
-    if lost(state):  # an answer lost on the way: the same job asked again; whichever answer comes first is the paper
-        items = load(os.path.join(data, "jobs"), state["job"] + ".json").get("items") or []
-        if items:
-            save(data, SUMMARY, dict(state, asked=time.time()))
-            return hud("Asking again for the news summary", ask_ai(state["job"], items, sources.titles(), language(run)))
-    if state.get("status") in ("fetching", "working"):
-        return hud("A news summary is already on its way (%s)" % age(state.get("started", 0)))
+    sources = Sources(run)
     on = sources.on()
+    job = lost(state)
+    items = askable(data, job, on)
+    if items:  # an answer lost on the way: the same job asked again; whichever answer comes first is the paper
+        save(data, SUMMARY, dict(state, asked=time.time()))
+        return hud("Asking again for the news summary", ask_ai(job, items, sources.titles(), language(run)))
+    if state.get("status") in ("fetching", "working") and not job:  # lost and no longer askable: a new summary
+        return hud("A news summary is already on its way (%s)" % age(state.get("started", 0)))
     if not on:
-        return hud("Pick a source on the News page first")
+        return hud(TICK_FIRST)
     started = time.time()
     # Fetching from now, so a second press while the headlines are read is refused too; a fetch that dies with its
     # process counts as lost after FETCH_STALE.
@@ -425,7 +478,7 @@ def summarised(run):
         return hud("News summary failed: %s" % str(context["error"])[:160])
     import paper
     answer = (run.get("input") or "").strip()
-    sources = Sources(data)
+    sources = Sources(run)
     titles, groups = sources.titles(), sources.groups()
     # Who wrote it: the fallback's notice when it took over, else the AI Pilot names (`answeredBy`, Pilot from 2026-11-22),
     # else, from an older Pilot, its AI unnamed.
@@ -448,157 +501,126 @@ def summarised(run):
 
 def refresh_now(run):
     data, cache = folders(run)
-    on = Sources(data).on()
+    on = Sources(run).on()
+    if not on:
+        return hud(TICK_FIRST)
     record, _ = headlines(cache, on, budget=REFRESH_TIME + 2, force=True)
     failed = [s for s in on if (record.get("sources") or {}).get(s["id"], {}).get("error")]
     hud("Headlines refreshed" + (" · %d not answering" % len(failed) if failed else ""))
 
 
-def toggle(run):
-    data, cache = folders(run)
-    sources = Sources(data)
-    source = sources.by_id.get(str((run.get("context") or {}).get("id") or ""))
-    if not source:
-        return hud("That source is gone")
-    now_on = not sources.is_on(source)
-    sources.picked[source["id"]] = now_on
-    sources.store()
-    if now_on and source["id"] not in (load(cache, CACHE).get("sources") or {}):
-        start_refresh(cache, sources.on())
-    hud("%s %s" % (source["title"], "on" if now_on else "off"))
-
-
-def add_feed(run):
-    """Adds his own feed: an RSS or Atom link, read once to check it is one and to name it, or words, followed as a
-    Google News search."""
-    data, cache = folders(run)
-    text = (run.get("input") or "").strip()
-    if not text:
-        return hud("Paste a feed's link, or type words to follow")
-    sources = Sources(data)
-    if feeds.is_feed_url(text):
-        url, title = text, ""
-    else:
-        url, title = feeds.google(text), "Google News: %s" % text[:60]
-    sid = feeds.custom_id(url)
-    if sid in sources.by_id:
-        return hud("That feed is in your sources already")
-    if not title:
-        answer = feeds.fetch_all([{"id": sid, "url": url}], os.path.join(cache, "feeds"), time.monotonic() + 15)
-        body, error = answer.get(sid, (None, "was not asked"))
-        if error:
-            return hud("That feed %s" % error)
-        try:
-            named, found = feeds.read(body)
-        except feeds.FeedProblem as e:
-            return hud("That link %s" % e)
-        title = (named or urlparse(url).hostname or url)[:60]
-        if not found:
-            return hud("%s has no items right now; not added" % title)
-    sources.mine.append({"id": sid, "title": title, "url": url})
-    sources.store()
-    start_refresh(cache, Sources(data).on())
-    hud("Added %s" % title)
-
-
-def remove_feed(run):
+def moved(run):
+    """Hides the page's note on 1.1.0's picks: their file kept aside, never read again."""
     data, _ = folders(run)
-    sources = Sources(data)
-    sid = str((run.get("context") or {}).get("id") or "")
-    mine = [m for m in sources.mine if m["id"] != sid]
-    if len(mine) == len(sources.mine):
-        return hud("That feed is gone")
-    sources.mine = mine
-    sources.picked.pop(sid, None)
-    sources.store()
-    hud("Feed removed")
+    try:
+        os.replace(os.path.join(data, OLD_PICKS), os.path.join(data, "sources-1.1.json"))
+    except OSError:
+        pass
+    hud("Your sources are in News' Settings")
 
 
-def plural(n, word):
-    return "%d %s%s" % (n, word, "" if n == 1 else "s")
+def moved_note(data, sources):
+    """While 1.1.0's picks file is there: where picking went, and his old feeds to paste."""
+    if not os.path.exists(os.path.join(data, OLD_PICKS)):
+        return []
+    text = ("Sources are ticked in News' Settings now. Ticks made on this page before 1.2 did not carry over: "
+            "Settings starts from its defaults.")
+    old = old_feeds(data, sources)
+    if old:
+        text += " Your feeds from before, to paste into Your feeds: " + ", ".join(old)
+    return [{"type": "note", "text": text, "icon": "info"},
+            {"type": "buttons", "actions": [PICK_SOURCES, run_action("moved", "Hide this note")]}]
 
 
-def source_row(sources, source, status, today=0):
-    on = sources.is_on(source)
-    flip = run_action("toggle", "Turn off" if on else "Turn on", {"id": source["id"]})
-    tried = status.get(source["id"]) if isinstance(status.get(source["id"]), dict) else {}
-    if tried.get("error"):
-        words = "Not answering: %s" % tried["error"]
-    elif tried:
-        words = "%s · %d in 24 h · read %s" % (plural(tried.get("count", 0), "item"), today, clock(tried.get("triedAt")))
-    else:
-        words = urlparse(source["url"]).hostname or ""
-    row = {"id": source["id"], "title": source["title"], "subtitle": words, "actions": [flip],
-           "inline": [dict(flip, icon="checkmark.circle" if on else "circle")]}
-    if on:
-        row["accessory"] = {"text": "On", "tone": "warn" if tried.get("error") else "fine"}
-    if source["group"] == "Yours":
-        gone = run_action("remove-feed", "Remove", {"id": source["id"]}, destructive=True)
-        row["actions"].append(gone)
-        row["inline"].append(dict(gone, icon="xmark"))
-    return row
+def headline_rows(items, titles, now, most):
+    return [{"id": i["id"], "title": i["title"], "subtitle": titles.get(i["source"], i["source"]),
+             "accessory": age(i["at"], now), "actions": [{"type": "open", "url": i["link"], "title": "Open"}]}
+            for i in items[:most]]
+
+
+def none_yet(on, running):
+    if not on:
+        return "_%s: tick them in News' Settings._" % NO_SOURCES
+    return "_Fetching headlines…_" if running else "_No headlines from the ticked sources yet._"
+
+
+class View:
+    """What the page and the bar item show: the ticked sources, their kept headlines (a stale cache starts a refresh,
+    never waited for) and the summary's state and buttons."""
+
+    def __init__(self, run):
+        self.data, cache = folders(run)
+        self.sources = Sources(run)
+        self.on = self.sources.on()
+        self.record, self.running = headlines(cache, self.on)
+        self.items = picked_items(self.record, self.on)
+        self.state = summary_state(self.data)
+        self.waiting = self.state.get("status") in ("fetching", "working")
+        self.now = time.time()
+        self.buttons, self.again = summary_buttons(run, self.data, self.state, self.sources, self.on)
+
+    def rows(self, most):
+        return headline_rows(self.items, self.sources.titles(), self.now, most)
+
+    def note(self):
+        line = summary_line(self.state)
+        return [{"type": "note", "text": line, "icon": "info"}] if line else []
+
+    def answer(self, blocks):
+        """A blocks answer, asked again at a calmer pace while Ask again (which carries the job's text) shows, else soon
+        while a summary or a refresh is on its way."""
+        answer = {"type": "blocks", "blocks": blocks}
+        if self.again:
+            answer["refresh"] = 10
+        elif self.waiting or self.running:
+            answer["refresh"] = 2
+        return answer
 
 
 def page(run):
-    """The page: the summary's buttons and its last one, the headlines, then the sources to pick from by group."""
-    data, cache = folders(run)
-    sources = Sources(data)
-    on = sources.on()
-    record, running = headlines(cache, on)
-    items = picked_items(record, on)
-    titles, status = sources.titles(), record.get("sources") or {}
-    state = summary_state(data)
-    waiting = state.get("status") in ("fetching", "working")
-    now = time.time()
-    buttons = [run_action("summarise", "Summarise the last 24 hours", icon="📰")]
-    job = lost(state)
-    if job:
-        # An answer lost on the way (Pilot quit while it asked): Ask again is that job's own ai, so the page asks it in
-        # one press (a press of Summarise does the same); only after ASK_AGAIN_AFTER, so a double click never asks twice.
-        kept = load(os.path.join(data, "jobs"), job + ".json").get("items") or []
-        if kept:
-            buttons = [ask_ai(job, kept, titles, language(run), title="Ask again")]
-    if state.get("path") and os.path.exists(state["path"]):
-        buttons.append({"type": "open", "url": state["path"], "title": "Open the last summary"})
-    buttons.append(run_action("refresh", "Refresh", icon="refresh"))
-    head = [{"type": "buttons", "actions": buttons}]
-    line = summary_line(state)
-    if line:
-        head.append({"type": "note", "text": line, "icon": "info"})
+    """The page: the summary's buttons and its last one, the headlines, and the ticked sources not answering."""
+    view = View(run)
+    status = view.record.get("sources") or {}
+    buttons = view.buttons + ([run_action("refresh", "Refresh", icon="refresh"), PICK_SOURCES] if view.on else [])
     blocks = [{"type": "section", "title": "News", "subtitle": "%d headlines in the last 24 hours from %d sources" % (
-        len(last_day(items, now)), len(on)), "aside": "Refreshing…" if running else "Read %s" % clock(record.get("fetchedAt")),
-        "blocks": head}]
-    failing = [s for s in on if (status.get(s["id"]) or {}).get("error")]
+        len(last_day(view.items, view.now)), len(view.on)),
+        "aside": "Refreshing…" if view.running else "Read %s" % clock(view.record.get("fetchedAt")),
+        "blocks": [{"type": "buttons", "actions": buttons}] + view.note() + moved_note(view.data, view.sources)}]
+    failing = [s for s in view.on if (status.get(s["id"]) or {}).get("error")]
     if failing:
         blocks.append({"type": "list", "title": "Not answering", "items": [
             {"id": "x-" + s["id"], "title": s["title"], "subtitle": status[s["id"]]["error"],
              "badges": [{"text": "Kept %d" % status[s["id"]].get("count", 0), "tone": "warn"}],
              "actions": [{"type": "open", "url": s["url"], "title": "Open the feed"}]} for s in failing]})
-    rows = [{"id": i["id"], "title": i["title"], "subtitle": titles.get(i["source"], i["source"]),
-             "accessory": age(i["at"], now), "actions": [{"type": "open", "url": i["link"], "title": "Open"}]}
-            for i in items[:PAGE_ROWS]]
+    rows = view.rows(PAGE_ROWS)
     blocks.append({"type": "list", "title": "Headlines", "items": rows} if rows else
-                  {"type": "markdown", "text": "_Fetching headlines…_" if running else "_No headlines yet: switch a source on below._"})
-    today = Counter(i.get("source") for i in last_day([i for i in record.get("items") or [] if isinstance(i, dict)], now))
-    picks = [{"type": "input", "placeholder": "Add a feed: paste an RSS or Atom link, or words to follow on Google News",
-              "action": run_action("add-feed", "Add")}]
-    for group in feeds.GROUPS:
-        members = [s for s in sources.all if s["group"] == group]
-        if members:
-            picks.append({"type": "list", "title": group + (" · " + feeds.GROUP_NOTES[group] if group in feeds.GROUP_NOTES else ""),
-                          "items": [source_row(sources, s, status, today.get(s["id"], 0)) for s in members]})
-    blocks.append({"type": "section", "title": "Sources", "subtitle": "%d on · Malta first; tick the ones you read" % len(on),
-                   "blocks": picks})
-    answer = {"type": "blocks", "blocks": blocks}
-    if job:  # Ask again carries the job's text: asked at a calmer pace
-        answer["refresh"] = 10
-    elif waiting or running:
-        answer["refresh"] = 2
-    send(answer)
+                  {"type": "markdown", "text": none_yet(view.on, view.running)})
+    send(view.answer(blocks))
 
 
-COMMANDS = {"news": news, "summarise": summarise, "summarised": summarised,
-            "refresh": refresh_now, "toggle": toggle, "add-feed": add_feed, "remove-feed": remove_feed, "page": page}
+def clipped(text, most=LONGEST):
+    return text if len(text) <= most else text[:most - 1].rstrip() + "…"
+
+
+def bar(run):
+    """The menu-bar item and its popover (ADR 0010, surfaces v2), and Pilot's dock face (amended 2026-11-13): 📰 News, the
+    latest BAR_ROWS headlines of the ticked sources and the summary's button. Read from the cache alone: a stale one
+    starts a refresh and the popover asks again in 2 s."""
+    view = View(run)
+    rows = view.rows(BAR_ROWS)
+    blocks = [{"type": "list", "title": "Latest", "items": rows} if rows else
+              {"type": "markdown", "text": none_yet(view.on, view.running)},
+              {"type": "buttons", "actions": view.buttons}] + view.note()
+    if run.get("surface") == "popover":
+        return send(view.answer(blocks))
+    value = "Summarising…" if view.waiting else clipped(view.items[0]["title"]) if view.items else (
+        NO_SOURCES if not view.on else "No headlines yet")
+    send({"type": "bar", "text": "📰 Summarising…" if view.waiting else "📰 News", "blocks": blocks,
+          "faces": [{"label": "News", "value": value, "symbol": "newspaper"}]})
+
+
+COMMANDS = {"news": news, "summarise": summarise, "summarised": summarised, "refresh": refresh_now, "moved": moved,
+            "page": page, "bar": bar}
 
 
 def main():

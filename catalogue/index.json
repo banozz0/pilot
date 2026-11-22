@@ -397,11 +397,11 @@
       "id": "news",
       "title": "News",
       "icon": "📰",
-      "version": "1.1.0",
-      "description": "Headlines from the sources you pick, Malta first (Times of Malta, MaltaToday, Newsbook, Lovin Malta, TVM and more), then world and tech, or any RSS or Atom feed you add, newest first in Hyper+Space and on its page. Press Summarise the last 24 hours for a newspaper front page made by Pilot's AI from the day's headlines, saved as an HTML file and opened in your browser; it never runs on its own.",
+      "version": "1.2.0",
+      "description": "Headlines from the sources you tick in its Settings, Malta first (Times of Malta, MaltaToday, Newsbook, Lovin Malta, TVM and more), then world and tech, or any RSS or Atom feed you add there, newest first in Hyper+Space, on its page, in the menu bar and in Pilot's dock. Press Summarise the last 24 hours for a newspaper front page made by Pilot's AI from the day's headlines, saved as an HTML file and opened in your browser; it never runs on its own.",
       "examples": [
         "Type news, Return on a headline: the article opens in your browser",
-        "On the News page, tick MaltaToday and press Summarise the last 24 hours: a front page with the lead story, sections and every article opens in your browser"
+        "In Extensions › News, tick MaltaToday, then click 📰 News in the menu bar and press Summarise the last 24 hours: a front page with the lead story, sections and every article opens in your browser"
       ],
       "requires": [
         "python3",
@@ -432,20 +432,20 @@
       "files": [
         {
           "path": "extension.json",
-          "sha256": "a6ab3f5f7467fc79885a7536c1f3d2d020e9aebffcd4a76408ee1160448f6440",
-          "size": 2512,
+          "sha256": "31c26bcf8b4845e20aeff9ede82e5f23d73f15849e75426240be2f9399f0c229",
+          "size": 8222,
           "executable": false
         },
         {
           "path": "feeds.py",
-          "sha256": "d3e8da345e83ef61f1fc8368ae8597c60e6ea69125237440a67579acec83bbef",
-          "size": 14386,
+          "sha256": "f9f1c79ff389d5516899016a321c9791894489174041d6bee846e1c62a9506c6",
+          "size": 14164,
           "executable": false
         },
         {
           "path": "main.py",
-          "sha256": "067545244f147ec61214047c609b026518b96a3863cb7db9b72b8e8edab56edb",
-          "size": 28628,
+          "sha256": "3392daf290eb5d5f2faafac0d13279dac0a9e8a1af5add0897518bbc787bd3bc",
+          "size": 29863,
           "executable": true
         },
         {

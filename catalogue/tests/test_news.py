@@ -62,8 +62,9 @@ def malti_feed():
 BROKEN = "<html><body>Our feed has moved</body></html>"
 CUT = "<?xml version='1.0'?><rss><channel><item><title>Half"
 
-PICKS = {"picked": {"times-of-malta": True, "maltatoday": False, "newsbook-en": False, "lovin-malta": True,
-                    "tvm-en": False, "tvm": True, "bbc-world": False, "hacker-news": False, "the-verge": True}}
+TICKED = {"times-of-malta": True, "maltatoday": False, "newsbook-en": False, "lovin-malta": True,
+          "tvm-en": False, "tvm": True, "bbc-world": False, "hacker-news": False, "the-verge": True}
+PREFS = {"source-" + k: v for k, v in TICKED.items()}  # Settings' checkboxes; the rest at the manifest's defaults (off)
 ROUTES = {"timesofmalta.com": ("rss.xml", 0), "theverge.com": ("atom.xml", 0), "tvmnews.mt": ("malti.xml", 0),
           "lovinmalta.com": ("broken.html", 0), "example.org/feed": ("rss.xml", 0)}
 
@@ -105,13 +106,20 @@ class NewsTests(ExtensionTestCase):
         script.write_text("LOG = %r\nROUTES = %r\nFIXTURES = %r\n" % (str(self.box.log), str(self.box.root / "routes.json"),
                                                                      str(fixtures)) + FAKE_CURL)
         self.box.shim("curl", 'exec /usr/bin/python3 "%s" "$@"' % script)
-        self.pick(PICKS)
+        self.prefs = dict(PREFS)
+
+    def run_ext(self, command, preferences=None, **kwargs):
+        """Every run with Settings as they stand (self.prefs), as Pilot sends them."""
+        return super().run_ext(command, preferences=dict(self.prefs, **(preferences or {})), **kwargs)
 
     def routes(self, routes):
         (self.box.root / "routes.json").write_text(json.dumps(routes))
 
-    def pick(self, picks):
-        (self.box.data / "sources.json").write_text(json.dumps(picks))
+    def tick(self, **ticks):
+        self.prefs.update({"source-" + k.replace("_", "-"): v for k, v in ticks.items()})
+
+    def untick_all(self):
+        self.prefs = {"source-" + s["id"]: False for s in feeds.built_in()}
 
     def settle(self):
         lock = self.box.cache / "refresh.lock"
@@ -233,27 +241,27 @@ class NewsTests(ExtensionTestCase):
 
     # ---- the page ----
 
-    def test_the_page_shows_the_buttons_headlines_a_broken_feed_and_the_sources_malta_first(self):
+    def test_the_page_shows_the_buttons_headlines_and_a_broken_feed_and_no_source_picker(self):
         self.fetched()
         blocks = self.page()
         news = blocks[0]
         self.assertEqual((news["title"], news["subtitle"]), ("News", "7 headlines in the last 24 hours from 4 sources"))
-        self.assertEqual([a["title"] for a in news["blocks"][0]["actions"]], ["Summarise the last 24 hours", "Refresh"])
+        self.assertEqual([a["title"] for a in news["blocks"][0]["actions"]], ["Summarise the last 24 hours", "Refresh", "Pick sources"])
+        self.assertEqual(news["blocks"][0]["actions"][2]["url"], "pilot://open?page=extensions&extension=news")
         failing = [b for b in blocks if b.get("title") == "Not answering"][0]
         self.assertEqual([(r["title"], r["subtitle"]) for r in failing["items"]], [("Lovin Malta", "is not an RSS or Atom feed")])
-        headlines = [b for b in blocks if b.get("title") == "Headlines"][0]
-        self.assertEqual(headlines["items"][0]["title"], "Is-settur marittimu ġġenera kważi €1,000 miljun")
-        sources = blocks[-1]
-        self.assertEqual(sources["title"], "Sources")
-        self.assertEqual(sources["blocks"][0]["type"], "input")
-        groups = [b["title"].split(" · ")[0] for b in sources["blocks"][1:]]
-        self.assertEqual(groups, ["Malta", "World", "Tech", "Business", "Reddit"])
-        malta = {r["id"]: r for r in sources["blocks"][1]["items"]}
-        self.assertEqual(malta["times-of-malta"]["accessory"], {"text": "On", "tone": "fine"})
-        self.assertEqual(malta["lovin-malta"]["accessory"], {"text": "On", "tone": "warn"})
-        self.assertNotIn("accessory", malta["maltatoday"])
-        self.assertEqual(malta["maltatoday"]["inline"][0]["icon"], "circle")
-        self.assertTrue(malta["times-of-malta"]["subtitle"].startswith("4 items · 3 in 24 h · read "), malta["times-of-malta"])
+        self.assertEqual(blocks[-1]["title"], "Headlines", "the sources are picked in Settings, not here")
+        self.assertEqual(blocks[-1]["items"][0]["title"], "Is-settur marittimu ġġenera kważi €1,000 miljun")
+        self.assertNotIn("input", [b["type"] for b in blocks])
+
+    def test_settings_has_a_checkbox_per_built_in_source_by_place_and_your_feeds(self):
+        prefs = manifest("news")["preferences"]
+        boxes = [p for p in prefs if p["name"].startswith("source-")]
+        self.assertEqual([p["name"][len("source-"):] for p in boxes], [s["id"] for s in feeds.built_in()],
+                         "one checkbox per built-in source, in its order: the defaults live in the manifest alone")
+        self.assertTrue(all(p["type"] == "checkbox" and isinstance(p["default"], bool) for p in boxes))
+        self.assertEqual([p["title"] for p in boxes], [s["group"] + " · " + s["title"] for s in feeds.built_in()])
+        self.assertEqual([p["name"] for p in prefs if not p["name"].startswith("source-")], ["language", "folder", "feeds"])
 
     def test_a_broken_feed_keeps_its_last_headlines(self):
         self.fetched()
@@ -264,28 +272,78 @@ class NewsTests(ExtensionTestCase):
         failing = [b for b in self.page() if b.get("title") == "Not answering"][0]
         self.assertEqual(failing["items"][0]["badges"], [{"text": "Kept 4", "tone": "warn"}])
 
-    def test_a_source_switched_on_is_fetched_and_one_switched_off_leaves_the_list(self):
+    def test_a_source_ticked_in_settings_is_fetched_and_one_unticked_leaves_the_list(self):
         self.fetched()
-        self.assertEqual(self.run_ext("toggle", context={"id": "the-verge"}).of_type("hud")[0]["text"], "The Verge off")
+        self.tick(the_verge=False)
         self.assertNotIn("A new Mac mini", [r["title"] for r in self.run_ext("news").items])
         self.routes(dict(ROUTES, **{"maltatoday.com.mt": ("rss.xml", 0)}))
-        self.run_ext("toggle", context={"id": "maltatoday"})
+        self.tick(maltatoday=True)
+        self.run_ext("news")
         self.settle()
         self.assertIn("curl https://www.maltatoday.com.mt/rss/news/", self.box.shim_calls())
 
-    def test_his_own_feed_is_checked_named_and_removable_and_words_follow_google_news(self):
-        self.assertEqual(self.run_ext("add-feed", input="https://example.org/feed").of_type("hud")[0]["text"], "Added Times of Malta")
-        self.assertIn("That feed", self.run_ext("add-feed", input="https://nowhere.invalid/rss").of_type("hud")[0]["text"])
-        self.assertEqual(self.run_ext("add-feed", input="Valletta port").of_type("hud")[0]["text"],
-                         "Added Google News: Valletta port")
-        self.settle()
-        yours = [b for b in self.page()[-1]["blocks"] if b.get("title") == "Yours"][0]["items"]
-        self.assertEqual([r["title"] for r in yours], ["Times of Malta", "Google News: Valletta port"])
-        self.assertEqual(json.loads((self.box.data / "sources.json").read_text())["mine"][1]["url"],
-                         "https://news.google.com/rss/search?q=Valletta+port&hl=en-GB&gl=GB&ceid=GB:en")
-        self.run_ext("remove-feed", context={"id": yours[0]["id"]})
-        self.assertEqual([r["title"] for r in [b for b in self.page()[-1]["blocks"] if b.get("title") == "Yours"][0]["items"]],
-                         ["Google News: Valletta port"])
+    def test_only_what_settings_tick_is_read_shown_and_summarised(self):
+        self.fetched()
+        # 1.1.0's page picks and own feed: never read again, whatever they tick.
+        (self.box.data / "sources.json").write_text(json.dumps({"picked": {"times-of-malta": True},
+                                                                 "mine": [{"id": "my-x", "title": "Mine", "url": "https://example.org/feed"}]}))
+        self.tick(times_of_malta=False)  # on by default, its headlines kept in the cache
+        malta = {"Parliament approves the budget", "Ferry service to Gozo resumes", "Old story from yesterday"}
+        listed = {r["title"] for r in self.run_ext("news").items}
+        self.assertFalse(malta & listed, listed)
+        shown = json.dumps(self.page() + self.popover() + [self.bar()], ensure_ascii=False)
+        self.assertFalse([t for t in malta if t in shown], "no unticked source on the page, the popover, the bar or the dock")
+        _, ai = self.press()
+        self.assertNotIn("Times of Malta", ai["text"])
+        self.assertNotIn("Parliament approves the budget", ai["text"])
+        (self.box.data / "summary.json").unlink()  # that press's summary on its way would show instead
+        self.untick_all()
+        items = self.run_ext("news").items
+        self.assertEqual([r["title"] for r in items[1:]], ["No sources ticked"])
+        self.assertEqual(self.bar()["faces"][0]["value"], "No sources ticked")
+
+    def test_your_feeds_are_links_or_words_read_as_sources_of_their_own(self):
+        self.untick_all()
+        self.prefs["feeds"] = " https://example.org/feed , Valletta port,,https://example.org/feed"
+        self.fetched()
+        calls = self.box.shim_calls()
+        self.assertIn("curl https://example.org/feed", calls)
+        self.assertIn("curl https://news.google.com/rss/search?q=Valletta+port&hl=en-GB&gl=GB&ceid=GB:en", calls)
+        self.assertEqual(calls.count("curl https://example.org/feed"), 1, "a repeat is read once")
+        rows = self.run_ext("news").items[1:]
+        self.assertEqual(rows[0]["subtitle"], "example.org")
+        self.assertEqual(rows[0]["icon"], "📡")
+
+    def test_the_page_says_where_picking_went_and_lists_his_old_feeds_until_hidden(self):
+        self.assertNotIn("note", [b["type"] for b in self.page()[0]["blocks"]], "a new install has no 1.1.0 file")
+        (self.box.data / "sources.json").write_text(json.dumps({"picked": {}, "mine": [
+            {"id": "my-a", "title": "A", "url": "https://example.org/feed"}, {"id": "my-b", "title": "B", "url": "https://b.example/rss"}]}))
+        self.prefs["feeds"] = "https://b.example/rss"
+        note = [b for b in self.page()[0]["blocks"] if b["type"] == "note"][0]["text"]
+        self.assertIn("Sources are ticked in News' Settings now", note)
+        self.assertTrue(note.endswith("to paste into Your feeds: https://example.org/feed"), note)
+        self.assertEqual(self.said(self.run_ext("moved")), "Your sources are in News' Settings")
+        self.assertNotIn("note", [b["type"] for b in self.page()[0]["blocks"]])
+
+    # ---- the menu bar and the dock ----
+
+    def test_the_bar_item_shows_news_its_popover_the_latest_headlines_and_summarise_and_the_dock_the_newest(self):
+        self.fetched()
+        bar = self.bar()
+        self.assertEqual(bar["text"], "📰 News")
+        [face] = bar["faces"]
+        self.assertEqual((face["label"], face["symbol"]), ("News", "newspaper"))
+        self.assertEqual(face["value"], "Is-settur marittimu ġġe…")
+        self.assertLessEqual(len(face["value"]), 24)
+        popover = self.popover()
+        latest = popover[0]
+        self.assertEqual((latest["title"], len(latest["items"])), ("Latest", 5))
+        self.assertEqual(latest["items"][1]["actions"][0]["url"], "https://timesofmalta.com/a/budget")
+        self.assertEqual(popover[1]["actions"][0], {"type": "run", "command": "summarise", "title": "Summarise the last 24 hours",
+                                                    "icon": "📰"})
+        self.press()
+        self.assertEqual(self.bar()["text"], "📰 Summarising…")
+        self.assertEqual(self.blocks_message("bar", "popover")["refresh"], 2, "waiting: asked again soon")
 
     # ---- the summary ----
 
@@ -396,11 +454,19 @@ class NewsTests(ExtensionTestCase):
         result, again = self.press()
         self.assertEqual(self.said(result), "Asking again for the news summary")
         self.assertEqual((again["text"], again["then"]["context"]["job"]), (ai["text"], ai["then"]["context"]["job"]))
+        state = self.summary()
+        state["asked"] -= 80  # lost again
+        (self.box.data / "summary.json").write_text(json.dumps(state))
+        self.tick(the_verge=False)
+        self.assertEqual(self.page()[0]["blocks"][0]["actions"][0]["type"], "run", "a source of that job unticked: no Ask again")
+        _, fresh = self.press()
+        self.assertNotEqual(fresh["then"]["context"]["job"], ai["then"]["context"]["job"], "a new summary of what is ticked now")
+        self.assertNotIn("A new Mac mini", fresh["text"])
 
     def test_a_second_press_while_the_first_fetches_is_refused(self):
         self.routes({k: (v[0], 1.5) for k, v in ROUTES.items()})
         first = {}
-        thread = threading.Thread(target=lambda: first.update(result=self.box.run("news", "summarise")))
+        thread = threading.Thread(target=lambda: first.update(result=self.box.run("news", "summarise", preferences=PREFS)))
         thread.start()
         time.sleep(0.6)
         second, ai = self.press()
@@ -410,19 +476,20 @@ class NewsTests(ExtensionTestCase):
         self.assertEqual(len([a for a in first["result"].actions if a["type"] == "ai"]), 1, "the first press asks, once")
 
     def test_nothing_from_the_last_day_asks_no_ai(self):
-        self.pick({"picked": {k: False for k in PICKS["picked"]}})
-        self.assertEqual(self.press()[0].of_type("hud")[0]["text"], "Pick a source on the News page first")
-        self.pick({"picked": dict({k: False for k in PICKS["picked"]}, **{"lovin-malta": True})})
+        self.untick_all()
+        self.assertEqual(self.press()[0].of_type("hud")[0]["text"], "Tick a source in News' Settings first")
+        self.tick(lovin_malta=True)
         result, ai = self.press()
         self.assertIsNone(ai)
         self.assertEqual(self.said(result), "No headlines from the last 24 hours in your sources")
         self.assertNotEqual(self.summary().get("status"), "working", "a press that asks nothing leaves no summary waiting")
 
     def test_no_surface_asks_the_ai_and_there_is_no_timer(self):
-        self.assertEqual(list(manifest("news")["surfaces"]), ["page"])
+        self.assertEqual(list(manifest("news")["surfaces"]), ["page", "bar"])
         self.fetched()
         self.assertEqual(self.run_ext("news").actions, [])
-        self.assertEqual(self.run_ext("page", surface="page").actions, [])
+        for command, surface in (("page", "page"), ("bar", "bar"), ("bar", "popover")):
+            self.assertEqual(self.run_ext(command, surface=surface).actions, [], surface)
 
     def test_the_paper_layout_keeps_only_real_item_numbers(self):
         read = paper.layout('Here: {"lead": {"headline": "H", "items": [0, 2, 2, 7, "1", true]}, "sections": []}', 3)
