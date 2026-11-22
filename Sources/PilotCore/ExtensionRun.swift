@@ -9,9 +9,11 @@ public enum ExtensionRun {
     public static let noViewTimeout: Duration = .seconds(30)
 
     /// What a no-view run shows: its HUD line (nil when it said nothing) with its sound, its error message, the actions it
-    /// printed in order (and how many past the limit were dropped), a timeout or a failed exit.
+    /// printed in order (and how many past the limit were dropped) with the HUD line it printed beside them, a timeout or a
+    /// failed exit.
     public enum Outcome: Equatable, Sendable {
-        case hud(String?, sound: String? = nil), error(String), actions([Extension.Item.Action], dropped: Int = 0), timedOut, failed(String)
+        case hud(String?, sound: String? = nil), error(String), timedOut, failed(String)
+        case actions([Extension.Item.Action], dropped: Int = 0, hud: String? = nil, sound: String? = nil)
     }
 
     /// The most actions one run may print; the rest are dropped and logged.
@@ -82,9 +84,10 @@ public enum ExtensionRun {
         }
     }
 
-    /// The first error message; else every action message in printed order, the first eight; else the last HUD message
-    /// with its sound; else the last plain line, as a script's; else nothing. A message of a type Pilot does not know is
-    /// skipped.
+    /// The first error message; else every action message in printed order, the first eight, with the last HUD message and
+    /// its sound beside them (News, 2026-11-22: "ready in 38 s" and the open; it gave way before); else the last HUD
+    /// message with its sound; else the last plain line, as a script's; else nothing. A message of a type Pilot does not
+    /// know is skipped.
     public static func outcome(of output: String) -> Outcome {
         var hud: String?, sound: String?, actions: [Extension.Item.Action] = [], plain: [Substring] = []
         let decoder = JSONDecoder()
@@ -102,7 +105,9 @@ public enum ExtensionRun {
             default: continue
             }
         }
-        if !actions.isEmpty { return .actions(Array(actions.prefix(mostActions)), dropped: max(actions.count - mostActions, 0)) }
+        if !actions.isEmpty {
+            return .actions(Array(actions.prefix(mostActions)), dropped: max(actions.count - mostActions, 0), hud: hud, sound: hud == nil ? nil : sound)
+        }
         if let hud { return .hud(hud, sound: sound) }
         return .hud(ScriptCommand.lastLine(plain.joined(separator: "\n")))
     }

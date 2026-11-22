@@ -90,7 +90,8 @@ enum ExtensionsModule {
         return nil
     }
 
-    /// What a no-view run came to: its HUD line and sound, its actions run in the order printed, its error under its
+    /// What a no-view run came to: its HUD line and sound, its actions run in the order printed (after the HUD line it
+    /// printed beside them, left out as a quiet run's is), its error under its
     /// extension's title, or that it timed out or failed (the reason in the log only, since a program's stderr can hold
     /// anything). Its bar item is asked again now, so a count follows the change (Sven on build 23: to-do felt slow).
     /// `quiet`: a run Hyper+Space stays open for (an action's `stay`), whose list shows the change; its HUD line is left out.
@@ -104,9 +105,13 @@ enum ExtensionsModule {
             if quiet { return }
             hud(line ?? "\(command.title) ran")
             sound.map(play)
-        case .actions(let actions, let dropped):
+        case .actions(let actions, let dropped, let line, let sound):
             if dropped > 0 {
                 dlog.error("extension: \(command.actionID, privacy: .public) printed \(dropped) actions past \(ExtensionRun.mostActions), dropped")
+            }
+            if let line, !quiet {
+                hud(line)
+                sound.map(play)
             }
             actions.forEach(act)
         case .error(let text): hud("\(ext.title): \(text)")
@@ -221,9 +226,9 @@ enum ExtensionActions {
             // The provider is the AI page's; only the size is logged, never the text.
             dlog.notice("extension: \(ext.id, privacy: .public) asks AI about \(text.utf8.count) bytes")
             let heard = AIFallback.Heard()
-            let runner = AISettings.shared.runner { heard.tell($0); AISettings.tip($0) }
+            let runner = AISettings.shared.runner { heard.tell($0); AISettings.tip($0) }, chosen = AISettings.shared.provider
             return Task {
-                let next = await ExtensionAI.ask(task, text, then: then, runner: runner, heard: heard)
+                let next = await ExtensionAI.ask(task, text, then: then, runner: runner, heard: heard, chosen: chosen)
                 await run(next, in: ext, inputs: inputs, quiet: quiet)?.value
             }
         }

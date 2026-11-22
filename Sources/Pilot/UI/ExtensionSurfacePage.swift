@@ -181,7 +181,7 @@ final class ExtensionPageModel {
         guard !Task.isCancelled else { return }
         switch outcome {
         case .hud: break
-        case .actions(let actions, _): dlog.notice("extension: \(command.actionID, privacy: .public) live run left \(actions.count) actions undone")
+        case .actions(let actions, _, _, _): dlog.notice("extension: \(command.actionID, privacy: .public) live run left \(actions.count) actions undone")
         default: ExtensionsModule.show(outcome, of: command, in: ext, act: { _ in })
         }
         await refresh()

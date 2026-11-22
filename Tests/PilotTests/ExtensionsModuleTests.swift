@@ -262,6 +262,13 @@ struct ExtensionActionsAppTests {
         ExtensionActions.run(Extension.Item.Action(kind: .hud("Starred", sound: "Pop")), in: ext, inputs: .sample, isRegistered: { _ in false },
                              hud: { said.append($0) }, play: { played.append($0) })
         #expect(said == ["Done", "Starred"] && played == ["Glass", "Pop"])
+        acted = []
+        ExtensionsModule.show(.actions([.open("/tmp/paper.html")], hud: "Ready in 38 s", sound: "Glass"), of: ext.commands[2], in: ext,
+                              act: { acted.append($0) }, hud: { said.append($0) }, play: { played.append($0) })
+        #expect(said.last == "Ready in 38 s" && played.last == "Glass" && acted == [.open("/tmp/paper.html")], "the HUD line and the actions both")
+        ExtensionsModule.show(.actions([.copy("q")], hud: "Quiet"), of: ext.commands[2], in: ext, act: { acted.append($0) },
+                              quiet: true, hud: { said.append($0) }, play: { played.append($0) })
+        #expect(said.last == "Ready in 38 s" && acted.last == .copy("q"), "a quiet run leaves its HUD line out, as before")
     }
 
     @Test("A pushed view pops back to the list under it as it was, its search kept")

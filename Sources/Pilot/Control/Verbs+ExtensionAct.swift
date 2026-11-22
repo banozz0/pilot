@@ -175,8 +175,9 @@ extension ControlVerbs {
             switch await Task.detached(operation: { await ExtensionRun.noView(command, context: context, input: input, inputs: inputs) }).value {
             case .hud(let line, _): out["shows"] = .string(line ?? "\(command.title) ran")
             case .error(let message): out["error"] = .string("\(ext.title) says: \(message)")
-            case .actions(let actions, _):
+            case .actions(let actions, _, let line, _):
                 out["actions"] = .array(actions.map(Self.action))
+                if let line { out["shows"] = .string(line) }
                 out["note"] = .string("its actions are not performed: its page or pilot run \(command.actionID) performs them")
             case .timedOut: throw ControlError(.timeout, "\(command.actionID) \(Self.late(ExtensionRun.noViewTimeout))")
             case .failed(let why): throw tools.failed(command, why)
@@ -186,7 +187,8 @@ extension ControlVerbs {
             // The provider is the AI page's; only the size is logged, never the text.
             log.notice("ext act: \(ext.id, privacy: .public) asks AI about \(text.utf8.count) bytes")
             let heard = AIFallback.Heard()
-            let next = await ExtensionAI.ask(task, text, then: then, runner: AISettings.shared.runner(told: heard.tell), heard: heard)
+            let next = await ExtensionAI.ask(task, text, then: then, runner: AISettings.shared.runner(told: heard.tell), heard: heard,
+                                             chosen: AISettings.shared.provider)
             var out = try await perform(next, ext, tools, inputs)
             out["askedAI"] = .bool(true)
             if let notice = heard.notice { out["notice"] = .string(notice.line) }

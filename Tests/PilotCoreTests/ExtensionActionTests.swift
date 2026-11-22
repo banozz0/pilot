@@ -62,11 +62,13 @@ struct ExtensionActionTests {
         #expect(ExtensionRun.outcome(of: #"{"type": "action", "action": {"type": "someday"}}"#) == .error("sent an action Pilot does not know"))
     }
 
-    @Test("Several action messages all run, in printed order; an error anywhere still wins; past eight the rest are dropped and counted")
+    @Test("Several action messages all run, in printed order, the HUD line beside them; an error anywhere still wins; past eight the rest are dropped and counted")
     func severalActions() {
         func action(_ text: String) -> String { #"{"type": "action", "action": {"type": "copy", "text": "\#(text)"}}"# }
-        let two = [action("a"), #"{"type": "hud", "text": "ignored"}"#, action("b")].joined(separator: "\n")
-        #expect(ExtensionRun.outcome(of: two) == .actions([.copy("a"), .copy("b")]), "every action, in order; the HUD line gives way")
+        let two = [action("a"), #"{"type": "hud", "text": "Copied", "sound": "Pop"}"#, action("b")].joined(separator: "\n")
+        #expect(ExtensionRun.outcome(of: two) == .actions([.copy("a"), .copy("b")], hud: "Copied", sound: "Pop"),
+                "every action, in order, and the HUD line with its sound (News, 2026-11-22: it gave way before)")
+        #expect(ExtensionRun.outcome(of: action("a")) == .actions([.copy("a")]), "no HUD message, no HUD line")
         #expect(ExtensionRun.outcome(of: two + "\n" + #"{"type": "error", "text": "no"}"#) == .error("no"))
         let ten = (1...10).map { action("\($0)") }.joined(separator: "\n")
         #expect(ExtensionRun.outcome(of: ten) == .actions((1...8).map { .copy("\($0)") }, dropped: 2))
