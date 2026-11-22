@@ -42,11 +42,12 @@ enum WorkspaceEditor {
     /// Own sizes' name in the editor (Sven 2026-10-17: "what is own sizes"): the apps side by side at the widths you set.
     static let ownSizes = "Your widths"
 
-    /// The Mac's apps by name, then Pilot's web apps with their sites; a web app is listed once, as a web app.
-    @MainActor static func installedChoices() -> [AppChoice] {
+    /// The Mac's apps by name, then Pilot's web apps with their sites; a web app is listed once, as a web app. The apps
+    /// are read off the main actor: the scan opens every app's Info.plist, which held the page's first frame (page-instant).
+    @MainActor static func installedChoices() async -> [AppChoice] {
         let web = WebAppDirectory.list().map { AppChoice(name: $0.name, bundle: $0.bundleID, host: $0.url.host) }
         let webIDs = Set(web.map(\.bundle))
-        return AppsModule.pickableApps().filter { !webIDs.contains($0.bundle) }.map { AppChoice(name: $0.name, bundle: $0.bundle) } + web
+        return await AppsModule.pickableAppsOffMain().filter { !webIDs.contains($0.bundle) }.map { AppChoice(name: $0.name, bundle: $0.bundle) } + web
     }
 }
 
@@ -126,7 +127,7 @@ struct WorkspaceEditorPanel: View {
             if picking != nil { pickerLayer }
         }
         .coordinateSpace(.named(WorkspaceEditor.space))
-        .task { if start.apps == nil { choices = WorkspaceEditor.installedChoices() } }
+        .task { if start.apps == nil { choices = await WorkspaceEditor.installedChoices() } }
     }
 
     // MARK: Header

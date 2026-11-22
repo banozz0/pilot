@@ -89,7 +89,7 @@ struct LookPage: View {
         return ScrollView {
             PageStack(asked: section != nil || focus != nil) {
                 // The preview takes the row's height, level with Glass and Wallpaper beside it (InstrumentPair's trick).
-                HStack(alignment: .top, spacing: 14) { Staged {
+                HStack(alignment: .top, spacing: 14) { Staged(inView: false) {
                     LookPreview(look: look).padding(.top, ink.style.density.padding)
                         .frame(maxWidth: .infinity, minHeight: 180, maxHeight: .infinity)
                     VStack(spacing: 0) {
@@ -522,13 +522,15 @@ struct ThemeCards: View {
     @FocusState private var focused: String?
 
     var body: some View {
-        let taglines = Array(Set(themes.map(\.tagline)))
+        // The two longest lines stand for all of them: one hidden line a theme on every card was a grid's worth of text laid
+        // out per card (page-instant: Look's first visit, 9 ms a card).
+        let taglines = Array(Set(themes.map(\.tagline)).sorted { $0.count > $1.count }.prefix(2))
         // A Grid, not a lazy one: each row is as tall as its tallest card and every card fills it, so the rows' edges
         // line up whatever each display face's height.
         Grid(horizontalSpacing: 8, verticalSpacing: 8) {
             ForEach(Array(stride(from: 0, to: themes.count, by: columns)), id: \.self) { start in
-                // Two cards a turn while the page is built ahead (Staged).
-                GridRow { Staged(by: 2) {
+                // Two cards a turn while the page is built ahead (Staged); in view the row at once, as a card added resizes the rest.
+                GridRow { Staged(by: 2, inView: false) {
                     ForEach(themes[start..<min(start + columns, themes.count)]) { theme in
                         ThemeCard(theme: theme, picked: picked == theme.id, focused: focused == theme.id,
                                   taglines: taglines) {
@@ -625,64 +627,62 @@ struct ThemeCard: View {
 }
 
 /// A small window drawn in `theme`: its title bar's three lights, a sidebar with the picked row, a prompt line and a few
-/// lines of text, and the theme's graph colours as bars along the foot. Every colour is the theme's own.
+/// lines of text, and the theme's graph colours as bars along the foot. Every colour is the theme's own. One Canvas, laid
+/// out as the stacks it replaced (page-instant: about 40 views a card made Look's first visit).
 private struct ThemeWindow: View {
     let theme: PilotTheme
+    static let radius: CGFloat = 7
 
     var body: some View {
         let t = theme
-        let radius: CGFloat = 7
-        HStack(spacing: 0) {
-            VStack(alignment: .leading, spacing: 5) {
-                HStack(spacing: 3) { ForEach([t.problem, t.amber, t.good], id: \.self) { Circle().fill(Color(hex: $0)).frame(width: 5, height: 5) } }
-                    .padding(.bottom, 3)
-                ForEach(0..<4) { row in
-                    Capsule().fill(Color(hex: row == 1 ? t.accent : t.text3).opacity(row == 1 ? 1 : 0.55))
-                        .frame(maxWidth: [22, 26, 18, 24][row]).frame(height: 3)
-                        .padding(.vertical, 2).padding(.horizontal, 3)
-                        .background(row == 1 ? Color(hex: t.accent).opacity(t.dark ? 0.16 : 0.14) : .clear, in: Capsule())
-                }
-                Spacer(minLength: 0)
-            }
-            .padding(6)
-            .frame(minWidth: 28, maxWidth: 44, alignment: .leading)
-            .frame(maxHeight: .infinity, alignment: .top)
-            .background(Color(hex: t.sidebar))
-            Rectangle().fill(Color(hex: t.line)).frame(width: 1)
-            VStack(alignment: .leading, spacing: 5) {
-                HStack(spacing: 4) {
-                    Capsule().fill(Color(hex: t.accent)).frame(width: 6, height: 3)
-                    Capsule().fill(Color(hex: t.text)).frame(maxWidth: 34).frame(height: 3)
-                    Capsule().fill(Color(hex: t.text3)).frame(maxWidth: 18).frame(height: 3)
-                }
-                ForEach(Array(Self.lines.enumerated()), id: \.offset) { _, line in
-                    HStack(spacing: 4) {
-                        ForEach(Array(line.enumerated()), id: \.offset) { _, word in
-                            Capsule().fill(Color(hex: Self.ink(word.ink, t))).frame(maxWidth: word.width).frame(height: 3)
-                        }
-                    }
-                }
-                .padding(.top, 1)
-                // The graph grows with the card.
-                GeometryReader { box in
-                    HStack(alignment: .bottom, spacing: 3) {
-                        ForEach(Array([0.45, 0.8, 0.6, 1.0, 0.7, 0.9, 0.55].enumerated()), id: \.offset) { i, share in
-                            let colour = t.graphs.isEmpty ? t.accent : t.graphs[i % t.graphs.count]
-                            RoundedRectangle(cornerRadius: 1.5).fill(Color(hex: colour)).frame(maxWidth: .infinity).frame(height: box.size.height * share)
-                        }
-                    }
-                    .frame(maxHeight: .infinity, alignment: .bottom)
-                }
-                .frame(minHeight: 18, maxHeight: .infinity)
-                .padding(.top, 4)
-            }
-            .padding(7)
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-            .background(Color(hex: t.ground))
+        Canvas { context, size in Self.draw(t, size, &context) }
+            // As tall as the stacks were at least: their padding, rows and the graph's least height.
+            .frame(minHeight: 80)
+            .clipShape(RoundedRectangle(cornerRadius: Self.radius, style: .continuous))
+            .overlay { RoundedRectangle(cornerRadius: Self.radius, style: .continuous).strokeBorder(Color(hex: t.line)) }
+            .accessibilityHidden(true)
+    }
+
+    private static func draw(_ t: PilotTheme, _ size: CGSize, _ context: inout GraphicsContext) {
+        func fill(_ rect: CGRect, _ hex: UInt32, _ opacity: Double = 1, radius: CGFloat = 0) {
+            let path = radius > 0 ? Path(roundedRect: rect, cornerRadius: radius) : Path(rect)
+            context.fill(path, with: .color(Color(hex: hex).opacity(opacity)))
         }
-        .clipShape(RoundedRectangle(cornerRadius: radius, style: .continuous))
-        .overlay { RoundedRectangle(cornerRadius: radius, style: .continuous).strokeBorder(Color(hex: t.line)) }
-        .accessibilityHidden(true)
+        func capsule(_ x: CGFloat, _ y: CGFloat, _ width: CGFloat, _ hex: UInt32, _ opacity: Double = 1) {
+            fill(CGRect(x: x, y: y, width: max(0, width), height: 3), hex, opacity, radius: 1.5)
+        }
+        // The sidebar: 28 to 44 pt, padded 6; its lights, then four rows 12 pt apart, the second picked.
+        let side = min(44, max(28, (size.width - 1) / 2))
+        fill(CGRect(x: side + 1, y: 0, width: size.width - side - 1, height: size.height), t.ground)
+        fill(CGRect(x: 0, y: 0, width: side, height: size.height), t.sidebar)
+        for (i, light) in [t.problem, t.amber, t.good].enumerated() {
+            context.fill(Path(ellipseIn: CGRect(x: 6 + CGFloat(i) * 8, y: 6, width: 5, height: 5)), with: .color(Color(hex: light)))
+        }
+        for (row, most) in [22, 26, 18, 24].enumerated() {
+            let y = 19 + CGFloat(row) * 12, width = min(CGFloat(most), side - 18)
+            if row == 1 { fill(CGRect(x: 6, y: y, width: width + 6, height: 7), t.accent, t.dark ? 0.16 : 0.14, radius: 3.5) }
+            capsule(9, y + 2, width, row == 1 ? t.accent : t.text3, row == 1 ? 1 : 0.55)
+        }
+        fill(CGRect(x: side, y: 0, width: 1, height: size.height), t.line)
+        // The pane: padded 7; a prompt line, four lines of words 9 pt apart, then the graph down to the foot.
+        let x = side + 1 + 7, room = size.width - side - 1 - 14
+        capsule(x, 7, 6, t.accent)
+        capsule(x + 10, 7, min(34, room - 32), t.text)
+        capsule(x + 48, 7, min(18, room - 52), t.text3)
+        for (k, line) in lines.enumerated() {
+            var left = x
+            for word in line {
+                capsule(left, 16 + CGFloat(k) * 9, min(word.width, x + room - left), ink(word.ink, t))
+                left += word.width + 4
+            }
+        }
+        let top: CGFloat = 55, height = max(18, size.height - 7 - top)
+        let shares = [0.45, 0.8, 0.6, 1.0, 0.7, 0.9, 0.55], bar = (room - 18) / 7
+        for (i, share) in shares.enumerated() {
+            let colour = t.graphs.isEmpty ? t.accent : t.graphs[i % t.graphs.count]
+            let h = height * share
+            fill(CGRect(x: x + CGFloat(i) * (bar + 3), y: top + height - h, width: bar, height: h), colour, radius: 1.5)
+        }
     }
 
     /// The window's text as words: which of the theme's inks, how long.

@@ -143,8 +143,8 @@ struct PanelTabStrip: View {
     static let spacing = 2.0
 
     var body: some View {
-        // Three tabs a turn while the part is built ahead (Staged).
-        HStack(spacing: Self.spacing) { Staged(by: 3) {
+        // Three tabs a turn while the part is built ahead (Staged); in view all at once, as each added would move the rest.
+        HStack(spacing: Self.spacing) { Staged(by: 3, inView: false) {
             ForEach(tabs, id: \.self) { area in
                 Button { pick(area) } label: { label(symbol: area.symbol, on: area == open) { Text(area.title) } }
                     .buttonStyle(.kitPress)

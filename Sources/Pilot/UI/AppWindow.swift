@@ -233,15 +233,20 @@ struct PageVisits {
         defaults.set(counts, forKey: Self.key)
     }
 
-    /// The `count` pages of `ahead` switched to most, most first (ties by name).
-    func likeliest(_ count: Int) -> [AppPage] {
+    /// The likeliest pages before any are counted (page-instant; Sven on build 3142: with no counts yet nothing was built
+    /// ahead, so every switch was a first visit).
+    static let seed: [AppPage] = [.home, .binds, .menuBar, .look]
+
+    /// The `count` pages of `ahead` switched to most, most first (ties by name), then `seed`'s not counted yet; never
+    /// `shown`, which is built already.
+    func likeliest(_ count: Int, besides shown: AppPage? = nil) -> [AppPage] {
         let counts = counts
-        let pages: [AppPage] = counts.keys.compactMap(AppPage.init(rawValue:)).filter(Self.ahead.contains)
+        let pages: [AppPage] = counts.keys.compactMap(AppPage.init(rawValue:)).filter { Self.ahead.contains($0) && $0 != shown }
         let sorted = pages.sorted { a, b in
             let na = counts[a.rawValue, default: 0], nb = counts[b.rawValue, default: 0]
             return na != nb ? na > nb : a.rawValue < b.rawValue
         }
-        return Array(sorted.prefix(count))
+        return Array((sorted + Self.seed.filter { !sorted.contains($0) && $0 != shown }).prefix(count))
     }
 }
 
@@ -675,6 +680,13 @@ enum PageSwitchTiming {
         let ms = turns.map { $0 / .milliseconds(1) }
         let pieces = ms.map { String(format: "%.1f", $0) }.joined(separator: " ")
         log.notice("page built ahead: \(key, privacy: .public), \(ms.count) turns, longest \(String(format: "%.1f", ms.max() ?? 0), privacy: .public) ms (\(pieces, privacy: .public))")
+    }
+
+    /// PageDeck built part `key` in view on its first visit, a few pieces a frame (page-instant): each frame's main-thread
+    /// time, and how long after its first frame it was whole.
+    static func builtInView(_ key: String, turns: [Duration], whole: Duration) {
+        let ms = turns.map { $0 / .milliseconds(1) }
+        log.notice("page built in view: \(key, privacy: .public), \(ms.count) frames, longest \(String(format: "%.1f", ms.max() ?? 0), privacy: .public) ms, whole \(Int(whole / .milliseconds(1))) ms after its first")
     }
 
     private static func arm() {
