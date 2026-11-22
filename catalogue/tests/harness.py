@@ -340,10 +340,10 @@ class ExtensionTestCase(unittest.TestCase):
                     self.assertIsInstance(action.get("title"), str)
                     self.assertActionShape(action, ITEM_ACTIONS)
                 self.assertTrue(all(isinstance(k, str) and k for k in block.get("files", [])), block)
-            else:
+            else:  # buttons: a button may also be an `ai` (ADR 0010, amended 2026-10-25: a row, a button or an input block)
                 self.assertTrue(block["actions"])
                 for action in block["actions"]:
-                    self.assertActionShape(action, ITEM_ACTIONS)
+                    self.assertActionShape(action, dict(ITEM_ACTIONS, ai="prompt"))
 
     def assertGaugesShape(self, gauges):
         """A bar line's gauges (story 165): up to 3, a label of at most 5 characters (2 before Pilot's 2026-10-16), 1 or 2 meters 0 to 100, a tone; or

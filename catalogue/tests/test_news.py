@@ -242,7 +242,7 @@ class NewsTests(ExtensionTestCase):
         self.assertEqual(malta["lovin-malta"]["accessory"], {"text": "On", "tone": "warn"})
         self.assertNotIn("accessory", malta["maltatoday"])
         self.assertEqual(malta["maltatoday"]["inline"][0]["icon"], "circle")
-        self.assertTrue(malta["times-of-malta"]["subtitle"].startswith("4 items · read "))
+        self.assertTrue(malta["times-of-malta"]["subtitle"].startswith("4 items · 3 in 24 h · read "), malta["times-of-malta"])
 
     def test_a_broken_feed_keeps_its_last_headlines(self):
         self.fetched()
@@ -334,6 +334,22 @@ class NewsTests(ExtensionTestCase):
         self.assertIsNotNone(again, "a new press makes a new summary")
         self.answer(again, input=json.dumps(layout))
         self.assertTrue(self.summary()["path"].endswith(time.strftime("%Y-%m-%d") + " 2.html"), "the first one is kept")
+
+    def test_while_one_is_on_its_way_the_page_offers_ask_again_and_a_twin_answer_is_dropped(self):
+        self.fetched()
+        _, ai = self.press()
+        page = self.page()
+        again = page[0]["blocks"][0]["actions"][0]
+        self.assertEqual((again["type"], again["title"]), ("ai", "Ask again"))
+        self.assertEqual((again["text"], again["then"]["context"]["job"]), (ai["text"], ai["then"]["context"]["job"]))
+        self.assertEqual(page[0]["blocks"][1]["text"], "Summarising 7 headlines…")
+        self.assertEqual(self.box.run("news", "page", surface="page").of_type("blocks")[0]["refresh"], 2)
+        first = self.answer(again, input="{}")
+        self.assertEqual(len(first.actions), 1)
+        twin = self.answer(ai, input="{}")
+        self.assertEqual((twin.of_type("hud")[0]["text"], twin.actions), ("That news summary is made already", []))
+        self.assertEqual(len(list((self.box.root / "out").iterdir())), 1, "one paper a press")
+        self.assertEqual(self.page()[0]["blocks"][0]["actions"][0]["type"], "run", "done: the button presses anew")
 
     def test_an_answer_that_is_not_json_still_makes_a_paper_and_a_failure_makes_none(self):
         self.fetched()

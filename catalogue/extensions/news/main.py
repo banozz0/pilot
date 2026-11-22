@@ -347,9 +347,14 @@ def summarise(run):
                              sources=len({i["source"] for i in items}), error=None))
     language = (run.get("preferences") or {}).get("language") or "english"
     hud("Summarising %d headlines from %d sources…" % (len(items), len({i["source"] for i in items})))
-    send({"type": "action", "action": {"type": "ai", "prompt": paper.task(language),
-                                       "text": paper.numbered(items, titles)[:150000],
-                                       "then": run_action("summarised", "News summary", {"job": job, "started": started})}})
+    send({"type": "action", "action": ask_ai(job, items, titles, language)})
+
+
+def ask_ai(job, items, titles, language, title="News summary"):
+    """The `ai` action for one job: its items' headlines and descriptions, the answer to `summarised` with the job and when
+    it was asked, so the time shown is the AI's."""
+    return {"type": "ai", "title": title, "prompt": paper.task(language), "text": paper.numbered(items, titles)[:150000],
+            "then": run_action("summarised", "News summary", {"job": job, "asked": time.time()})}
 
 
 def unique(folder, name):
@@ -364,9 +369,11 @@ def summarised(run):
     data, _ = folders(run)
     context = run.get("context") if isinstance(run.get("context"), dict) else {}
     job = str(context.get("job") or "")
-    started = context.get("started") if isinstance(context.get("started"), (int, float)) else time.time()
-    seconds = max(0.0, time.time() - started)
+    asked = context.get("asked") if isinstance(context.get("asked"), (int, float)) else time.time()
+    seconds = max(0.0, time.time() - asked)
     state = load(data, SUMMARY)
+    if state.get("job") == job and state.get("status") == "done":  # Ask again's twin answer: one paper a press
+        return hud("That news summary is made already")
     saved = load(os.path.join(data, "jobs"), job + ".json") if job.isalnum() else {}
     items = [i for i in saved.get("items") or [] if isinstance(i, dict)]
     if not items:
@@ -395,7 +402,7 @@ def summarised(run):
     except OSError as e:
         save(data, SUMMARY, dict(state, status="failed", error="could not save it (%s)" % e.strerror, at=time.time()))
         return hud("News summary could not be saved: %s" % e.strerror)
-    save(data, SUMMARY, {"status": "done", "job": job, "at": time.time(), "started": started, "seconds": seconds,
+    save(data, SUMMARY, {"status": "done", "job": job, "at": time.time(), "seconds": seconds,
                          "by": by, "count": len(items), "path": path})
     hud("News summary ready in %d s · %s" % (round(seconds), by))
     send({"type": "action", "action": {"type": "open", "url": path}})
@@ -469,14 +476,18 @@ def remove_feed(run):
     hud("Feed removed")
 
 
-def source_row(sources, source, status):
+def plural(n, word):
+    return "%d %s%s" % (n, word, "" if n == 1 else "s")
+
+
+def source_row(sources, source, status, today=0):
     on = sources.is_on(source)
     flip = run_action("toggle", "Turn off" if on else "Turn on", {"id": source["id"]})
     tried = status.get(source["id"]) if isinstance(status.get(source["id"]), dict) else {}
     if tried.get("error"):
         words = "Not answering: %s" % tried["error"]
     elif tried:
-        words = "%d items · read %s" % (tried.get("count", 0), clock(tried.get("triedAt")))
+        words = "%s · %d in 24 h · read %s" % (plural(tried.get("count", 0), "item"), today, clock(tried.get("triedAt")))
     else:
         words = urlparse(source["url"]).hostname or ""
     row = {"id": source["id"], "title": source["title"], "subtitle": words, "actions": [flip],
@@ -503,6 +514,11 @@ def page(run):
     now = time.time()
     last_day = sum(1 for i in items if now - i["at"] < DAY)
     buttons = [run_action("summarise", "Summarise the last 24 hours", icon="📰")]
+    if working:  # an answer lost on the way (Pilot quit while it asked): the same job asked again, its first answer kept
+        job = load(os.path.join(data, "jobs"), str(state.get("job")) + ".json").get("items") or []
+        if job:
+            language = (run.get("preferences") or {}).get("language") or "english"
+            buttons = [ask_ai(state["job"], job, titles, language, title="Ask again")]
     if state.get("path") and os.path.exists(state["path"]):
         buttons.append({"type": "open", "url": state["path"], "title": "Open the last summary"})
     buttons.append(run_action("refresh", "Refresh", icon="refresh"))
@@ -523,13 +539,17 @@ def page(run):
             for i in items[:PAGE_ROWS]]
     blocks.append({"type": "list", "title": "Headlines", "items": rows} if rows else
                   {"type": "markdown", "text": "_Fetching headlines…_" if running else "_No headlines yet: switch a source on below._"})
+    today = {}
+    for item in record.get("items") or []:
+        if isinstance(item, dict) and now - item.get("at", 0) < DAY:
+            today[item.get("source")] = today.get(item.get("source"), 0) + 1
     picks = [{"type": "input", "placeholder": "Add a feed: paste an RSS or Atom link, or words to follow on Google News",
               "action": run_action("add-feed", "Add")}]
     for group in feeds.GROUPS:
         members = [s for s in sources.all if s["group"] == group]
         if members:
             picks.append({"type": "list", "title": group + (" · " + feeds.GROUP_NOTES[group] if group in feeds.GROUP_NOTES else ""),
-                          "items": [source_row(sources, s, status) for s in members]})
+                          "items": [source_row(sources, s, status, today.get(s["id"], 0)) for s in members]})
     blocks.append({"type": "section", "title": "Sources", "subtitle": "%d on · Malta first; tick the ones you read" % len(on),
                    "blocks": picks})
     answer = {"type": "blocks", "blocks": blocks}
