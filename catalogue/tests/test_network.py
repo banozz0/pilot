@@ -32,7 +32,7 @@ class NetworkCase(ExtensionTestCase):
 
     def part(self, name, **kwargs):
         """The page with `name` shown: its nav first (a link per part, this one marked), then that part's blocks."""
-        self.run_ext("view", context={"view": name}, **{k: v for k, v in kwargs.items() if k in ("home",)})
+        self.run_ext("view", context={"view": name}, home=kwargs.get("home"))
         message = self.blocks_message("page", "page", pilot=PILOT, **kwargs)
         nav = message["blocks"][0]
         self.assertEqual(nav["type"], "links")
@@ -696,7 +696,7 @@ Ethernet Address: 00:00:5e:00:53:02
 ROUTE = """   route to: default
 destination: default
        mask: default
-    gateway: 192.0.2.1
+    gateway: {gateway}
   interface: {interface}
       flags: <UP,GATEWAY,DONE,STATIC,PRCLONING,GLOBAL>
 """
@@ -743,34 +743,43 @@ ARP = """? (192.0.2.1) at 0:0:5e:0:53:1 on en1 ifscope [ethernet]
 
 class LocalNetworkCase(NetworkCase):
     def net(self, interface="en1", wifi_profile=None, airport="You are not associated with an AirPort network.",
-            summary="", public="203.0.113.50", arp=ARP, online=True):
+            summary="", public="203.0.113.50", arp=ARP, online=True, gateway="192.0.2.1", ethernet_ip=None, slow=False):
         """Shims for every local read: networksetup, system_profiler, route, ipconfig, scutil, arp and curl (the one that
         would leave the Mac; its asks logged)."""
         root = self.box.root / "net"
         root.mkdir(exist_ok=True)
-        files = {"hardware": HARDWARE, "route": ROUTE.format(interface=interface) if online else "",
+        files = {"hardware": HARDWARE, "route": ROUTE.format(interface=interface, gateway=gateway) if online else "",
+                 "en0": ethernet_ip or "",
                  "profile": wifi_profile if wifi_profile is not None else profile(), "airport": airport + "\n",
                  "summary": summary, "dns": DNS, "arp": arp}
         for name, text in files.items():
             (root / name).write_text(text)
-        self.box.shim("networksetup", 'case "$1" in -listallhardwareports) cat "{r}/hardware";; -getairportnetwork) cat "{r}/airport";; '
-                                      '*) exit 1;; esac'.format(r=root))
-        self.box.shim("system_profiler", 'cat "%s/profile"' % root)
-        self.box.shim("route", '[ -s "{r}/route" ] || {{ echo "route: writing to routing socket: not in table" >&2; exit 1; }}\n'
-                               'cat "{r}/route"'.format(r=root))
-        self.box.shim("ipconfig", """case "$1 $2 $3" in
+        nap = "sleep 5; " if slow else ""
+        curl = 'printf "%s" "{p}"'.format(p=public) if public else "exit 28"
+        # One script behind a link per tool: macOS scans each new executable on its first run (about 0.17 s here), so
+        # seven separate shims would spend most of a list's 2 s before the program does anything.
+        self.box.shim("netshim", """case "${{0##*/}}" in
+networksetup) case "$1" in -listallhardwareports) cat "{r}/hardware";; -getairportnetwork) {nap}cat "{r}/airport";; *) exit 1;; esac;;
+system_profiler) {nap}cat "{r}/profile";;
+route) [ -s "{r}/route" ] || {{ echo "route: writing to routing socket: not in table" >&2; exit 1; }}; cat "{r}/route";;
+ipconfig) case "$1 $2 $3" in
   "getifaddr en1 ") echo 192.0.2.10;;
-  "getifaddr en0 ") echo 192.0.2.11;;
+  "getifaddr en0 ") [ -s "{r}/en0" ] || exit 1; cat "{r}/en0";;
+  "getifaddr utun4 ") echo 198.51.100.20;;
   "getoption en1 subnet_mask"|"getoption en0 subnet_mask") echo 255.255.255.0;;
+  "getoption en1 router") echo 192.0.2.1;;
   "getsummary en1 ") cat "{r}/summary";;
   *) exit 1;;
-esac""".format(r=root))
-        self.box.shim("scutil", 'cat "%s/dns"' % root)
-        self.box.shim("arp", 'cat "%s/arp"' % root)
-        if public:
-            self.box.shim("curl", 'printf "%%s\\n" "curl $*" >> "%s"\nprintf "%s"' % (self.box.log, public))
-        else:
-            self.box.shim("curl", 'printf "%%s\\n" "curl $*" >> "%s"\nexit 28' % self.box.log)
+  esac;;
+scutil) cat "{r}/dns";;
+arp) cat "{r}/arp";;
+curl) printf "%s\\n" "curl $*" >> "{log}"; {curl};;
+esac""".format(r=root, nap=nap, log=self.box.log, curl=curl))
+        for tool in ("networksetup", "system_profiler", "route", "ipconfig", "scutil", "arp", "curl"):
+            link = self.box.shims / tool
+            if link.is_symlink() or link.exists():
+                link.unlink()
+            link.symlink_to("netshim")
 
     def curl_calls(self):
         return [c for c in self.box.shim_calls() if c.startswith("curl")]
@@ -812,7 +821,7 @@ class OverviewTests(LocalNetworkCase):
         calls = self.curl_calls()
         self.assertEqual(len(calls), 1)
         self.assertTrue(calls[0].endswith("https://api.ipify.org"), calls)
-        self.assertIn("-m 0.8", calls[0], "a list must answer in 2 s")
+        self.assertLessEqual(float(calls[0].split("-m ")[1].split()[0]), 0.8, "a list must answer in 2 s")
 
     def test_a_public_ip_that_does_not_answer_says_so_and_is_not_asked_again_at_once(self):
         self.net(public=None)
@@ -838,10 +847,28 @@ class OverviewTests(LocalNetworkCase):
 
     def test_on_ethernet_with_wifi_off(self):
         self.net(interface="en0", wifi_profile=profile(status="spairport_status_off", name=None),
-                 airport="Wi-Fi power is currently off.")
+                 airport="Wi-Fi power is currently off.", ethernet_ip="192.0.2.11")
         rows = self.overview()
         self.assertEqual((rows["wifi"]["title"], rows["wifi"]["subtitle"]), ("Wi-Fi is off", "On Ethernet"))
         self.assertEqual(rows["local-ip"]["subtitle"], "Local IP · Ethernet (en0)")
+
+    def test_slow_wifi_tools_never_hold_the_list_past_pilots_2_s(self):
+        """system_profiler and networksetup each hang 5 s: the run's budget drops them and the rest still shows."""
+        self.net(slow=True)
+        r = self.run_ext("overview")  # raises past Pilot's 2 s
+        self.assertLess(r.elapsed, 2)
+        rows = {i["id"]: i for i in r.items}
+        self.assertEqual(rows["local-ip"]["title"], "192.0.2.10")
+        self.assertEqual(rows["router"]["title"], "192.0.2.1")
+        self.assertEqual(rows["dns"]["title"], "198.51.100.53, 198.51.100.54", "the Wi-Fi tools leave time for the rest")
+        r = self.run_ext("devices")
+        self.assertLess(r.elapsed, 2)
+        self.assertEqual(r.items[0]["title"], "192.0.2.1")
+
+    def test_behind_a_tunnel_the_local_ip_is_the_lans(self):
+        self.net(interface="utun4", gateway="198.51.100.1")
+        rows = self.overview()
+        self.assertEqual((rows["local-ip"]["title"], rows["local-ip"]["subtitle"]), ("192.0.2.10", "Local IP · Wi-Fi (en1)"))
 
     def test_offline_asks_nothing_of_the_internet(self):
         self.net(online=False, wifi_profile=profile(name=None))
@@ -898,20 +925,41 @@ class DevicesTests(LocalNetworkCase):
         self.net(arp="? (192.0.2.10) at 0:0:5e:0:53:2 on en1 ifscope permanent [ethernet]\n")
         items = self.devices()
         self.assertEqual(len(items), 1)
-        self.assertEqual(items[0]["title"], "macOS keeps this network's devices from Pilot")
+        self.assertEqual(items[0]["title"], "No devices: macOS may be keeping them from Pilot")
         self.assertEqual(items[0]["actions"][0]["url"], network.SETTINGS_LOCAL_NETWORK)
-        (self.box.data / "scan.json").write_text(json.dumps({"status": "done", "at": 0}))  # stale: still no look
-        self.assertEqual(self.devices()[0]["title"], "macOS keeps this network's devices from Pilot")
-        self.assertEqual(json.loads((self.box.data / "scan.json").read_text())["at"], 0)
+
+    def test_a_hidden_looking_table_still_starts_a_look(self):
+        """A cold table holds only this Mac too: a look fills it where macOS lets it through."""
+        run = {"paths": {"data": str(self.box.data)}}
+        now = {"lan": {"interface": "en1", "ip": "192.0.2.10", "router": "192.0.2.1", "kind": "Wi-Fi"}}
+        (self.box.data / "scan.json").write_text(json.dumps({"status": "done", "at": 0}))
+        own = [{"ip": "192.0.2.10", "mac": "00:00:5e:00:53:02", "interface": "en1", "own": True}]
+        with mock.patch.object(network, "connection", return_value=now), mock.patch.object(network, "arp_devices", return_value=own), \
+                mock.patch.object(network, "subnet_mask", return_value="255.255.255.0"), \
+                mock.patch.object(network, "detach") as detach:
+            _, rows, _, hidden, looking = network.devices_found(run)
+        self.assertEqual((rows, hidden, looking), ([], True, True))
+        self.assertEqual(detach.call_count, 1)
 
     def test_the_devices_page(self):
         self.net()
         blocks = self.part("devices")
         self.assertEqual({s["label"]: s["value"] for s in blocks[0]["items"]},
-                         {"Devices": "4", "Named": "1", "Network": "Wi-Fi on en1"})
+                         {"Devices": "4", "Named": "0", "Network": "Wi-Fi on en1"})
         self.assertEqual(blocks[1], {"type": "buttons", "actions": [{"type": "run", "command": "devices-scan", "title": "Look again"}]})
         self.assertEqual(blocks[2]["title"], "On en1")
         self.assertIsNone(self.refresh)
+
+    def test_a_router_missing_from_a_table_with_others_still_lists_them(self):
+        self.net(arp="\n".join(l for l in ARP.splitlines() if "(192.0.2.1)" not in l) + "\n")
+        self.assertEqual([i["title"] for i in self.devices()], ["This Mac", "192.0.2.20", "192.0.2.30", "Look for more devices"])
+
+    def test_behind_a_tunnel_devices_are_the_lans(self):
+        """A VPN or a Tailscale exit node holds the default route: Devices reads the hardware port with an IP, its router."""
+        self.net(interface="utun4", gateway="198.51.100.1")
+        items = self.devices()
+        self.assertEqual(items[0]["subtitle"], "192.0.2.1 · 00:00:5e:00:53:01 · router")
+        self.assertEqual(len(items), 5)
 
     def test_not_on_a_network(self):
         self.net(online=False)
@@ -955,7 +1003,7 @@ class DevicesTests(LocalNetworkCase):
 
     def test_a_stale_look_starts_one_detached_and_look_again_forces_one(self):
         run = {"paths": {"data": str(self.box.data)}}
-        now = {"interface": "en1", "ip": "192.0.2.10", "router": "192.0.2.1", "kind": "Wi-Fi"}
+        now = {"lan": {"interface": "en1", "ip": "192.0.2.10", "router": "192.0.2.1", "kind": "Wi-Fi"}}
         started = []
         with mock.patch.object(network, "detach", side_effect=lambda work: started.append(work)), \
                 mock.patch.object(network, "subnet_mask", return_value="255.255.255.0"):

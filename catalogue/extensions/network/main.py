@@ -37,6 +37,12 @@ import threading
 import time
 
 PAGE = "pilot://open?tab=page&extension=network"
+# Each run's one time budget for the local reads (seconds after it starts): under Pilot's 2 s for a list, detail or bar
+# line and 5 s for a page or popover, a cold python3's start counted. A read past it answers nothing, so the slow sources
+# (system_profiler first) drop out and the cheap ones still show. None: no budget (a detached worker, a no-view command).
+BUDGETS = {"list": 1.5, "page": 4.2}
+LIST_COMMANDS = {"overview", "devices", "tailscale", "kill-port", "ssh-hosts", "speedtest"}
+DEADLINE = None
 
 
 def send(message):
@@ -70,8 +76,19 @@ def cache_dir(run):
     return (run.get("paths") or {}).get("cache") or data_dir(run)
 
 
-def output(args, wait=1.5):
-    """A command's stdout as text, "" when it is missing, fails or takes longer than `wait` seconds."""
+def left(wait, reserve=0.0):
+    """`wait`, cut to the run's budget less `reserve` (kept for the reads after); 0 once it is spent."""
+    if DEADLINE is None:
+        return wait
+    return max(0.0, min(wait, DEADLINE - reserve - time.monotonic()))
+
+
+def output(args, wait=1.5, reserve=0.0):
+    """A command's stdout as text, "" when it is missing, fails or takes longer than `wait` seconds (or the run's
+    budget less `reserve`, whichever ends first)."""
+    wait = left(wait, reserve)
+    if wait < 0.05:
+        return ""
     try:
         done = subprocess.run(args, stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=wait)
     except (OSError, subprocess.SubprocessError):
@@ -97,6 +114,8 @@ def detach(work):
     os.setsid()
     if os.fork():
         os._exit(0)
+    global DEADLINE
+    DEADLINE = None  # Pilot no longer waits on a detached worker
     null = os.open(os.devnull, os.O_RDWR)
     for fd in (0, 1, 2):
         os.dup2(null, fd)
@@ -207,7 +226,7 @@ def wifi(ports=None):
     found = {"device": device, "on": True, "connected": False, "name": None, "signal": None, "noise": None,
              "channel": None, "rate": None}
     try:
-        profile = json.loads(output(["system_profiler", "SPAirPortDataType", "-json"], wait=3.0) or "{}")
+        profile = json.loads(output(["system_profiler", "SPAirPortDataType", "-json"], wait=3.0, reserve=0.6) or "{}")
     except ValueError:
         profile = {}
     for entry in (profile.get("SPAirPortDataType") or [{}])[0].get("spairport_airport_interfaces") or []:
@@ -227,14 +246,14 @@ def wifi(ports=None):
             rate = current.get("spairport_network_rate")
             found["rate"] = rate if isinstance(rate, (int, float)) else None
     if not found["name"]:
-        said = output(["networksetup", "-getairportnetwork", device]).strip()
+        said = output(["networksetup", "-getairportnetwork", device], reserve=0.5).strip()
         if said.startswith("Current Wi-Fi Network: "):
             found["name"] = said[len("Current Wi-Fi Network: "):].strip() or None
             found["connected"] = True
         elif "power is currently off" in said:
             found["on"] = False
     if not found["name"] and found["on"]:
-        for line in output(["ipconfig", "getsummary", device]).splitlines():
+        for line in output(["ipconfig", "getsummary", device], reserve=0.4).splitlines():
             key, _, value = line.strip().partition(" : ")
             if key == "SSID" and value.strip() not in ("", HIDDEN):
                 found["name"], found["connected"] = value.strip(), True
@@ -254,7 +273,10 @@ def public_ip(run, wait):
     age = time.time() - kept.get("at", 0) if isinstance(kept.get("at"), (int, float)) else None
     if age is not None and 0 <= age < (PUBLIC_KEPT if kept.get("ip") else PUBLIC_FAILED_KEPT):
         return kept.get("ip")
-    answer = output(["curl", "-s", "-f", "-m", "%.1f" % wait, PUBLIC_IP], wait=wait + 0.5).strip()
+    wait = left(wait)
+    if wait < 0.3:
+        return None
+    answer = output(["curl", "-s", "-f", "-m", "%.1f" % wait, PUBLIC_IP], wait=wait + 0.2).strip()
     ip = answer if valid_ip(answer) else None
     try:
         write_json(path, {"at": time.time(), "ip": ip})
@@ -263,20 +285,31 @@ def public_ip(run, wait):
     return ip
 
 
-def connection(ports=None):
-    """What the Mac is on now: {"kind" (Wi-Fi, Ethernet…, or None offline), "interface", "ip", "router", "wifi"}."""
-    ports = hardware_ports() if ports is None else ports
+def tunnel(interface):
+    return bool(interface) and interface.startswith(("utun", "ipsec", "ppp"))
+
+
+def connection():
+    """What the Mac is on now: {"kind" (Wi-Fi, Ethernet…, VPN, or None offline), "interface", "ip", "router", "ports",
+    "lan"}; `lan` is the local network's own {"interface", "ip", "router", "kind"}, a hardware port's when the default
+    route goes through a tunnel (a VPN, a Tailscale exit node)."""
     router, interface = default_route()
-    air = wifi(ports)
-    kind = None
-    if interface:
-        if air and interface == air["device"]:
-            kind = "Wi-Fi"
-        elif interface.startswith("utun") or interface.startswith("ipsec"):
-            kind = "VPN"
-        else:
-            kind = ports.get(interface) or interface
-    return {"kind": kind, "interface": interface, "ip": local_ip(interface), "router": router, "wifi": air}
+    ports = hardware_ports()
+    lan = {"interface": interface, "ip": local_ip(interface), "router": router}
+    if tunnel(interface):
+        lan = {"interface": None, "ip": None, "router": None}
+        for device in ports:
+            ip = local_ip(device)
+            if ip:
+                found = output(["ipconfig", "getoption", device, "router"]).strip()
+                lan = {"interface": device, "ip": ip, "router": found if valid_ip(found) else None}
+                break
+    def kind_of(device):
+        name = ports.get(device) or device
+        return "Wi-Fi" if name == "AirPort" else name
+    lan["kind"] = kind_of(lan["interface"]) if lan["interface"] else None
+    kind = ("VPN" if tunnel(interface) else kind_of(interface)) if interface else None
+    return {"kind": kind, "interface": interface, "ip": lan["ip"], "router": router, "ports": ports, "lan": lan}
 
 
 def copy(text, title):
@@ -287,24 +320,25 @@ def router_url(router):
     return "http://%s" % (router if ":" not in router else "[%s]" % router)
 
 
+WIFI_SETTINGS = {"type": "open", "url": "x-apple.systempreferences:com.apple.wifi-settings-extension",
+                 "title": "Open Wi-Fi settings"}
+
+
 def overview_items(run, wait):
     """Wi-Fi, Local IP, Public IP, Router, DNS: a row each."""
+    # Cheap local reads first, then Wi-Fi's slow tools, then the one ask that leaves the Mac: when the budget runs
+    # out, the last ones drop.
     now = connection()
-    air = now["wifi"]
+    servers = dns_servers()
+    air = now["wifi"] = wifi(now["ports"])
     items = []
+    on = "On %s" % now["kind"] if now["kind"] else "Not connected"
     if air is None:
-        items.append({"id": "wifi", "title": "No Wi-Fi on this Mac", "icon": "📶",
-                      "subtitle": "On %s" % now["kind"] if now["kind"] else "Not connected"})
-    elif not air["on"]:
-        items.append({"id": "wifi", "title": "Wi-Fi is off", "icon": "📶",
-                      "subtitle": "On %s" % now["kind"] if now["kind"] else "Not connected",
-                      "actions": [{"type": "open", "url": "x-apple.systempreferences:com.apple.wifi-settings-extension",
-                                   "title": "Open Wi-Fi settings"}]})
-    elif not air["connected"]:
-        items.append({"id": "wifi", "title": "Wi-Fi is on, not joined", "icon": "📶",
-                      "subtitle": "On %s" % now["kind"] if now["kind"] and now["kind"] != "Wi-Fi" else "No network joined",
-                      "actions": [{"type": "open", "url": "x-apple.systempreferences:com.apple.wifi-settings-extension",
-                                   "title": "Open Wi-Fi settings"}]})
+        items.append({"id": "wifi", "title": "No Wi-Fi on this Mac", "icon": "📶", "subtitle": on})
+    elif not air["on"] or not air["connected"]:
+        joined = air["on"] and now["kind"] in (None, "Wi-Fi")
+        items.append({"id": "wifi", "title": "Wi-Fi is on, not joined" if air["on"] else "Wi-Fi is off", "icon": "📶",
+                      "subtitle": "No network joined" if joined else on, "actions": [WIFI_SETTINGS]})
     else:
         words, tone_ = signal_words(air["signal"])
         name = air["name"] or "Wi-Fi (macOS hides its name)"
@@ -314,14 +348,15 @@ def overview_items(run, wait):
         if air["channel"]:
             parts.append("channel %s" % air["channel"])
         item = {"id": "wifi", "title": name, "icon": "📶", "subtitle": " · ".join(parts), "keywords": "wifi wi-fi ssid signal"}
-        if tone_ and air["signal"] is not None:
+        if tone_:
             item["accessory"] = {"text": words, "tone": tone_}
         if air["name"]:
             item["actions"] = [copy(air["name"], "Copy Wi-Fi name")]
         items.append(item)
     if now["ip"]:
         items.append({"id": "local-ip", "title": now["ip"], "icon": "🏠",
-                      "subtitle": "Local IP · %s (%s)" % (now["kind"], now["interface"]), "keywords": "local ip address lan",
+                      "subtitle": "Local IP · %s (%s)" % (now["lan"]["kind"], now["lan"]["interface"]),
+                      "keywords": "local ip address lan",
                       "actions": [copy(now["ip"], "Copy local IP")]})
     else:
         items.append({"id": "local-ip", "title": "No local IP", "icon": "🏠", "subtitle": "This Mac is not on a network"})
@@ -339,7 +374,6 @@ def overview_items(run, wait):
                                   copy(now["router"], "Copy router address")]})
     else:
         items.append({"id": "router", "title": "No router", "icon": "📡", "subtitle": "No default route"})
-    servers = dns_servers()
     if servers:
         items.append({"id": "dns", "title": ", ".join(servers[:3]) + (" +%d" % (len(servers) - 3) if len(servers) > 3 else ""),
                       "icon": "🧭", "subtitle": "DNS", "keywords": "dns nameserver resolver",
@@ -359,17 +393,17 @@ def overview_blocks(run):
     stats = [{"label": "On", "value": now["kind"] or "Offline", "tone": "fine" if now["kind"] else "alert"}]
     air = now["wifi"]
     if now["kind"] == "Wi-Fi" and air and air["signal"] is not None:
-        words, tone_ = signal_words(air["signal"])
+        _, tone_ = signal_words(air["signal"])
         stats.append({"label": "Signal", "value": "%d dBm" % air["signal"], "tone": tone_})
         if air["rate"]:
             stats.append({"label": "Link", "value": "%d Mbps" % air["rate"]})
-    known = arp_devices(now["interface"]) if now["interface"] else []
+    known = arp_devices(now["lan"]["interface"]) if now["lan"]["interface"] else []
     if known:
         stats.append({"label": "Devices", "value": str(len(known))})
     last = speed_last(Paths(run))
     if last:
         stats.append({"label": "Last speed test", "value": "↓ %s ↑ %s Mbps" % (mbps(last.get("download")), mbps(last.get("upload")))})
-    return [{"type": "stats", "items": stats[:6]}, {"type": "list", "title": "Network", "items": items}]
+    return [{"type": "stats", "items": stats}, {"type": "list", "title": "Network", "items": items}], None
 
 
 # MARK: - Devices on the network
@@ -421,17 +455,17 @@ class Scan:
     device's name by MAC, as it last answered)."""
 
     def __init__(self, run):
-        self.folder = data_dir(run)
-        self.state = os.path.join(self.folder, "scan.json")
-        self.names = os.path.join(self.folder, "names.json")
+        folder = data_dir(run)
+        self.state = os.path.join(folder, "scan.json")
+        self.names = os.path.join(folder, "names.json")
 
     def running(self):
         state = read_json(self.state)
         return state.get("status") == "running" and ours(state.get("pid"))
 
-    def stale(self, now=None):
+    def stale(self):
         at = read_json(self.state).get("at")
-        return not isinstance(at, (int, float)) or (now or time.time()) - at > SCAN_KEPT
+        return not isinstance(at, (int, float)) or time.time() - at > SCAN_KEPT
 
     def known(self):
         names = read_json(self.names)
@@ -453,8 +487,8 @@ def probe_targets(ip, mask):
     return [str(a) for a in network.hosts() if a != own]
 
 
-def probe(targets, gap=PROBE_GAP):
-    """One empty UDP datagram to the discard port (9) of each address, `gap` s apart: the kernel asks ARP who holds each
+def probe(targets):
+    """One empty UDP datagram to the discard port (9) of each address, PROBE_GAP s apart: the kernel asks ARP who holds each
     one, so the devices that are up land in the ARP table. Nothing is read back and no port is scanned."""
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     try:
@@ -463,7 +497,7 @@ def probe(targets, gap=PROBE_GAP):
                 sock.sendto(b"", (address, 9))
             except OSError:
                 pass
-            time.sleep(gap)
+            time.sleep(PROBE_GAP)
     finally:
         sock.close()
 
@@ -478,9 +512,9 @@ def mdns_query(ip, ident):
     return struct.pack(">HHHHHH", ident, 0, 1, 0, 0, 0) + question + struct.pack(">HH", 12, 1)
 
 
-def read_name(packet, at, depth=0):
+def read_name(packet, at):
     """A DNS name at `at` in `packet` (compression followed): (name, the offset after it)."""
-    labels, after = [], None
+    labels, after, depth = [], None, 0
     while depth < 20:
         if at >= len(packet):
             raise ValueError("short")
@@ -587,7 +621,8 @@ def resolver_names(ips, wait=2.0):
 
 
 def scan_work(scan, interface, ip, mask, probe_=probe, mdns=mdns_names, resolver=resolver_names):
-    """The detached look: wake the subnet, then ask each device in the ARP table its name; names.json keeps them by MAC."""
+    """The detached look: wake the subnet, then ask each device in the ARP table its name; names.json keeps them by MAC.
+    """
     write_json(scan.state, {"status": "running", "pid": os.getpid(), "at": time.time()})
     try:
         probe_(probe_targets(ip, mask))
@@ -612,84 +647,83 @@ def start_scan(run, now=None, force=False):
         return True
     if not force and not scan.stale():
         return False
-    now = now or connection()
-    if not now["interface"] or not now["ip"]:
+    lan = (now or connection())["lan"]
+    if not lan["interface"] or not lan["ip"]:
         return False
-    interface, ip, mask = now["interface"], now["ip"], subnet_mask(now["interface"])
+    interface, ip, mask = lan["interface"], lan["ip"], subnet_mask(lan["interface"])
     write_json(scan.state, {"status": "running", "pid": None, "at": time.time()})
     detach(lambda: scan_work(scan, interface, ip, mask))
     return True
 
 
 def device_rows(run, now):
-    """The Devices list's rows (router first, then this Mac, then named ones, then by address) and whether macOS hid
-    the table from this program (the router itself missing)."""
-    devices = arp_devices(now["interface"]) if now["interface"] else []
+    """The Devices rows (router first, then this Mac, then named ones, then by address), how many carry a name the
+    look found, and whether the table may be one macOS hid: the router always answers ARP, so a table holding nobody
+    but this Mac (with a router known) is taken as hidden."""
+    lan = now["lan"]
+    devices = arp_devices(lan["interface"]) if lan["interface"] else []
+    if lan["router"] and all(d["own"] for d in devices):
+        return [], 0, True
     names = Scan(run).known()
-    hidden = bool(now["router"]) and now["router"] not in [d["ip"] for d in devices]
-    if hidden and not [d for d in devices if not d["own"]]:
-        return [], True
-    rows = []
+    rows, named = [], 0
     for d in devices:
-        own, router = d["own"] or d["ip"] == now["ip"], d["ip"] == now["router"]
-        name = "This Mac" if own else (names.get(d["mac"]) or {}).get("name")
-        roles = ["router"] if router else []
-        if private_mac(d["mac"]):
-            roles.append("private address")
-        item = {"id": d["mac"], "title": name or d["ip"], "icon": "💻" if own else "📡" if router else "📱" if private_mac(d["mac"]) else "🔹",
-                "subtitle": " · ".join([d["ip"], d["mac"]] + roles),
+        own, router, private = d["own"] or d["ip"] == lan["ip"], d["ip"] == lan["router"], private_mac(d["mac"])
+        found = None if own else (names.get(d["mac"]) or {}).get("name")
+        named += 1 if found else 0
+        name = "This Mac" if own else found
+        roles = (["router"] if router else []) + (["private address"] if private else [])
+        icon = "💻" if own else "📡" if router else "📱" if private else "🔹"
+        item = {"id": d["mac"], "title": name or d["ip"], "icon": icon, "subtitle": " · ".join([d["ip"], d["mac"]] + roles),
                 "keywords": " ".join(x for x in (d["ip"], d["mac"], name, " ".join(roles)) if x)}
-        actions = []
-        if router:
-            actions.append({"type": "open", "url": router_url(d["ip"]), "title": "Open router admin page"})
+        actions = [{"type": "open", "url": router_url(d["ip"]), "title": "Open router admin page"}] if router else []
         actions += [copy(d["ip"], "Copy IP %s" % d["ip"]), copy(d["mac"], "Copy MAC")]
-        if name and not own:
-            actions.append(copy(name, "Copy name"))
+        if found:
+            actions.append(copy(found, "Copy name"))
         item["actions"] = actions
         key = (0 if router else 1 if own else 2 if name else 3, (name or "").lower(), tuple(int(p) for p in d["ip"].split(".")))
         rows.append((key, item))
     rows.sort(key=lambda r: r[0])
-    return [item for _, item in rows], hidden
+    return [item for _, item in rows], named, False
 
 
 LOOK_AGAIN = {"type": "run", "command": "devices-scan", "title": "Look again"}
-HIDDEN_ROW = {"title": "macOS keeps this network's devices from Pilot", "icon": "🔒",
-              "subtitle": "Allow Pilot in Privacy & Security › Local Network, then look again",
+HIDDEN_ROW = {"title": "No devices: macOS may be keeping them from Pilot", "icon": "🔒",
+              "subtitle": "If Pilot is off in Privacy & Security › Local Network, turn it on, then look again",
               "actions": [{"type": "open", "url": SETTINGS_LOCAL_NETWORK, "title": "Open Local Network settings"}]}
+NOT_ON_A_NETWORK = {"title": "This Mac is not on a network", "icon": "📡"}
+NONE_YET = {"title": "No devices found yet", "icon": "📡", "subtitle": "Looking now; open this again in a moment"}
+
+
+def devices_found(run):
+    """(connection, rows or None off a network, named, hidden, whether a look runs). A look starts when one is due,
+    a hidden-looking table too: a cold table fills where macOS lets the look through."""
+    now = connection()
+    if not now["lan"]["interface"]:
+        return now, None, 0, False, False
+    rows, named, hidden = device_rows(run, now)
+    return now, rows, named, hidden, start_scan(run, now)
 
 
 def devices(run):
-    now = connection()
-    if not now["interface"]:
-        return send({"type": "list", "items": [{"title": "This Mac is not on a network", "icon": "📡"}]})
-    rows, hidden = device_rows(run, now)
-    if hidden:
-        return send({"type": "list", "items": [HIDDEN_ROW]})
-    start_scan(run, now)
-    if not rows:
-        return send({"type": "list", "items": [{"title": "No devices found yet", "icon": "📡",
-                                                "subtitle": "Looking now; open this again in a moment"}]})
+    _, rows, _, hidden, _ = devices_found(run)
+    if rows is None or hidden or not rows:
+        return send({"type": "list", "items": [NOT_ON_A_NETWORK if rows is None else HIDDEN_ROW if hidden else NONE_YET]})
     look = {"title": "Look for more devices", "icon": "🔎", "subtitle": "Wakes the network and asks each device its name",
             "actions": [dict(LOOK_AGAIN, stay=True)]}
     send({"type": "list", "items": rows + [look]})
 
 
 def devices_blocks(run):
-    """(blocks, whether a look runs now)."""
-    now = connection()
-    if not now["interface"]:
-        return [{"type": "markdown", "text": "This Mac is not on a network."}], False
-    rows, hidden = device_rows(run, now)
-    if hidden:
-        return [{"type": "list", "items": [HIDDEN_ROW]}], False
-    looking = start_scan(run, now)
-    if not rows:
-        return [{"type": "list", "items": [{"title": "No devices found yet", "icon": "📡", "subtitle": "Looking now"}]}], looking
-    named = sum(1 for r in rows if not re.fullmatch(r"[\d.]+", r["title"]))
+    """The page's Devices: (blocks, refresh), asked every 3 s while a look runs."""
+    now, rows, named, hidden, looking = devices_found(run)
+    refresh = 3 if looking else None
+    if rows is None or hidden or not rows:
+        return [{"type": "list", "items": [NOT_ON_A_NETWORK if rows is None else HIDDEN_ROW if hidden else NONE_YET]}], refresh
+    lan = now["lan"]
     stats = {"type": "stats", "items": [{"label": "Devices", "value": str(len(rows))}, {"label": "Named", "value": str(named)},
-                                        {"label": "Network", "value": "%s on %s" % (now["kind"], now["interface"])}]}
+                                        {"label": "Network", "value": "%s on %s" % (lan["kind"], lan["interface"])}]}
     buttons = {"type": "buttons", "actions": [dict(LOOK_AGAIN, title="Looking…" if looking else "Look again")]}
-    return [stats, buttons, {"type": "list", "title": "On %s" % now["interface"], "items": rows[:50]}], looking
+    return [stats, buttons, {"type": "list", "title": "On %s" % lan["interface"], "items": rows[:MOST_ROWS]}], refresh
 
 
 def devices_scan(run):
@@ -1594,8 +1628,9 @@ def speedtest_stop(run):
 
 # MARK: - The page
 
-VIEWS = [("overview", "Overview"), ("devices", "Devices"), ("tailscale", "Tailscale"), ("ports", "Ports"),
-         ("ssh", "SSH"), ("speedtest", "Speedtest")]
+VIEWS = {"overview": "Overview", "devices": "Devices", "tailscale": "Tailscale", "ports": "Ports", "ssh": "SSH",
+         "speedtest": "Speedtest"}
+MOST_BLOCKS = 23  # Pilot draws 24 blocks of a page; the nav is one
 
 
 def view_path(run):
@@ -1608,56 +1643,49 @@ def held_view(run):
             name = f.read().strip()
     except OSError:
         return "overview"
-    return name if name in dict(VIEWS) else "overview"
+    return name if name in VIEWS else "overview"
 
 
 def keep_view(run, name):
-    if name in dict(VIEWS):
-        os.makedirs(data_dir(run), exist_ok=True)
-        with open(view_path(run), "w", encoding="utf-8") as f:
-            f.write(name)
+    os.makedirs(data_dir(run), exist_ok=True)
+    with open(view_path(run), "w", encoding="utf-8") as f:
+        f.write(name)
 
 
 def view(run):
     """A link at the page's top: the part it names shows."""
     context = run.get("context") if isinstance(run.get("context"), dict) else {}
     name = context.get("view")
-    if name not in dict(VIEWS):
+    if name not in VIEWS:
         return send({"type": "error", "text": "has no part %s" % name})
     keep_view(run, name)
 
 
 def nav(run, shown):
     """A link per part, the shown one marked; buttons where this Pilot draws no links."""
-    actions = [{"type": "run", "command": "view", "title": title, "context": {"view": name}} for name, title in VIEWS]
-    if drawn(run, "links"):
-        items = []
-        for (name, title), action in zip(VIEWS, actions):
-            link = {"title": title, "actions": [action]}
-            if name == shown:
-                link.update(tone="fine", word="shown")
-            items.append(link)
-        return {"type": "links", "items": items}
-    return {"type": "buttons", "actions": actions}
+    actions = [{"type": "run", "command": "view", "title": title, "context": {"view": name}} for name, title in VIEWS.items()]
+    if not drawn(run, "links"):
+        return {"type": "buttons", "actions": actions}
+    return {"type": "links", "items": [dict({"title": a["title"], "actions": [a]},
+                                            **({"tone": "fine", "word": "shown"} if a["context"]["view"] == shown else {}))
+                                       for a in actions]}
+
+
+# Each part's blocks and how often its page asks again (None: the page's own 60 s).
+PARTS = {
+    "overview": overview_blocks,
+    "devices": devices_blocks,
+    "tailscale": lambda run: (tailscale_blocks(run), None),
+    "ports": lambda run: (ports_blocks(run), PORTS_REFRESH),
+    "ssh": lambda run: (ssh_blocks(run), None),
+    "speedtest": speedtest_page,
+}
 
 
 def page(run):
     shown = held_view(run)
-    refresh = None
-    if shown == "overview":
-        blocks = overview_blocks(run)
-    elif shown == "devices":
-        blocks, looking = devices_blocks(run)
-        refresh = 3 if looking else None
-    elif shown == "tailscale":
-        blocks = tailscale_blocks(run)
-    elif shown == "ports":
-        blocks, refresh = ports_blocks(run), PORTS_REFRESH
-    elif shown == "ssh":
-        blocks = ssh_blocks(run)
-    else:
-        blocks, refresh = speedtest_page(run)
-    message = {"type": "blocks", "blocks": [nav(run, shown)] + blocks[:23]}
+    blocks, refresh = PARTS[shown](run)
+    message = {"type": "blocks", "blocks": [nav(run, shown)] + blocks[:MOST_BLOCKS]}
     if refresh:
         message["refresh"] = refresh
     send(message)
@@ -1680,6 +1708,12 @@ def main():
     except ValueError:
         send({"type": "error", "text": "got a run message it could not read"})
         return
+    global DEADLINE
+    surface = run.get("surface")
+    if surface in ("page", "popover"):
+        DEADLINE = STARTED + BUDGETS["page"]
+    elif surface == "bar" or run.get("command") in LIST_COMMANDS:
+        DEADLINE = STARTED + BUDGETS["list"]
     command = COMMANDS.get(run.get("command"))
     if command is None:
         send({"type": "error", "text": "has no command %s" % run.get("command")})
@@ -1688,4 +1722,5 @@ def main():
 
 
 if __name__ == "__main__":
+    STARTED = time.monotonic()
     main()
