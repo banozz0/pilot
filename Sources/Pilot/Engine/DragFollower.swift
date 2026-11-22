@@ -23,9 +23,11 @@ final class DragFollower {
     typealias Ticker = @MainActor (_ tick: @escaping @Sendable () -> Void) -> (@MainActor () -> Void)
     /// Moves window `number` so its top-left corner is at `corner` (window-server coordinates), from any thread.
     typealias Mover = @Sendable (_ number: UInt32, _ corner: CGPoint) -> Void
-    /// The border panel to move for window `id`, and how far its corner sits up and left of the window's: nil when
-    /// no border is shown above that window, and the main thread lands each read instead.
-    var border: (CGWindowID) -> DragBorder? = { _ in nil }
+    /// The border panel lent for a drag of window `id`, and how far its corner sits up and left of the window's: nil when
+    /// no border is shown above that window, and the main thread lands each read instead. The revoke (focus moved on,
+    /// the border hid) stops the drag moving it; `giveBack` returns it at the drag's end.
+    var border: (_ id: CGWindowID, _ revoke: @escaping () -> Void) -> DragBorder? = { _, _ in nil }
+    var giveBack: () -> Void = {}
     typealias DragBorder = (number: UInt32, inset: CGFloat)
     private let reader: Reader
     private let ticker: Ticker
@@ -50,7 +52,7 @@ final class DragFollower {
 
     init(reader: @escaping Reader = DragFollower.readOffMain, ticker: @escaping Ticker = DragFollower.threadTicker,
          mover: @escaping Mover = { _ = WindowServerMove.move($0, corner: $1) },
-         held: @escaping @Sendable () -> Bool = { CGEventSource.buttonState(.combinedSessionState, button: .left) },
+         held: @escaping @Sendable () -> Bool = { NSEvent.pressedMouseButtons & 1 != 0 },
          pointer: @escaping @Sendable () -> CGPoint = { CGEvent(source: nil)?.location ?? .zero },
          now: @escaping @Sendable () -> TimeInterval = { ProcessInfo.processInfo.systemUptime }) {
         self.reader = reader; self.ticker = ticker; self.mover = mover; self.held = held; self.pointer = pointer; self.now = now
@@ -62,8 +64,10 @@ final class DragFollower {
         guard let id, held() else { return false }
         if window != id {
             stop?()
+            _ = self.track?.finish() // a tick already under way must not move the border for the old window
             window = id
-            let track = Track(id: id, border: border(id), start: now(), reader: reader, mover: mover, held: held, pointer: pointer, now: now)
+            let track = Track(id: id, start: now(), reader: reader, mover: mover, held: held, pointer: pointer, now: now)
+            track.lend(border(id) { [weak track] in track?.revoke() })
             track.landed = { [weak self] frame in self?.landed(id, frame) }
             track.released = { [weak self] in self?.end(id) }
             self.track = track
@@ -78,6 +82,7 @@ final class DragFollower {
         stop?()
         (stop, window, self.track) = (nil, nil, nil)
         let (s, placed) = track.finish()
+        giveBack()
         lastDrag = s
         let ms = Int((now() - s.start) * 1000), avg = s.reads == 0 ? 0 : Int(s.readTime / Double(s.reads) * 1_000_000)
         wlog.notice("border drag: \(ms) ms, \(s.moves) AX moves, \(s.frames) frames, \(s.reads) bounds reads (\(avg) us each, p95 \(Int(s.readP95 * 1_000_000)) us), \(s.busy) frames with a read still out, \(s.led) led by the pointer")
@@ -89,7 +94,8 @@ final class DragFollower {
     /// One drag's frames, on the ticker's thread; its reads on the reader's. All state behind one lock.
     final class Track: @unchecked Sendable {
         private let lock = NSLock()
-        private let id: CGWindowID, border: DragBorder?
+        private let id: CGWindowID
+        private var border: DragBorder?
         private let reader: Reader, mover: Mover, held: @Sendable () -> Bool, pointer: @Sendable () -> CGPoint, now: @Sendable () -> TimeInterval
         private var stats: Stats
         /// The last read and the pointer straight after it; whether the reads move with the pointer; the drag's first size.
@@ -108,13 +114,17 @@ final class DragFollower {
         var landed: @MainActor (CGRect?) -> Void = { _ in }
         var released: @MainActor () -> Void = {}
 
-        init(id: CGWindowID, border: DragBorder?, start: TimeInterval, reader: @escaping Reader, mover: @escaping Mover,
+        init(id: CGWindowID, start: TimeInterval, reader: @escaping Reader, mover: @escaping Mover,
              held: @escaping @Sendable () -> Bool, pointer: @escaping @Sendable () -> CGPoint, now: @escaping @Sendable () -> TimeInterval) {
-            self.id = id; self.border = border; self.reader = reader; self.mover = mover; self.held = held; self.pointer = pointer; self.now = now
+            self.id = id; self.reader = reader; self.mover = mover; self.held = held; self.pointer = pointer; self.now = now
             stats = Stats(start: start)
         }
 
         func moved() { lock.withLock { stats.moves += 1 } }
+
+        /// The border this drag moves, from its first frame; the revoke takes it back for good, and reads go to the main thread.
+        func lend(_ border: DragBorder?) { lock.withLock { self.border = border } }
+        func revoke() { lock.withLock { border = nil } }
 
         /// A display frame: the border to where the pointer has the window, then a read if none is out.
         func frame() {
@@ -175,7 +185,7 @@ final class DragFollower {
         func finish() -> (Stats, CGRect?) {
             lock.withLock {
                 done = true
-                return (stats, resized ? nil : placed)
+                return (stats, resized || border == nil ? nil : placed)
             }
         }
 

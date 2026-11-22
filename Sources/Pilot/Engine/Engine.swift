@@ -552,7 +552,8 @@ final class Engine {
             windowBorder.update($0)
             DefocusController.shared.update($0)
         }
-        observers.drag.border = { [windowBorder] in windowBorder.dragTarget($0) }
+        observers.drag.border = { [windowBorder] in windowBorder.lend($0, revoke: $1) }
+        observers.drag.giveBack = { [windowBorder] in windowBorder.giveBack() }
         windowBorder.start()
         DefocusController.shared.start()
         TilerDropZone.show = { [dropZone] in dropZone.update($0, below: $1) }

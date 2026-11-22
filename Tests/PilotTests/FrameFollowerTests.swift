@@ -95,7 +95,8 @@ struct FrameFollowerTests {
         let border = WindowBorderController(surface: surface, look: WindowBorderControllerTests.look(),
                                             screens: { [CGRect(x: 0, y: 0, width: 3840, height: 2160)] }, primaryHeight: { 2160 })
         observers.onFocusedWindow = { border.update($0) }
-        drag.border = { border.dragTarget($0) }
+        drag.border = { border.lend($0, revoke: $1) }
+        drag.giveBack = { border.giveBack() }
         observers.refreshFocusedWindow() // focus lands on it, as kAXFocusedWindowChanged does
         return Rig(observers: observers, clock: clock, costs: costs, surface: surface, mouse: mouse, frame: { current }, move: { current = $0 },
                    draw: { drawn = .some($0) })
@@ -180,7 +181,7 @@ struct FrameFollowerTests {
         #expect(rig.clock.due.isEmpty, "idle once the drag stopped")
     }
 
-    @Test("A move read while focus went to another window is dropped; a move of another window re-reads the focused one, once per frame")
+    @Test("A move read while focus went to another window is dropped, held by the mouse too; a move of another window re-reads the focused one, once per frame")
     func staleAndOtherWindows() {
         let rig = Self.rig()
         rig.costs.fullReads = 0
@@ -200,6 +201,37 @@ struct FrameFollowerTests {
         rig.observers.windowMoved(Self.dragged) // its frame read lands for a window no longer focused
         rig.clock.advance(to: 2)
         #expect(rig.surface.shown == Self.border(CGRect(x: 1000, y: 50, width: 800, height: 600)))
+        focusMovesMidDrag()
+    }
+
+    /// drag-3: the drag's thread moves the border it was lent; focus moving on mid-drag takes it back, so the line
+    /// stays on the newly focused window and the drag moves it no more.
+    private func focusMovesMidDrag() {
+        let rig = Self.rig()
+        rig.mouse.held = true
+        rig.observers.windowMoved(Self.dragged)
+        for ms in 1...40 {
+            rig.clock.advance(to: Double(ms) / 1000)
+            rig.move(CGRect(x: 100 + 4 * ms, y: 50, width: 800, height: 600))
+            if ms % 8 == 0 { rig.mouse.tick?() }
+        }
+        let lent = rig.costs.threadMoves
+        let other = CGRect(x: 1000, y: 50, width: 800, height: 600)
+        rig.observers.readFocusedWindow = { _ in
+            ("Other", WindowBorder.Window(frame: other, subrole: "AXStandardWindow", fullScreen: false, minimised: false, windowID: 8), Self.other)
+        }
+        rig.observers.refreshFocusedWindow()
+        for ms in 41...80 {
+            rig.clock.advance(to: Double(ms) / 1000)
+            rig.move(CGRect(x: 100 + 4 * ms, y: 50, width: 800, height: 600))
+            if ms % 8 == 0 { rig.mouse.tick?() }
+        }
+        rig.mouse.held = false
+        rig.mouse.tick?()
+        rig.clock.advance(to: 2)
+        #expect(lent >= 3, "the drag moved the lent border: \(lent)")
+        #expect(rig.costs.threadMoves == lent, "none once focus moved on")
+        #expect(rig.surface.shown == Self.border(other))
     }
 
     /// Live bug 2026-11-16 and tester bug 9 (2026-11-19): a move read takes the app's frame, which it has at once (the
