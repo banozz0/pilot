@@ -2,7 +2,7 @@
   "id": "network",
   "title": "Network",
   "icon": "🌐",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Your network in one place: Wi-Fi, local and public IP, the router and DNS; the devices on your network; your Tailscale devices with Connect and Disconnect; the ports your programs hold, freed in a click; your SSH hosts, opened in a terminal; and a speed test on macOS's own networkQuality.",
   "examples": ["Type network overview: your Wi-Fi and its signal, your local and public IP and DNS; Return on Router opens its admin page", "Type kill port, then 3000: the node process holding it; Return quits it. Tailscale devices, SSH hosts and Speedtest are found by their names too"],
   "runtime": "process",
@@ -22,13 +22,7 @@
     { "name": "kill-port", "title": "Ports: kill port", "icon": "🔌", "mode": "list", "run": "main.py" },
     { "name": "ssh-hosts", "title": "SSH hosts", "icon": "🖥️", "mode": "list", "run": "main.py" },
     { "name": "speedtest", "title": "Speedtest", "icon": "⚡", "mode": "detail", "run": "main.py" },
-    { "name": "kill", "title": "Quit a port's program", "mode": "no-view", "hidden": true, "run": "main.py" },
-    { "name": "ssh-connect", "title": "Connect to SSH host", "mode": "no-view", "hidden": true, "run": "main.py" },
-    { "name": "ssh-filter", "title": "Filter SSH hosts", "mode": "no-view", "hidden": true, "run": "main.py" },
-    { "name": "speedtest-start", "title": "Run speed test", "mode": "no-view", "hidden": true, "run": "main.py" },
-    { "name": "speedtest-stop", "title": "Stop speed test", "mode": "no-view", "hidden": true, "run": "main.py" },
-    { "name": "devices-scan", "title": "Look for devices", "mode": "no-view", "hidden": true, "run": "main.py" },
-    { "name": "view", "title": "Show a part of the Network page", "mode": "no-view", "hidden": true, "run": "main.py" },
+    { "name": "step", "title": "A step of Network's lists and page", "mode": "no-view", "hidden": true, "run": "main.py" },
     { "name": "page", "title": "Network page", "mode": "no-view", "hidden": true, "run": "main.py" },
     { "name": "bar", "title": "Tailscale in the menu bar", "mode": "no-view", "hidden": true, "run": "main.py" }
   ]
