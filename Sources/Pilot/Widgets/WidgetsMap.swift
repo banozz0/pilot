@@ -91,23 +91,23 @@ struct WidgetsMap: View {
         .accessibilityHidden(true)
     }
 
-    /// A widget on the map: its icon and name while there is room, its icon alone when small; the picked one ringed in
-    /// the accent.
+    /// A widget on the map: its icon over its whole name while there is room, beside it when short, its icon alone when
+    /// small (its name in the tooltip), never a name cut or broken inside a word; the picked one ringed in the accent.
     private func tile(_ placement: Widget.Placement, picked: Bool) -> some View {
         let widget = widget(placement.widget)
         let shape = RoundedRectangle(cornerRadius: 5, style: .continuous)
         let title = widget?.title ?? placement.widget
         return Button { selected = placement.id } label: {
-            ViewThatFits(in: .vertical) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(widget?.icon ?? "🧩").font(.system(size: 13))
-                    Text(title).font(ink.ui(10.5, .semibold)).foregroundStyle(ink.text).lineLimit(2)
+            ViewThatFits(in: [.horizontal, .vertical]) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(widget?.icon ?? "🧩").font(.system(size: 14))
+                    Text(title).font(ink.ui(11, .semibold)).foregroundStyle(ink.text).fixedSize()
                 }
                 HStack(spacing: 4) {
                     Text(widget?.icon ?? "🧩").font(.system(size: 11))
-                    Text(title).font(ink.ui(10, .semibold)).foregroundStyle(ink.text).lineLimit(1)
+                    Text(title).font(ink.ui(10, .semibold)).foregroundStyle(ink.text).fixedSize()
                 }
-                Text(widget?.icon ?? "🧩").font(.system(size: 11))
+                Text(widget?.icon ?? "🧩").font(.system(size: 13))
             }
             .padding(5)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)

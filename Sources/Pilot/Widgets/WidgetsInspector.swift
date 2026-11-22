@@ -12,26 +12,40 @@ struct WidgetsInspector: View {
     let previews: WidgetPreviews
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(alignment: .firstTextBaseline, spacing: 8) {
-                Text(widget.icon).font(.system(size: 17))
-                Text(widget.title).font(ink.ui(15, .semibold)).foregroundStyle(ink.text).lineLimit(1)
-                WidgetsTrust(trust: model.trust[widget.id])
-                Spacer(minLength: 6)
-                Button("Remove") { model.remove(placement) }.buttonStyle(.pilot)
+        // The preview beside its settings while there is room for both; above them in a narrow window.
+        ViewThatFits(in: .horizontal) {
+            HStack(alignment: .top, spacing: 18) {
+                preview.frame(width: 200)
+                VStack(alignment: .leading, spacing: 6) {
+                    title
+                    WidgetsSettingsRows(model: model, widget: widget, placement: placement)
+                }
+                .frame(minWidth: 300)
             }
-            HStack(alignment: .top, spacing: 14) {
-                preview.frame(width: 156)
+            VStack(alignment: .leading, spacing: 10) {
+                title
+                preview.frame(maxWidth: 280)
                 WidgetsSettingsRows(model: model, widget: widget, placement: placement)
             }
         }
     }
 
+    /// Its icon and name, its trust, and Remove at the right.
+    private var title: some View {
+        HStack(alignment: .center, spacing: 8) {
+            Text(widget.icon).font(.system(size: 16))
+            Text(widget.title).font(ink.ui(15, .semibold)).foregroundStyle(ink.text).lineLimit(1)
+            WidgetsTrust(trust: model.trust[widget.id])
+            Spacer(minLength: 6)
+            Button("Remove") { model.remove(placement) }.buttonStyle(.pilot).help("Take it off the desktop")
+        }
+    }
+
     @ViewBuilder private var preview: some View {
         if let tile = previews.models[widget.id] {
-            WidgetPreview(widget: widget, model: tile, shot: previews.shots[widget.id], height: 156)
+            WidgetPreview(widget: widget, model: tile, shot: previews.shots[widget.id], height: 170)
         } else {
-            WidgetPreview.ground(Look.shared.theme).frame(height: 156).clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+            WidgetPreview.ground(Look.shared.theme).frame(height: 170).clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
         }
     }
 }

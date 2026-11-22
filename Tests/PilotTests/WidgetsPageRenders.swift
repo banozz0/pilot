@@ -102,16 +102,120 @@ struct WidgetsPageRenders {
     ]
 
     /// The desktop map (Sven, 2026-11-15, Q252 B), from a store laid out like Sven's desktop on the grid, one widget on
-    /// Home, one of his own and one locked: Instrument with Glass on, Dracula and Porcelain, at the page's width in the
-    /// window's first size (716) and its least (688, the list folded away), Weather picked; Home's switch; then Add, which
-    /// must land on free cells clear of the rest, written to `widgets-map/add.txt`.
+    /// Home, one of his own and one locked: Instrument with Glass on, Dracula and Porcelain (the theme each drew, written to
+    /// `widgets-map/themes.txt`), at the page's width in the window's first size (1296: 1063) and its least (780: 571),
+    /// Weather picked, and at the first with nothing picked; then Add, which must land on free cells clear of the rest,
+    /// written to `widgets-map/add.txt`.
     /// `CFFIXED_USER_HOME=<tmp> PILOT_RENDER_DIR=<tmp> PILOT_RESOURCES=Packaging swift test --filter WidgetsPageRenders/map`
-    @Test("The desktop map, light and dark, at 1000 and 760, Home, and Add on free cells",
+    @Test("The desktop map, light and dark, at the window's first and least widths, Home, and Add on free cells",
           .enabled(if: env["PILOT_RENDER_DIR"] != nil && env["CFFIXED_USER_HOME"] != nil))
     func map() async throws {
         let dir = try WidgetRenders.dir().deletingLastPathComponent().appending(path: "widgets-map")
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         testApp()
+        let (model, store) = try Self.sven()
+        let display = Self.display, grid = Widget.Grid(area: display.room)
+        let weather = try #require(model.placements.first { $0.widget == "desk-weather" })
+        // A placement saved on Home before T6 is kept in the file, and the page leaves it out.
+        #expect(model.placements.contains { $0.onHome })
+
+        let look = Look.shared
+        let saved = (look.themeID, look.style, look.glass)
+        defer { (look.themeID, look.style, look.glass) = saved; look.packChanged(nil) }
+        var themes: [String] = []
+        func shoot(_ name: String, width: CGFloat, selected: String?, previews: WidgetPreviews) throws {
+            let page = MonitorsGround {
+                WidgetsPage(model: model, reads: false, previews: previews, displays: [display], selected: selected)
+            }
+            .styled(.page(.widgets)).frame(width: width, height: 3600).pilotTheme(look: look)
+            try RestyledRenders.writeTrimmed(rendered(page), from: 0, to: dir.appending(path: "\(name).png"))
+        }
+        look.style = .instrument
+        look.glass = true
+        // The page's width in the window's first size (1296) and its least (780), beside the sidebar.
+        let first = LookRenders.page(AppWindowController.size.width), least = LookRenders.page(AppWindowController.minSize.width)
+        for (scheme, theme) in [("dark", "dracula"), ("light", "porcelain")] {
+            // No pack worn over the theme, so the theme picked is the one drawn.
+            look.packChanged(nil)
+            look.themeID = theme
+            themes.append("\(scheme): asked \(theme), drawn \(look.theme.id), dark \(look.theme.dark), pack \(look.packAppearance != nil)")
+            let previews = try await Self.previews(model, store: store, look: look)
+            try shoot("map-\(scheme)-\(Int(first))", width: first, selected: weather.id, previews: previews)
+            try shoot("map-\(scheme)-\(Int(least))", width: least, selected: weather.id, previews: previews)
+            try shoot("map-\(scheme)-\(Int(first))-none", width: first, selected: nil, previews: previews)
+        }
+        try themes.joined(separator: "\n").appending("\n").write(to: dir.appending(path: "themes.txt"), atomically: true, encoding: .utf8)
+        // Add from the list: the first free cells nearest the room's top left, clear of every other widget.
+        let note = try #require(ReadyWidgets.widget(ReadyWidgets.note))
+        // Snap to grid off for the save, so the desk does not put it on this Mac's own display's grid instead.
+        let snapped = WidgetSnap.shared.on
+        WidgetSnap.shared.on = false
+        let added = model.add(note, on: display)
+        WidgetSnap.shared.on = snapped
+        let placement = try #require(model.placements.first { $0.id == added })
+        let frame = placement.frame(on: display.frame), cell = grid.cell(nearest: frame)
+        let others = model.placements.filter { !$0.onHome && $0.id != added }.map { grid.cell(nearest: $0.frame(on: display.frame)) }
+        #expect(grid.holds(frame) && !others.contains { $0.overlaps(cell) }, "Add landed on a taken cell: \(cell.line)")
+        try "added \(note.id) at cell \(cell.line), on the grid: \(grid.holds(frame)), overlaps: \(others.filter { $0.overlaps(cell) }.map(\.line))\n"
+            .write(to: dir.appending(path: "add.txt"), atomically: true, encoding: .utf8)
+        look.packChanged(nil)
+        look.themeID = "dracula"
+        let previews = try await Self.previews(model, store: store, look: look)
+        try shoot("map-dark-added", width: first, selected: added, previews: previews)
+    }
+
+    /// How long the page takes to build, lay out and draw as a first visit does, in a window-sized host so its lazy list
+    /// builds only what shows: previews empty (a first visit draws before they load) and filled, Sven's desktop, nothing
+    /// picked, at the window's first size. The first run warms up and is left out; the median of the rest, in a debug
+    /// build, written to `widgets-map/first-visit.txt`: a before-and-after measure, not the app's own milliseconds.
+    /// `CFFIXED_USER_HOME=<tmp> PILOT_RENDER_DIR=<tmp> PILOT_RESOURCES=Packaging swift test --filter WidgetsPageRenders/firstVisit`
+    @Test("The page's first build, laid out and drawn, timed", .enabled(if: env["PILOT_RENDER_DIR"] != nil && env["CFFIXED_USER_HOME"] != nil))
+    func firstVisit() async throws {
+        let dir = try WidgetRenders.dir().deletingLastPathComponent().appending(path: "widgets-map")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        testApp()
+        let (model, store) = try Self.sven()
+        let look = Look.shared
+        let saved = (look.themeID, look.style, look.glass)
+        defer { (look.themeID, look.style, look.glass) = saved; look.packChanged(nil) }
+        look.packChanged(nil)
+        (look.themeID, look.style, look.glass) = ("dracula", .instrument, true)
+        let size = CGSize(width: LookRenders.page(AppWindowController.size.width), height: AppWindowController.size.height)
+        func once(_ previews: WidgetPreviews) -> Double {
+            drawingQoS()
+            let start = ContinuousClock.now
+            let host = NSHostingView(rootView: MonitorsGround {
+                WidgetsPage(model: model, reads: false, previews: previews, displays: [Self.display])
+            }.styled(.page(.widgets)).frame(width: size.width, height: size.height).pilotTheme(look: look))
+            host.frame = CGRect(origin: .zero, size: size)
+            let window = NSWindow(contentRect: host.frame, styleMask: [.borderless], backing: .buffered, defer: false)
+            window.isReleasedWhenClosed = false
+            window.contentView = host
+            host.layoutSubtreeIfNeeded()
+            host.display()
+            CATransaction.flush()
+            let ms = (ContinuousClock.now - start) / .milliseconds(1)
+            window.close()
+            PanelTestSupport.pump(0.05)
+            return ms
+        }
+        func median(_ previews: WidgetPreviews) -> (Double, [Double]) {
+            _ = once(previews)
+            let runs = (0..<9).map { _ in once(previews) }
+            return (runs.sorted()[runs.count / 2], runs)
+        }
+        let empty = median(WidgetPreviews())
+        let filled = median(try await Self.previews(model, store: store, look: look))
+        func line(_ name: String, _ r: (Double, [Double])) -> String {
+            "\(name): median \(String(format: "%.1f", r.0)) ms (\(r.1.map { String(format: "%.1f", $0) }.joined(separator: " ")))"
+        }
+        try [line("previews empty", empty), line("previews filled", filled), "page \(Int(size.width)) × \(Int(size.height)), debug build"]
+            .joined(separator: "\n").appending("\n").write(to: dir.appending(path: "first-visit.txt"), atomically: true, encoding: .utf8)
+    }
+
+    /// Sven's desktop (`desk`) laid out on the grid, a widget on Home, one of his own and one locked, in a store of its
+    /// own in the moved home; the page's model reading it.
+    static func sven() throws -> (WidgetsPageModel, WidgetStore) {
         let store = try DeskWidgetRenders.store()
         try FileManager.default.createDirectory(at: store.widgets, withIntermediateDirectories: true)
         let mine = try WidgetRenders.make(store, "standup", """
@@ -134,44 +238,7 @@ struct WidgetsPageRenders {
         let model = WidgetsPageModel()
         model.store = store
         model.reload()
-        let weather = try #require(model.placements.first { $0.widget == "desk-weather" })
-        // A placement saved on Home before T6 is kept in the file, and the page leaves it out.
-        #expect(model.placements.contains { $0.onHome })
-
-        let look = Look.shared
-        let saved = (look.themeID, look.style, look.glass)
-        defer { (look.themeID, look.style, look.glass) = saved }
-        func shoot(_ name: String, width: CGFloat, selected: String?, previews: WidgetPreviews) throws {
-            let page = MonitorsGround {
-                WidgetsPage(model: model, reads: false, previews: previews, displays: [display], selected: selected)
-            }
-            .styled(.page(.widgets)).frame(width: width, height: 2400).pilotTheme(look: look)
-            try RestyledRenders.writeTrimmed(rendered(page), from: 0, to: dir.appending(path: "\(name).png"))
-        }
-        look.style = .instrument
-        look.glass = true
-        for (scheme, theme) in [("dark", "dracula"), ("light", "porcelain")] {
-            look.themeID = theme
-            let previews = try await Self.previews(model, store: store, look: look)
-            try shoot("map-\(scheme)-1000", width: 716, selected: weather.id, previews: previews)
-            try shoot("map-\(scheme)-760", width: 688, selected: weather.id, previews: previews)
-        }
-        // Add from the list: the first free cells nearest the room's top left, clear of every other widget.
-        let note = try #require(ReadyWidgets.widget(ReadyWidgets.note))
-        // Snap to grid off for the save, so the desk does not put it on this Mac's own display's grid instead.
-        let snapped = WidgetSnap.shared.on
-        WidgetSnap.shared.on = false
-        let added = model.add(note, on: display)
-        WidgetSnap.shared.on = snapped
-        let placement = try #require(model.placements.first { $0.id == added })
-        let frame = placement.frame(on: display.frame), cell = grid.cell(nearest: frame)
-        let others = model.placements.filter { !$0.onHome && $0.id != added }.map { grid.cell(nearest: $0.frame(on: display.frame)) }
-        #expect(grid.holds(frame) && !others.contains { $0.overlaps(cell) }, "Add landed on a taken cell: \(cell.line)")
-        try "added \(note.id) at cell \(cell.line), on the grid: \(grid.holds(frame)), overlaps: \(others.filter { $0.overlaps(cell) }.map(\.line))\n"
-            .write(to: dir.appending(path: "add.txt"), atomically: true, encoding: .utf8)
-        look.themeID = "dracula"
-        let previews = try await Self.previews(model, store: store, look: look)
-        try shoot("map-dark-added", width: 716, selected: added, previews: previews)
+        return (model, store)
     }
 
     /// Each widget's preview in the theme of the moment, with fixed data.

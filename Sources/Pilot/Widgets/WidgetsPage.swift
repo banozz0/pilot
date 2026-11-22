@@ -207,11 +207,13 @@ final class WidgetsPageModel {
 
 }
 
-/// Look's Widgets page (T20; the desktop map, Sven 2026-11-15, Q252 B): the main display drawn small with each widget
-/// where it sits on the grid, Snap to grid on the map; a click on one shows its own settings under the map, saved as
-/// they are set; and every widget to add in a list, Add putting it on the map's first free cells. Trust this widget, Duplicate to edit, Show folder, Uninstall
-/// and Import (a folder or .zip, or one dropped on the page) as before. Each widget's own CPU and memory are not shown:
-/// a page's WebContent process is not Pilot's to attribute.
+/// Look's Widgets page (T20; the desktop map, Sven 2026-11-15, Q252 B; grouped, Sven 2026-11-22 on build 3142: "widgets
+/// page can look better and be more organised"): three titled panels. On the desktop: the display and Snap to grid over
+/// the main display drawn small, each widget where it sits on the grid; a click on one shows its preview and its own
+/// settings under the map, saved as they are set. In the Dock: where the dock's widgets are set. Add a widget: every
+/// widget, Pilot's then yours, each with its preview and Add putting it on the map's first free cells. Trust this widget,
+/// Duplicate to edit, Show folder, Uninstall and Import (a folder or .zip, or one dropped on the page) as before. Each
+/// widget's own CPU and memory are not shown: a page's WebContent process is not Pilot's to attribute.
 struct WidgetsPage: View {
     @Environment(\.ink) private var ink
     /// The previews are read while the page shows, not while it is kept hidden behind another (page-switch-3).
@@ -233,34 +235,44 @@ struct WidgetsPage: View {
         _selected = State(initialValue: selected)
     }
 
-    static let intro = "Your desktop as it is. Click a widget to change it, or add one from the list."
+    static let intro = "Your desktop as it is. Click a widget to change it, or add one below."
     static let introInfo = "Widgets show on an empty workspace, or while Show desktop holds the windows out. On the desktop, Hyper+drag moves one and Hyper+right-drag resizes it, on whole cells of the grid while Snap to grid is on; a right-click (or a Hyper+right click) opens its menu. A widget from elsewhere arrives locked: it runs nothing until you trust it."
     static let snapInfo = "Desktop widgets move and resize a whole cell at a time, so their edges and gaps line up; the grid shows faintly while you drag one. Turned on, the ones already there go to the nearest free cells."
 
     var body: some View {
         let shown = displays ?? WidgetsDisplay.live()
         let display = shown.first { $0.id == displayID } ?? shown.first
+        let onMap = display.map { one in model.placements.filter { one.holds($0, among: shown) } } ?? []
         KitPage(intro: Self.intro, info: Self.introInfo) {
             if let note = model.note { Text(note).font(ink.ui(12)).foregroundStyle(ink.text2).padding(.top, 6) }
-            VStack(alignment: .leading, spacing: 10) {
-                header(shown, display)
-                if let display {
-                    WidgetsMap(display: display, placements: model.placements.filter { display.holds($0, among: shown) }, widget: model.widget,
-                               snap: snap.on, selected: $selected)
-                }
-            }
-            .padding(.top, 8)
-            ViewThatFits(in: .horizontal) {
-                HStack(alignment: .top, spacing: 20) {
-                    inspector.frame(minWidth: 400, maxWidth: .infinity, alignment: .topLeading)
-                    list(display, shown).frame(width: 290)
-                }
-                VStack(alignment: .leading, spacing: 20) {
+            TitledPanel(title: "On the desktop") {
+                VStack(alignment: .leading, spacing: 12) {
+                    header(shown, display, count: onMap.count)
+                    if let display {
+                        WidgetsMap(display: display, placements: onMap, widget: model.widget, snap: snap.on, selected: $selected)
+                    }
+                    InstrumentRule()
                     inspector
-                    list(display, shown)
                 }
             }
-            .padding(.top, 16).padding(.bottom, 20)
+            .padding(.top, 14)
+            TitledPanel(title: "In the Dock") {
+                HStack(spacing: 10) {
+                    Image(systemName: "dock.rectangle").font(.system(size: 14)).foregroundStyle(ink.text2).frame(width: 20)
+                    Text("The dock's widgets are picked and ordered on its own page.").font(ink.ui(12.5)).foregroundStyle(ink.text2)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Spacer(minLength: 8)
+                    AccentLink(title: "Dock") { DockPageFocus.shared.open(nil) }.fixedSize()
+                }
+            }
+            .padding(.top, 14)
+            TitledPanel(title: "Add a widget") {
+                WidgetsAddList(model: model, previews: previews) { widget in
+                    if let display { selected = model.add(widget, on: display, among: shown) }
+                    else { model.add(widget) }
+                }
+            }
+            .padding(.top, 14).padding(.bottom, 20)
         }
         .task(id: pageShown) {
             guard reads, pageShown else { return }
@@ -279,18 +291,20 @@ struct WidgetsPage: View {
         .modifier(WidgetsPageSheets(model: model))
     }
 
-    /// The display and its size (a menu with more than one), Snap to grid.
-    private func header(_ shown: [WidgetsDisplay], _ display: WidgetsDisplay?) -> some View {
+    /// The display, its size and how many widgets it holds (a menu with more than one display), then Snap to grid.
+    private func header(_ shown: [WidgetsDisplay], _ display: WidgetsDisplay?, count: Int) -> some View {
         HStack(spacing: 12) {
             if let display {
+                let words = "\(display.name) · \(display.size)"
                 if shown.count > 1 {
-                    Menu("\(display.name) · \(display.size)") {
+                    Menu(words) {
                         ForEach(shown) { one in Button("\(one.name) · \(one.size)") { displayID = one.id; selected = nil } }
                     }
                     .fixedSize()
                 } else {
-                    Text("\(display.name) · \(display.size)").font(ink.ui(11.5)).foregroundStyle(ink.text2).lineLimit(1)
+                    Text(words).font(ink.ui(12.5, .semibold)).foregroundStyle(ink.text).lineLimit(1)
                 }
+                Text(count == 1 ? "1 widget" : "\(count) widgets").font(ink.mono(11)).foregroundStyle(ink.text2).lineLimit(1)
             }
             Spacer(minLength: 8)
             HStack(spacing: 6) {
@@ -305,15 +319,12 @@ struct WidgetsPage: View {
         if let placement = model.placements.first(where: { $0.id == selected && !$0.onHome }), let widget = model.widget(placement.widget) {
             WidgetsInspector(model: model, placement: placement, widget: widget, previews: previews)
         } else {
-            Text("Click a widget on the map to change it.")
-                .font(ink.ui(12)).foregroundStyle(ink.text2)
-        }
-    }
-
-    private func list(_ display: WidgetsDisplay?, _ shown: [WidgetsDisplay]) -> some View {
-        WidgetsAddList(model: model) { widget in
-            if let display { selected = model.add(widget, on: display, among: shown) }
-            else { model.add(widget) }
+            HStack(spacing: 10) {
+                Image(systemName: "cursorarrow.click").font(.system(size: 14)).foregroundStyle(ink.text2).frame(width: 20)
+                Text("Click a widget on the map to see it here with its settings.").font(ink.ui(12.5)).foregroundStyle(ink.text2)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(.vertical, 4)
         }
     }
 }
