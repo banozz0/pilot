@@ -154,6 +154,35 @@ public struct MenuIcon: Hashable, Sendable {
         return cleanRules.first { $0.0.contains(where: names) }?.1 ?? glyph("archivebox", .good)
     }
 
+    /// A Clean part (one of Mole's sections) wears its section's own glyph from `cleanSections`, else its kind's glyph
+    /// filled, in its tint: two parts never share a row's look, even where their tints match (browsers and mail are both
+    /// accent) or their first lines are of one kind (App caches, Apps & utilities, App leftovers), and a part is told from
+    /// its own lines. Every glyph in `cleanRules` has a filled form.
+    public static func cleanPart(title: String, section: String) -> MenuIcon {
+        if let own = cleanSections[section] { return own }
+        let kind = clean(title: title, section: section)
+        return glyph(kind.symbol + ".fill", kind.tint)
+    }
+
+    /// Mole 1.72's sections (clean.sh's start_section names), each its own glyph.
+    private static let cleanSections: [String: MenuIcon] = [
+        "System": glyph("gearshape.fill", .neutral),
+        "External volume": glyph("externaldrive.fill", .neutral),
+        "User essentials": glyph("person.crop.circle.fill", .good),
+        "App caches": glyph("square.stack.3d.up.fill", .third),
+        "Browsers": glyph("safari.fill", .accent),
+        "Cloud & Office": glyph("icloud.fill", .second),
+        "Developer tools": glyph("hammer.fill", .amber),
+        "Apps & utilities": glyph("wrench.and.screwdriver.fill", .third),
+        "Virtualization": glyph("cube.fill", .neutral),
+        "Application Support": glyph("folder.fill", .neutral),
+        "App leftovers": glyph("app.badge.fill", .third),
+        "Device backups & firmware": glyph("iphone", .second),
+        "Time Machine": glyph("clock.arrow.circlepath", .second),
+        "Large files": glyph("doc.fill", .amber),
+        "Project artifacts": glyph("shippingbox.fill", .amber),
+    ]
+
     private static let cleanRules: [([String], MenuIcon)] = [
         (["chrome", "safari", "firefox", "brave", "edge", "arc", "zen", "browser", "service worker"], glyph("safari", .accent)),
         (["xcode", "simulator", "derived", "vs code", "npm", "yarn", "pip", "cargo", "gradle", "go", "developer", "homebrew", "brew"],
