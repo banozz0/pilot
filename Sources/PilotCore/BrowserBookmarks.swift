@@ -24,9 +24,14 @@ public enum BrowserBookmarks {
         case firefox(folder: String)
     }
 
-    /// A browser the menu reads, by the name its rows show.
+    /// A browser the menu reads, by the name its rows show. `bundles` are every app that keeps its folder, its own first
+    /// (WebSearch.firefox's builds); `bundle` is the one its rows open in, the one installed once BrowserReader looked.
     public struct Browser: Equatable, Sendable {
-        public let name: String, bundle: String, family: Family
+        public let name: String, family: Family, bundles: [String]
+        public var bundle: String
+        public init(name: String, bundle: String, family: Family, also: [String] = []) {
+            self.name = name; self.bundle = bundle; self.family = family; bundles = [bundle] + also
+        }
     }
 
     /// The browsers read, Safari first, then every Chromium browser WebSearch knows (its one table of their folders), then
@@ -38,7 +43,10 @@ public enum BrowserBookmarks {
         }
         + [("Firefox", "org.mozilla.firefox", "Firefox"), ("Zen", "app.zen-browser.zen", "zen"), ("LibreWolf", "org.mozilla.librewolf", "librewolf"),
            ("Floorp", "one.ablaze.floorp", "Floorp"), ("Waterfox", "net.waterfox.waterfox", "Waterfox")]
-        .map { Browser(name: $0.0, bundle: $0.1, family: .firefox(folder: $0.2)) }
+        .map { name, bundle, folder in
+            Browser(name: name, bundle: bundle, family: .firefox(folder: folder),
+                    also: WebSearch.firefox.filter { $0.value == folder && $0.key != bundle }.keys.sorted())
+        }
 
     /// The names rows show where a browser's folder does not say it.
     private static let names = [

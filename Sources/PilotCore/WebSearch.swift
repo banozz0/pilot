@@ -72,17 +72,18 @@ public enum WebSearch {
     /// The Chromium family's data folders, guarded like Chrome's (WebSearchReader.settingsFile).
     public static let chromiumFolders = chromium.values.map(\.folder)
 
+    /// The Firefox family by bundle id: its folder under Application Support, which a browser's other builds share
+    /// (Developer Edition and Nightly keep Firefox's, LibreWolf's community build LibreWolf's).
+    public static let firefox: [String: String] = [
+        "org.mozilla.firefox": "Firefox", "org.mozilla.firefoxdeveloperedition": "Firefox", "org.mozilla.nightly": "Firefox",
+        "app.zen-browser.zen": "zen", "org.mozilla.librewolf": "librewolf", "io.gitlab.librewolf-community": "librewolf",
+        "one.ablaze.floorp": "Floorp", "net.waterfox.waterfox": "Waterfox",
+    ]
+
     public static func family(bundleID: String) -> Family {
         if let browser = chromium[bundleID] { return .chromium(folder: browser.folder, standard: browser.standard) }
-        switch bundleID {
-        case "com.apple.Safari", "com.apple.SafariTechnologyPreview": return .safari
-        case "org.mozilla.firefox", "org.mozilla.firefoxdeveloperedition", "org.mozilla.nightly": return .firefox(folder: "Firefox")
-        case "app.zen-browser.zen": return .firefox(folder: "zen")
-        case "org.mozilla.librewolf", "io.gitlab.librewolf-community": return .firefox(folder: "librewolf")
-        case "one.ablaze.floorp": return .firefox(folder: "Floorp")
-        case "net.waterfox.waterfox": return .firefox(folder: "Waterfox")
-        default: return .other
-        }
+        if let folder = firefox[bundleID] { return .firefox(folder: folder) }
+        return ["com.apple.Safari", "com.apple.SafariTechnologyPreview"].contains(bundleID) ? .safari : .other
     }
 
     // MARK: Chromium

@@ -34,7 +34,7 @@ final class BrowserSettings {
 ///   here: without it they are skipped. Safari's is TCC's; since macOS 27 Chrome's and Firefox's profiles under Application
 ///   Support are guarded too (Apple DTS: "This is an intentional change", developer forums thread 847030; build 2495's log:
 ///   sandboxd "checking kTCCServiceSystemPolicyAppDataDetailed for com.google.Chrome", then "Data Access Blocked" naming
-///   Pilot, commit ca8ee1d).
+///   Pilot, commit ca8ee1d). A browser whose app is gone is skipped: its folder is never read (`installed`).
 /// - A running browser's lock. A SQLite file (History, History.db, places.sqlite) is never opened: it and its `-wal` and
 ///   `-journal` are copied (a clone on APFS) into a folder only this user reads, the copy queried, the folder removed at
 ///   once. Bookmarks' JSON and plist are read whole, as any reader does.
@@ -77,15 +77,38 @@ actor BrowserReader {
     /// Each bookmarks file's rows, by its path, with the date and size it was read at.
     private var kept: [String: (stamp: String, rows: [MenuEntry])] = [:]
 
+    /// The browsers installed at the menu's last open; nil before the first.
+    private var onMac: [BrowserBookmarks.Browser]?
+
+    /// The known browsers with an app on the Mac that keeps their folder (LaunchServices, by any of `bundles`), each to
+    /// open in the first found: one removed leaves its profile folder behind (Zen's, combined-10 build 3091), which is
+    /// never read. Asked on the reader, off the main thread the key tap runs on. An isolated run's stand-in is the seam's
+    /// `Applications/<bundle id>`, as its host runs on a real Mac whose apps would decide.
+    nonisolated static func installed() -> [BrowserBookmarks.Browser] {
+        let home = isIsolatedTestRun ? home() : nil
+        guard !isIsolatedTestRun || home != nil else { return [] }
+        func found(_ bundle: String) -> Bool {
+            if let home { return FileManager.default.fileExists(atPath: home.appending(path: "Applications/\(bundle)").path) }
+            return NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundle) != nil
+        }
+        return BrowserBookmarks.browsers.compactMap { browser in
+            browser.bundles.first(where: found).map { var on = browser; on.bundle = $0; return on }
+        }
+    }
+
     /// Every browser's bookmarks as menu rows, a file read again only when it changed. Each address once per browser (a
     /// row's target is the browser and the address), however many of its profiles keep it, and none whose target a row
     /// in `listed` already has (an `apps.url:` bind of the same page), as the menu keys its rows by target.
     /// The switch is read first, past the one wait, so a read asked for before it went off and reaching the reader after
-    /// forget() keeps nothing; one already reading finishes before forget() runs.
+    /// forget() keeps nothing; one already reading finishes before forget() runs. The menu asks as it opens, switch on or
+    /// off, so the browsers installed are looked up then, once, for `hist`'s reads too.
     func bookmarks(listed: Set<MenuEntry.Target> = []) async -> [MenuEntry] {
-        guard await MainActor.run(body: { BrowserSettings.shared.bookmarks }), let home = Self.readableHome() else { kept = [:]; return [] }
+        let on = await MainActor.run { BrowserSettings.shared.bookmarks }
+        let browsers = Self.installed()
+        onMac = browsers
+        guard on, let home = Self.readableHome() else { kept = [:]; return [] }
         var rows: [MenuEntry] = [], paths = Set<String>(), seen = listed
-        for browser in BrowserBookmarks.browsers {
+        for browser in browsers {
             for profile in BrowserBookmarks.profiles(browser, home: home) {
                 let path = profile.bookmarks.path
                 guard let stamp = Self.stamp(profile.bookmarks) else { kept[path] = nil; continue }
@@ -103,14 +126,16 @@ actor BrowserReader {
     func forget() { kept = [:] }
 
     /// The history pages `words` find in every browser's history, the last visited first; while history is off, only the
-    /// row that says so. Read from copies, never kept.
+    /// row that says so. Read from copies, never kept; only the installed browsers' (as the menu last opened).
     func history(_ words: [String], on: Bool) -> [MenuEntry] {
         guard on else { return [BrowserBookmarks.historyOff] }
         guard let home = Self.home() else { return [] }
         // Switched on without Full Disk Access: the row that opens its setting, as the Files view's does.
         guard isIsolatedTestRun || FileIndex.hasFullDiskAccess() else { return [BrowserBookmarks.historyNeedsAccess] }
+        let browsers = onMac ?? Self.installed()
+        onMac = browsers
         var found: [(page: BrowserBookmarks.Page, browser: BrowserBookmarks.Browser)] = []
-        for browser in BrowserBookmarks.browsers {
+        for browser in browsers {
             for profile in BrowserBookmarks.profiles(browser, home: home) {
                 let pages = Self.copied(profile.history) { BrowserBookmarks.history(browser.family, copy: $0, words: words) } ?? []
                 found += pages.map { ($0, browser) }
