@@ -116,7 +116,8 @@ struct SnippetsEditorTests {
         #expect(Snippet.firstLine("  ") == nil)
         let now = Date(timeIntervalSince1970: 1_791_450_000)
         let placeholders = SnippetsEditor.placeholders(now: now)
-        #expect(placeholders.map(\.token) == ["{date}", "{time}", "{clipboard}", "{argument}", "{cursor}"])
+        #expect(placeholders.map(\.token) == ["{date}", "{date +7d}", "{time}", "{clipboard}", "{clipboard 1}", "{selection}", "{argument}",
+                                               "{argument name}", "{cursor}"])
         let date = Snippet(name: "", keyword: "", text: "{date}").expanded(now: now, clipboard: nil).text
         #expect(placeholders[0].line.hasSuffix(date))
     }

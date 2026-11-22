@@ -54,6 +54,10 @@ public enum RowAction: String, Equatable, Sendable {
             let values = try? URL(fileURLWithPath: path).resourceValues(forKeys: [.isDirectoryKey, .isPackageKey])
             let folder = values?.isDirectory == true && values?.isPackage != true
             return [.open, .openWith, .convert, .showInFinder, .copyPath] + (folder ? [.searchInside] : []) + [.trash] + aliased
+        // The call to join (MeetingLink, T5) is a one-off link: no bind, as it has no favourite or alias.
+        case .action where row.leadsRoot: return [.run, .copyID]
+        // A row on the selection the menu opened over (T11): no bind, as its id is no registered action.
+        case .action where row.onSelection: return [.run, .copyID]
         case .action: return [.run] + (row.kind == .command ? [.openApp] : []) + [.setBind, .copyID] + aliased
         case .package: return [.install] + aliased
         case .branch: return [.open] + (row.extensionID == nil ? [] : [.uninstall]) + aliased

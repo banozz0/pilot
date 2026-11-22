@@ -56,7 +56,8 @@ final class QuicklinkBook {
 }
 
 /// `links.open:<id>` opens that quicklink, `links.open:<id>:<words>` with its {query} filled (the root's answer), in the
-/// default browser. The link is read again as it runs, so an edit since is followed.
+/// default browser, its other placeholders filled as it opens (PlaceholderReads). The link is read again as it runs, so
+/// an edit since is followed.
 @MainActor
 enum QuicklinksModule {
     static func dynamic(_ id: String, book: QuicklinkBook = .shared,
@@ -64,9 +65,11 @@ enum QuicklinksModule {
         guard let (linkID, query) = Quicklink.parse(id), let link = book.link(linkID) else { return nil }
         return Action(id: id, label: link.name, module: .apps) {
             guard let link = book.link(linkID) else { return HUD.tip("That quicklink is gone.") }
-            guard let url = link.url(query: query ?? "") else { return HUD.tip("\(link.name) is not a link Pilot can open.") }
-            qlog.notice("quicklink \(link.keyword, privacy: .public)")
-            open(url)
+            PlaceholderReads.read(for: link.url) { values in
+                guard let url = link.url(query: query ?? "", values: values) else { return HUD.tip("\(link.name) is not a link Pilot can open.") }
+                qlog.notice("quicklink \(link.keyword, privacy: .public)")
+                open(url)
+            }
         }
     }
 }

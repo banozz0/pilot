@@ -42,7 +42,8 @@ extension ControlVerbs {
             return .object(Self.row(alias))
         }))
 
-        register(ControlCollection("quicklinks", help: "Named URLs opened from Hyper+Space; {query} takes what is typed after the keyword.",
+        register(ControlCollection("quicklinks", help: "Named URLs opened from Hyper+Space; {query} takes what is typed after the keyword, and "
+                                   + "{selection}, {clipboard} and {date +7d} fill as it opens. A link holding one reads back filled, its clipboard and selection as samples.",
                                    fields: [.init("name", help: "the link's name"), .init("keyword", help: "lowercase letters and digits, e.g. gh"),
                                             .init("url", help: "https://…, {query} where the words go"), Self.idField("link", "its links.open:<id> action and binds")],
                                    rowKey: "keyword", list: { .array(s.quicklinks.links.map { .object(Self.row($0)) }) },
@@ -60,10 +61,10 @@ extension ControlVerbs {
         }))
 
         register(ControlCollection("snippets", help: "Saved text pasted by its keyword in any app or from Hyper+Space. Each row reads back its preview "
-                                   + "(clipboard and argument as samples) and where its keyword expands: anywhere, word-start, menu-only, or never when a "
+                                   + "(clipboard, selection and argument as samples) and where its keyword expands: anywhere, word-start, menu-only, or never when a "
                                    + "snippet higher in the list has it (clashesWith); typedText is the text typing its keyword pastes now.",
                                    fields: [.init("name", help: "the snippet's name"),
-                                            .init("text", help: "what it pastes; {date}, {time}, {clipboard}, {argument}, {cursor} are filled in"),
+                                            .init("text", help: "what it pastes; {date +7d format=\"d MMM\"}, {time}, {clipboard}, {clipboard 1}, {selection}, {argument}, {argument name}, {cursor} are filled in, each with | uppercase, lowercase, trim or encode"),
                                             .init("keyword", help: "typed in any app to paste it, e.g. ;sig; none: Hyper+Space only", required: false),
                                             Self.idField("snippet", "its place in the list")],
                                    rowKey: "id", list: { Self.snippets(s.snippets) },
@@ -313,8 +314,15 @@ extension ControlVerbs {
 
     private static func row(_ a: Alias) -> [String: JSONValue] { ["alias": .string(a.alias), "row": .string(a.key), "title": .string(a.title)] }
 
+    /// `filled`: a link holding a placeholder besides {query}, as Return would open it now, with the samples' clipboard
+    /// and selection (PlaceholderReads.samples) and {query} empty.
     private static func row(_ l: Quicklink) -> [String: JSONValue] {
-        ["id": .string(l.id.uuidString), "name": .string(l.name), "keyword": .string(l.keyword), "url": .string(l.url), "action": .string(l.actionID)]
+        var row: [String: JSONValue] = ["id": .string(l.id.uuidString), "name": .string(l.name), "keyword": .string(l.keyword),
+                                        "url": .string(l.url), "action": .string(l.actionID)]
+        if !Placeholders.kinds(in: l.url).subtracting([.query]).isEmpty, let filled = l.url(query: "", values: PlaceholderReads.samples()) {
+            row["filled"] = .string(filled.absoluteString)
+        }
+        return row
     }
 
     private static func snippets(_ library: SnippetLibrary) -> JSONValue {
@@ -322,11 +330,12 @@ extension ControlVerbs {
         return .array(library.snippets.map { .object(row($0, editor)) })
     }
 
-    /// Its preview as the editor shows it, never the real pasteboard, and where its keyword expands (the editor's note).
+    /// Its preview as the editor shows it, the clock's now (PlaceholderReads) and samples for the rest, never the real
+    /// pasteboard or selection, and where its keyword expands (the editor's note).
     private static func row(_ s: Snippet, _ editor: SnippetsEditor) -> [String: JSONValue] {
+        let preview = s.expanded(PlaceholderReads.samples()).text
         var row: [String: JSONValue] = ["id": .string(s.id.uuidString), "name": .string(s.name), "keyword": .string(s.keyword), "text": .string(s.text),
-                                        "preview": .string(s.expanded(now: Date(), clipboard: SnippetsEditor.sampleClipboard,
-                                                                      argument: SnippetsEditor.sampleArgument).text)]
+                                        "preview": .string(preview)]
         let expands: String
         switch editor.note(for: s) {
         case .menuOnly: expands = "menu-only"

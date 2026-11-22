@@ -42,6 +42,10 @@ enum AppsModule {
         // Pilot Files (P85, spec pilot-1.1 T10, T11): its own window; no default key, as Hyper+F is the Files role, which can pick it (Q800).
         add(&registry, "pilotFiles", "Pilot Files", nil, keywords: "finder browse folders files window") { FilesWindows.shared.show() }
         add(&registry, "appsMenu", "Apps menu", nil) { PilotMenu.shared.toggle(branch: .apps) }
+        // Act on any selection (spec launcher-best T11): no default key, as Hyper+A is Capture full screen.
+        add(&registry, "selectionActions", "Act on the selection", nil, keywords: "selection selected text files actions send buffer universal") {
+            SelectionActions.open()
+        }
         // Command-Tab's next and previous app, no switcher shown (Arrows preset, Sven's Q439).
         AppOrder.shared.start()
         // Each app's menu bar, read as it comes forward and saved, so the menu lists a closed app's menu items (T41).

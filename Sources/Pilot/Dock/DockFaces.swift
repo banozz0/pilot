@@ -118,7 +118,14 @@ struct DockWidgetView: View {
         // apps, the battery's, the clock's month and events.
         case .system: barPopover(reader.options.stats.map(BarKind.init), under: view)
         case .battery: barPopover([.battery], under: view)
-        case .nextEvent, .timeline, .clock: barPopover([.clock], under: view)
+        // Next event joins the call near now, as the menu's Join row does (MeetingLink, spec launcher-best T5).
+        case .nextEvent, .timeline, .clock:
+            if widget == .nextEvent, let call = MeetingLink.joinable(reader.calendar.events, at: reader.sources.readings.now)?.call {
+                BarPanel.shared.close()
+                AppsModule.openWeb(call)
+            } else {
+                barPopover([.clock], under: view)
+            }
         case .note:
             BarPanel.shared.close()
             NotesPanel.shared.show(note: NoteStore.scratch)

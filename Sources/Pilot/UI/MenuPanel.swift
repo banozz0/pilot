@@ -49,6 +49,10 @@ final class PilotMenu {
     private var appMenus: [String: [MenuEntry]] = [:]
     private var boundMenuRoutes: Set<String> = []
     private var appMenuRead: Task<Void, Never>?
+    /// The `hist` search in flight (T9); a newer keystroke cancels it.
+    private var historyRead: Task<Void, Never>?
+    /// History rows (or the off row) were provided for this menu, so leaving `hist` drops them.
+    private var historyShown = false
     /// The GIFs folder's pictures, read each time Stickers and GIFs opens.
     private var stickerFiles: [StickerFile] = []
     /// GIPHY in Stickers and GIFs (story 164): its key, read off the main thread as the branch opens; what the last
@@ -245,6 +249,9 @@ final class PilotMenu {
                                 aliases: AliasBook.shared.aliases, root: MenuRootSettings.shared.root.listed)
         nav.fileFilters.hidden = FileSearchSettings.shared.showHidden
         show(nav)
+        historyShown = false
+        provideCall()
+        provideBookmarks()
         model?.onFileQuery = { [weak self] in self?.searchFiles($0) }
         model?.onQuery = { [weak self] in
             self?.searchEmoji($0)
@@ -260,6 +267,7 @@ final class PilotMenu {
             self?.translate($0)
             self?.define($0)
             self?.provideSnippets($0)
+            self?.provideHistory($0)
         }
         model?.onBranch = { [weak self] in self?.branchOpened($0) }
         model?.onRowShown = { [weak self] in self?.moreGiphy(near: $0) }
@@ -269,7 +277,7 @@ final class PilotMenu {
         branchOpened(branch, opening: true)
         provideWindows(engine)
         provideMenuItems(listed: entries)
-        provideFinderSelection()
+        provideSelection()
         refreshRates()
         // The file index reads its saved index now, so it answers by the time Sven reaches the Files view.
         FileIndex.shared.start()
@@ -401,8 +409,63 @@ final class PilotMenu {
                                  branches: installed.branches,
                                  switches: SystemModule.switchStates(), fills: ScriptCommand.fills(scripts))
         // Each app's own commands (P38), from the drive catalogue.
-        return MenuEntries.commands(built, catalogue: DriveModule.catalogue, installed: Set(apps.map(\.bundle)))
-            + MenuEntries.quicklinks(QuicklinkBook.shared.links)
+        let links = QuicklinkBook.shared.links
+        let rows = MenuEntries.commands(built, catalogue: DriveModule.catalogue, installed: Set(apps.map(\.bundle))) + MenuEntries.quicklinks(links)
+        // Your fallbacks ride with the entries, which the navigator sets aside (T4); the call to join, as last read, leads
+        // the root (T5).
+        return rows + MenuFallbacks.templates(MenuRootSettings.shared.fallbacks ?? [], links: links, among: rows) + joinRow(DockCalendar.shared.calls)
+    }
+
+    /// The menu's Join row for the call near now among `calls` (MeetingLink, T5); none when no call is near.
+    static func joinRow(_ calls: [ClockEvent], now: Date = .now) -> [MenuEntry] {
+        MeetingLink.joinable(calls, at: now).flatMap { MeetingLink.row($0, at: now) }.map { [$0] } ?? []
+    }
+
+    /// The call to join (T5): Calendar read off the main thread as the menu opens, never asked; its row leads the root
+    /// once read, as Return's first pick.
+    private func provideCall() {
+        guard let model else { return }
+        Task { [weak self] in
+            let now = Date()
+            let calls = await DockCalendar.shared.readCalls(now: now)
+            guard self?.model === model else { return }
+            model.nav.lead(Self.joinRow(calls, now: now))
+        }
+    }
+
+    /// The browsers' bookmarks (T9), read off the main thread as the menu opens while Launcher › More rows has them on;
+    /// a file read again only when it changed (BrowserReader). Counts only in the log, never a title or an address.
+    private func provideBookmarks() {
+        guard let model, BrowserSettings.shared.bookmarks else { return }
+        Task { [weak self] in
+            let rows = await BrowserReader.shared.bookmarks()
+            guard self?.model === model else { return }
+            model.nav.provide(.bookmark, rows)
+            mlog.notice("menu: \(rows.count) bookmarks listed")
+        }
+    }
+
+    /// `hist <words>` at the root (T9): once typing pauses for 0.2 s, the history pages they find, read from copies of the
+    /// browsers' databases; while history is off (Q328) only the row saying so, nothing read. Any other search drops them.
+    private func provideHistory(_ query: String) {
+        historyRead?.cancel()
+        guard let model else { return }
+        guard model.nav.branch == nil, let words = BrowserBookmarks.historyWords(query) else {
+            // Dropped once on leaving `hist`, not on every keystroke (a scan of every entry).
+            if historyShown { historyShown = false; model.nav.provide(.history, []) }
+            return
+        }
+        historyShown = true
+        let on = BrowserSettings.shared.history
+        guard on else { return model.nav.provide(.history, [BrowserBookmarks.historyOff]) }
+        historyRead = Task { [weak self] in
+            try? await Task.sleep(for: .milliseconds(200))
+            guard !Task.isCancelled else { return }
+            let rows = await BrowserReader.shared.history(words, on: true)
+            guard !Task.isCancelled, let self, self.model === model else { return }
+            model.nav.provide(.history, rows)
+            mlog.notice("menu: \(rows.count) history pages listed")
+        }
     }
 
     /// Every window on every workspace, read once as the menu opens (the tiler's `list-windows --all`).
@@ -490,14 +553,20 @@ final class PilotMenu {
         }
     }
 
-    /// Dress selected folders and Reset folder icons while Finder is in front with folders selected (P43), the selection
-    /// read off the main thread.
-    private func provideFinderSelection() {
-        guard let model, previousApp?.bundleIdentifier == DesktopIcons.finder else { return }
+    /// What is selected in the app Sven was in, read off the main thread after the menu is up (SelectionActions, spec
+    /// launcher-best T11): over selected text Translate, Ask AI and Act on the selection… lead the root; over Finder's
+    /// files a search finds their actions, and Dress selected folders and Reset folder icons with folders among them
+    /// (P43); Act on the buffered files… leads while the buffer holds any. Nothing read is logged.
+    private func provideSelection() {
+        guard let model else { return }
+        let front = previousApp, commands = AICommandBook.shared.commands.map { (id: $0.id, title: $0.title) }
         Task { [weak self] in
-            let rows = await Task.detached(priority: .userInitiated) { FolderDesigns.rows(FolderDesigns.finderSelection()) }.value
+            let read = await SelectionActions.read(front: front)
+            let folders = read.folders
+            let designs = folders.isEmpty ? [] : await Task.detached(priority: .userInitiated) { FolderDesigns.rows(folders) }.value
             guard self?.model === model else { return }
-            model.nav.provide(.selection, rows)
+            SelectionActions.held = read.held
+            model.nav.provide(.selection, designs + SelectionActions.rows(read.held, buffer: SelectionActions.buffer, commands: commands))
         }
     }
 
@@ -1146,6 +1215,8 @@ final class PilotMenu {
         case 125: .down
         case 36, 76: flags.contains(.command) ? .commandReturn : .return
         case 53: .escape
+        // ⌫ goes up a browsed folder on an empty search (FolderBrowse); the navigator hands any other back to the field.
+        case 51 where flags.isDisjoint(with: [.command, .option, .control, .shift]): .deleteBackward
         case 123 where plainArrow: .left
         case 124 where plainArrow: .right
         case 48: flags.contains(.shift) ? .backTab : .tab
@@ -1404,8 +1475,8 @@ final class PilotMenu {
     /// A Cmd+K action the navigator leaves to the panel (card agent-bo-95422968). Uninstall and opening never get here:
     /// the navigator searches Remove for the first and picks the row for the second.
     private func perform(_ action: RowAction, on entry: MenuEntry) {
-        // A menu item's key names its title path (T41 review): private.
-        if entry.kind == .menuItem {
+        // A menu item's key names its title path (T41 review), a browser page's its address (T9): private.
+        if Self.isPrivate(entry) {
             mlog.notice("menu: \(action.rawValue, privacy: .public) on \(LinkToken.redact(entry.frecencyKey ?? "a row"), privacy: .private)")
         } else {
             mlog.notice("menu: \(action.rawValue, privacy: .public) on \(LinkToken.redact(entry.frecencyKey ?? "a row"), privacy: .public)")
@@ -1493,6 +1564,10 @@ final class PilotMenu {
         case .app(let bundle):
             close(restoreFocus: false)
             mlog.notice("menu: open \(bundle, privacy: .public) \(RunCaller.with("menu") { AppsModule.open(bundle: bundle) } ? "opened" : "not installed", privacy: .public)")
+        // A browser's bookmark or history page (T9): opened in that browser with nothing logged but the browser.
+        case .action(let id) where entry.kind == .bookmark || entry.kind == .history:
+            close(restoreFocus: false)
+            mlog.notice("menu: a browser page opened in \(BrowserReader.open(id) ?? "no browser", privacy: .public)")
         // Another app's menu item (provideAppMenu): that app comes forward, then its item is pressed.
         case .action(let id) where entry.kind == .menuItem && entry.app != previous?.bundleIdentifier:
             guard let bundle = entry.app, let route = DriveRoute(id: id) else { return }
@@ -1504,6 +1579,15 @@ final class PilotMenu {
             let words = model?.nav.clipboardWords
             close(restoreFocus: true)
             runWhenFrontmost(previous, id) { ClipboardHistory.shared.toggle(searching: words) }
+        // Act on the selection the menu opened over (T11): with that app in front again, as an action runs.
+        case .action(let id) where SelectionActions.owns(id):
+            close(restoreFocus: true)
+            let web: (String) -> Void = { [weak self] text in
+                let choice = self?.webSearch ?? WebSearchReader.read(browser: WebSearchReader.defaultBrowser(), fullDiskAccess: FileIndex.hasFullDiskAccess())
+                WebSearchReader.open(text, with: choice)
+            }
+            let frontmost: (@escaping () -> Void) -> Void = { [weak self] body in self?.runWhenFrontmost(previous, id, body) }
+            frontmost { SelectionActions.run(id, web: web, frontmost: frontmost) }
         case .action(let id):
             close(restoreFocus: true)
             runWhenFrontmost(previous, id) { RunCaller.with("menu") { Engine.shared?.action(id)?.run() } }
@@ -1628,18 +1712,36 @@ final class PilotMenu {
         }
     }
 
+    /// A row whose title or key names what another app holds (a menu item, a browser's page), logged only privately.
+    static func isPrivate(_ entry: MenuEntry) -> Bool { [.menuItem, .bookmark, .history].contains(entry.kind) }
+
     /// Stores the pick and logs the order it was picked from, so a ranking change shows in the log.
     private func record(_ entry: MenuEntry, from nav: MenuNavigator) {
         guard let key = entry.frecencyKey else { return }
-        frecency?.record(key, at: .now)
+        frecency?.record(key, at: .now, query: Self.learnedQuery(nav))
         guard let picks = frecency else { return }
         saveFrecency(picks)
         let top = nav.rows.prefix(3).map(\.title).joined(separator: ", ")
-        // An app's menu item names what the app holds now and then (T41 review): its titles stay out of the public log.
-        guard entry.kind != .menuItem, !nav.rows.prefix(3).contains(where: { $0.kind == .menuItem }) else {
+        // An app's menu item names what the app holds now and then (T41 review), a bookmark the page it keeps (T9): their
+        // titles and keys stay out of the public log.
+        guard !Self.isPrivate(entry), !nav.rows.prefix(3).contains(where: Self.isPrivate) else {
             return mlog.notice("menu: picked \(LinkToken.redact(key), privacy: .private) from \(top, privacy: .private), frecency \(picks.score(key, now: .now))")
         }
         mlog.notice("menu: picked \(LinkToken.redact(key), privacy: .public) for \"\(nav.query, privacy: .public)\" from \(top, privacy: .public), frecency \(picks.score(key, now: .now))")
+    }
+
+    /// The query a pick teaches (learned abbreviations, spec launcher-best T7): the root search's alone, where
+    /// MenuNavigator lists the learned row first; nil in a branch or a picker.
+    static func learnedQuery(_ nav: MenuNavigator) -> String? { nav.branch == nil && !nav.isList ? nav.query : nil }
+
+    /// A pick from the pilot command (`pilot menu pick`, T7) on the menu's own copy, as Return makes it, the row never
+    /// run; the picks as saved; nil when the file does not read, so nothing is saved over it.
+    func recordPick(_ key: String, query: String) throws -> Frecency? {
+        guard var picks = frecency else { return nil }
+        picks.record(key, at: .now, query: query)
+        try frecencyStore.save(picks)
+        frecency = picks
+        return picks
     }
 
     /// Reset ranking from the pilot command (CLI W4), on the menu's own copy, so its next pick saves no stale one; the
@@ -2017,7 +2119,7 @@ extension MenuModel {
     /// A root search: no branch, something typed or a kind Tab shows (Sven 2026-10-12), so the kind tabs show.
     var searchingRoot: Bool { nav.branch == nil && (!nav.query.isEmpty || nav.only != nil) }
     /// The root as it opens: no branch, nothing typed, no kind shown, not a picker.
-    var atRoot: Bool { nav.branch == nil && !nav.isList && nav.query.isEmpty && nav.only == nil }
+    var atRoot: Bool { nav.branch == nil && !nav.isList && nav.query.isEmpty && nav.only == nil && nav.folder == nil }
     /// A narrow list (the root's, Trigger's, Capture's) shows only the current row's count, key and chevron
     /// (mockup A); the wide ones keep each row's key.
     var quiet: Bool { shape == .narrow }

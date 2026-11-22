@@ -19,14 +19,23 @@ final class MenuRootSettings {
             defaults.set(root.extras.sorted(), forKey: Self.extrasKey)
         }
     }
+    /// Your fallbacks (spec launcher-best T4): what a search that finds nothing offers, in order (MenuFallbacks ids);
+    /// nil is Pilot's own offers.
+    var fallbacks: [String]? { didSet { defaults.set(fallbacks, forKey: Self.fallbacksKey) } }
     @ObservationIgnored private let defaults: UserDefaults
-    private static let orderKey = "menu.rootOrder", hiddenKey = "menu.rootHidden", extrasKey = "menu.rootExtras"
+    private static let orderKey = "menu.rootOrder", hiddenKey = "menu.rootHidden", extrasKey = "menu.rootExtras", fallbacksKey = "menu.fallbacks"
 
     init(defaults: UserDefaults = .pilot()) {
         self.defaults = defaults
         root = MenuRoot(order: defaults.stringArray(forKey: Self.orderKey) ?? [],
                         hidden: Set(defaults.stringArray(forKey: Self.hiddenKey) ?? []),
                         extras: Set(defaults.stringArray(forKey: Self.extrasKey) ?? []))
+        fallbacks = defaults.stringArray(forKey: Self.fallbacksKey)
+    }
+
+    /// The fallbacks there are to pick today: Pilot's four, your quicklinks taking words, your scripts asking for them.
+    static func fallbackOptions(fills: [String: String] = ScriptCommand.fills(ScriptCommand.find())) -> [MenuFallbacks.Option] {
+        MenuFallbacks.options(links: QuicklinkBook.shared.links, fills: fills)
     }
 
     /// Today's branches in today's order, all shown, the extras switched on after System; stale ids go too. Which extras

@@ -22,12 +22,16 @@ enum CalendarAccess { case undetermined, granted, denied }
     func reminders(in range: DateInterval) async -> [ClockEvent]
     /// Calls `changed` whenever Calendar or Reminders change, in Pilot or anywhere else.
     func observe(_ changed: @escaping @MainActor () -> Void)
+    /// The timed events in `range` that link to a video call (ClockEvent.call, spec launcher-best T5), read off the main
+    /// thread and never asking; none without full access.
+    func calls(in range: DateInterval) async -> [ClockEvent]
 }
 
 extension CalendarStore {
     func requestRemindersAccess() async {}
     func reminders(in range: DateInterval) async -> [ClockEvent] { [] }
     func observe(_ changed: @escaping @MainActor () -> Void) {}
+    func calls(in range: DateInterval) async -> [ClockEvent] { [] }
 }
 
 /// The clock's popover's events (card agent-bo-95423011, SPEC story 168): the store is made, and access asked, only
@@ -144,13 +148,28 @@ final class ClockCalendar {
     }
 
     func events(in range: DateInterval) -> [ClockEvent] {
-        store.events(matching: store.predicateForEvents(withStart: range.start, end: range.end, calendars: nil)).map { event in
-            let holiday = event.calendar.map { ClockEvent.isHolidays(calendar: $0.title, readOnly: !$0.allowsContentModifications, birthdays: $0.type == .birthday) }
-            return ClockEvent(title: event.title ?? "", start: event.startDate, end: event.endDate, allDay: event.isAllDay,
-                              colour: Self.paint(event.calendar),
-                              url: event.eventIdentifier.flatMap { ClockEvent.calendarURL(id: $0, occurrence: event.hasRecurrenceRules ? event.startDate : nil) },
-                              holiday: holiday ?? false)
-        }
+        store.events(matching: store.predicateForEvents(withStart: range.start, end: range.end, calendars: nil)).map(Self.clock)
+    }
+
+    /// EventKit's fetch is synchronous, so it runs detached; the store is only read there (Apple's events(matching:) notes
+    /// suggest a background thread for it).
+    func calls(in range: DateInterval) async -> [ClockEvent] {
+        guard await Self.hasFullAccess(to: .event) else { return [] }
+        nonisolated(unsafe) let store = store
+        return await Task.detached {
+            store.events(matching: store.predicateForEvents(withStart: range.start, end: range.end, calendars: nil))
+                .filter { !$0.isAllDay }.map(Self.clock).filter { $0.call != nil }
+        }.value
+    }
+
+    /// An event as the clock, the Dock and the menu's Join row read it; its call link from its URL, location or notes.
+    nonisolated private static func clock(_ event: EKEvent) -> ClockEvent {
+        let holiday = event.calendar.map { ClockEvent.isHolidays(calendar: $0.title, readOnly: !$0.allowsContentModifications, birthdays: $0.type == .birthday) }
+        return ClockEvent(title: event.title ?? "", start: event.startDate, end: event.endDate, allDay: event.isAllDay,
+                          colour: paint(event.calendar),
+                          url: event.eventIdentifier.flatMap { ClockEvent.calendarURL(id: $0, occurrence: event.hasRecurrenceRules ? event.startDate : nil) },
+                          holiday: holiday ?? false,
+                          call: event.isAllDay ? nil : MeetingLink.find(in: [event.url?.absoluteString, event.location, event.notes]))
     }
 
     /// A calendar's or a Reminders list's colour.

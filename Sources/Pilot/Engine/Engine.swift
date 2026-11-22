@@ -971,7 +971,8 @@ final class Engine {
         let kept = observers.tiler.workspaces
         // A ring made since launch lists beside the registered ones.
         let rings = rings.store.rings.rings.map(\.openID).filter { registry.actions[$0] == nil }.compactMap { action($0).map(Self.info) }
-        return BindsPage.actions(registered: registry.sorted.map(Self.info) + rings, store: binds.store) { action($0).map(Self.info) }
+        // So does an AI command saved since (launcher-best T10).
+        return BindsPage.actions(registered: registry.sorted.map(Self.info) + rings + AICommands.infos(), store: binds.store) { action($0).map(Self.info) }
             .filter { !Workspaces.isRemoved(action: $0.id, kept: kept) }
     }
 
@@ -1015,6 +1016,8 @@ final class Engine {
         if Extension.input(inAction: id) != nil { return ExtensionsModule.dynamic(id) }
         // A ring (P74): built each time from the rings as they are, so one made or renamed after launch shows.
         if let ring = RingsModule.dynamic(id, rings: rings) { return ring }
+        // And an AI command (launcher-best T10), so an edited prompt is read fresh and a removed one stops resolving.
+        if let command = AICommands.dynamic(id) { return command }
         if let action = registry.actions[id] ?? dynamicActions[id] { return action }
         // A settings row's pane or window place (SettingsSearch, Q131).
         if let setting = SettingsActions.dynamic(id) { return setting }

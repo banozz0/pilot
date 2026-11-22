@@ -572,6 +572,8 @@ public struct MenuEntry: Identifiable, Equatable, Sendable {
         case command
         /// An action on what is selected in the app in front, Finder's folders (P43): its provider never replaces the actions.
         case selection
+        /// A browser's bookmark, and a page from its history behind `hist` (BrowserBookmarks, spec launcher-best T9).
+        case bookmark, history
 
         /// Tab's cycle at the root search, as the wireframe orders it: every kind (nil), then each with a chip; branches,
         /// emoji and answers have none (cards agent-bo-95422931 and agent-bo-95422933).
@@ -591,6 +593,8 @@ public struct MenuEntry: Identifiable, Equatable, Sendable {
             case .branch: "Menu"
             case .menuItem: "Menu item"
             case .setting: "Setting"
+            case .bookmark: "Bookmark"
+            case .history: "History"
             case .file, .answer: nil
             }
         }
@@ -660,6 +664,18 @@ public struct MenuEntry: Identifiable, Equatable, Sendable {
     /// The words in a file's picture the text index matched (Homy-style Files): a row found by them alone lists after
     /// the name hits, in the index's order, and its icon wears text.viewfinder.
     public var matchedWords: String?
+    /// One of your fallbacks (spec launcher-best T4): the navigator keeps it aside from the entries and offers it, with
+    /// what was typed, when a root search finds nothing (MenuFallbacks).
+    public var isFallback = false
+    /// Leads the root before typing, above its branches, and a search finds it as any row: the call to join (MeetingLink,
+    /// spec launcher-best T5). Never a pick, so frecency, favourites and aliases leave it alone.
+    public var leadsRoot = false
+    /// Acts on what was selected as the menu opened (SelectionActions, spec launcher-best T11): never a pick, as that
+    /// selection is gone by the next open.
+    public var onSelection = false
+    /// One of those that leads the root before typing, above the call to join and the branches: Translate and Ask AI on
+    /// selected text, Act on the buffered files.
+    public var leadsSelection = false
 
     public init(title: String, target: Target, home: MenuBranch? = nil, detail: String? = nil, detailIsKey: Bool = false,
                 running: Bool = false, inSearch: Bool = true, keywords: String? = nil, isAnswer: Bool = false, ownKind: Kind? = nil,
@@ -677,7 +693,8 @@ public struct MenuEntry: Identifiable, Equatable, Sendable {
     public var id: Target { target }
     /// The row's id in the frecency store: its target's, except an answer's, which answers one search and is never a pick
     /// (a translation's Download row opens an action, yet picking it says nothing about that action).
-    public var frecencyKey: String? { isAnswer ? nil : target.key }
+    /// A browser history page (T9) is never one either, so no address visited lands in Pilot's ranking, nor a selection's row (T11).
+    public var frecencyKey: String? { isAnswer || leadsRoot || onSelection || ownKind == .history ? nil : target.key }
     /// What a search matches: the title and any keywords.
     public var searchText: String { keywords.map { "\(title) \($0)" } ?? title }
     /// An answer is its own kind (card agent-bo-95422933), so providing answers never replaces the rows of the kind its
@@ -712,7 +729,7 @@ public struct MenuEntry: Identifiable, Equatable, Sendable {
     /// A row that offers to look elsewhere for what was typed, not a result: Search files, Search to install, Search the
     /// web, and the Ask AI row every root search ends its hits with (an `ask …` typed is an answer, a result).
     public var isOffer: Bool {
-        if target.isSearchOffer { return true }
+        if target.isSearchOffer || isFallback { return true }
         if case .ask = target { return !isAnswer }
         return false
     }
@@ -755,6 +772,8 @@ public struct MenuNavigator: Sendable {
         /// ⌘1 to ⌘9 in Line (menu-morph T3): run the list's nth row, as a click on it would. PilotMenu sends it only
         /// outside the Files view, where ⌘1 to ⌘3 stay its filters.
         case number(Int)
+        /// ⌫: up a folder on an empty search in a browsed folder (FolderBrowse); anywhere else the field deletes.
+        case deleteBackward
     }
     /// Providers that search as Sven types (files, Homebrew) start at this many characters.
     public static let minimumQuery = 2
@@ -808,6 +827,11 @@ public struct MenuNavigator: Sendable {
     /// A deeper branch an extra row opened from the root before typing (Notes from More rows, Sven 2026-10-21): up from it
     /// goes back to the root, not to the branch it lives in; nil when the open branch was reached through its parent.
     private var rooted: MenuBranch?
+    /// The folder → opened from a folder row (FolderBrowse, spec launcher-best T8), where browsing began and the kind Tab
+    /// showed there, which Escape goes back to; nil when no folder is browsed.
+    private var browse: (folder: String, from: Spot, only: MenuEntry.Kind?)?
+    /// The browsed folder: its items are the rows and the search filters them by name.
+    public var folder: String? { browse?.folder }
     /// Ranks again only when it changes: the search field hands back its text as it takes focus, which must not move the
     /// selection to the first row.
     public var query = "" { didSet { if query != oldValue { refresh() } } }
@@ -824,6 +848,9 @@ public struct MenuNavigator: Sendable {
     /// Every root branch, which a root search finds, hidden ones and Config too; `rootRows` the ones the root lists before typing,
     /// in Sven's order (MenuRoot, story 152).
     private let branchRows: [MenuEntry], rootRows: [MenuEntry]
+    /// Your fallbacks in your order (MenuEntry.isFallback), kept out of the entries so no search or provider touches them;
+    /// none is Pilot's own offers.
+    private let fallbackRows: [MenuEntry]
     /// A picker: the root lists the entries themselves, not the branches.
     public let isList: Bool
     /// A picker's heading, "Audio output"; nil is the menu's own.
@@ -837,6 +864,8 @@ public struct MenuNavigator: Sendable {
     /// `root` orders and hides the root's branches and places the extras switched on among them.
     public init(entries: [MenuEntry], branch: MenuBranch? = nil, frecency: Frecency = Frecency(), favourites: Set<String> = [],
                 aliases: Aliases = Aliases(), root: MenuRoot = MenuRoot(), now: Date = .now) {
+        fallbackRows = entries.filter(\.isFallback)
+        let entries = entries.filter { !$0.isFallback }
         self.entries = entries
         isList = false
         isLive = false
@@ -881,6 +910,7 @@ public struct MenuNavigator: Sendable {
         boost = [:]
         branchRows = []
         rootRows = []
+        fallbackRows = []
         refresh()
     }
 
@@ -891,7 +921,8 @@ public struct MenuNavigator: Sendable {
 
     /// Back at `spot` (Escape in a picker it opened): its branch and search, its row selected while it is listed.
     public mutating func go(to spot: Spot) {
-        let moved = branch != spot.branch || only != nil
+        let moved = branch != spot.branch || only != nil || browse != nil
+        browse = nil
         branch = spot.branch
         rooted = spot.rooted
         only = nil
@@ -996,6 +1027,14 @@ public struct MenuNavigator: Sendable {
         rerank(keeping: nil)
     }
 
+    /// The rows leading the root (MenuEntry.leadsRoot) replaced, as the call to join arrives once Calendar is read after
+    /// the menu opened (T5); a row arrowed onto stays selected, else the first, so Return joins.
+    public mutating func lead(_ rows: [MenuEntry]) {
+        guard entries.filter(\.leadsRoot) != rows else { return }
+        entries = entries.filter { !$0.leadsRoot } + rows
+        rerank(keeping: selection == 0 ? nil : selected?.id)
+    }
+
     /// Ranks again after the entries, picks or favourites changed, keeping `id` selected while it is listed.
     private mutating func rerank(keeping id: MenuEntry.Target?) {
         boost = frecency.boosts(for: entries.compactMap(\.target.key), now: now)
@@ -1011,15 +1050,24 @@ public struct MenuNavigator: Sendable {
         kindCounts = [:]
         guard let branch else {
             if isList { rows = MenuGroups.bySection(rank(entries)); return }
+            // A browsed folder's items, or a path typed at the root ("~/code/pi", "/Applications/"): read from the folder, no
+            // index asked.
+            if let (dir, stem) = browse.map({ ($0.folder, query) }) ?? (only == nil ? FolderBrowse.typed(query, home: home) : nil) {
+                rows = FolderBrowse.rows(in: dir, matching: stem, home: home, showHidden: fileFilters.hidden)
+                return
+            }
             // Nothing typed: the root's branches, or the kind Tab shows (rootKind); the Files view (also when Search inside
             // emptied it) lists nothing until Sven types.
             guard !query.isEmpty else {
-                rows = only.map(rootKind) ?? rootRows
+                rows = only.map(rootKind) ?? entries.filter(\.leadsSelection) + entries.filter(\.leadsRoot) + rootRows
                 kindCounts = Dictionary(uniqueKeysWithValues: [.app, .window, .action].map { k in (k, entries.count { Self.listedUntyped($0) && $0.kind.tab == k }) })
                 return
             }
             // The emoji picker's alias and words ("em funny", T37): the emoji they find as EmojiSearch ordered them, best first.
             if only == nil, emojiWords != nil { rows = entries.filter { $0.kind == .emoji && $0.home == nil }; return }
+            // `hist <words>` (BrowserBookmarks, spec launcher-best T9): only the history pages its provider found, the last
+            // visited first, or the row saying history is off; no offers, as nothing else is searched.
+            if only == nil, BrowserBookmarks.historyWords(query) != nil { rows = entries.filter { $0.kind == .history }; return }
             // An app's alias and words ("bw generate password", T40): that app's actions the words find, best first; none
             // found is today's search, so an alias that is also a word ("am") still searches.
             switch aliasRoute {
@@ -1072,8 +1120,11 @@ public struct MenuNavigator: Sendable {
             // group, or first when nothing matched (Sven 2026-10-16, Q174; Search files joined them, Q182).
             let fallbacks = only == nil ? Self.fallbacks(query, after: rows, via: webVia) : []
             let install = InstallSearch.Query(query).map { [MenuEntry(title: "Search to install \"\($0.text)\"", target: .searchInstall($0.text))] } ?? []
-            // Nothing else matched: Install's search is offered too, first when the text reads as an app's name.
-            if only == nil, rows.isEmpty, !install.isEmpty {
+            // Nothing matched and you picked your fallbacks (Launcher › Your menu, T4): those alone, in your order.
+            if only == nil, rows.isEmpty, !fallbackRows.isEmpty {
+                rows = fallbackRows.compactMap { MenuFallbacks.offer($0, query, own: fallbacks + files + install) }
+            } else if only == nil, rows.isEmpty, !install.isEmpty {
+                // Nothing else matched: Install's search is offered too, first when the text reads as an app's name.
                 let offers = install + files
                 rows = fallbacks + (Self.looksLikeApp(query) ? offers : offers.reversed())
             } else if only == .package {
@@ -1125,9 +1176,11 @@ public struct MenuNavigator: Sendable {
     }
 
     /// The row of `searched` whose alias the query is, before `rows` (card agent-bo-95423037), found even when its name
-    /// does not match; `rows` as they are when the query is no alias.
+    /// does not match; failing a typed alias, the row the query was learned for (Frecency.learned, spec launcher-best T7:
+    /// "ps" picked twice for Photoshop); `rows` as they are when the query is neither.
     private func aliasFirst(_ rows: [MenuEntry], of searched: [MenuEntry]) -> [MenuEntry] {
-        guard let key = aliases.key(for: query), let row = searched.first(where: { $0.frecencyKey == key }) else { return rows }
+        guard let key = aliases.key(for: query) ?? frecency.learned(query), let row = searched.first(where: { $0.frecencyKey == key })
+        else { return rows }
         return [row] + rows.filter { $0.id != row.id }
     }
 
@@ -1219,6 +1272,11 @@ public struct MenuNavigator: Sendable {
             guard let row = selected else { return .handled }
             return pick(row)
         case .right:
+            // A folder row opens, with text typed too ("~/code/pi" then → into pilot); any other row's → is the caret's.
+            if !isList, branch == nil, case .file(let path)? = selected?.target, FolderLooks.isFolder(URL(fileURLWithPath: path)) {
+                enter(path)
+                return .handled
+            }
             guard query.isEmpty, case .branch(let b)? = selected?.target else { return .ignored }
             open(b)
             return .handled
@@ -1230,6 +1288,11 @@ public struct MenuNavigator: Sendable {
             if let row = selected, !list.isEmpty { actions = RowActionsMenu(row: row, list) }
             return .handled
         case .escape:
+            // In a browsed folder a typed search clears first, then Escape goes back where browsing began.
+            if folder != nil {
+                if query.isEmpty { leaveFolder() } else { query = "" }
+                return .handled
+            }
             guard branch != nil else {
                 if isList { return back.map { .back($0) } ?? .close }
                 // At the root a typed search clears first, so Escape never throws away what Sven typed and closes at once.
@@ -1244,6 +1307,10 @@ public struct MenuNavigator: Sendable {
                 return .handled
             }
             up()
+            return .handled
+        case .left where folder != nil, .deleteBackward:
+            guard folder != nil, query.isEmpty else { return .ignored }
+            upFolder()
             return .handled
         case .left:
             guard branch != nil, query.isEmpty else { return .ignored }
@@ -1267,7 +1334,8 @@ public struct MenuNavigator: Sendable {
             return click(at: n - 1)
         case .space:
             // Quick Look in the Files view (Sven, 2026-10-07); a switch flips (S1); anywhere else the space is typed.
-            if fileQuery != nil, let row = selected, row.kind == .file { return .preview(row) }
+            // In a browsed folder too; a typed path's Space is typed, as folder names hold spaces.
+            if fileQuery != nil || folder != nil, let row = selected, row.kind == .file { return .preview(row) }
             guard spaceToggles, let row = selected, case .action(let id) = row.target else { return .ignored }
             switches([id: row.isOn != true])
             return .toggle(row)
@@ -1381,7 +1449,7 @@ public struct MenuNavigator: Sendable {
         case .escape, .commandK:
             actions = nil
             return .handled
-        case .left, .right:
+        case .left, .right, .deleteBackward:
             return .ignored
         case .tab, .backTab, .commandReturn, .filter, .toggleHidden, .number:
             return .handled
@@ -1416,6 +1484,7 @@ public struct MenuNavigator: Sendable {
             return .handled
         case .searchInside:
             guard case .file(let path) = row.target else { return .handled }
+            browse = nil
             fileFilters.place = .folder(path)
             only = .file
             query = ""
@@ -1431,6 +1500,32 @@ public struct MenuNavigator: Sendable {
         default: break
         }
         return .act(action, row)
+    }
+
+    /// → on a folder row: its items listed, the search cleared; the first folder entered keeps where browsing began.
+    private mutating func enter(_ path: String) {
+        browse = (FolderBrowse.standard(path), browse?.from ?? spot, browse?.only ?? only)
+        only = nil
+        clearQuery()
+    }
+
+    /// ← or ⌫ on an empty search in a browsed folder: the folder above, the one just left selected; above `/`, back
+    /// where browsing began.
+    private mutating func upFolder() {
+        guard let left = folder else { return }
+        guard let above = FolderBrowse.parent(of: left) else { return leaveFolder() }
+        browse?.folder = above
+        clearQuery()
+        select(.file(left))
+    }
+
+    /// Escape in a browsed folder: back to the search or Files view browsing began in, its row selected.
+    private mutating func leaveFolder() {
+        guard let (_, from, kind) = browse else { return }
+        browse = nil
+        only = kind
+        if query != from.query { query = from.query } else { refresh() }
+        select(from.row)
     }
 
     private mutating func open(_ b: MenuBranch) {
@@ -1797,5 +1892,85 @@ extension FileSearch.Ask {
         calendar.firstWeekday = 2
         let unit: Calendar.Component = switch when { case .today: .day; case .week: .weekOfYear; case .month: .month }
         return calendar.dateInterval(of: unit, for: now).map { modified >= $0.start } ?? true
+    }
+}
+
+/// Your fallbacks (spec launcher-best T4, after Raycast's Fallback Commands and Alfred's fallback searches): what a root
+/// search that found nothing offers for the words, in the order picked on Launcher › Your menu (`menu.fallbacks`). Each
+/// is one of Pilot's four offers (`ai.ask`, `web`, `files`, `install`), a quicklink that takes words
+/// (`quicklinks.<keyword>`, opened with them) or a script that asks for them (its action id, the words typed after its
+/// title). None picked is Pilot's own offers, as before.
+public enum MenuFallbacks {
+    public struct Option: Equatable, Sendable {
+        public let id: String, title: String
+        public init(id: String, title: String) { self.id = id; self.title = title }
+    }
+
+    public static let builtIn = [Option(id: "ai.ask", title: "Ask AI"), Option(id: "web", title: "Search the web"),
+                                 Option(id: "files", title: "Search files"), Option(id: "install", title: "Search to install")]
+    public static let quicklinkPrefix = "quicklinks."
+
+    /// Every fallback there is to pick: the four built in, each quicklink taking words, each script asking for them
+    /// (`fills`, ScriptCommand.fills).
+    public static func options(links: [Quicklink], fills: [String: String]) -> [Option] {
+        builtIn + links.filter(\.takesQuery).map { Option(id: quicklinkPrefix + $0.keyword.lowercased(), title: "Search \($0.name)") }
+            + fills.sorted { $0.key < $1.key }.map { Option(id: $0.key, title: $0.value.trimmingCharacters(in: .whitespaces)) }
+    }
+
+    /// The rows the navigator keeps aside for `ids`, in their order (MenuEntry.isFallback); a quicklink or script since
+    /// removed is left out. Pilot's four stand in for the offers the navigator builds itself; a script's row is its own
+    /// from `rows`, so it keeps its icon.
+    public static func templates(_ ids: [String], links: [Quicklink], among rows: [MenuEntry]) -> [MenuEntry] {
+        ids.compactMap { id -> MenuEntry? in
+            var row: MenuEntry
+            switch id {
+            case "ai.ask": row = MenuEntry(title: "Ask AI", target: .ask(""))
+            case "web": row = MenuEntry(title: "Search the web", target: .searchWeb(""))
+            case "files": row = MenuEntry(title: "Search files", target: .searchFiles)
+            case "install": row = MenuEntry(title: "Search to install", target: .searchInstall(""))
+            case _ where id.hasPrefix(quicklinkPrefix):
+                let keyword = id.dropFirst(quicklinkPrefix.count)
+                guard let link = links.first(where: { $0.takesQuery && $0.keyword.caseInsensitiveCompare(keyword) == .orderedSame }) else { return nil }
+                row = MenuEntry(title: link.name, target: .action(link.actionID), detail: link.url(query: "x")?.host(), icon: MenuIcon.quicklink)
+            default:
+                guard let script = rows.first(where: { $0.target == .action(id) && $0.fills != nil }) else { return nil }
+                row = script
+            }
+            row.inSearch = false
+            row.isFallback = true
+            return row
+        }
+    }
+
+    /// A fallback offering what was typed, as the navigator lists it. Pilot's four are the navigator's `own` offers for
+    /// the words (nil when Search files or Search to install has none: the words are no file's or package's name); a
+    /// quicklink opens with them; a script types them after its title, where its row runs with them.
+    static func offer(_ template: MenuEntry, _ query: String, own: [MenuEntry]) -> MenuEntry? {
+        let typed = query.trimmingCharacters(in: .whitespaces)
+        var row: MenuEntry
+        switch template.target {
+        case .ask, .searchWeb, .searchFiles, .searchInstall:
+            guard let built = own.first(where: { sameOffer($0.target, template.target) }) else { return nil }
+            row = built
+        case .action(let id) where Quicklink.parse(id) != nil:
+            // An answer, as `gh …` gives (Quicklink.answers): one search's words are never a pick, a favourite or an alias.
+            row = MenuEntry(title: "Search \(template.title) for \u{201C}\(typed)\u{201D}", target: .action("\(id):\(typed)"),
+                            detail: template.detail, isAnswer: true, icon: MenuIcon.quicklink)
+        default:
+            row = template
+            row.subtitle = "\u{201C}\(typed)\u{201D}"
+            row.fills = (template.fills ?? "") + typed
+            row.inSearch = true
+            row.isAnswer = true
+        }
+        row.isFallback = true
+        return row
+    }
+
+    private static func sameOffer(_ a: MenuEntry.Target, _ b: MenuEntry.Target) -> Bool {
+        switch (a, b) {
+        case (.ask, .ask), (.searchWeb, .searchWeb), (.searchFiles, .searchFiles), (.searchInstall, .searchInstall): true
+        default: false
+        }
     }
 }

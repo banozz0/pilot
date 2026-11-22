@@ -13,8 +13,11 @@ public struct ClockEvent: Equatable, Sendable {
     public var url: URL?
     /// From a holidays calendar (`isHolidays`): its day red in the month, its title a red chip in the list.
     public var holiday: Bool
+    /// A video call it links to in its URL, location or notes (MeetingLink, spec launcher-best T5); nil when none.
+    public var call: URL?
 
-    public init(title: String, start: Date, end: Date, allDay: Bool = false, colour: Paint? = nil, url: URL? = nil, holiday: Bool = false) {
+    public init(title: String, start: Date, end: Date, allDay: Bool = false, colour: Paint? = nil, url: URL? = nil, holiday: Bool = false,
+                call: URL? = nil) {
         self.title = title
         self.start = start
         self.end = end
@@ -22,6 +25,7 @@ public struct ClockEvent: Equatable, Sendable {
         self.colour = colour
         self.url = url
         self.holiday = holiday
+        self.call = call
     }
 
     /// Whether a calendar holds public holidays (Sven, 2026-10-23, Q418): Calendar's Holidays calendar for a region

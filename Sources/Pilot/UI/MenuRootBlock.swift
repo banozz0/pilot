@@ -23,9 +23,17 @@ struct MenuRootBlock: View {
     ]
 
     var body: some View {
+        // When nothing matches stands under the root's rows, in the same column (spec launcher-best T4).
+        VStack(alignment: .leading, spacing: MenuPage.gap) {
+            rootRows
+            MenuFallbacksBlock(settings: settings)
+        }
+    }
+
+    private var rootRows: some View {
         let list = settings.root.rows()
         let pick = list.first { $0.id == picked }?.id ?? list.first?.id
-        KitBlock(title: "What the menu shows first", symbol: "list.bullet", note: Self.note) {
+        return KitBlock(title: "What the menu shows first", symbol: "list.bullet", note: Self.note) {
             if !settings.root.isDefault() {
                 Button("Reset to default") { withAnimation(Kit.change) { settings.reset() } }.buttonStyle(.pilot)
             }
@@ -76,6 +84,67 @@ struct MenuRootBlock: View {
         guard settings.root.rows().indices.contains(index) else { return }
         withAnimation(Kit.change) { settings.root.move(row, to: index) }
     }
+}
+
+/// Launcher › Your menu's When nothing matches (spec launcher-best T4, after Raycast's Fallback Commands): what Hyper+Space
+/// offers for your words when nothing on the Mac matches, in your order, each moved with its arrows and taken off with its
+/// minus; Add lists the rest (MenuFallbacks: Pilot's four offers, each quicklink taking words, each script asking for
+/// them). Until you change it the list is Pilot's own four. `pilot set menu.fallbacks` sets the same list.
+struct MenuFallbacksBlock: View {
+    @Environment(\.ink) private var ink
+    @Bindable var settings: MenuRootSettings
+    /// What can be picked, read as the block shows: quicklinks and scripts change elsewhere.
+    @State private var options = MenuFallbacks.builtIn
+
+    static let note = "What Hyper+Space offers for your words when nothing on your Mac matches, in this order."
+
+    var body: some View {
+        let picked = settings.fallbacks ?? MenuFallbacks.builtIn.map(\.id)
+        let left = options.filter { !picked.contains($0.id) }
+        KitBlock(title: "When nothing matches", symbol: "arrow.turn.down.right", note: Self.note) {
+            if settings.fallbacks != nil {
+                Button("Reset to default") { withAnimation(Kit.change) { settings.fallbacks = nil } }.buttonStyle(.pilot)
+            }
+        } content: {
+            ForEach(Array(picked.enumerated()), id: \.element) { i, id in
+                BlockRow(first: i == 0) { row(id, at: i, in: picked) }
+            }
+            if !left.isEmpty {
+                BlockRow(first: picked.isEmpty) {
+                    Menu("Add a fallback") {
+                        ForEach(left, id: \.id) { option in Button(option.title) { save(picked + [option.id]) } }
+                    }
+                    .menuStyle(.borderlessButton).fixedSize()
+                }
+            }
+        }
+        // The scripts folder is read off the main thread.
+        .task { options = MenuRootSettings.fallbackOptions(fills: await Task.detached { ScriptCommand.fills(ScriptCommand.find()) }.value) }
+    }
+
+    private func row(_ id: String, at i: Int, in picked: [String]) -> some View {
+        // A quicklink or script since removed keeps its id, muted, until it is taken off.
+        let title = options.first { $0.id == id }?.title, name = title ?? id
+        return HStack(spacing: 10) {
+            Text(name).foregroundStyle(title == nil ? ink.muted : ink.text)
+            Spacer()
+            IconButton(symbol: "chevron.up", label: "Move \(name) up", size: 22, glyph: 11, tint: ink.text2) { move(i, by: -1, in: picked) }
+                .disabled(i == 0).kitDimmed(i > 0)
+            IconButton(symbol: "chevron.down", label: "Move \(name) down", size: 22, glyph: 11, tint: ink.text2) { move(i, by: 1, in: picked) }
+                .disabled(i == picked.count - 1).kitDimmed(i < picked.count - 1)
+            // The last one stays: with none, Pilot's own offers would come back unasked.
+            IconButton(symbol: "minus.circle", label: "Take \(name) off", size: 22, glyph: 11, tint: ink.text2) { save(picked.filter { $0 != id }) }
+                .disabled(picked.count == 1).kitDimmed(picked.count > 1)
+        }
+    }
+
+    private func move(_ i: Int, by step: Int, in picked: [String]) {
+        var list = picked
+        list.swapAt(i, i + step)
+        save(list)
+    }
+
+    private func save(_ list: [String]) { withAnimation(Kit.change) { settings.fallbacks = list } }
 }
 
 /// A root row's icon: a branch's in its colour, an extra's that opens a branch too (Notes) the same; any other extra's
@@ -159,19 +228,32 @@ struct MenuExtrasBlock: View {
             ForEach(Array(extras.enumerated()), id: \.element.id) { i, extra in
                 BlockRow(first: i == 0) { row(extra) }
             }
+            // The browsers' pages in search (spec launcher-best T9): bookmarks on, history off until you switch it on (Q328).
+            BlockRow { switchRow("Browser bookmarks", "bookmark", Self.bookmarksInfo, isOn: $browsers.bookmarks) }
+            BlockRow { switchRow("Browser history", "clock.arrow.circlepath", Self.historyInfo, isOn: $browsers.history) }
+        }
+    }
+
+    @Bindable var browsers: BrowserSettings = .shared
+
+    static let bookmarksInfo = "A search lists the bookmarks of Safari, Chrome, Brave, Edge, Arc, Vivaldi and Firefox, read as the menu opens while Pilot has Full Disk Access."
+    static let historyInfo = "hist and words search the pages you visited in those browsers, read only then, never saved or logged. Off until you switch it on."
+
+    /// A row's symbol, title, info and switch, muted while off.
+    private func switchRow(_ title: String, _ symbol: String, _ info: String, isOn: Binding<Bool>) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: symbol).font(ink.ui(12.5)).foregroundStyle(isOn.wrappedValue ? ink.text : ink.muted).frame(width: 18)
+            Text(title).foregroundStyle(isOn.wrappedValue ? ink.text : ink.muted)
+            InfoMark(text: info)
+            Spacer()
+            Toggle("Show \(title)", isOn: isOn).labelsHidden().toggleStyle(.pilotSwitch)
         }
     }
 
     private func row(_ extra: MenuRoot.Extra) -> some View {
         let on = settings.root.extras.contains(extra.id)
-        return HStack(spacing: 10) {
-            Image(systemName: extra.symbol).font(ink.ui(12.5)).foregroundStyle(on ? ink.text : ink.muted).frame(width: 18)
-            Text(extra.title).foregroundStyle(on ? ink.text : ink.muted)
-            InfoMark(text: Self.info(extra))
-            Spacer()
-            Toggle("Show \(extra.title)", isOn: Binding(get: { on }, set: { new in withAnimation(Kit.change) { settings.root.show(extra: extra.id, new) } }))
-                .labelsHidden().toggleStyle(.pilotSwitch)
-        }
+        return switchRow(extra.title, extra.symbol, Self.info(extra),
+                         isOn: Binding(get: { on }, set: { new in withAnimation(Kit.change) { settings.root.show(extra: extra.id, new) } }))
     }
 
     /// Where the row lives today, or what it runs.

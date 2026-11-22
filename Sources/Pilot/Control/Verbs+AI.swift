@@ -7,13 +7,14 @@ extension ControlVerbs {
     /// OpenAI-compatible endpoint's). Each answers the provider's row as `pilot list ai-providers` reads it after; a
     /// login, Refresh or Test that did not take answers ok false with the page's line, as its chip shows it.
     func registerAIVerb(_ s: ControlAI) {
-        let subcommands = ["signin", "connect <provider> [--cancel]", "models <provider> [--refresh]", "test", "ask <text> [--new] [--stop]"]
-        register(ControlVerb("ai", help: "The AI page's Sign in (Claude Code), Connect (the ChatGPT and Google subscriptions), each provider's model list and Refresh, and Test; ask sends to the AI chat and answers.",
-                             usage: "pilot ai signin | ai connect <provider> [--cancel] | ai models <provider> [--refresh] | ai test | ai ask <text> [--new] | ai ask --stop",
+        let subcommands = ["signin", "connect <provider> [--cancel]", "models <provider> [--refresh]", "test", "ask <text> [--new] [--stop]", "run <command> [--text <words>]"]
+        register(ControlVerb("ai", help: "The AI page's Sign in (Claude Code), Connect (the ChatGPT and Google subscriptions), each provider's model list and Refresh, and Test; ask sends to the AI chat and answers; run answers one of your AI commands.",
+                             usage: "pilot ai signin | ai connect <provider> [--cancel] | ai models <provider> [--refresh] | ai test | ai ask <text> [--new] | ai ask --stop | ai run <command> [--text <words>]",
                              flags: [.init("refresh", help: "models: ask the provider for its list now", takesValue: false),
                                      .init("cancel", help: "connect: stop a Connect still waiting on the browser", takesValue: false),
                                      .init("new", help: "ask: start a new chat first; alone, New chat", takesValue: false),
-                                     .init("stop", help: "ask: stop the answer pilot ai ask asked for, still coming", takesValue: false)],
+                                     .init("stop", help: "ask: stop the answer pilot ai ask asked for, still coming", takesValue: false),
+                                     .init("text", help: "run: the words the command works on, else the selected text")],
                              schema: { .object(["subcommands": .array(subcommands.map(JSONValue.string)),
                                                 "providers": .array(AIProvider.allCases.map { .string($0.rawValue) })]) },
                              index: { .object(["subcommands": .array(subcommands.map(JSONValue.string))]) },
@@ -24,12 +25,13 @@ extension ControlVerbs {
                                  case "models": "pilot ai models <provider>: the model it answers with and the ones on offer, each by the id set ai.model.<provider> takes. --refresh asks the provider for its list first (codex's catalog, an API's models), as Refresh on the page"
                                  case "test": "pilot ai test: asks the picked provider (ai.provider) one tiny question the way AI will, answering ok or the problem and its hint"
                                  case "ask": "pilot ai ask <text>: asks Allow, then sends it to the AI chat as its input's Return does, on the AI page's provider, and answers the reply once it has come, with the pilot commands an agent ran for it. --new starts a new chat first (alone: New chat). --stop stops an answer it asked for still coming, what came so far kept, and answers only stopped. A chat unused for the AI page's idle time starts over first; a capture waiting on its input refuses, and /extension and /widget are typed in the chat itself"
+                                 case "run": "pilot ai run <command>: asks Allow, then answers one of your AI commands (pilot list ai-commands) on --text's words, else the selected text, on its provider or the AI page's with its fallback. The answer comes back to the command only: nothing is pasted, copied or sent to the chat"
                                  default: nil
                                  }
                              }) { call throws(ControlError) in
             let args = call.arguments()
             let sub = args.positional.first
-            let known = switch sub { case "connect": ["cancel"]; case "models": ["refresh"]; case "ask": ["new", "stop"]; default: [String]() }
+            let known = switch sub { case "connect": ["cancel"]; case "models": ["refresh"]; case "ask": ["new", "stop"]; case "run": ["text"]; default: [String]() }
             if let sub, let refusal = ControlVerb.unknownFlag(args.flags, known: known, in: "pilot ai \(sub)") {
                 throw refusal
             }
@@ -43,8 +45,9 @@ extension ControlVerbs {
                 return try await Self.models(p, refresh: args.has("refresh"), s, peer: call.peer)
             case "test": return try await Self.test(s, peer: call.peer)
             case "ask": return try await Self.ask(args, s, call: call)
-            case let other?: throw ControlError(.badValue, "no ai \(other); there are signin, connect, models, test and ask")
-            case nil: throw ControlError(.badRequest, "say signin, connect, models, test or ask")
+            case "run": return try await Self.runCommand(args, s, call: call)
+            case let other?: throw ControlError(.badValue, "no ai \(other); there are signin, connect, models, test, ask and run")
+            case nil: throw ControlError(.badRequest, "say signin, connect, models, test, ask or run")
             }
         })
     }

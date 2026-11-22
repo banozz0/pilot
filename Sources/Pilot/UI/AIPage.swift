@@ -666,3 +666,174 @@ struct SelectionSkipRow: View {
         save(apps.map(\.id) + [id])
     }
 }
+
+/// AI › Commands (launcher-best T10): your own AI commands, a row each with its title, prompt, where its answer goes,
+/// arrows to reorder (the selection pill lists the first three) and its own Hyper bind; a click opens it in the editor
+/// under the rows, as Quicklinks' does. Add command opens it empty. Save refuses, in one line, an empty title or prompt,
+/// or a title another command has; Remove asks nothing and frees its key.
+struct AICommandsBlock: View {
+    @Environment(\.ink) private var ink
+    let book: AICommandBook
+    /// The command open in the editor, as typed: one of the book's, or a new one (no id yet).
+    @State private var draft: CustomAICommand?
+    @State private var refusal: String?
+
+    /// `editing` starts a render with a command open.
+    init(book: AICommandBook = .shared, editing: CustomAICommand? = nil) {
+        self.book = book
+        _draft = State(initialValue: editing)
+    }
+
+    static let note = "Your own prompts for the text you select: from Hyper+Space, a bind, a ring, or the selection pill, which shows the first three."
+
+    var body: some View {
+        let commands = book.commands
+        KitBlock(title: AppSection.aiCommands.title, symbol: "sparkles", note: Self.note, trailing: {
+            AccentLink(title: "Add command", chevron: "plus", action: add)
+        }) {
+            if commands.isEmpty && draft == nil {
+                BlockRow(first: true) { FinePrint(text: "No commands yet. Add one, as Make it friendlier, and select text to run it.") }
+            }
+            ForEach(Array(commands.enumerated()), id: \.element.id) { i, command in
+                BlockRow(first: i == 0) {
+                    Button { toggle(command) } label: {
+                        TitledText(title: command.title, detail: command.prompt).lineLimit(1).contentShape(.rect)
+                    }
+                    .buttonStyle(.kitPress)
+                    .accessibilityHint(draft?.id == command.id ? "Closes the editor" : "Edits it")
+                    Spacer(minLength: 8)
+                    Text(Self.outputTitle(command.output)).font(ink.ui(12)).foregroundStyle(ink.muted).fixedSize()
+                    IconButton(symbol: "chevron.up", label: "Move \(command.title) up") { move(command, -1) }
+                        .opacity(i == 0 ? 0.35 : 1).disabled(i == 0)
+                    IconButton(symbol: "chevron.down", label: "Move \(command.title) down") { move(command, 1) }
+                        .opacity(i == commands.count - 1 ? 0.35 : 1).disabled(i == commands.count - 1)
+                    IconButton(symbol: "trash", label: "Remove \(command.title)", tint: ink.destructive) { remove(command.id) }
+                    BindKey(action: command.actionID)
+                }
+            }
+            if let open = Binding(unwrapping: $draft) {
+                AICommandEditor(draft: open, title: open.wrappedValue.id.isEmpty ? nil : book.command(open.wrappedValue.id)?.title,
+                                refusal: refusal, save: save, cancel: close)
+                    .padding(.top, 8)
+                    .onChange(of: open.wrappedValue) { refusal = nil }
+            }
+        }
+    }
+
+    static func outputTitle(_ output: CustomAICommand.Output) -> String {
+        switch output {
+        case .replace: "Replaces it"
+        case .copy: "Copies"
+        case .chat: "In the chat"
+        }
+    }
+
+    private func add() {
+        if let draft, draft.id.isEmpty { return }
+        refusal = nil
+        withAnimation(Kit.change) { draft = CustomAICommand(id: "", title: "", prompt: "", provider: nil, output: .replace) }
+    }
+
+    private func toggle(_ command: CustomAICommand) {
+        refusal = nil
+        withAnimation(Kit.change) { draft = draft?.id == command.id ? nil : command }
+    }
+
+    private func save() {
+        guard let draft else { return }
+        switch book.save(draft) {
+        case .failure(let why): refusal = why.line.replacingOccurrences(of: "--", with: "")
+        case .success: close()
+        }
+    }
+
+    private func close() {
+        refusal = nil
+        withAnimation(Kit.change) { draft = nil }
+    }
+
+    private func move(_ command: CustomAICommand, _ offset: Int) {
+        withAnimation(Kit.change) { _ = book.move(command.id, by: offset) }
+    }
+
+    private func remove(_ id: String) {
+        withAnimation(Kit.change) {
+            _ = book.remove(id)
+            if draft?.id == id { draft = nil }
+        }
+    }
+}
+
+/// The open command, under the rows: its title with Cancel and Save, then its title, prompt, answer and AI fields, and
+/// the refusal or what {selection} does. Return saves, Escape cancels.
+private struct AICommandEditor: View {
+    @Environment(\.ink) private var ink
+    @Binding var draft: CustomAICommand
+    /// The saved command's title; nil for a new one.
+    let title: String?
+    let refusal: String?
+    let save: () -> Void
+    let cancel: () -> Void
+
+    var body: some View {
+        let shape = RoundedRectangle(cornerRadius: ink.blockRadius, style: .continuous)
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 8) {
+                KitTile(symbol: "sparkles", colour: .accent, size: 18)
+                Text(title ?? "New AI command").font(ink.ui(13, .semibold)).foregroundStyle(ink.text).lineLimit(1)
+                Spacer(minLength: 8)
+                Button("Cancel", action: cancel).buttonStyle(.pilot).fixedSize()
+                Button(action: save) { Text(title == nil ? "Add" : "Save") }
+                    .buttonStyle(.pilotPrimary).fixedSize()
+                    .accessibilityLabel(title.map { "Save \($0)" } ?? "Add AI command")
+            }
+            .padding(.horizontal, 12).padding(.vertical, 9)
+            ink.line.frame(height: 1)
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(alignment: .top, spacing: 10) {
+                    field("Title", prompt: "Friendlier", info: "Its name in Hyper+Space, Binds and the selection pill.", text: $draft.title)
+                        .frame(width: 220)
+                    choice("Answer", info: "Where the answer goes: over the selected text, on the clipboard, or into the AI chat.",
+                           options: CustomAICommand.Output.allCases.map { ($0, AICommandsBlock.outputTitle($0)) }, picked: draft.output) { draft.output = $0 }
+                    choice("AI", info: "The AI page's pick with its fallback, or one provider for this command.",
+                           options: [(String?.none, "The AI page's")] + AIProvider.allCases.map { (Optional($0.rawValue), $0.title) },
+                           picked: draft.provider) { draft.provider = $0 }
+                }
+                field("Prompt", prompt: "Rewrite {selection} to sound friendlier and warmer.",
+                      info: "What the AI does with the text you select. The snippets' placeholders fill as it runs, as {date}; the selection goes with it as text to work on, never as an instruction.",
+                      text: $draft.prompt)
+                FinePrint(text: refusal ?? "{selection} in the prompt names the selected text; without it the prompt is applied to it.",
+                          color: refusal == nil ? nil : ink.yellow)
+            }
+            .padding(.horizontal, 12).padding(.top, 10).padding(.bottom, 12)
+        }
+        .blockSurface()
+        .clipShape(shape)
+        .onSubmit(save)
+        .onExitCommand(perform: cancel)
+    }
+
+    private func label(_ text: String, _ info: String) -> some View {
+        HStack(spacing: 6) {
+            Text(text).font(ink.ui(11.5, .semibold)).foregroundStyle(ink.muted).accessibilityHidden(true)
+            InfoMark(text: info)
+        }
+    }
+
+    private func field(_ name: String, prompt: String, info: String, text: Binding<String>) -> some View {
+        VStack(alignment: .leading, spacing: 5) {
+            label(name, info)
+            TextField(name, text: text, prompt: Text(verbatim: prompt).foregroundStyle(ink.muted))
+                .font(.system(size: 12.5))
+                .pilotField()
+        }
+    }
+
+    private func choice<Value: Hashable>(_ name: String, info: String, options: [(value: Value, title: String)], picked: Value,
+                                         set: @escaping (Value) -> Void) -> some View {
+        VStack(alignment: .leading, spacing: 5) {
+            label(name, info)
+            DropdownField(label: name, options: options, picked: picked, pick: set).frame(width: 170)
+        }
+    }
+}

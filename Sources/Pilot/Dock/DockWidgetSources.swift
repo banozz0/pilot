@@ -145,7 +145,7 @@ struct DockWidgetSources {
 /// while a widget shows them: Calendar's changes and the day's turn read again.
 @Observable @MainActor
 final class DockCalendar {
-    static let shared = DockCalendar()
+    static let shared = DockCalendar.sandbox ?? DockCalendar()
 
     private(set) var access: CalendarAccess = .undetermined
     /// Today's events, all-day ones and holidays among them (the faces leave those out).
@@ -155,8 +155,34 @@ final class DockCalendar {
     @ObservationIgnored private var day: Date?
     @ObservationIgnored private var observing = false
     @ObservationIgnored private var following = false
+    /// The calls near at the last read (MeetingLink, spec launcher-best T5): the menu's Join row reads them as it opens.
+    @ObservationIgnored private(set) var calls: [ClockEvent] = []
+    /// Whether events can be read, asked before the store is made: no store is made without access.
+    @ObservationIgnored private let readable: @MainActor () async -> Bool
 
-    init(store make: @escaping @MainActor () -> CalendarStore = { EventKitCalendar() }) { self.make = make }
+    init(store make: @escaping @MainActor () -> CalendarStore = { EventKitCalendar() },
+         readable: @escaping @MainActor () async -> Bool = { await EventKitCalendar.hasFullAccess(to: .event) }) {
+        self.make = make
+        self.readable = readable
+    }
+
+    /// The calls running now or starting within MeetingLink.lead, read off the main thread and never asking (the menu
+    /// opens; `pilot menu search`); kept in `calls`.
+    @discardableResult
+    func readCalls(now: Date) async -> [ClockEvent] {
+        if store == nil, !(await readable()) { calls = []; return [] }
+        let store = store ?? make()
+        self.store = store
+        calls = await store.calls(in: DateInterval(start: now, duration: MeetingLink.lead + 1))
+        return calls
+    }
+
+    /// The sandbox host's stand-in for Calendar (PILOT_SANDBOX_CALENDAR=<events.json>, isolated test runs only), so the
+    /// Join row and the Dock's event widgets read a file, never Sven's events.
+    private static let sandbox: DockCalendar? = {
+        guard isIsolatedTestRun, let file = ProcessInfo.processInfo.environment["PILOT_SANDBOX_CALENDAR"], file.hasPrefix("/") else { return nil }
+        return DockCalendar(store: { CalendarFixture(file: URL(fileURLWithPath: file)) }, readable: { true })
+    }()
 
     /// A widget shows: access read (never asked); with it, today's events read, and Calendar's changes followed.
     func follow(now: Date, calendar: Calendar = .autoupdatingCurrent) {
@@ -198,4 +224,32 @@ final class DockCalendar {
         let found = store.events(in: DateInterval(start: day, duration: 86_400))
         if found != events { events = found }
     }
+}
+
+/// Calendar as a file for the sandbox host (PILOT_SANDBOX_CALENDAR): `[{"title", "start", "end" (ISO 8601), "allDay"?,
+/// "url"?, "location"?, "notes"?}]`, read at each ask, its call links found as EventKit's are (MeetingLink). Access is given;
+/// nothing is saved.
+@MainActor final class CalendarFixture: CalendarStore {
+    private struct Event: Decodable {
+        var title: String, start: Date, end: Date, allDay: Bool?, url: String?, location: String?, notes: String?
+    }
+    private let file: URL
+    init(file: URL) { self.file = file }
+
+    var access: CalendarAccess { .granted }
+    func requestAccess() async -> Bool { true }
+    var newEventsCalendar: String? { nil }
+    func add(_ event: QuickEvent) throws {}
+
+    func events(in range: DateInterval) -> [ClockEvent] {
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let found = (try? decoder.decode([Event].self, from: Data(contentsOf: file))) ?? []
+        return found.map { e in
+            ClockEvent(title: e.title, start: e.start, end: e.end, allDay: e.allDay ?? false,
+                       call: e.allDay == true ? nil : MeetingLink.find(in: [e.url, e.location, e.notes]))
+        }.filter { $0.overlaps(range) }
+    }
+
+    func calls(in range: DateInterval) async -> [ClockEvent] { events(in: range).filter { !$0.allDay && $0.call != nil } }
 }

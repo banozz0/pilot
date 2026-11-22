@@ -491,6 +491,8 @@ public enum AppSection: String, CaseIterable, Sendable {
     /// AI Setup's places, back from More with AI's More (pages round 4, Sven's Q105): the fallback provider, the AI's keys
     /// and when a chat starts over.
     case aiFallback, aiKeys, aiNewChat
+    /// Your own AI commands on a selection (launcher-best T10).
+    case aiCommands
     /// Keys' More (simplify-pages T14) and its place beside `overlay`, `keySwaps` and `exportImport`, Binds' tabs until
     /// then: the keyboard's lock for cleaning.
     case bindsMore, cleaning
@@ -519,7 +521,7 @@ public enum AppSection: String, CaseIterable, Sendable {
         case .capturesMore, .captureOptions, .captureKeys, .recordingQuality: .captures
         case .extensionCatalogue: .extensions
         case .agents: .configs
-        case .aiSetup, .aiFallback, .aiKeys, .aiNewChat: .ai
+        case .aiSetup, .aiFallback, .aiKeys, .aiCommands, .aiNewChat: .ai
         case .recording, .captureHistory: .captures
         case .wallpaper, .themeCatalogue, .glassTuning, .cursor, .wallpaperCycle: .look
         }
@@ -567,7 +569,7 @@ public enum AppSection: String, CaseIterable, Sendable {
     /// The places that are blocks on their page's front (Sven, 2026-11-11, after 2276: back from More): a link or the search
     /// opens the front and scrolls to the block (the window's `blockFocus`, as for a block on More).
     private static let onFrontOf: Set<AppSection> = [.workspaceOpens, .workspaceRules, .workspaceMonitors, .focusedWindow, .floatApps, .floatTitles, .motion, .appsForKeys,
-                                                     .aiFallback, .aiKeys, .aiNewChat,
+                                                     .aiFallback, .aiKeys, .aiCommands, .aiNewChat,
                                                      .hyperKey, .permissions, .status, .data, .notifications, .about,
                                                      .keySwaps, .overlay, .menuExtras, .glassTuning, .cursor, .wallpaperCycle,
                                                      .soundInput, .keyboardLayout, .mouseSpeed, .voiceDictation,
@@ -580,7 +582,7 @@ public enum AppSection: String, CaseIterable, Sendable {
     /// (Install is only its parts). Nil for the page's own first view.
     public var frontTab: AppSection? {
         switch self {
-        case .aiFallback, .aiKeys, .aiNewChat: .aiSetup
+        case .aiFallback, .aiKeys, .aiCommands, .aiNewChat: .aiSetup
         case .installLists: .catalogue
         default: nil
         }
@@ -637,6 +639,7 @@ public enum AppSection: String, CaseIterable, Sendable {
         case .cleaning: "Cleaning"
         case .aiFallback: "Fallback"
         case .aiKeys: "Keys"
+        case .aiCommands: "Commands"
         case .aiNewChat: "Chat"
         case .soundInput: "Input"
         case .keyboardLayout: "Keyboard layout"
@@ -721,6 +724,7 @@ public enum AppSection: String, CaseIterable, Sendable {
         case .cleaning: ["cleaning", "lock keyboard", "keyboard lock", "clean the keyboard", "wipe"]
         case .aiFallback: ["fallback", "backup ai", "when the ai fails"]
         case .aiKeys: ["ai keys", "ask ai key", "fix text", "fix selected text", "selection tools", "selection pill"]
+        case .aiCommands: ["ai commands", "your own ai commands", "custom prompts", "prompt on selection", "rewrite selection"]
         case .aiNewChat: ["new chat after", "new chat", "start a new chat", "chat resets", "answer style", "answer length", "short answers"]
         case .soundInput: ["input", "microphone", "mic", "input volume", "input device"]
         case .keyboardLayout: ["keyboard layout", "input source", "layout", "typing in"]
