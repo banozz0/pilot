@@ -394,6 +394,90 @@
       ]
     },
     {
+      "id": "network",
+      "title": "Network",
+      "icon": "🌐",
+      "version": "1.0.0",
+      "description": "Your network in one place: Wi-Fi, local and public IP, the router and DNS; the devices on your network; your Tailscale devices with Connect and Disconnect; the ports your programs hold, freed in a click; your SSH hosts, opened in a terminal; and a speed test on macOS's own networkQuality.",
+      "examples": [
+        "Type network overview: your Wi-Fi and its signal, your local and public IP and DNS; Return on Router opens its admin page",
+        "Type kill port, then 3000: the node process holding it; Return quits it. Tailscale devices, SSH hosts and Speedtest are found by their names too"
+      ],
+      "requires": [
+        "python3",
+        "lsof",
+        "networkQuality"
+      ],
+      "commands": [
+        {
+          "name": "overview",
+          "title": "Network overview",
+          "mode": "list"
+        },
+        {
+          "name": "devices",
+          "title": "Devices on the network",
+          "mode": "list"
+        },
+        {
+          "name": "tailscale",
+          "title": "Tailscale devices",
+          "mode": "list"
+        },
+        {
+          "name": "tailscale-connect",
+          "title": "Connect Tailscale",
+          "mode": "no-view"
+        },
+        {
+          "name": "tailscale-disconnect",
+          "title": "Disconnect Tailscale",
+          "mode": "no-view"
+        },
+        {
+          "name": "kill-port",
+          "title": "Kill port",
+          "mode": "list"
+        },
+        {
+          "name": "ssh-hosts",
+          "title": "SSH hosts",
+          "mode": "list"
+        },
+        {
+          "name": "speedtest",
+          "title": "Speedtest",
+          "mode": "detail"
+        }
+      ],
+      "permissions": {
+        "network": [
+          "api.ipify.org",
+          "mensura.cdn-apple.com",
+          "aaplimg.com"
+        ],
+        "clipboard": true,
+        "files": [
+          "~/.ssh/config"
+        ],
+        "actions": []
+      },
+      "files": [
+        {
+          "path": "extension.json",
+          "sha256": "ad16a56c962fc9a54dbf29a422b36c1f19059a0ae49c36e23b44703be488c297",
+          "size": 3094,
+          "executable": false
+        },
+        {
+          "path": "main.py",
+          "sha256": "0596ce6f8c814e6d1f3f39596d204f01fd4733e672001a5cbaa51f0b21d97053",
+          "size": 71416,
+          "executable": true
+        }
+      ]
+    },
+    {
       "id": "now-playing",
       "title": "Now playing",
       "icon": "🎵",
