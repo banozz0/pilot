@@ -1109,6 +1109,11 @@ public struct MenuNavigator: Sendable {
                 rows = [rows[0]] + own + rows.dropFirst().filter { !Self.belongs($0, to: bundle) }
                 owned = own.count
             }
+            // Browser history while its switch is on (T9; the panel provides pages only then): up to 3 pages, under History
+            // after everything else matched, leading only when nothing else did.
+            let pages = only == nil ? BrowserBookmarks.searchWords(query).map { BrowserBookmarks.searchPages(entries, words: $0) } ?? [] : []
+            let pagesLead = rows.isEmpty && !pages.isEmpty
+            if pagesLead { rows = pages }
             let files = searchFiles.map { [$0] } ?? []
             // Under All, Ask AI and Search the web for what was typed always, Search files with them: after the best match's
             // group, or first when nothing matched (Sven 2026-10-16, Q174; Search files joined them, Q182).
@@ -1129,7 +1134,7 @@ public struct MenuNavigator: Sendable {
                 // offered to install.
                 let installs = only == nil && rows.first?.kind != .app && Self.looksLikeApp(query)
                 let end = owned > 0 ? 1 + owned : Self.bestMatchEnd(rows), offers = fallbacks + files + (installs ? install : [])
-                rows = Array(rows.prefix(end)) + offers + rows.dropFirst(end)
+                rows = Array(rows.prefix(end)) + offers + rows.dropFirst(end) + (pagesLead ? [] : pages)
             }
             return
         }

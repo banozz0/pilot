@@ -3,7 +3,7 @@ import Observation
 import PilotCore
 
 /// Launcher › More rows' two browser switches (spec launcher-best T9): bookmarks in Hyper+Space's search, on; history
-/// behind `hist <words>`, off until switched on (Sven, Q328). `pilot set menu.bookmarks` and `menu.browserHistory` flip
+/// in its search (up to 3 pages) and behind `hist <words>`, off until switched on (Sven, Q328). `pilot set menu.bookmarks` and `menu.browserHistory` flip
 /// the same.
 @MainActor @Observable
 final class BrowserSettings {
@@ -29,7 +29,7 @@ final class BrowserSettings {
 }
 
 /// Reads the browsers' bookmarks and history for Hyper+Space (spec launcher-best T9), only when the menu asks: bookmarks
-/// as it opens, history at a `hist` search while history is switched on. The threat model:
+/// as it opens, history at a search of 3 characters or more or a `hist` one while history is switched on. The threat model:
 /// - Another app's private record. Every browser's folder is read only under Full Disk Access, which Pilot never asks for
 ///   here: without it they are skipped. Safari's is TCC's; since macOS 27 Chrome's and Firefox's profiles under Application
 ///   Support are guarded too (Apple DTS: "This is an intentional change", developer forums thread 847030; build 2495's log:
@@ -101,7 +101,7 @@ actor BrowserReader {
     /// in `listed` already has (an `apps.url:` bind of the same page), as the menu keys its rows by target.
     /// The switch is read first, past the one wait, so a read asked for before it went off and reaching the reader after
     /// forget() keeps nothing; one already reading finishes before forget() runs. The menu asks as it opens, switch on or
-    /// off, so the browsers installed are looked up then, once, for `hist`'s reads too.
+    /// off, so the browsers installed are looked up then, once, for history's reads too.
     func bookmarks(listed: Set<MenuEntry.Target> = []) async -> [MenuEntry] {
         let on = await MainActor.run { BrowserSettings.shared.bookmarks }
         let browsers = Self.installed()

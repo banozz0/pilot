@@ -54,8 +54,8 @@ public enum BrowserBookmarks {
         "com.brave.Browser": "Brave", "com.microsoft.edgemac": "Edge", "company.thebrowser.Browser": "Arc",
     ]
 
-    /// The most bookmarks the menu keeps, and the most history pages one `hist` search lists.
-    public static let bookmarkCap = 5000, historyCap = 50
+    /// The most bookmarks the menu keeps, the most history pages one `hist` search lists, and the most a plain search does.
+    public static let bookmarkCap = 5000, historyCap = 50, searchHistoryCap = 3
 
     // MARK: Files
 
@@ -187,6 +187,24 @@ public enum BrowserBookmarks {
     public static func historyWords(_ query: String) -> [String]? {
         guard query.lowercased().hasPrefix("hist ") else { return nil }
         return query.dropFirst(5).split(separator: " ").map(String.init)
+    }
+
+    /// The words a plain root search looks for in history while its switch is on (the coordinator's call on Sven's
+    /// combined-11): 3 characters typed or more, not a `hist` search; nil otherwise.
+    public static func searchWords(_ query: String) -> [String]? {
+        guard historyWords(query) == nil, query.trimmingCharacters(in: .whitespaces).count >= 3 else { return nil }
+        return query.split(separator: " ").map(String.init)
+    }
+
+    /// The history pages of a plain root search, from what its read found: only pages (never the off or Full Disk Access
+    /// row), each still matching every word typed now as the read's LIKE did (a read for fewer letters may still be
+    /// listed), the last visited first, at most `searchHistoryCap`.
+    public static func searchPages(_ rows: [MenuEntry], words: [String]) -> [MenuEntry] {
+        let pages = rows.filter { row in
+            guard row.kind == .history, case .action(let id) = row.target else { return false }
+            return words.allSatisfy { row.title.localizedCaseInsensitiveContains($0) || id.localizedCaseInsensitiveContains($0) }
+        }
+        return Array(pages.prefix(searchHistoryCap))
     }
 
     /// Web pages only, once each by address, in the order given: a `javascript:` bookmarklet or a `file:` link never
