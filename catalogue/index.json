@@ -661,11 +661,11 @@
       "id": "packages",
       "title": "Packages",
       "icon": "📦",
-      "version": "1.0.0",
-      "description": "Track parcels from any carrier in Hyper+Space and on its page: type a tracking number and TrackingMore finds the carrier, then each parcel shows its status, its last event and how long ago; open one for every event. Delivered parcels move to Delivered and are not asked again. Uses your own TrackingMore API key: each new parcel takes one of your plan's credits, refreshing takes none.",
+      "version": "1.1.0",
+      "description": "Keep your parcels in Hyper+Space, on its page and in the menu bar: type a tracking number and a name, and Return on it opens its tracking page (the carrier's own when the number shows which, else 17track's, which finds it; opening sends the number to that site). Mark it delivered and it moves to Delivered. The menu bar item, and its widget in Pilot's dock, show how many are on the way. With your own TrackingMore API key (its paid plans) each parcel also gets its carrier found, its status, its last event and every event, and Delivered on its own; each new parcel takes one credit, refreshing none, at most every 15 minutes.",
       "examples": [
-        "Hyper+Space › Packages, type 1Z999AA10123456784 shoes and press Return: tracked as shoes, its carrier found, under On the way",
-        "Type track LX123456789CN in Hyper+Space and press Return: Packages starts tracking it in one step"
+        "Hyper+Space › Packages, type LX123456789CN shoes and press Return: kept as shoes, and Return on it opens its tracking page",
+        "Type track 1Z999AA10123456784 in Hyper+Space and press Return: Packages keeps it in one step, and the menu bar shows 📦 1"
       ],
       "requires": [
         "python3",
@@ -689,14 +689,14 @@
       "files": [
         {
           "path": "extension.json",
-          "sha256": "8a7bb6fb484a7ec524ff4fc8a27edd745979037256839a7e51b3646fd0029653",
-          "size": 2075,
+          "sha256": "2663aa41cf388940bf9126d5a5f51a7c3635653c4b4225be3b9adf1460a44105",
+          "size": 2793,
           "executable": false
         },
         {
           "path": "main.py",
-          "sha256": "31d9a0b2230cac7c5d0f362922d5364b670fe13b622b5573022e2df141977aec",
-          "size": 34290,
+          "sha256": "db56ad9febe28d63d07ca5ccd475c4770db857d7c0f75b5a96118bfeefbbcc6f",
+          "size": 45443,
           "executable": true
         }
       ]
