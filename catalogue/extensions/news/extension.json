@@ -2,28 +2,304 @@
   "id": "news",
   "title": "News",
   "icon": "📰",
-  "version": "1.1.0",
-  "description": "Headlines from the sources you pick, Malta first (Times of Malta, MaltaToday, Newsbook, Lovin Malta, TVM and more), then world and tech, or any RSS or Atom feed you add, newest first in Hyper+Space and on its page. Press Summarise the last 24 hours for a newspaper front page made by Pilot's AI from the day's headlines, saved as an HTML file and opened in your browser; it never runs on its own.",
-  "examples": ["Type news, Return on a headline: the article opens in your browser", "On the News page, tick MaltaToday and press Summarise the last 24 hours: a front page with the lead story, sections and every article opens in your browser"],
-  "runtime": "process",
-  "requires": ["python3", "curl"],
-  "permissions": { "network": ["the feeds you pick (timesofmalta.com, maltatoday.com.mt, newsbook.com.mt, lovinmalta.com, tvmnews.mt, feeds.bbci.co.uk, news.ycombinator.com, news.google.com and others)"], "files": ["~/Downloads/Pilot News"] },
-  "preferences": [
-    { "name": "language", "type": "dropdown", "title": "Summary language", "default": "english",
-      "description": "The language the 24-hour summary is written in; headlines in other languages are translated.",
-      "data": [ { "title": "English", "value": "english" }, { "title": "Malti", "value": "maltese" } ] },
-    { "name": "folder", "type": "folder", "title": "Save summaries in", "default": "",
-      "description": "Where each summary's HTML file goes, named by its date. Empty: Downloads › Pilot News." }
+  "version": "1.2.0",
+  "description": "Headlines from the sources you tick in its Settings, Malta first (Times of Malta, MaltaToday, Newsbook, Lovin Malta, TVM and more), then world and tech, or any RSS or Atom feed you add there, newest first in Hyper+Space, on its page, in the menu bar and in Pilot's dock. Press Summarise the last 24 hours for a newspaper front page made by Pilot's AI from the day's headlines, saved as an HTML file and opened in your browser; it never runs on its own.",
+  "examples": [
+    "Type news, Return on a headline: the article opens in your browser",
+    "In Extensions › News, tick MaltaToday, then click 📰 News in the menu bar and press Summarise the last 24 hours: a front page with the lead story, sections and every article opens in your browser"
   ],
-  "surfaces": { "page": { "command": "page", "every": 300 } },
+  "runtime": "process",
+  "requires": [
+    "python3",
+    "curl"
+  ],
+  "permissions": {
+    "network": [
+      "the feeds you pick (timesofmalta.com, maltatoday.com.mt, newsbook.com.mt, lovinmalta.com, tvmnews.mt, feeds.bbci.co.uk, news.ycombinator.com, news.google.com and others)"
+    ],
+    "files": [
+      "~/Downloads/Pilot News"
+    ]
+  },
+  "preferences": [
+    {
+      "name": "language",
+      "type": "dropdown",
+      "title": "Summary language",
+      "default": "english",
+      "description": "The language the 24-hour summary is written in; headlines in other languages are translated.",
+      "data": [
+        {
+          "title": "English",
+          "value": "english"
+        },
+        {
+          "title": "Malti",
+          "value": "maltese"
+        }
+      ]
+    },
+    {
+      "name": "folder",
+      "type": "folder",
+      "title": "Save summaries in",
+      "default": "",
+      "description": "Where each summary's HTML file goes, named by its date. Empty: Downloads › Pilot News."
+    },
+    {
+      "name": "source-times-of-malta",
+      "type": "checkbox",
+      "title": "Malta · Times of Malta",
+      "default": true
+    },
+    {
+      "name": "source-maltatoday",
+      "type": "checkbox",
+      "title": "Malta · MaltaToday",
+      "default": true
+    },
+    {
+      "name": "source-newsbook-en",
+      "type": "checkbox",
+      "title": "Malta · Newsbook (English)",
+      "default": true
+    },
+    {
+      "name": "source-newsbook",
+      "type": "checkbox",
+      "title": "Malta · Newsbook (Malti)",
+      "default": false
+    },
+    {
+      "name": "source-lovin-malta",
+      "type": "checkbox",
+      "title": "Malta · Lovin Malta",
+      "default": true
+    },
+    {
+      "name": "source-tvm-en",
+      "type": "checkbox",
+      "title": "Malta · TVM News (English)",
+      "default": true
+    },
+    {
+      "name": "source-tvm",
+      "type": "checkbox",
+      "title": "Malta · TVM Aħbarijiet (Malti)",
+      "default": false
+    },
+    {
+      "name": "source-the-shift",
+      "type": "checkbox",
+      "title": "Malta · The Shift",
+      "default": false
+    },
+    {
+      "name": "source-one-news",
+      "type": "checkbox",
+      "title": "Malta · ONE News (Malti)",
+      "default": false
+    },
+    {
+      "name": "source-gozo-news",
+      "type": "checkbox",
+      "title": "Malta · Gozo News",
+      "default": false
+    },
+    {
+      "name": "source-maltatoday-business",
+      "type": "checkbox",
+      "title": "Malta · MaltaToday Business",
+      "default": false
+    },
+    {
+      "name": "source-google-malta",
+      "type": "checkbox",
+      "title": "Malta · Google News: Malta",
+      "default": false,
+      "description": "Headlines from many papers, gathered by Google News."
+    },
+    {
+      "name": "source-bbc-world",
+      "type": "checkbox",
+      "title": "World · BBC World",
+      "default": true
+    },
+    {
+      "name": "source-bbc-top",
+      "type": "checkbox",
+      "title": "World · BBC Top stories",
+      "default": false
+    },
+    {
+      "name": "source-guardian-world",
+      "type": "checkbox",
+      "title": "World · The Guardian World",
+      "default": false
+    },
+    {
+      "name": "source-al-jazeera",
+      "type": "checkbox",
+      "title": "World · Al Jazeera",
+      "default": false
+    },
+    {
+      "name": "source-npr",
+      "type": "checkbox",
+      "title": "World · NPR News",
+      "default": false
+    },
+    {
+      "name": "source-reuters",
+      "type": "checkbox",
+      "title": "World · Reuters (through Google News)",
+      "default": false,
+      "description": "Headlines from many papers, gathered by Google News."
+    },
+    {
+      "name": "source-ap",
+      "type": "checkbox",
+      "title": "World · AP (through Google News)",
+      "default": false,
+      "description": "Headlines from many papers, gathered by Google News."
+    },
+    {
+      "name": "source-google-world",
+      "type": "checkbox",
+      "title": "World · Google News: World",
+      "default": false,
+      "description": "Headlines from many papers, gathered by Google News."
+    },
+    {
+      "name": "source-hacker-news",
+      "type": "checkbox",
+      "title": "Tech · Hacker News",
+      "default": true
+    },
+    {
+      "name": "source-ars-technica",
+      "type": "checkbox",
+      "title": "Tech · Ars Technica",
+      "default": false
+    },
+    {
+      "name": "source-the-verge",
+      "type": "checkbox",
+      "title": "Tech · The Verge",
+      "default": false
+    },
+    {
+      "name": "source-techcrunch",
+      "type": "checkbox",
+      "title": "Tech · TechCrunch",
+      "default": false
+    },
+    {
+      "name": "source-bbc-tech",
+      "type": "checkbox",
+      "title": "Tech · BBC Technology",
+      "default": false
+    },
+    {
+      "name": "source-google-tech",
+      "type": "checkbox",
+      "title": "Tech · Google News: Technology",
+      "default": false,
+      "description": "Headlines from many papers, gathered by Google News."
+    },
+    {
+      "name": "source-google-business",
+      "type": "checkbox",
+      "title": "Business · Google News: Business",
+      "default": false,
+      "description": "Headlines from many papers, gathered by Google News."
+    },
+    {
+      "name": "source-r-malta",
+      "type": "checkbox",
+      "title": "Reddit · r/malta",
+      "default": false,
+      "description": "Reddit often refuses readers without a sign-in (429), so it may stay empty."
+    },
+    {
+      "name": "source-r-worldnews",
+      "type": "checkbox",
+      "title": "Reddit · r/worldnews",
+      "default": false,
+      "description": "Reddit often refuses readers without a sign-in (429), so it may stay empty."
+    },
+    {
+      "name": "source-r-technology",
+      "type": "checkbox",
+      "title": "Reddit · r/technology",
+      "default": false,
+      "description": "Reddit often refuses readers without a sign-in (429), so it may stay empty."
+    },
+    {
+      "name": "feeds",
+      "type": "text",
+      "title": "Your feeds",
+      "default": "",
+      "description": "More sources of your own, separated by commas: an RSS or Atom feed's link, or words to follow through a Google News search (Valletta port)."
+    }
+  ],
+  "surfaces": {
+    "page": {
+      "command": "page",
+      "every": 300
+    },
+    "bar": {
+      "command": "bar",
+      "every": 300
+    }
+  },
   "commands": [
-    { "name": "news", "title": "News", "mode": "list", "run": "main.py" },
-    { "name": "summarise", "title": "Summarise the last 24 hours of news", "mode": "no-view", "run": "main.py" },
-    { "name": "summarised", "title": "News summary", "mode": "no-view", "hidden": true, "run": "main.py" },
-    { "name": "refresh", "title": "Refresh the headlines", "mode": "no-view", "hidden": true, "run": "main.py" },
-    { "name": "toggle", "title": "Switch a source on or off", "mode": "no-view", "hidden": true, "run": "main.py" },
-    { "name": "add-feed", "title": "Add a feed", "mode": "no-view", "hidden": true, "run": "main.py" },
-    { "name": "remove-feed", "title": "Remove a feed", "mode": "no-view", "hidden": true, "run": "main.py" },
-    { "name": "page", "title": "News page", "mode": "no-view", "hidden": true, "run": "main.py" }
+    {
+      "name": "news",
+      "title": "News",
+      "mode": "list",
+      "run": "main.py"
+    },
+    {
+      "name": "summarise",
+      "title": "Summarise the last 24 hours of news",
+      "mode": "no-view",
+      "run": "main.py"
+    },
+    {
+      "name": "summarised",
+      "title": "News summary",
+      "mode": "no-view",
+      "hidden": true,
+      "run": "main.py"
+    },
+    {
+      "name": "refresh",
+      "title": "Refresh the headlines",
+      "mode": "no-view",
+      "hidden": true,
+      "run": "main.py"
+    },
+    {
+      "name": "bar",
+      "title": "News in the menu bar",
+      "mode": "no-view",
+      "hidden": true,
+      "run": "main.py"
+    },
+    {
+      "name": "moved",
+      "title": "Hide the note on moved sources",
+      "mode": "no-view",
+      "hidden": true,
+      "run": "main.py"
+    },
+    {
+      "name": "page",
+      "title": "News page",
+      "mode": "no-view",
+      "hidden": true,
+      "run": "main.py"
+    }
   ]
 }

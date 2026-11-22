@@ -31,48 +31,47 @@ def google(words):
     return GOOGLE % quote_plus(words)
 
 
-# (group, id, title, url, on by default). Groups show in this order.
+# (group, id, title, url), in Settings' order. Each is a checkbox in Settings, source-<id>, whose default in
+# extension.json says whether it starts ticked (one list of defaults: test_news checks the two match).
 BUILT_IN = [
-    ("Malta", "times-of-malta", "Times of Malta", "https://timesofmalta.com/rss", True),
-    ("Malta", "maltatoday", "MaltaToday", "https://www.maltatoday.com.mt/rss/news/", True),
-    ("Malta", "newsbook-en", "Newsbook (English)", "https://newsbook.com.mt/en/feed/", True),
-    ("Malta", "newsbook", "Newsbook (Malti)", "https://newsbook.com.mt/feed/", False),
-    ("Malta", "lovin-malta", "Lovin Malta", "https://lovinmalta.com/feed/", True),
-    ("Malta", "tvm-en", "TVM News (English)", "https://tvmnews.mt/en/feed/?post_type=ahbarijiet&orderby=date&order=DESC", True),
-    ("Malta", "tvm", "TVM Aħbarijiet (Malti)", "https://tvmnews.mt/feed/?post_type=ahbarijiet&orderby=date&order=DESC", False),
-    ("Malta", "the-shift", "The Shift", "https://theshiftnews.com/feed/", False),
-    ("Malta", "one-news", "ONE News (Malti)", "https://one.com.mt/feed/", False),
-    ("Malta", "gozo-news", "Gozo News", "https://gozo.news/feed/", False),
-    ("Malta", "maltatoday-business", "MaltaToday Business", "https://www.maltatoday.com.mt/rss/business/", False),
-    ("Malta", "google-malta", "Google News: Malta", google("Malta when:1d"), False),
-    ("World", "bbc-world", "BBC World", "https://feeds.bbci.co.uk/news/world/rss.xml", True),
-    ("World", "bbc-top", "BBC Top stories", "https://feeds.bbci.co.uk/news/rss.xml", False),
-    ("World", "guardian-world", "The Guardian World", "https://www.theguardian.com/world/rss", False),
-    ("World", "al-jazeera", "Al Jazeera", "https://www.aljazeera.com/xml/rss/all.xml", False),
-    ("World", "npr", "NPR News", "https://feeds.npr.org/1001/rss.xml", False),
-    ("World", "reuters", "Reuters (through Google News)", google("site:reuters.com when:1d"), False),
-    ("World", "ap", "AP (through Google News)", google("site:apnews.com when:1d"), False),
+    ("Malta", "times-of-malta", "Times of Malta", "https://timesofmalta.com/rss"),
+    ("Malta", "maltatoday", "MaltaToday", "https://www.maltatoday.com.mt/rss/news/"),
+    ("Malta", "newsbook-en", "Newsbook (English)", "https://newsbook.com.mt/en/feed/"),
+    ("Malta", "newsbook", "Newsbook (Malti)", "https://newsbook.com.mt/feed/"),
+    ("Malta", "lovin-malta", "Lovin Malta", "https://lovinmalta.com/feed/"),
+    ("Malta", "tvm-en", "TVM News (English)", "https://tvmnews.mt/en/feed/?post_type=ahbarijiet&orderby=date&order=DESC"),
+    ("Malta", "tvm", "TVM Aħbarijiet (Malti)", "https://tvmnews.mt/feed/?post_type=ahbarijiet&orderby=date&order=DESC"),
+    ("Malta", "the-shift", "The Shift", "https://theshiftnews.com/feed/"),
+    ("Malta", "one-news", "ONE News (Malti)", "https://one.com.mt/feed/"),
+    ("Malta", "gozo-news", "Gozo News", "https://gozo.news/feed/"),
+    ("Malta", "maltatoday-business", "MaltaToday Business", "https://www.maltatoday.com.mt/rss/business/"),
+    ("Malta", "google-malta", "Google News: Malta", google("Malta when:1d")),
+    ("World", "bbc-world", "BBC World", "https://feeds.bbci.co.uk/news/world/rss.xml"),
+    ("World", "bbc-top", "BBC Top stories", "https://feeds.bbci.co.uk/news/rss.xml"),
+    ("World", "guardian-world", "The Guardian World", "https://www.theguardian.com/world/rss"),
+    ("World", "al-jazeera", "Al Jazeera", "https://www.aljazeera.com/xml/rss/all.xml"),
+    ("World", "npr", "NPR News", "https://feeds.npr.org/1001/rss.xml"),
+    ("World", "reuters", "Reuters (through Google News)", google("site:reuters.com when:1d")),
+    ("World", "ap", "AP (through Google News)", google("site:apnews.com when:1d")),
     ("World", "google-world", "Google News: World",
-     "https://news.google.com/rss/headlines/section/topic/WORLD?hl=en-GB&gl=GB&ceid=GB:en", False),
-    ("Tech", "hacker-news", "Hacker News", "https://news.ycombinator.com/rss", True),
-    ("Tech", "ars-technica", "Ars Technica", "https://feeds.arstechnica.com/arstechnica/index", False),
-    ("Tech", "the-verge", "The Verge", "https://www.theverge.com/rss/index.xml", False),
-    ("Tech", "techcrunch", "TechCrunch", "https://techcrunch.com/feed/", False),
-    ("Tech", "bbc-tech", "BBC Technology", "https://feeds.bbci.co.uk/news/technology/rss.xml", False),
+     "https://news.google.com/rss/headlines/section/topic/WORLD?hl=en-GB&gl=GB&ceid=GB:en"),
+    ("Tech", "hacker-news", "Hacker News", "https://news.ycombinator.com/rss"),
+    ("Tech", "ars-technica", "Ars Technica", "https://feeds.arstechnica.com/arstechnica/index"),
+    ("Tech", "the-verge", "The Verge", "https://www.theverge.com/rss/index.xml"),
+    ("Tech", "techcrunch", "TechCrunch", "https://techcrunch.com/feed/"),
+    ("Tech", "bbc-tech", "BBC Technology", "https://feeds.bbci.co.uk/news/technology/rss.xml"),
     ("Tech", "google-tech", "Google News: Technology",
-     "https://news.google.com/rss/headlines/section/topic/TECHNOLOGY?hl=en-GB&gl=GB&ceid=GB:en", False),
+     "https://news.google.com/rss/headlines/section/topic/TECHNOLOGY?hl=en-GB&gl=GB&ceid=GB:en"),
     ("Business", "google-business", "Google News: Business",
-     "https://news.google.com/rss/headlines/section/topic/BUSINESS?hl=en-GB&gl=GB&ceid=GB:en", False),
-    ("Reddit", "r-malta", "r/malta", "https://www.reddit.com/r/malta/.rss", False),
-    ("Reddit", "r-worldnews", "r/worldnews", "https://www.reddit.com/r/worldnews/.rss", False),
-    ("Reddit", "r-technology", "r/technology", "https://www.reddit.com/r/technology/.rss", False),
+     "https://news.google.com/rss/headlines/section/topic/BUSINESS?hl=en-GB&gl=GB&ceid=GB:en"),
+    ("Reddit", "r-malta", "r/malta", "https://www.reddit.com/r/malta/.rss"),
+    ("Reddit", "r-worldnews", "r/worldnews", "https://www.reddit.com/r/worldnews/.rss"),
+    ("Reddit", "r-technology", "r/technology", "https://www.reddit.com/r/technology/.rss"),
 ]
-GROUPS = ["Malta", "World", "Tech", "Business", "Reddit", "Yours"]
-GROUP_NOTES = {"Reddit": "Reddit often refuses readers without a sign-in (429)"}
 
 
 def built_in():
-    return [{"id": i, "group": g, "title": t, "url": u, "on": on} for g, i, t, u, on in BUILT_IN]
+    return [{"id": i, "group": g, "title": t, "url": u} for g, i, t, u in BUILT_IN]
 
 
 def is_feed_url(text):
