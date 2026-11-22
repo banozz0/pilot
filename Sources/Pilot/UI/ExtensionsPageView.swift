@@ -70,8 +70,7 @@ struct ExtensionsPageView: View {
 
     var body: some View {
         let listing = listing
-        let rows = listing.installed + listing.catalogue
-        let current = rows.first { $0.id == picked } ?? rows.first
+        let current = listing.shown.first { $0.id == picked } ?? listing.shown.first
         VStack(spacing: 0) {
             toolbar(listing)
             ink.line.frame(height: 1)
@@ -125,7 +124,7 @@ struct ExtensionsPageView: View {
     private func landCatalogue(_ proxy: ScrollViewProxy) {
         guard toCatalogue, focus == nil, catalogue.load != .loading, catalogue.load != .idle else { return }
         (filter, query) = (.get, "")
-        if let first = listing.catalogue.first { picked = first.id }
+        if let first = listing.shown.first { picked = first.id }
         withAnimation(Kit.change) { proxy.scrollTo(Self.catalogueAnchor, anchor: .top) }
         landedCatalogue()
     }
@@ -146,7 +145,7 @@ struct ExtensionsPageView: View {
                 }
             }
             Spacer(minLength: 12)
-            SearchBox(prompt: "Search \(ExtensionsPageView.plural(listing.total, "extension"))", text: $query).frame(maxWidth: 220)
+            SearchBox(prompt: "Search \(ExtensionsPageView.plural(listing.installedCount + listing.catalogueCount, "extension"))", text: $query).frame(maxWidth: 220)
             Button { ScriptsModule.openFolder(Extension.folder) } label: { Label("Folder", systemImage: "folder") }
                 .buttonStyle(.pilot)
                 .help("Opens \(Self.folderPath)")
@@ -174,7 +173,7 @@ struct ExtensionsPageView: View {
                         Text("None yet. Get one from the Get tab, or put one in the Extensions folder.").font(ink.ui(12)).foregroundStyle(ink.muted)
                             .fixedSize(horizontal: false, vertical: true).padding(.horizontal, 10).padding(.vertical, 6)
                     }
-                    ForEach(listing.installed) { entry in row(entry, current: current) }
+                    ForEach(listing.shown) { entry in row(entry, current: current) }
                     if !settings.broken.isEmpty, filter == .installed, query.isEmpty { broken }
                 }
             }
@@ -199,9 +198,9 @@ struct ExtensionsPageView: View {
             }
             .padding(.horizontal, 10).padding(.vertical, 6)
         case .loaded:
-            eyebrow("Catalogue · \(listing.total - listing.installedCount)").id(Self.catalogueAnchor)
-            ForEach(listing.catalogue) { entry in row(entry, current: current) }
-            if listing.catalogue.isEmpty {
+            eyebrow("Catalogue · \(listing.catalogueCount)").id(Self.catalogueAnchor)
+            ForEach(listing.shown) { entry in row(entry, current: current) }
+            if listing.shown.isEmpty {
                 Text(query.isEmpty ? "You have every extension it lists." : "Nothing in the catalogue matches.")
                     .font(ink.ui(12)).foregroundStyle(ink.muted).padding(.horizontal, 10).padding(.vertical, 6)
             }

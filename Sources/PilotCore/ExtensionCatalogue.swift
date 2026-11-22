@@ -335,6 +335,12 @@ public enum ExtensionCatalogue {
         }
     }
 
+    /// The entries browsing the catalogue offers: those not installed (the Extensions page's Get, `pilot ext catalogue`;
+    /// Sven, 2026-11-22). The Hyper+Space catalogue still lists every entry.
+    public static func offered(_ entries: [Entry], installed: [String: Installed]) -> [Entry] {
+        entries.filter { installed[$0.id] == nil }
+    }
+
     public static func standing(of entry: Entry, installed: [String: Installed]) -> Standing {
         guard let have = installed[entry.id] else { return .install }
         guard let offered = Version(entry.version), let mine = have.version.flatMap(Version.init), mine >= offered else { return .update }

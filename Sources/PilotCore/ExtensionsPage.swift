@@ -73,15 +73,16 @@ public enum ExtensionsPage {
 
     /// What the list shows under a filter and a search, and the counts its filters and search wear, which neither moves.
     public struct Listing: Equatable, Sendable {
-        public let installed: [Entry], catalogue: [Entry]
-        /// Every extension the list knows: installed, and the catalogue's others (the catalogue's size, past what is installed).
-        public let total: Int, installedCount: Int
+        /// The rows the filter and the search leave: installed ones, or under Get the catalogue's others.
+        public let shown: [Entry]
+        /// The installed ones, and the catalogue's others (its size, past what is installed).
+        public let installedCount: Int, catalogueCount: Int
         /// The installed ones the catalogue has newer, by id, whatever the filter and search show: Update all's.
         public let updatable: [String]
         public var updates: Int { updatable.count }
 
         public func count(_ filter: Filter) -> Int {
-            switch filter { case .installed: installedCount; case .get: total - installedCount; case .updates: updates }
+            switch filter { case .installed: installedCount; case .get: catalogueCount; case .updates: updates }
         }
     }
 
@@ -96,17 +97,22 @@ public enum ExtensionsPage {
                          kind: .installed, mark: update ? .update : .installed)
         }
         let mine = rows.map(entry)
-        let others = (catalogue ?? []).filter { installed[$0.id] == nil }
+        let others = ExtensionCatalogue.offered(catalogue ?? [], installed: installed)
         let q = query.trimmingCharacters(in: .whitespaces)
-        let shownRows = q.isEmpty ? mine : FuzzyRanker.Filter(q).filter(rows) { row in
-            [row.ext.title, row.id, row.ext.description] + row.ext.examples + row.ext.listed.map(\.title)
-        }.map(entry)
-        let shownOthers = ExtensionCatalogue.search(others, q).map {
-            Entry(id: $0.id, title: $0.title, icon: $0.icon, line: $0.description, version: $0.version, kind: .catalogue, mark: .get)
+        // Only the search the filter shows runs.
+        let shown: [Entry]
+        if filter == .get {
+            shown = ExtensionCatalogue.search(others, q).map {
+                Entry(id: $0.id, title: $0.title, icon: $0.icon, line: $0.description, version: $0.version, kind: .catalogue, mark: .get)
+            }
+        } else {
+            let found = q.isEmpty ? mine : FuzzyRanker.Filter(q).filter(rows) { row in
+                [row.ext.title, row.id, row.ext.description] + row.ext.examples + row.ext.listed.map(\.title)
+            }.map(entry)
+            shown = filter == .updates ? found.filter { $0.mark == .update } : found
         }
-        let installedShown = switch filter { case .installed: shownRows; case .get: [Entry](); case .updates: shownRows.filter { $0.mark == .update } }
-        return Listing(installed: installedShown, catalogue: filter == .get ? shownOthers : [],
-                       total: mine.count + others.count, installedCount: mine.count, updatable: mine.filter { $0.mark == .update }.map(\.id))
+        return Listing(shown: shown, installedCount: mine.count, catalogueCount: others.count,
+                       updatable: mine.filter { $0.mark == .update }.map(\.id))
     }
 
     public struct Field: Equatable, Sendable, Identifiable {

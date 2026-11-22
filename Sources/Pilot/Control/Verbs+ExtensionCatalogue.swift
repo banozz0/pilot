@@ -6,14 +6,14 @@ import PilotCore
 /// command asks Allow first, as `ext install` does, naming every file from the index the install checks each file
 /// against, and the commands of the extension.json that check pins.
 extension ControlVerbs {
-    /// `ext catalogue [<query>] [--refresh]`: the entries the page's Get tab shows for that search, the installed ones left
-    /// out (Sven, 2026-11-22), each with its standing; `updates` the installed ones it has newer, as the Updates tab.
+    /// `ext catalogue [<query>] [--refresh]`: the entries the search finds that the page's Get tab offers, the installed
+    /// ones left out (ExtensionCatalogue.offered), each with its standing; `updates` the installed ones it finds newer.
     static func catalogue(_ args: ControlArguments, _ tools: ExtensionTools) async throws(ControlError) -> JSONValue {
         let model = tools.catalogue
         try await Self.readCatalogue(model, refresh: args.has("refresh"))
         let query = args.positional.dropFirst().joined(separator: " ")
         let found = model.entries(query)
-        let entries = found.filter { model.installed[$0.id] == nil }
+        let entries = ExtensionCatalogue.offered(found, installed: model.installed)
         let updates = found.filter { model.standing(of: $0) == .update }
         func card(_ entry: ExtensionCatalogue.Entry) -> JSONValue {
             let standing = model.standing(of: entry)
