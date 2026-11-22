@@ -31,7 +31,7 @@ import subprocess
 import sys
 import time
 from datetime import datetime
-from urllib.parse import urlencode
+from urllib.parse import quote, urlencode
 
 API = "https://api.trackingmore.com/v4"
 SIGNUP = "https://www.trackingmore.com/signup.html"
@@ -52,6 +52,7 @@ STORE_LOCK = "store.lock"
 REFRESH_LOCK = "refresh.lock"
 KEY = re.compile(r"^[A-Za-z0-9_-]{8,128}$")
 NUMBER = re.compile(r"^[A-Za-z0-9-]{5,50}$")
+ID = re.compile(r"^[A-Za-z0-9_-]{1,64}$")  # TrackingMore's tracking ids are 32 hex characters
 GONE = {404, 4102, 4112}  # TrackingMore has no such tracking: removing it is done
 # TrackingMore's delivery statuses (docs: Courier Delivery Status): words, emoji, tone.
 STATUSES = {"pending": ("Pending", "⏳", None), "notfound": ("Not found yet", "⏳", None),
@@ -154,9 +155,10 @@ class Store:
     def find(self, parcel_id):
         return next((p for p in self.parcels if p["id"] == parcel_id), None)
 
-    def active(self):
-        """The parcels still worth asking about: not delivered, and still updated by TrackingMore."""
-        return [p for p in self.parcels if state(self.tracking(p)) == "active"]
+    def active(self, force=False):
+        """The parcels still worth asking about: not delivered, and still updated by TrackingMore; forced, any not
+        delivered."""
+        return [p for p in self.parcels if state(self.tracking(p)) in (("active", "stopped") if force else ("active",))]
 
     def read_at(self):
         """When the stalest parcel on its way was last read (an add reads its own), 0 for one never read; with none on
@@ -320,18 +322,20 @@ def refreshing(cache):
         return False
 
 
-def fetch(key, store):
-    """One read of every parcel on its way; its answer, or why it failed, saved in status.json. Holds no lock while it
-    waits on TrackingMore."""
-    numbers = sorted({p["number"] for p in store.active()})
+def fetch(key, store, force=False):
+    """One read of every parcel on its way (forced, every one not delivered); its answer, or why it failed, saved in
+    status.json. A tracking is matched by id, else by number and carrier. Holds no lock while it waits on TrackingMore."""
+    numbers = sorted({p["number"] for p in store.active(force)})
     if not numbers:
         return None
     found, why = read_trackings(key, numbers)
+    by_number = {(t.get("tracking_number"), t.get("courier_code")): t for t in found.values()}
     with store:
         now = time.time()
         for parcel in store.parcels:
-            if parcel["id"] in found:
-                store.status["byId"][parcel["id"]] = trimmed(found[parcel["id"]])
+            t = found.get(parcel["id"]) or by_number.get((parcel["number"], parcel["courier"]))
+            if t is not None:
+                store.status["byId"][parcel["id"]] = trimmed(t)
         store.status["triedAt"] = now
         store.status["error"] = why
         if why is None:
@@ -341,11 +345,12 @@ def fetch(key, store):
 
 def due(store, now, force=False):
     """Whether to read TrackingMore now: something on its way whose last read is older than the pace (FORCE_FLOOR when
-    forced), and for a view not within RETRY s of a failure."""
-    active = store.active()
+    forced), and for a view not within RETRY s of a failure. The last whole refresh bounds it, so a parcel TrackingMore
+    leaves out of its answer (archived, or gone after its 180 days) waits like the rest."""
+    active = store.active(force)
     if not active:
         return False
-    gone = now - store.read_at()
+    gone = now - max(store.read_at(), store.status.get("refreshedAt") or 0)
     if force:
         return gone >= FORCE_FLOOR
     status = store.status
@@ -592,7 +597,7 @@ def add(run, key):
         tracking = next((t for t in found.values() if t.get("courier_code") == courier), None)
         code = 200 if tracking else code
         why = why or "TrackingMore lists it already but did not send it"
-    if code != 200 or not isinstance(tracking, dict) or not isinstance(tracking.get("id"), str):
+    if code != 200 or not isinstance(tracking, dict) or not ID.match(str(tracking.get("id"))):
         fail(why or "TrackingMore did not start tracking it")
         return
     parcel = {"id": tracking["id"], "number": number, "courier": courier, "courierName": courier_name,
@@ -658,7 +663,7 @@ def remove(run, key):
     if not parcel:
         send({"type": "hud", "text": "Packages: not tracked any more"})
         return
-    code, _, why = call(key, "DELETE", "trackings/delete/%s" % parcel["id"])
+    code, _, why = call(key, "DELETE", "trackings/delete/" + quote(parcel["id"], safe=""))
     if code != 200 and code not in GONE:
         fail("could not stop tracking it: %s" % why)
         return
@@ -669,7 +674,7 @@ def remove(run, key):
 
 def refresh(run, key):
     store = Store.of(run)
-    count = len(store.active())
+    count = len(store.active(force=True))
     if not count:
         send({"type": "hud", "text": "Packages: nothing on its way to refresh"})
         return
@@ -688,7 +693,7 @@ def refresh(run, key):
             store.read()
             why = store.status.get("error")
         else:
-            why = fetch(key, store)
+            why = fetch(key, store, force=True)
     if why:
         fail("could not refresh: %s" % why)
         return

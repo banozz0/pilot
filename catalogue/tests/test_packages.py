@@ -359,6 +359,31 @@ class PackagesTests(ExtensionTestCase):
         sizes = [len(parse_qs(urlsplit(c["url"]).query)["tracking_numbers"][0].split(",")) for c in self.calls()]
         self.assertEqual(sizes, [40, 5])
 
+    def test_a_parcel_trackingmore_leaves_out_waits_like_the_rest(self):
+        self.two_parcels(refreshed_at=time.time() - 20 * 60)
+        self.answer({"GET trackings/get": envelope([])})  # archived at TrackingMore, or gone after its 180 days
+        self.run_ext("packages", preferences=PREFS)
+        self.settle()
+        self.run_ext("packages", query="s", preferences=PREFS)
+        self.run_ext("packages", query="sh", preferences=PREFS)
+        self.settle()
+        self.assertEqual(len(self.calls()), 1)
+
+    def test_a_tracking_answered_under_another_id_is_matched_by_number_and_carrier(self):
+        self.two_parcels(refreshed_at=0)
+        self.answer({"GET trackings/get": envelope([tracking("other-id", NUMBER, status="pickup", events=TRANSIT_EVENTS)])})
+        self.run_ext("refresh", preferences=PREFS)
+        self.assertEqual(self.status()["byId"]["t1"]["delivery_status"], "pickup")
+
+    def test_a_forced_refresh_also_asks_a_parcel_trackingmore_stopped_updating(self):
+        self.seed([self.parcel("t4", OTHER)], {"t4": tracking("t4", OTHER, status="expired", updating=False)}, refreshed_at=0)
+        self.answer({"GET trackings/get": envelope([tracking("t4", OTHER, status="transit", events=TRANSIT_EVENTS)])})
+        self.run_ext("packages", preferences=PREFS)
+        self.settle()
+        self.assertEqual(self.calls(), [])  # a view never asks it
+        self.assertEqual(self.hud(self.run_ext("refresh", preferences=PREFS)), "Packages: 1 parcel refreshed")
+        self.assertEqual(self.status()["byId"]["t4"]["delivery_status"], "transit")
+
     def test_a_refresh_landing_late_never_brings_back_a_removed_parcel_or_drops_a_new_one(self):
         self.two_parcels(refreshed_at=0)
         data, cache = str(self.box.data), str(self.box.cache)
