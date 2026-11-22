@@ -11,7 +11,8 @@ import html
 import json
 import re
 import time
-from urllib.parse import urlparse
+
+import feeds
 
 TASK = (
     "These are the news headlines from the last 24 hours, numbered [n], each with its source, time and a short "
@@ -50,8 +51,9 @@ def _numbers(value, count):
         return []
     seen = []
     for n in value:
-        if isinstance(n, str) and n.strip().lstrip("[").rstrip("]").isdigit():
-            n = int(n.strip().lstrip("[").rstrip("]"))
+        digits = n.strip().lstrip("[").rstrip("]") if isinstance(n, str) else ""
+        if digits.isdigit():
+            n = int(digits)
         if isinstance(n, int) and not isinstance(n, bool) and 1 <= n <= count and n not in seen:
             seen.append(n)
     return seen
@@ -59,6 +61,16 @@ def _numbers(value, count):
 
 def _words(value, limit):
     return re.sub(r"\s+", " ", value).strip()[:limit] if isinstance(value, str) else ""
+
+
+def _list(raw, key):
+    value = raw.get(key)
+    return value if isinstance(value, list) else []
+
+
+def _unfenced(answer):
+    """An answer with a Markdown code fence around it taken off."""
+    return re.sub(r"^```\w*\s*|\s*```$", "", (answer or "").strip())
 
 
 def _story(raw, count):
@@ -72,8 +84,7 @@ def _story(raw, count):
 def layout(answer, count):
     """The AI's answer as {"lead", "sections", "brief"}, each story with its item numbers checked against `count`; None
     when it holds no JSON object with a lead or a section."""
-    text = (answer or "").strip()
-    text = re.sub(r"^```(?:json)?\s*|\s*```$", "", text)
+    text = _unfenced(answer)
     start, end = text.find("{"), text.rfind("}")
     if start < 0 or end <= start:
         return None
@@ -84,19 +95,17 @@ def layout(answer, count):
     if not isinstance(raw, dict):
         return None
     sections = []
-    for section in raw.get("sections") if isinstance(raw.get("sections"), list) else []:
+    for section in _list(raw, "sections"):
         if not isinstance(section, dict):
             continue
-        stories = [s for s in (_story(r, count) for r in (section.get("stories") or [])
-                               if isinstance(section.get("stories"), list)) if s]
+        stories = [s for s in (_story(r, count) for r in _list(section, "stories")) if s]
         if stories:
             sections.append({"title": _words(section.get("title"), 60) or "News", "stories": stories[:8]})
     brief = []
-    for line in raw.get("brief") if isinstance(raw.get("brief"), list) else []:
-        if isinstance(line, dict) and _words(line.get("text"), 300):
-            brief.append({"text": _words(line["text"], 300), "items": _numbers(line.get("items"), count)})
-        elif isinstance(line, str) and line.strip():
-            brief.append({"text": _words(line, 300), "items": []})
+    for line in _list(raw, "brief"):
+        words = _words(line.get("text") if isinstance(line, dict) else line, 300)
+        if words:
+            brief.append({"text": words, "items": _numbers(line.get("items"), count) if isinstance(line, dict) else []})
     lead = _story(raw.get("lead"), count)
     if not lead and not sections:
         return None
@@ -109,8 +118,7 @@ def layout(answer, count):
 def fallback(answer, items, titles, groups):
     """A paper with no layout from the AI: its words (when any) as the lead's text, the newest item as the lead, the rest
     by group and source."""
-    words = re.sub(r"^```\w*\s*|\s*```$", "", (answer or "").strip())
-    lead = {"headline": items[0]["title"], "summary": "", "items": [1], "notes": words}
+    lead = {"headline": items[0]["title"], "summary": "", "items": [1], "notes": _unfenced(answer)}
     by_group = {}
     for n, item in enumerate(items[1:], 2):
         by_group.setdefault(groups.get(item["source"], "News"), []).append(
@@ -126,8 +134,7 @@ def _e(text):
 
 
 def _href(link):
-    url = urlparse(link or "")
-    return _e(link) if url.scheme in ("http", "https") and url.netloc else None
+    return _e(link) if feeds.is_feed_url(link or "") else None
 
 
 def _source_links(numbers, items, titles):
@@ -141,10 +148,10 @@ def _source_links(numbers, items, titles):
     return '<p class="read">%s</p>' % " · ".join(links) if links else ""
 
 
-def _headline(story, items, tag):
-    first = story["items"][0] if story["items"] else None
-    href = _href(items[first - 1]["link"]) if first else None
-    words = _e(story["headline"])
+def _linked(words, numbers, items, tag):
+    """`words` in `tag`, linked to the article of the first item number when it has one."""
+    href = _href(items[numbers[0] - 1]["link"]) if numbers else None
+    words = _e(words)
     return "<%s>%s</%s>" % (tag, '<a href="%s">%s</a>' % (href, words) if href else words, tag)
 
 
@@ -231,32 +238,23 @@ r.classList.toggle('dark',!dark);r.classList.toggle('light',dark)}})();"""
 
 
 def page(paper, items, titles, meta):
-    """The whole file. `paper` is a layout; `meta` has `day` (a time), `seconds`, `by`, `sources` (titles) and `count`."""
+    """The whole file. `paper` is a layout; `meta` has `day` (a time), `seconds` (the AI's) and `by` (who answered)."""
     day = time.localtime(meta["day"])
     date = time.strftime("%A %-d %B %Y", day)
     lead = paper["lead"]
     body = _paragraphs(lead["notes"]) if lead.get("notes") else ""
     lead_html = ('<div class="lead"><p class="kicker">The lead</p>%s%s%s%s</div>' % (
-        _headline(lead, items, "h1"),
+        _linked(lead["headline"], lead["items"], items, "h1"),
         '<p class="standfirst">%s</p>' % _e(lead["summary"]) if lead.get("summary") else "",
         '<div class="body">%s</div>' % body if body else "",
         _source_links(lead["items"], items, titles)))
-    brief = ""
-    if paper["brief"]:
-        lines = []
-        for line in paper["brief"]:
-            first = line["items"][0] if line["items"] else None
-            href = _href(items[first - 1]["link"]) if first else None
-            words = _e(line["text"])
-            lines.append("<li>%s</li>" % ('<a href="%s">%s</a>' % (href, words) if href else words))
-        brief = '<aside class="brief"><h2>In brief</h2><ol>%s</ol></aside>' % "".join(lines)
-    else:
-        brief = '<aside class="brief"><h2>In brief</h2><ol>%s</ol></aside>' % "".join(
-            '<li><a href="%s">%s</a></li>' % (_href(i["link"]) or "#", _e(i["title"])) for i in items[1:9])
+    lines = paper["brief"] or [{"text": i["title"], "items": [n]} for n, i in enumerate(items[1:9], 2)]
+    brief = '<aside class="brief"><h2>In brief</h2><ol>%s</ol></aside>' % "".join(
+        _linked(line["text"], line["items"], items, "li") for line in lines)
     sections = []
     for section in paper["sections"]:
         stories = "".join('<article>%s%s%s</article>' % (
-            _headline(s, items, "h3"), "<p>%s</p>" % _e(s["summary"]) if s.get("summary") else "",
+            _linked(s["headline"], s["items"], items, "h3"), "<p>%s</p>" % _e(s["summary"]) if s.get("summary") else "",
             _source_links(s["items"], items, titles)) for s in section["stories"])
         sections.append('<section><h2>%s</h2><div class="cols">%s</div></section>' % (_e(section["title"]), stories))
     by_source = {}
@@ -266,8 +264,9 @@ def page(paper, items, titles, meta):
         '<li><time>%s</time><a href="%s">%s</a></li>' % (time.strftime("%H:%M", time.localtime(i["at"])),
                                                          _href(i["link"]) or "#", _e(i["title"])) for i in group))
         for sid, group in by_source.items())
-    who = meta.get("by") or "Pilot's AI"
-    took = "%d s" % round(meta["seconds"]) if meta.get("seconds") is not None else "—"
+    by, took = meta["by"], "%d s" % round(meta["seconds"])
+    # The fallback's notice is a sentence of its own ("Answered by Codex. …"); Pilot's own pick has no name to give.
+    who = "Edited by %s in %s" % (by, took) if by == "Pilot's AI" else "%s Took %s." % (by, took)
     return """<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="color-scheme" content="light dark"><title>Pilot News · %(date)s</title><style>%(style)s</style></head>
@@ -275,7 +274,7 @@ def page(paper, items, titles, meta):
 <div class="ears"><span>The last 24 hours</span><span>%(count)d stories · %(nsources)d sources</span>
 <button id="look" type="button">Light / dark</button></div>
 <h1 class="mast">Pilot News<small>%(sources)s</small></h1>
-<div class="dateline"><span>%(date)s</span><span>Edited by %(who)s in %(took)s</span></div>
+<div class="dateline"><span>%(date)s</span><span>%(who)s</span></div>
 <div class="front">%(lead)s%(brief)s</div>
 %(sections)s
 <div class="index"><section><h2>Every article read</h2><div class="cols">%(index)s</div></section></div>
@@ -283,6 +282,6 @@ def page(paper, items, titles, meta):
 AI's reading: check the article before you rely on one.</footer>
 <script>%(script)s</script>
 </body></html>
-""" % {"date": _e(date), "style": STYLE, "count": len(items), "nsources": len(by_source), "who": _e(who), "took": took,
-       "sources": _e(" · ".join(meta.get("sources") or [])), "lead": lead_html, "brief": brief,
+""" % {"date": _e(date), "style": STYLE, "count": len(items), "nsources": len(by_source), "who": _e(who),
+       "sources": _e(" · ".join(titles.get(sid, sid) for sid in by_source)), "lead": lead_html, "brief": brief,
        "sections": "\n".join(sections), "index": index, "made": time.strftime("%H:%M", day), "script": SCRIPT}

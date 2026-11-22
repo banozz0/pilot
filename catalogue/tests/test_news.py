@@ -1,11 +1,12 @@
 import fcntl
 import json
 import sys
+import threading
 import time
 import unittest
 from email.utils import formatdate
 
-from harness import EXTENSIONS, ExtensionTestCase
+from harness import EXTENSIONS, ExtensionTestCase, manifest
 
 sys.path.insert(0, str(EXTENSIONS / "news"))
 import feeds  # noqa: E402
@@ -127,6 +128,15 @@ class NewsTests(ExtensionTestCase):
         with open(path, encoding="utf-8") as f:
             return f.read()
 
+    def said(self, result):
+        """The HUD line: a hud message, or (beside other actions, where Pilot drops a hud message) a hud action."""
+        lines = [m["text"] for m in result.of_type("hud")] + [a["text"] for a in result.actions if a["type"] == "hud"]
+        self.assertEqual(len(lines), 1, result.stdout)
+        return lines[0]
+
+    def opened(self, result):
+        return [a for a in result.actions if a["type"] == "open"]
+
     def summary(self):
         return json.loads((self.box.data / "summary.json").read_text())
 
@@ -158,7 +168,7 @@ class NewsTests(ExtensionTestCase):
         malti = feeds.parse(malti_feed().encode())
         self.assertEqual(malti[0]["title"], "Is-settur marittimu ġġenera kważi €1,000 miljun")
         self.assertEqual(malti[1]["title"], "Direttur ta’ kumpanija mmultat €1,800")
-        self.assertEqual(feeds.feed_title(malti_feed().encode()), "TVMnews.mt")
+        self.assertEqual(feeds.read(malti_feed().encode())[0], "TVMnews.mt")
 
     def test_a_broken_feed_says_why_and_an_entity_bomb_is_refused(self):
         for body, words in ((BROKEN, "is not an RSS or Atom feed"), (CUT, "did not read as RSS or Atom"), ("", "empty")):
@@ -187,6 +197,7 @@ class NewsTests(ExtensionTestCase):
     # ---- Hyper+Space ----
 
     def test_hyper_space_lists_the_summary_row_then_headlines_newest_first_and_return_opens_them(self):
+        self.fetched()
         items = self.run_ext("news").items
         self.assertItemShape(items)
         self.assertEqual(items[0]["title"], "Summarise the last 24 hours")
@@ -200,7 +211,7 @@ class NewsTests(ExtensionTestCase):
                                                  "title": "Open in the browser"})
         ages = [r for r in rows if r["title"] == "Old story from yesterday"]
         self.assertEqual(ages[0]["accessory"], "1 d")
-        self.assertFalse([m for m in self.box.run("news", "news").messages if m.get("type") == "action"])
+        self.assertEqual(self.run_ext("news").actions, [])
 
     def test_a_fresh_cache_is_not_fetched_again_and_a_stale_one_refreshes_behind_the_list(self):
         self.run_ext("news")
@@ -281,7 +292,7 @@ class NewsTests(ExtensionTestCase):
     def test_a_press_sends_the_last_24_hours_headlines_and_short_descriptions_once(self):
         self.fetched()
         result, ai = self.press()
-        self.assertEqual(result.of_type("hud")[0]["text"], "Summarising 7 headlines from 3 sources…")
+        self.assertEqual(self.said(result), "Summarising 7 headlines from 3 sources…")
         self.assertActionShape(ai)
         text = ai["text"]
         self.assertIn("[1] TVM Aħbarijiet (Malti) · ", text)
@@ -306,10 +317,9 @@ class NewsTests(ExtensionTestCase):
                                {"title": "Tech", "stories": [{"headline": "A faster Mac mini", "summary": "", "items": ["3"]}]}],
                   "brief": [{"text": "Ferries run again", "items": [4]}]}
         done = self.answer(ai, input="```json\n%s\n```" % json.dumps(layout), notice="Answered by Codex. Claude Code is out of usage.")
-        hud = done.of_type("hud")[0]["text"]
+        hud = self.said(done)
         self.assertRegex(hud, r"^News summary ready in \d+ s · Answered by Codex\. Claude Code is out of usage\.$")
-        [opened] = done.actions
-        self.assertEqual(opened["type"], "open")
+        [opened] = self.opened(done)
         self.assertTrue(opened["url"].endswith(time.strftime("%Y-%m-%d") + ".html"))
         html = self.read(opened["url"])
         self.assertIn('<h1 class="mast">Pilot News', html)
@@ -323,7 +333,7 @@ class NewsTests(ExtensionTestCase):
         self.assertNotIn("<script>alert", html)
         self.assertIn('href="https://timesofmalta.com/a/x">Valletta</a>', html, "a title's tags are dropped as a description's")
         self.assertNotIn("Old story from yesterday", html)
-        self.assertIn("Edited by Answered by Codex.", html)
+        self.assertIn("Answered by Codex. Claude Code is out of usage. Took ", html)
         self.assertEqual(html.count("<script>"), 1, "its one script is its own light and dark switch")
         state = self.summary()
         self.assertEqual((state["status"], state["count"], state["path"]), ("done", 7, opened["url"]))
@@ -338,16 +348,21 @@ class NewsTests(ExtensionTestCase):
     def test_while_one_is_on_its_way_the_page_offers_ask_again_and_a_twin_answer_is_dropped(self):
         self.fetched()
         _, ai = self.press()
+        self.assertEqual(self.page()[0]["blocks"][0]["actions"][0]["title"], "Summarise the last 24 hours",
+                         "no Ask again at once, so a double click never asks twice")
+        state = self.summary()
+        state["asked"] -= 80
+        (self.box.data / "summary.json").write_text(json.dumps(state))
+        self.assertEqual(self.blocks_message("page", "page")["refresh"], 10, "Ask again's text is asked at a calmer pace")
         page = self.page()
         again = page[0]["blocks"][0]["actions"][0]
         self.assertEqual((again["type"], again["title"]), ("ai", "Ask again"))
         self.assertEqual((again["text"], again["then"]["context"]["job"]), (ai["text"], ai["then"]["context"]["job"]))
         self.assertEqual(page[0]["blocks"][1]["text"], "Summarising 7 headlines…")
-        self.assertEqual(self.box.run("news", "page", surface="page").of_type("blocks")[0]["refresh"], 2)
         first = self.answer(again, input="{}")
-        self.assertEqual(len(first.actions), 1)
+        self.assertEqual(len(self.opened(first)), 1)
         twin = self.answer(ai, input="{}")
-        self.assertEqual((twin.of_type("hud")[0]["text"], twin.actions), ("That news summary is made already", []))
+        self.assertEqual((self.said(twin), twin.actions), ("That news summary is made already", []))
         self.assertEqual(len(list((self.box.root / "out").iterdir())), 1, "one paper a press")
         self.assertEqual(self.page()[0]["blocks"][0]["actions"][0]["type"], "run", "done: the button presses anew")
 
@@ -355,16 +370,40 @@ class NewsTests(ExtensionTestCase):
         self.fetched()
         _, ai = self.press()
         done = self.answer(ai, input="- **Budget** passed\n- Ferries are back")
-        self.assertEqual(done.of_type("hud")[0]["text"].split(" · ")[1], "Pilot's AI")
-        html = self.read(done.actions[0]["url"])
+        self.assertEqual(self.said(done).split(" · ")[1], "Pilot's AI")
+        html = self.read(self.opened(done)[0]["url"])
+        self.assertRegex(html, r"Edited by Pilot&#x27;s AI in \d+ s")
         self.assertIn("<li>Budget passed</li>", html)
         self.assertIn('href="https://www.theverge.com/x"', html)
         _, ai = self.press()
         failed = self.answer(ai, error="Claude Code is signed out. Sign in on the AI page.")
-        self.assertEqual(failed.of_type("hud")[0]["text"], "News summary failed: Claude Code is signed out. Sign in on the AI page.")
+        self.assertEqual(self.said(failed), "News summary failed: Claude Code is signed out. Sign in on the AI page.")
         self.assertEqual(failed.actions, [])
         self.assertEqual(self.summary()["status"], "failed")
         self.assertIsNotNone(self.press()[1], "after a failure a press asks again")
+
+    def test_a_press_after_an_answer_was_lost_asks_the_same_job_again(self):
+        self.fetched()
+        _, ai = self.press()
+        self.assertIsNone(self.press()[1], "not yet: it may still come")
+        state = self.summary()
+        state["asked"] -= 80
+        (self.box.data / "summary.json").write_text(json.dumps(state))
+        result, again = self.press()
+        self.assertEqual(self.said(result), "Asking again for the news summary")
+        self.assertEqual((again["text"], again["then"]["context"]["job"]), (ai["text"], ai["then"]["context"]["job"]))
+
+    def test_a_second_press_while_the_first_fetches_is_refused(self):
+        self.routes({k: (v[0], 1.5) for k, v in ROUTES.items()})
+        first = {}
+        thread = threading.Thread(target=lambda: first.update(result=self.box.run("news", "summarise")))
+        thread.start()
+        time.sleep(0.6)
+        second, ai = self.press()
+        thread.join()
+        self.assertIsNone(ai)
+        self.assertIn("already on its way", self.said(second))
+        self.assertEqual(len([a for a in first["result"].actions if a["type"] == "ai"]), 1, "the first press asks, once")
 
     def test_nothing_from_the_last_day_asks_no_ai(self):
         self.pick({"picked": {k: False for k in PICKS["picked"]}})
@@ -372,15 +411,14 @@ class NewsTests(ExtensionTestCase):
         self.pick({"picked": dict({k: False for k in PICKS["picked"]}, **{"lovin-malta": True})})
         result, ai = self.press()
         self.assertIsNone(ai)
-        self.assertEqual(result.of_type("hud")[0]["text"], "No headlines from the last 24 hours in your sources")
+        self.assertEqual(self.said(result), "No headlines from the last 24 hours in your sources")
+        self.assertNotEqual(self.summary().get("status"), "working", "a press that asks nothing leaves no summary waiting")
 
     def test_no_surface_asks_the_ai_and_there_is_no_timer(self):
-        manifest = json.loads((EXTENSIONS / "news" / "extension.json").read_text())
-        self.assertEqual(list(manifest["surfaces"]), ["page"])
+        self.assertEqual(list(manifest("news")["surfaces"]), ["page"])
         self.fetched()
-        for command in ("news", "page"):
-            result = self.box.run("news", command, surface="page" if command == "page" else None)
-            self.assertFalse([m for m in result.messages if m.get("type") == "action"], command)
+        self.assertEqual(self.run_ext("news").actions, [])
+        self.assertEqual(self.run_ext("page", surface="page").actions, [])
 
     def test_the_paper_layout_keeps_only_real_item_numbers(self):
         read = paper.layout('Here: {"lead": {"headline": "H", "items": [0, 2, 2, 7, "1", true]}, "sections": []}', 3)

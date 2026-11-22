@@ -25,21 +25,23 @@ import json  # noqa: E402
 import os  # noqa: E402
 import subprocess  # noqa: E402
 import time  # noqa: E402
+from collections import Counter  # noqa: E402
 from urllib.parse import urlparse  # noqa: E402
 
 import feeds  # noqa: E402
-import paper  # noqa: E402
 
 PAGE = "pilot://open?tab=page&extension=news"
+DAY = 86400
 FRESH = 600  # seconds headlines count as fresh
 RETRY = 120  # seconds after a refresh before a view starts another
-KEPT_FOR = 3 * 86400  # seconds an item is kept
+KEPT_FOR = 3 * DAY  # seconds an item is kept
 KEPT = 1500  # items kept at most
-DAY = 86400
 SUMMARY_FRESH = 300  # seconds of headlines a summary uses as they are; older ones are fetched first
 SUMMARY_WAIT = 20  # seconds a summary waits for that fetch
 REFRESH_TIME = 22  # seconds one refresh may take in all
 STALE = 600  # seconds a summary may take before it counts as lost
+FETCH_STALE = 60  # seconds a press may spend fetching before it counts as lost
+ASK_AGAIN_AFTER = 75  # seconds a summary waits before a press, or its page's Ask again, asks again
 MOST_READ = 200  # items one summary sends at most
 PER_SOURCE = 40  # of them, from one source at most
 ROWS = 150  # headlines in Hyper+Space
@@ -52,8 +54,13 @@ def send(message):
     sys.stdout.write(json.dumps(message, ensure_ascii=False) + "\n")
 
 
-def hud(text):
-    send({"type": "hud", "text": text})
+def hud(text, *actions):
+    """The HUD line, then `actions`. Pilot shows a no-view's hud message only when it prints no action, so with actions
+    the line goes first as a hud action."""
+    if not actions:
+        return send({"type": "hud", "text": text})
+    for action in ({"type": "hud", "text": text},) + actions:
+        send({"type": "action", "action": action})
 
 
 def run_action(command, title, context=None, **fields):
@@ -64,13 +71,13 @@ def run_action(command, title, context=None, **fields):
     return action
 
 
-def load(folder, name, default=None):
+def load(folder, name):
     try:
         with open(os.path.join(folder, name), encoding="utf-8") as f:
             value = json.load(f)
     except (OSError, ValueError):
-        return {} if default is None else default
-    return value if isinstance(value, dict) else ({} if default is None else default)
+        return {}
+    return value if isinstance(value, dict) else {}
 
 
 def save(folder, name, value):
@@ -78,6 +85,14 @@ def save(folder, name, value):
     with open(path + ".part", "w", encoding="utf-8") as f:
         json.dump(value, f, ensure_ascii=False)
     os.replace(path + ".part", path)
+
+
+def language(run):
+    return (run.get("preferences") or {}).get("language") or "english"
+
+
+def last_day(items, now):
+    return [i for i in items if now - i.get("at", 0) < DAY]
 
 
 def folders(run):
@@ -159,11 +174,14 @@ def refresh(cache, sources):
             except feeds.FeedProblem as e:
                 error = str(e)
             else:
-                fresh[source["id"]] = [feeds.tidy(source, r, seen, now) for r in raw]
-                fresh[source["id"]] = [i for i in fresh[source["id"]] if now - i["at"] < KEPT_FOR]
-        last = status.get(source["id"]) if isinstance(status.get(source["id"]), dict) else {}
-        status[source["id"]] = {"error": error, "triedAt": now, "count": len(fresh.get(source["id"], [])) if not error
-                                else last.get("count", 0), "fetchedAt": now if not error else last.get("fetchedAt")}
+                tidied = (feeds.tidy(source, r, seen, now) for r in raw)
+                fresh[source["id"]] = [i for i in tidied if now - i["at"] < KEPT_FOR]
+        if error:  # its last items stay, with why the fetch failed
+            last = status.get(source["id"]) if isinstance(status.get(source["id"]), dict) else {}
+            count, fetched = last.get("count", 0), last.get("fetchedAt")
+        else:
+            count, fetched = len(fresh[source["id"]]), now
+        status[source["id"]] = {"error": error, "triedAt": now, "count": count, "fetchedAt": fetched}
     items = [i for i in old if i["source"] not in fresh] + [i for group in fresh.values() for i in group]
     items.sort(key=lambda i: -i["at"])
     save(cache, CACHE, {"fetchedAt": now, "sources": status, "items": items[:KEPT]})
@@ -175,16 +193,16 @@ def refresh_main():
 
 
 def start_refresh(cache, sources):
-    """Takes the lock and hands it to a detached child that fetches; None when a refresh runs already."""
+    """Takes the lock and hands it to a detached child that fetches; nothing when a refresh runs already."""
     if not sources:
-        return None
+        return False
     try:
         lock = open(os.path.join(cache, LOCK), "a")
     except OSError:
-        return None
+        return False
     with lock:
         if not locked(lock):
-            return None
+            return False
         try:
             child = subprocess.Popen([sys.executable, os.path.abspath(__file__), "--refresh"], stdin=subprocess.PIPE,
                                      stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, pass_fds=(lock.fileno(),),
@@ -192,27 +210,27 @@ def start_refresh(cache, sources):
             child.stdin.write(json.dumps({"cache": cache, "sources": sources}).encode())
             child.stdin.close()
         except OSError:
-            return None
-    return child
+            return False
+    return True
 
 
-def headlines(cache, sources, budget=0.0, force=False, fresh_for=FRESH):
+def headlines(cache, sources, budget=0.0, force=False, fresh_for=FRESH, empty_budget=0.0):
     """(the kept record, True while a refresh runs). A record older than `fresh_for`, missing a picked source, or
-    `force`, starts a refresh (not within RETRY of the last, unless forced); the view waits for it `budget` s at most."""
+    `force`, starts a refresh (not within RETRY of the last, unless forced); the view waits for it `budget` s at most
+    (`empty_budget` when nothing is kept yet), and reads the record again only when a refresh ran meanwhile."""
     started = time.monotonic()
     record = load(cache, CACHE)
-    now = time.time()
+    budget = budget or (empty_budget if not record else 0.0)
+    since = time.time() - (record.get("fetchedAt") or 0)
     tried = record.get("sources") or {}
     missing = [s for s in sources if s["id"] not in tried]
-    stale = now - (record.get("fetchedAt") or 0) >= fresh_for
-    recent = now - (record.get("fetchedAt") or 0) < RETRY
-    if force or missing or (stale and not recent):
-        start_refresh(cache, sources)
+    began = (force or missing or (since >= fresh_for and since >= RETRY)) and start_refresh(cache, sources)
     running = refreshing(cache)
+    waited = began or running
     while running and budget and time.monotonic() - started < budget:
         time.sleep(0.1)
         running = refreshing(cache)
-    if budget:
+    if budget and waited:
         record = load(cache, CACHE)
     return record, running
 
@@ -243,12 +261,23 @@ def clock(at):
 # MARK: The summary's state
 
 def summary_state(data):
-    """The last summary: `status` working, done or failed, with its time, file, seconds and who answered. One on its way
-    for longer than STALE counts as lost, so a new press may start."""
+    """The last summary: `status` fetching (a press reading its headlines), working (asked), done or failed, with its
+    time, file, seconds and who answered. A fetch past FETCH_STALE or an ask past STALE counts as lost, so a new press
+    may start."""
     state = load(data, SUMMARY)
-    if state.get("status") == "working" and time.time() - state.get("started", 0) > STALE:
+    waited = time.time() - state.get("started", 0)
+    if (state.get("status") == "fetching" and waited > FETCH_STALE) or (state.get("status") == "working" and waited > STALE):
         state.update(status="failed", error="no answer came back")
     return state
+
+
+def lost(state):
+    """The job of a summary asked ASK_AGAIN_AFTER ago and not answered, which may be asked again; else None."""
+    asked = state.get("asked")
+    if state.get("status") == "working" and state.get("job") and isinstance(asked, (int, float)) \
+            and time.time() - asked >= ASK_AGAIN_AFTER:
+        return state["job"]
+    return None
 
 
 def save_in(run):
@@ -257,6 +286,8 @@ def save_in(run):
 
 
 def summary_line(state):
+    if state.get("status") == "fetching":
+        return "Fetching headlines for a summary…"
     if state.get("status") == "working":
         return "Summarising %d headlines…" % state.get("count", 0)
     if state.get("status") == "failed":
@@ -274,13 +305,13 @@ def news(run):
     data, cache = folders(run)
     sources = Sources(data)
     on = sources.on()
-    record, running = headlines(cache, on, budget=1.0 if not load(cache, CACHE) else 0.0)
+    record, running = headlines(cache, on, empty_budget=1.0)
     items = picked_items(record, on)
     titles, groups = sources.titles(), sources.groups()
     state = summary_state(data)
-    last_day = [i for i in items if time.time() - i["at"] < DAY]
     row = {"id": "summarise", "title": "Summarise the last 24 hours", "icon": "📰",
-           "subtitle": summary_line(state) or "%d headlines from your sources, laid out as a front page" % len(last_day),
+           "subtitle": summary_line(state) or "%d headlines from your sources, laid out as a front page" % len(
+               last_day(items, time.time())),
            "keywords": "summary summarize digest newspaper front page today",
            "actions": [run_action("summarise", "Summarise the last 24 hours")]}
     if state.get("path") and os.path.exists(state["path"]):
@@ -322,37 +353,47 @@ def summarise(run):
     `ai` action with their headlines and short descriptions; the answer comes back to `summarised`."""
     data, cache = folders(run)
     state = summary_state(data)
-    if state.get("status") == "working":
-        return hud("A news summary is already on its way (%s)" % age(state.get("started", 0)))
     sources = Sources(data)
+    if lost(state):  # an answer lost on the way: the same job asked again; whichever answer comes first is the paper
+        items = load(os.path.join(data, "jobs"), state["job"] + ".json").get("items") or []
+        if items:
+            save(data, SUMMARY, dict(state, asked=time.time()))
+            return hud("Asking again for the news summary", ask_ai(state["job"], items, sources.titles(), language(run)))
+    if state.get("status") in ("fetching", "working"):
+        return hud("A news summary is already on its way (%s)" % age(state.get("started", 0)))
     on = sources.on()
     if not on:
         return hud("Pick a source on the News page first")
     started = time.time()
-    record, _ = headlines(cache, on, budget=SUMMARY_WAIT, fresh_for=SUMMARY_FRESH)
-    items = gather(record, on, time.time())
+    # Fetching from now, so a second press while the headlines are read is refused too; a fetch that dies with its
+    # process counts as lost after FETCH_STALE.
+    save(data, SUMMARY, dict(state, status="fetching", started=started, error=None))
+    try:
+        record, _ = headlines(cache, on, budget=SUMMARY_WAIT, fresh_for=SUMMARY_FRESH)
+        items = gather(record, on, time.time())
+    except BaseException:
+        save(data, SUMMARY, state)
+        raise
     if not items:
+        save(data, SUMMARY, state)
         return hud("No headlines from the last 24 hours in your sources")
     job = hashlib.sha1(("%f" % started).encode()).hexdigest()[:12]
     jobs = os.path.join(data, "jobs")
     os.makedirs(jobs, exist_ok=True)
     for name in os.listdir(jobs):  # one summary at a time, so only this job's file is kept
-        try:
-            os.remove(os.path.join(jobs, name))
-        except OSError:
-            pass
+        feeds.discard(os.path.join(jobs, name))
     save(jobs, job + ".json", {"items": items})
-    titles = sources.titles()
-    save(data, SUMMARY, dict(state, status="working", job=job, started=started, count=len(items),
-                             sources=len({i["source"] for i in items}), error=None))
-    language = (run.get("preferences") or {}).get("language") or "english"
-    hud("Summarising %d headlines from %d sources…" % (len(items), len({i["source"] for i in items})))
-    send({"type": "action", "action": ask_ai(job, items, titles, language)})
+    save(data, SUMMARY, dict(state, status="working", job=job, started=started, asked=time.time(), count=len(items),
+                             error=None))
+    named = len({i["source"] for i in items})
+    hud("Summarising %d headlines from %d sources…" % (len(items), named),
+        ask_ai(job, items, sources.titles(), language(run)))
 
 
 def ask_ai(job, items, titles, language, title="News summary"):
     """The `ai` action for one job: its items' headlines and descriptions, the answer to `summarised` with the job and when
     it was asked, so the time shown is the AI's."""
+    import paper  # only a summary needs it: the list and the page start faster without
     return {"type": "ai", "title": title, "prompt": paper.task(language), "text": paper.numbered(items, titles)[:150000],
             "then": run_action("summarised", "News summary", {"job": job, "asked": time.time()})}
 
@@ -382,17 +423,13 @@ def summarised(run):
         if state.get("job") == job:
             save(data, SUMMARY, dict(state, status="failed", error=str(context["error"])[:200], at=time.time()))
         return hud("News summary failed: %s" % str(context["error"])[:160])
+    import paper
     answer = (run.get("input") or "").strip()
     sources = Sources(data)
     titles, groups = sources.titles(), sources.groups()
     by = str(context.get("notice") or "Pilot's AI")
     layout = paper.layout(answer, len(items)) or paper.fallback(answer, items, titles, groups)
-    shown = []
-    for item in items:
-        name = titles.get(item["source"], item["source"])
-        if name not in shown:
-            shown.append(name)
-    html = paper.page(layout, items, titles, {"day": time.time(), "seconds": seconds, "by": by, "sources": shown})
+    html = paper.page(layout, items, titles, {"day": time.time(), "seconds": seconds, "by": by})
     folder = save_in(run)
     try:
         os.makedirs(folder, exist_ok=True)
@@ -404,14 +441,13 @@ def summarised(run):
         return hud("News summary could not be saved: %s" % e.strerror)
     save(data, SUMMARY, {"status": "done", "job": job, "at": time.time(), "seconds": seconds,
                          "by": by, "count": len(items), "path": path})
-    hud("News summary ready in %d s · %s" % (round(seconds), by))
-    send({"type": "action", "action": {"type": "open", "url": path}})
+    hud("News summary ready in %d s · %s" % (round(seconds), by), {"type": "open", "url": path})
 
 
 def refresh_now(run):
     data, cache = folders(run)
     on = Sources(data).on()
-    record, running = headlines(cache, on, budget=REFRESH_TIME + 2, force=True)
+    record, _ = headlines(cache, on, budget=REFRESH_TIME + 2, force=True)
     failed = [s for s in on if (record.get("sources") or {}).get(s["id"], {}).get("error")]
     hud("Headlines refreshed" + (" · %d not answering" % len(failed) if failed else ""))
 
@@ -451,10 +487,10 @@ def add_feed(run):
         if error:
             return hud("That feed %s" % error)
         try:
-            found = feeds.parse(body)
+            named, found = feeds.read(body)
         except feeds.FeedProblem as e:
             return hud("That link %s" % e)
-        title = (feeds.feed_title(body) or urlparse(url).hostname or url)[:60]
+        title = (named or urlparse(url).hostname or url)[:60]
         if not found:
             return hud("%s has no items right now; not added" % title)
     sources.mine.append({"id": sid, "title": title, "url": url})
@@ -510,23 +546,25 @@ def page(run):
     items = picked_items(record, on)
     titles, status = sources.titles(), record.get("sources") or {}
     state = summary_state(data)
-    working = state.get("status") == "working"
+    waiting = state.get("status") in ("fetching", "working")
     now = time.time()
-    last_day = sum(1 for i in items if now - i["at"] < DAY)
     buttons = [run_action("summarise", "Summarise the last 24 hours", icon="📰")]
-    if working:  # an answer lost on the way (Pilot quit while it asked): the same job asked again, its first answer kept
-        job = load(os.path.join(data, "jobs"), str(state.get("job")) + ".json").get("items") or []
-        if job:
-            language = (run.get("preferences") or {}).get("language") or "english"
-            buttons = [ask_ai(state["job"], job, titles, language, title="Ask again")]
+    job = lost(state)
+    if job:
+        # An answer lost on the way (Pilot quit while it asked): Ask again is that job's own ai, so the page asks it in
+        # one press (a press of Summarise does the same); only after ASK_AGAIN_AFTER, so a double click never asks twice.
+        kept = load(os.path.join(data, "jobs"), job + ".json").get("items") or []
+        if kept:
+            buttons = [ask_ai(job, kept, titles, language(run), title="Ask again")]
     if state.get("path") and os.path.exists(state["path"]):
         buttons.append({"type": "open", "url": state["path"], "title": "Open the last summary"})
     buttons.append(run_action("refresh", "Refresh", icon="refresh"))
     head = [{"type": "buttons", "actions": buttons}]
-    if summary_line(state):
-        head.append({"type": "note", "text": summary_line(state), "icon": "info"})
+    line = summary_line(state)
+    if line:
+        head.append({"type": "note", "text": line, "icon": "info"})
     blocks = [{"type": "section", "title": "News", "subtitle": "%d headlines in the last 24 hours from %d sources" % (
-        last_day, len(on)), "aside": "Refreshing…" if running else "Read %s" % clock(record.get("fetchedAt")),
+        len(last_day(items, now)), len(on)), "aside": "Refreshing…" if running else "Read %s" % clock(record.get("fetchedAt")),
         "blocks": head}]
     failing = [s for s in on if (status.get(s["id"]) or {}).get("error")]
     if failing:
@@ -539,10 +577,7 @@ def page(run):
             for i in items[:PAGE_ROWS]]
     blocks.append({"type": "list", "title": "Headlines", "items": rows} if rows else
                   {"type": "markdown", "text": "_Fetching headlines…_" if running else "_No headlines yet: switch a source on below._"})
-    today = {}
-    for item in record.get("items") or []:
-        if isinstance(item, dict) and now - item.get("at", 0) < DAY:
-            today[item.get("source")] = today.get(item.get("source"), 0) + 1
+    today = Counter(i.get("source") for i in last_day([i for i in record.get("items") or [] if isinstance(i, dict)], now))
     picks = [{"type": "input", "placeholder": "Add a feed: paste an RSS or Atom link, or words to follow on Google News",
               "action": run_action("add-feed", "Add")}]
     for group in feeds.GROUPS:
@@ -553,7 +588,9 @@ def page(run):
     blocks.append({"type": "section", "title": "Sources", "subtitle": "%d on · Malta first; tick the ones you read" % len(on),
                    "blocks": picks})
     answer = {"type": "blocks", "blocks": blocks}
-    if working or running:
+    if job:  # Ask again carries the job's text: asked at a calmer pace
+        answer["refresh"] = 10
+    elif waiting or running:
         answer["refresh"] = 2
     send(answer)
 

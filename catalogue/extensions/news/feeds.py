@@ -1,7 +1,7 @@
 """News's sources and feeds: the built-in list, reading RSS 2.0, RSS 1.0 (RDF) and Atom, and fetching every picked
 feed at once through curl, each with its own time and size limit, so one dead feed never holds the rest.
 
-Each built-in URL was asked on 2026-11-22 and answered with a feed (Sven is in Malta, so Malta comes first). The Malta
+Each built-in URL was asked on 2026-11-22 and answered with a feed; Malta comes first. The Malta
 Independent has no feed today; TVM's news is its `ahbarijiet` posts, and its plain feed is a
 cached copy days old, so its links ask for them by date. Reddit answers readers without a sign-in with 429 or 404, so Reddit's are listed
 but off. Reuters and AP publish no public feed; theirs are Google News searches of their sites.
@@ -161,11 +161,9 @@ def _local(tag):
     return tag.rsplit("}", 1)[-1] if isinstance(tag, str) else ""
 
 
-def _child(node, *names):
-    for child in node:
-        if _local(child.tag) in names:
-            return child
-    return None
+def _child(node, name):
+    """`name` in any namespace or none (ElementTree's {*}, Python 3.8 and later)."""
+    return node.find("{*}" + name)
 
 
 def _text(node, *names):
@@ -178,9 +176,7 @@ def _text(node, *names):
 
 def _atom_link(entry):
     best = ""
-    for child in entry:
-        if _local(child.tag) != "link":
-            continue
+    for child in entry.findall("{*}link"):
         rel, href = child.get("rel", "alternate"), (child.get("href") or "").strip()
         if href and rel == "alternate":
             return href
@@ -193,24 +189,29 @@ class FeedProblem(Exception):
 
 
 def parse(body):
-    """A feed's items as [{"title", "link", "at" (or None), "text", "via"}], from RSS 2.0, RSS 1.0 or Atom; raises
-    FeedProblem when it is none of them. A feed declaring entities is refused (no entity expansion from outside input)."""
+    """A feed's items as [{"title", "link", "at" (or None), "text", "via"}]; see `read`."""
+    return read(body)[1]
+
+
+def read(body):
+    """(the feed's own title, its items), from RSS 2.0, RSS 1.0 or Atom; raises FeedProblem when it is none of them. A
+    feed declaring entities is refused (no entity expansion from outside input)."""
     if not body or not body.strip():
         raise FeedProblem("sent an empty answer")
-    if b"<!ENTITY" in body[:4096]:
+    if b"<!ENTITY" in body:
         raise FeedProblem("declares XML entities, so it is not read")
     try:
         root = ET.fromstring(body)
     except ET.ParseError:
         raise FeedProblem("did not read as RSS or Atom")
     kind = _local(root.tag)
+    channel = _child(root, "channel")  # RSS 2.0's (items inside it) and RSS 1.0's (items beside it)
     if kind == "feed":
-        nodes, atom = [n for n in root if _local(n.tag) == "entry"], True
+        nodes, atom = root.findall("{*}entry"), True
     elif kind == "rss":
-        channel = _child(root, "channel")
-        nodes, atom = ([n for n in channel if _local(n.tag) == "item"] if channel is not None else []), False
+        nodes, atom = (channel.findall("{*}item") if channel is not None else []), False
     elif kind == "RDF":
-        nodes, atom = [n for n in root if _local(n.tag) == "item"], False
+        nodes, atom = root.findall("{*}item"), False
     else:
         raise FeedProblem("is not an RSS or Atom feed")
     items = []
@@ -224,17 +225,7 @@ def parse(body):
         source = _child(node, "source")
         via = (source.text or "").strip() if source is not None and not atom else ""
         items.append({"title": title, "link": link, "at": at, "text": plain(text, DESCRIBED), "via": via})
-    return items
-
-
-def feed_title(body):
-    """A feed's own title (its channel's or its Atom feed's), or ""; read only when a feed is added."""
-    try:
-        root = ET.fromstring(body)
-    except ET.ParseError:
-        return ""
-    channel = _child(root, "channel")  # RSS 2.0's and RSS 1.0's; an Atom feed's title is its own
-    return plain(_text(channel if channel is not None else root, "title"))
+    return plain(_text(channel if channel is not None else root, "title")), items
 
 
 def _guid_link(node):
@@ -246,54 +237,47 @@ def _guid_link(node):
 
 # MARK: Fetching
 
-def curl_binary():
-    return shutil.which("curl") or "/usr/bin/curl"
-
-
 def fetch_all(sources, folder, deadline):
     """Fetches every source's feed into `folder` at once; {id: (body bytes or None, why or None)}. Each curl has its own
     FEED_TIME and LARGEST; past `deadline` (time.monotonic) the ones still running are stopped."""
     os.makedirs(folder, exist_ok=True)
-    running = {}
+    curl = shutil.which("curl") or "/usr/bin/curl"
+    running, answers = {}, {}
     for source in sources:
         out = os.path.join(folder, source["id"] + ".part")
         try:
             running[source["id"]] = (subprocess.Popen(
-                [curl_binary(), "-sS", "-L", "--compressed", "--max-time", str(FEED_TIME), "--max-filesize", str(LARGEST),
+                [curl, "-sS", "-L", "--compressed", "--max-time", str(FEED_TIME), "--max-filesize", str(LARGEST),
                  "-A", AGENT, "-o", out, "-w", "%{http_code}", source["url"]],
                 stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE), out)
         except OSError:
-            running[source["id"]] = (None, out)
-    answers = {}
+            answers[source["id"]] = (None, "could not start curl")
     for source_id, (process, out) in running.items():
-        if process is None:
-            answers[source_id] = (None, "could not start curl")
-            continue
         try:
             code, err = process.communicate(timeout=max(0.1, deadline - time.monotonic()))
         except subprocess.TimeoutExpired:
             process.kill()
             process.communicate()
             answers[source_id] = (None, "took too long")
-            _discard(out)
+            discard(out)
             continue
         status = code.decode("ascii", "replace").strip()
         if process.returncode != 0:
             said = err.decode("utf-8", "replace").strip().splitlines()
             answers[source_id] = (None, (said[-1] if said else "did not answer").replace("curl: ", "")[:120])
-        elif status and status != "200" and not status.startswith("2"):
+        elif status and not status.startswith("2"):
             answers[source_id] = (None, "answered %s" % status)
         else:
             try:
                 with open(out, "rb") as f:
-                    answers[source_id] = (f.read(LARGEST + 1)[:LARGEST], None)
+                    answers[source_id] = (f.read(LARGEST), None)
             except OSError:
                 answers[source_id] = (None, "sent nothing")
-        _discard(out)
+        discard(out)
     return answers
 
 
-def _discard(path):
+def discard(path):
     try:
         os.remove(path)
     except OSError:
@@ -315,11 +299,13 @@ def tidy(source, raw, seen, now):
     title = raw["title"]
     via = raw.get("via") or ""
     through_google = "news.google.com" in source["url"]
-    if through_google:
+    named = re.search(r"\s+[-–—]\s+%s$" % re.escape(via), title) if via else None
+    if named:  # the publisher its <source> names, repeated at the headline's end
+        title = title[:named.start()]
+    elif through_google:  # no <source>: Google's " - Publisher" read from the headline
         tail = GOOGLE_TAIL.search(title)
         if tail:
-            via = via or tail.group(0).strip(" -–—")
-            title = title[:tail.start()]
+            via, title = tail.group(0).strip(" -–—"), title[:tail.start()]
     iid = item_id(raw["link"])
     at = raw.get("at") or seen.get(iid) or now
     text = raw.get("text") or ""
