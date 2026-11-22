@@ -397,7 +397,7 @@
       "id": "news",
       "title": "News",
       "icon": "📰",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "description": "Headlines from the sources you pick, Malta first (Times of Malta, MaltaToday, Newsbook, Lovin Malta, TVM and more), then world and tech, or any RSS or Atom feed you add, newest first in Hyper+Space and on its page. Press Summarise the last 24 hours for a newspaper front page made by Pilot's AI from the day's headlines, saved as an HTML file and opened in your browser; it never runs on its own.",
       "examples": [
         "Type news, Return on a headline: the article opens in your browser",
@@ -432,7 +432,7 @@
       "files": [
         {
           "path": "extension.json",
-          "sha256": "2213a5ff12cb7af038d72e2e65ca14c1d67022a3bfe5d01b8de6532d2af13fe5",
+          "sha256": "a6ab3f5f7467fc79885a7536c1f3d2d020e9aebffcd4a76408ee1160448f6440",
           "size": 2512,
           "executable": false
         },
@@ -444,14 +444,14 @@
         },
         {
           "path": "main.py",
-          "sha256": "267d59d6cda866f7f1bcd23e648b9a57b7611ac098585e7c16eb6a171a25ec32",
-          "size": 28426,
+          "sha256": "067545244f147ec61214047c609b026518b96a3863cb7db9b72b8e8edab56edb",
+          "size": 28628,
           "executable": true
         },
         {
           "path": "paper.py",
-          "sha256": "f82177024d746a534c6f8a21efb35653632d0cdf782968e86a3d4a4cddee825e",
-          "size": 15293,
+          "sha256": "df90e283d98819d97a330e37f87213f7daeab75273073315984e74ca076f48e5",
+          "size": 15301,
           "executable": false
         }
       ]

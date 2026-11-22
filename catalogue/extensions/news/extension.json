@@ -2,7 +2,7 @@
   "id": "news",
   "title": "News",
   "icon": "📰",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Headlines from the sources you pick, Malta first (Times of Malta, MaltaToday, Newsbook, Lovin Malta, TVM and more), then world and tech, or any RSS or Atom feed you add, newest first in Hyper+Space and on its page. Press Summarise the last 24 hours for a newspaper front page made by Pilot's AI from the day's headlines, saved as an HTML file and opened in your browser; it never runs on its own.",
   "examples": ["Type news, Return on a headline: the article opens in your browser", "On the News page, tick MaltaToday and press Summarise the last 24 hours: a front page with the lead story, sections and every article opens in your browser"],
   "runtime": "process",

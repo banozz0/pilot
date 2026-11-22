@@ -265,8 +265,8 @@ def page(paper, items, titles, meta):
                                                          _href(i["link"]) or "#", _e(i["title"])) for i in group))
         for sid, group in by_source.items())
     by, took = meta["by"], "%d s" % round(meta["seconds"])
-    # The fallback's notice is a sentence of its own ("Answered by Codex. …"); Pilot's own pick has no name to give.
-    who = "Edited by %s in %s" % (by, took) if by == "Pilot's AI" else "%s Took %s." % (by, took)
+    # The fallback's notice is a sentence of its own ("Answered by Codex. …"); else the AI's name ("Claude Code").
+    who = "%s Took %s." % (by, took) if by.startswith("Answered by") else "Edited by %s in %s" % (by, took)
     return """<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="color-scheme" content="light dark"><title>Pilot News · %(date)s</title><style>%(style)s</style></head>

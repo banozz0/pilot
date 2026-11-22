@@ -427,7 +427,9 @@ def summarised(run):
     answer = (run.get("input") or "").strip()
     sources = Sources(data)
     titles, groups = sources.titles(), sources.groups()
-    by = str(context.get("notice") or "Pilot's AI")
+    # Who wrote it: the fallback's notice when it took over, else the AI Pilot names (`answeredBy`, Pilot from 2026-11-22),
+    # else, from an older Pilot, its AI unnamed.
+    by = str(context.get("notice") or context.get("answeredBy") or "Pilot's AI")
     layout = paper.layout(answer, len(items)) or paper.fallback(answer, items, titles, groups)
     html = paper.page(layout, items, titles, {"day": time.time(), "seconds": seconds, "by": by})
     folder = save_in(run)
