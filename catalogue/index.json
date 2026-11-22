@@ -658,6 +658,50 @@
       ]
     },
     {
+      "id": "packages",
+      "title": "Packages",
+      "icon": "📦",
+      "version": "1.0.0",
+      "description": "Track parcels from any carrier in Hyper+Space and on its page: type a tracking number and TrackingMore finds the carrier, then each parcel shows its status, its last event and how long ago; open one for every event. Delivered parcels move to Delivered and are not asked again. Uses your own TrackingMore API key: each new parcel takes one of your plan's credits, refreshing takes none.",
+      "examples": [
+        "Hyper+Space › Packages, type 1Z999AA10123456784 shoes and press Return: tracked as shoes, its carrier found, under On the way",
+        "Type track LX123456789CN in Hyper+Space and press Return: Packages starts tracking it in one step"
+      ],
+      "requires": [
+        "python3",
+        "curl"
+      ],
+      "commands": [
+        {
+          "name": "packages",
+          "title": "Packages",
+          "mode": "list"
+        }
+      ],
+      "permissions": {
+        "network": [
+          "api.trackingmore.com"
+        ],
+        "clipboard": false,
+        "files": [],
+        "actions": []
+      },
+      "files": [
+        {
+          "path": "extension.json",
+          "sha256": "8a7bb6fb484a7ec524ff4fc8a27edd745979037256839a7e51b3646fd0029653",
+          "size": 2075,
+          "executable": false
+        },
+        {
+          "path": "main.py",
+          "sha256": "31d9a0b2230cac7c5d0f362922d5364b670fe13b622b5573022e2df141977aec",
+          "size": 34290,
+          "executable": true
+        }
+      ]
+    },
+    {
       "id": "pomodoro",
       "title": "Pomodoro",
       "icon": "🍅",
