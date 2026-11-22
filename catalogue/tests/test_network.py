@@ -984,8 +984,10 @@ class DevicesTests(LocalNetworkCase):
 class ManifestTests(NetworkCase):
     def test_every_old_command_is_found_by_its_own_name(self):
         shown = {c["title"]: c for c in manifest("network")["commands"] if not c.get("hidden")}
-        for title in ("Tailscale devices", "Connect Tailscale", "Disconnect Tailscale", "Kill port", "SSH hosts", "Speedtest",
-                      "Network overview", "Devices on the network"):
+        # Pilot gives a command its extension's title as keywords (Extension.swift, ActionInfo), so "ports" found Ports'
+        # Kill port; under Network the word leads its title instead.
+        for title in ("Tailscale devices", "Connect Tailscale", "Disconnect Tailscale", "Ports: kill port", "SSH hosts",
+                      "Speedtest", "Network overview", "Devices on the network"):
             self.assertIn(title, shown)
         self.assertEqual(manifest("network")["preferences"][0]["name"], "terminal", "SSH hosts' preference, its name kept")
 

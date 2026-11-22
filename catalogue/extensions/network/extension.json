@@ -19,7 +19,7 @@
     { "name": "tailscale", "title": "Tailscale devices", "icon": "🛜", "mode": "list", "run": "main.py" },
     { "name": "tailscale-connect", "title": "Connect Tailscale", "icon": "🛜", "mode": "no-view", "run": "main.py" },
     { "name": "tailscale-disconnect", "title": "Disconnect Tailscale", "icon": "🛜", "mode": "no-view", "run": "main.py" },
-    { "name": "kill-port", "title": "Kill port", "icon": "🔌", "mode": "list", "run": "main.py" },
+    { "name": "kill-port", "title": "Ports: kill port", "icon": "🔌", "mode": "list", "run": "main.py" },
     { "name": "ssh-hosts", "title": "SSH hosts", "icon": "🖥️", "mode": "list", "run": "main.py" },
     { "name": "speedtest", "title": "Speedtest", "icon": "⚡", "mode": "detail", "run": "main.py" },
     { "name": "kill", "title": "Quit a port's program", "mode": "no-view", "hidden": true, "run": "main.py" },
