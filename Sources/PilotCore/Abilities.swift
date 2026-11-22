@@ -154,7 +154,7 @@ public enum Abilities {
         "system.lock", "system.sleep", "system.restart", "system.shutDown", "system.logOut", "system.wifi", "system.bluetooth", "system.ejectAll",
         "system.clearAllNotifications", "system.clearNotification", "system.idleLock",
         "engine.hyper", "engine.tilingOff", "engine.openWindow", "bar.peekMenuBar",
-        "apps.pastePlain", "apps.bitwardenFill", "apps.bitwardenLock", "apps.bitwardenForget", "ai.fix", "ai.selection", "ai.selectionTools", "speech.readAloud",
+        "apps.pastePlain", "apps.bitwardenFill", "apps.bitwardenLock", "apps.bitwardenForget", "ai.fix", "ai.selection", "apps.selectionActions", "ai.selectionTools", "speech.readAloud",
         "dictation.toggle", "dictation.hold", "cursor.spotlight",
     ]
 
