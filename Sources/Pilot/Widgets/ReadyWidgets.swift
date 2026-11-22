@@ -57,7 +57,7 @@ enum ReadyWidgets {
         // The repos folder's repos with work not committed or pushed (Q725), a click opening one (WidgetRepos).
         repos: """
             {"id": "pilot-repos", "title": "Repos", "icon": "🌿", "version": "1.0",
-             "description": "Your repos in the repos folder (~/code unless picked on Developer › Repos) with changes not committed or commits not pushed, read every 5 minutes; a click opens one.",
+             "description": "Your repos in the repos folder (~/code unless picked on Launcher › Abilities) with changes not committed or commits not pushed, read every 5 minutes; a click shows one in Finder.",
              "draw": "blocks", "data": {"repos": true}, "size": {"width": 280, "height": 200}}
             """,
         // A GitHub user's contributions (P82), gh's signed-in user unless Edit widget names one (WidgetGitHub).

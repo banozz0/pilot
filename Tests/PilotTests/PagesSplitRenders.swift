@@ -7,7 +7,7 @@ import Testing
 @testable import Pilot
 
 /// The pages split (Sven, 2026-11-15): the window at the pages it moved, at 1000 and 760 by 660, and the rail at the least
-/// size, 760 by 520, with the Developer pages switch on, in Instrument and the Toolbar tabs layout; run on main
+/// size, 760 by 520, in Instrument and the Toolbar tabs layout; run on main
 /// for the before and on the branch for the after. Seeded as WindowPagesRenders is.
 /// `CFFIXED_USER_HOME=<fresh dir> PILOT_RENDER_DIR=<fresh dir> swift test --filter PagesSplitRenders`
 extension SharedLook {
@@ -18,7 +18,7 @@ struct PagesSplitRenders {
 
     static let places: [(String, AppPlace)] = [
         ("workspaces", AppPlace(.workspaces)), ("tiling", AppPlace(.tiling)), ("menubar", AppPlace(.menuBar)),
-        ("look", AppPlace(.look)), ("fonts", AppPlace(.fonts)), ("openwith", AppPlace(.openWith)), ("configs", AppPlace(.configs)),
+        ("look", AppPlace(.look)), ("fonts", AppPlace(.fonts)), ("openwith", AppPlace(.openWith)),
         ("launcher", AppPlace(.menu)), ("extensions", AppPlace(.extensions)),
     ]
 
@@ -34,11 +34,10 @@ struct PagesSplitRenders {
 
         let engine = try SharedLook.HomeRenders.engine()
         SharedLook.StatsRenders.seed(SystemSampler.shared)
-        // The window reads the Developer switch from the app's own settings: the engine's stand in for this run.
+        // The window reads its switches from the app's own settings: the engine's stand in for this run.
         let live = PilotSettings.live
         PilotSettings.live = engine.settings
-        engine.settings.developer = true
-        defer { engine.settings.developer = false; PilotSettings.live = live }
+        defer { PilotSettings.live = live }
         let model = AppWindowModel(defaults: try #require(UserDefaults(suiteName: testSuite())))
         let window = AppWindowController.makeWindow(content: NSHostingView(rootView: AppWindowView(model: model).environment(engine)))
         defer { window.close() }

@@ -96,7 +96,6 @@ final class ControlActions {
             + rows("script", ScriptCommand.actions([], with: ScriptCommand.find()))
             + rows("extension", Extension.actions([], with: Extension.find().extensions))
             + rows("quicklink", QuicklinkBook.shared.links.map { .init(id: $0.actionID, label: $0.name, module: apps) })
-            + rows("config", DeveloperPages.on ? ConfigsModule.menuRows() : [])
             + rows("output", SystemModule.outputRows())
             + rows("appAction", catalogueRows())
     }

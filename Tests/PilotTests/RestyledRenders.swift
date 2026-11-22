@@ -41,7 +41,7 @@ struct RestyledRenders {
         let model = AppWindowModel(defaults: UserDefaults(suiteName: "pilot.renders.restyled")!)
         let window = AppWindowController.makeWindow(content: NSHostingView(rootView: AppWindowView(model: model).environment(engine)))
         let frame = try #require(window.contentView?.superview)
-        let places = [AppPlace(.workspaces), AppPlace(.tiling), AppPlace(.install, .catalogue), AppPlace(.install, .webApps), AppPlace(.openWith), AppPlace(.configs)]
+        let places = [AppPlace(.workspaces), AppPlace(.tiling), AppPlace(.install, .catalogue), AppPlace(.install, .webApps), AppPlace(.openWith)]
         for theme in ["tokyo-night", "folio"] {
             Look.shared.themeID = theme
             for place in places {
@@ -61,69 +61,6 @@ struct RestyledRenders {
         }
         Look.shared.themeID = PilotTheme.defaultID
         window.close()
-    }
-
-    /// Defaults as mockup D (card agent-bo-95422980) at the window widths 1440, 1000 and 760, in Tokyo Night: the whole window
-    /// as it opens, then the page alone (beside the window's 206 pt sidebar and hairline) as it opens, with the mouse over
-    /// AeroSpace, with Ghostty's preview open and filtered for "nvim". The configs are seeded in the moved home with the
-    /// mockup's dates, eight in a dotfiles folder; defaults and the editor are fakes. Each PNG is trimmed below the page's
-    /// last line.
-    @Test("Defaults renders as mockup D at 1440, 1000 and 760", .enabled(if: env["PILOT_RENDER_DIR"] != nil && env["CFFIXED_USER_HOME"] != nil))
-    func renderDefaults() throws {
-        let home = try #require(Self.env["CFFIXED_USER_HOME"])
-        try #require(NSHomeDirectory() == home, "the home directory did not move; refusing to touch Sven's files")
-        let dir = URL(fileURLWithPath: try #require(Self.env["PILOT_RENDER_DIR"])).appendingPathComponent("defaults")
-        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        testApp()
-        DisplayFaces.directory = LookThemeTests.fonts
-        DisplayFaces.register()
-        try Self.seedConfigs(home: URL(fileURLWithPath: home))
-        let began = Date.now
-
-        let engine = Engine()
-        let suite = "pilot.renders.defaults"
-        UserDefaults().removePersistentDomain(forName: suite)
-        let editor = EditorChoice(defaults: UserDefaults(suiteName: suite)!, installed: { _ in true }, handler: { _ in "com.microsoft.VSCode" })
-        func kinds() -> DefaultAppsModel { DefaultAppsModel(system: RenderDefaultApps(), forget: { _ in }) }
-
-        // PILOT_RENDER_ONLY narrows the renders to the file names holding it, for a quick look at one state.
-        let only = Self.env["PILOT_RENDER_ONLY"]
-        func wanted(_ name: String) -> Bool { only.map(name.contains) ?? true }
-        let model = AppWindowModel(defaults: UserDefaults(suiteName: "pilot.renders.restyled")!)
-        let window = AppWindowController.makeWindow(content: NSHostingView(rootView: AppWindowView(model: model).environment(engine)))
-        defer { window.close() }
-        let frame = try #require(window.contentView?.superview)
-        Look.shared.themeID = "tokyo-night"
-        for width in [1440, 1000, 760] {
-            // The whole window, tall enough for the whole page; trimmed under the page's end.
-            let tall = CGFloat(width == 760 ? 3300 : 2700)
-            if wanted("window-\(width)") {
-                window.setContentSize(NSSize(width: CGFloat(width), height: tall))
-                model.go(AppPlace(.configs))
-                RunLoop.main.run(until: Date().addingTimeInterval(0.8))
-                frame.layoutSubtreeIfNeeded()
-                let rep = try #require(snapshot(frame, scale: 2))
-                try Self.writeTrimmed(rep, from: 207, to: dir.appendingPathComponent("window-\(width).png"))
-            }
-
-            // The seeded home, its ages counted from when the renders began.
-            let seeded = URL(fileURLWithPath: home)
-            for (state, start) in [("page", ConfigsList.Start(home: seeded, now: began)), ("hover", ConfigsList.Start(hovered: "aerospace", home: seeded, now: began)),
-                                   ("preview", ConfigsList.Start(previewing: "ghostty", home: seeded, now: began)),
-                                   ("empty", ConfigsList.Start(query: "nvim", home: seeded, now: began))]
-                where wanted("page-\(width)-\(state)") {
-                let page = ConfigsPage(editor: editor, configs: start).environment(engine)
-                    .frame(width: CGFloat(width - 207), height: tall).pilotTheme(look: .shared).background(Theme.background)
-                try Self.writeTrimmed(rendered(page), from: 0, to: dir.appendingPathComponent("page-\(width)-\(state).png"))
-            }
-        }
-        // All kinds folded out, at the least width and the widest, where the groups sit side by side.
-        for width in [760, 1440] where wanted("page-\(width)-allkinds") {
-            let page = OpenWithPage(allKinds: true, kinds: kinds(), editor: editor).environment(engine)
-                .frame(width: CGFloat(width - 207), height: 4400).pilotTheme(look: .shared).background(Theme.background)
-            try Self.writeTrimmed(rendered(page), from: 0, to: dir.appendingPathComponent("page-\(width)-allkinds.png"))
-        }
-        Look.shared.themeID = PilotTheme.defaultID
     }
 
     /// Open with with All kinds folded out (Sven 2026-11-12, "open with isnt well aligned"): the page alone beside the
@@ -165,47 +102,6 @@ struct RestyledRenders {
         try #require(last < bottom - 16 * scale, "the page is taller than the render: \(url.lastPathComponent)")
         let image = try #require(rep.cgImage?.cropping(to: CGRect(x: 0, y: 0, width: rep.pixelsWide, height: last + 16 * scale)))
         try #require(NSBitmapImageRep(cgImage: image).representation(using: .png, properties: [:])).write(to: url)
-    }
-
-    /// Mockup D's twelve configs in `home`, eight linked into ~/code/dotfiles, each dated as the mockup shows it; Ghostty's
-    /// holds the mockup's lines at their line numbers. Any other known config is removed, so nine are not on this Mac.
-    static func seedConfigs(home: URL) throws {
-        let fm = FileManager.default
-        for config in AppConfigs.known { for path in config.paths { try? fm.removeItem(at: home.appending(path: path)) } }
-        try? fm.removeItem(at: home.appending(path: "code/dotfiles"))
-        let calendar = Calendar.current, now = Date.now, year = calendar.component(.year, from: now)
-        func day(_ month: Int, _ day: Int) -> Date { calendar.date(from: DateComponents(year: year, month: month, day: day, hour: 12))! }
-        let yesterday = calendar.date(byAdding: .day, value: -1, to: now)!
-        let filler = ["", "# Window", "window-padding-x = 12", "window-padding-y = 10", "window-decoration = auto", "macos-titlebar-style = hidden",
-                      "", "# Keys", "keybind = cmd+t=new_tab", "keybind = cmd+w=close_surface", "copy-on-select = clipboard", "cursor-style = block",
-                      "shell-integration = zsh", "", "mouse-hide-while-typing = true", "confirm-close-surface = false"]
-        var ghostty = (0..<66).map { filler[$0 % filler.count] }
-        for (n, line) in [(1, "# Shared by Ghostty.app and Ghostex — both load this file."), (23, "theme = Ayu Tokyo Night"),
-                          (33, "font-family = Iosevka Nerd Font"), (34, "font-size = 13"), (36, "font-feature = calt"),
-                          (44, "font-thicken = true"), (64, "background-opacity = 0.80")] { ghostty[n - 1] = line }
-        ghostty[49] = "api-key = xxxx"
-        let seeds: [(id: String, dotfiles: String?, changed: Date, text: String)] = [
-            ("ghostty", "workstation/ghostty/config", yesterday, ghostty.joined(separator: "\n") + "\n"),
-            ("zsh", "shell/zsh/zshrc", day(9, 21), "export EDITOR=code\n"), ("zshenv", "shell/zsh/zshenv", day(9, 15), "export LANG=en_GB.UTF-8\n"),
-            ("fish", nil, yesterday, "set -g fish_greeting\n"),
-            ("aerospace", "workstation/aerospace.toml", now.addingTimeInterval(-35 * 60), "start-at-login = true\n"),
-            ("hammerspoon", "workstation/hammerspoon/init.lua", day(9, 6), "-- Hammerspoon\n"),
-            ("karabiner", nil, day(9, 15), "{}\n"), ("skhd", "workstation/skhd/skhdrc", day(10, 4), "# skhd\n"),
-            ("yabai", "workstation/yabai/yabairc", day(9, 24), "# yabai\n"), ("git", "git/gitconfig", day(9, 15), "[user]\n\tname = Alex\n"),
-            ("lazygit", nil, day(8, 6), "gui:\n  theme: {}\n"), ("vscode", nil, day(10, 5), "{\n  \"editor.fontSize\": 13\n}\n"),
-        ]
-        for seed in seeds {
-            let config = try #require(AppConfigs.known.first { $0.id == seed.id })
-            let path = home.appending(path: config.paths[0])
-            let real = seed.dotfiles.map { home.appending(path: "code/dotfiles/\($0)") } ?? path
-            try fm.createDirectory(at: real.deletingLastPathComponent(), withIntermediateDirectories: true)
-            try Data(seed.text.utf8).write(to: real)
-            try fm.setAttributes([.modificationDate: seed.changed], ofItemAtPath: real.path)
-            if real != path {
-                try fm.createDirectory(at: path.deletingLastPathComponent(), withIntermediateDirectories: true)
-                try fm.createSymbolicLink(at: path, withDestinationURL: real)
-            }
-        }
     }
 }
 

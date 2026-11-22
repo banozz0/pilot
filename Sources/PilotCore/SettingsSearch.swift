@@ -74,8 +74,8 @@ public enum SettingsSearch {
     /// then the panes (panes(_:)), a Setting each, so an app or action that matches as well stays above them, unless a setting's title is what was typed (P53). Provided per
     /// query, as emoji are: listed whole, their long keyword lists matched letters scattered across words ("gaps" found
     /// Export and import by its initials, "msg" the Menu page over Messages).
-    public static func entries(for query: String, developer: Bool = true) -> [MenuEntry] {
-        AppPlace.search(query, developer: developer).map { place in
+    public static func entries(for query: String) -> [MenuEntry] {
+        AppPlace.search(query).map { place in
             MenuEntry(title: place.path, target: .action(actionID(place)), keywords: place.keywords.joined(separator: " "),
                       ownKind: .setting, subtitle: "Pilot", icon: .glyph(place.page.symbol, .accent))
         } + panes(query).map { pane in
@@ -170,7 +170,7 @@ public struct SettingsGroup: Sendable {
     public let settings: [SettingKey]
 
     /// The tab path it is listed under: "Windows › Tiling".
-    public func path(count: Int = AppArea.tabCount, developer: Bool) -> String { AppPlace(page).tabPath(count: count, developer: developer) }
+    public func path(count: Int = AppArea.tabCount) -> String { AppPlace(page).tabPath(count: count) }
 }
 
 extension SettingsSearch {
@@ -182,15 +182,14 @@ extension SettingsSearch {
     /// finds Launcher by its "hyper+space". A page whose own title or a part's matched comes first, then one found by its
     /// search words, then one found by its settings alone, each tier in the pages' order. `settings` is the schema's,
     /// matched on their words, so no value is read here. When nothing matches word by word, the places the window's
-    /// search finds (AppPlace.search, typos forgiven) as groups with no rows; empty for a blank query. Developer pages
-    /// only while `developer` is on.
-    public static func grouped(_ query: String, settings: [SettingKey], developer: Bool = true) -> [SettingsGroup] {
+    /// search finds (AppPlace.search, typos forgiven) as groups with no rows; empty for a blank query.
+    public static func grouped(_ query: String, settings: [SettingKey]) -> [SettingsGroup] {
         let words = Words(query)
-        let typos = { AppPlace.search(query, developer: developer).map { SettingsGroup(page: $0.page, parts: [], settings: []) } }
+        let typos = { AppPlace.search(query).map { SettingsGroup(page: $0.page, parts: [], settings: []) } }
         guard !words.typed.isEmpty else { return typos() }
-        let pages = AppPage.allCases.filter { developer || !$0.isDeveloper }
+        let pages = AppPage.allCases
         let found = settings.compactMap { setting -> (page: AppPage, setting: SettingKey, byTitle: Bool)? in
-            guard let page = AppPlace.named(setting.page)?.page, pages.contains(page) else { return nil }
+            guard let page = AppPlace.named(setting.page)?.page else { return nil }
             if words.holds(setting.label) { return (page, setting, true) }
             return words.holds(any: setting.choiceWords) ? (page, setting, false) : nil
         }.prefix(groupedSettings)
@@ -239,9 +238,8 @@ extension SettingKey {
 }
 
 extension MenuNavigator {
-    /// The settings a root search finds (SettingsSearch.entries(for:)); none inside a branch. Developer pages only while
-    /// `developer` is on.
-    public mutating func provideSettings(_ query: String, developer: Bool = true) {
-        provide(.setting, branch == nil ? SettingsSearch.entries(for: query, developer: developer) : [])
+    /// The settings a root search finds (SettingsSearch.entries(for:)); none inside a branch.
+    public mutating func provideSettings(_ query: String) {
+        provide(.setting, branch == nil ? SettingsSearch.entries(for: query) : [])
     }
 }

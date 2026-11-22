@@ -20,7 +20,6 @@ struct BindAITests {
         scripts: [.init(id: "scripts.run:zebra-deploy.sh", label: "Zebra deploy", module: "drive")],
         extensions: [.init(id: "ext.okapi.focus", label: "Okapi focus", module: "drive")],
         quicklinks: BindSearch.quicklinks([Quicklink(name: "Narwhal search", keyword: "nw", url: "https://narwhal.example/?q={query}")]),
-        configs: [.init(id: "configs.edit:quokka", label: "Quokka config", module: "apps")],
         shortcuts: ["Lemur routine"])
 
     /// The job a fake runner was handed.
@@ -120,10 +119,10 @@ struct BindAITests {
         guard case .none = try await Self.suggest("I would open Chrome.") else { Issue.record("prose is no bind"); return }
     }
 
-    @Test("Only the words, the apps, the browsers and Pilot's own actions are sent: no script, link, config, extension, Shortcut or bound command")
+    @Test("Only the words, the apps, the browsers and Pilot's own actions are sent: no script, link, extension, Shortcut or bound command")
     func privacy() {
         let input = BindAI.input("open youtube in chrome", Self.sources)
-        for name in ["zebra", "Zebra", "narwhal", "Narwhal", "quokka", "Quokka", "okapi", "Okapi", "Lemur", "walrus", "rsync"] {
+        for name in ["zebra", "Zebra", "narwhal", "Narwhal", "okapi", "Okapi", "Lemur", "walrus", "rsync"] {
             #expect(!input.contains(name), "\(name) was sent")
         }
         for sent in ["Google Chrome — com.google.Chrome", "windows.close — Close window", "drive.menu:com.mitchellh.ghostty:View > Quick Terminal"] {

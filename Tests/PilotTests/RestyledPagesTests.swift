@@ -37,12 +37,11 @@ struct RestyledPagesTests {
         #expect(Set(try pixels(page)).count > 16, "a blank page")
     }
 
-    @Test("Workspaces, Install, Open with and Configs each draw their body")
+    @Test("Workspaces, Install and Open with each draw their body")
     func bodies() throws {
         try expectBody(Self.workspacesBody())
         try expectBody(CataloguePage())
         try expectBody(OpenWithPage())
-        try expectBody(ConfigsPage(configs: ConfigsListTests.fixture))
     }
 
     /// Menu's Quicklinks and Aliases on files of the test's own, none of them Pilot.app's live ones.

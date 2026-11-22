@@ -85,7 +85,7 @@ struct InstrumentPagesRenders {
     static let rest: [(name: String, place: AppPlace)] = [
         ("workspaces", AppPlace(.workspaces)), ("tiling", AppPlace(.tiling)), ("clipboard", AppPlace(.clipboard)),
         ("snippets", AppPlace(.snippets)), ("install", AppPlace(.catalogue)),
-        ("webapps", AppPlace(.webApps)), ("openwith", AppPlace(.openWith)), ("configs", AppPlace(.configs)), ("general", AppPlace(.general)),
+        ("webapps", AppPlace(.webApps)), ("openwith", AppPlace(.openWith)), ("general", AppPlace(.general)),
         ("ai", AppPlace(.ai)), ("menu", AppPlace(.menu)), ("extensions", AppPlace(.extensions)),
     ]
 

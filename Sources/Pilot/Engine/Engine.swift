@@ -31,12 +31,8 @@ final class PilotSettings {
         dragModifier = defaults.string(forKey: "windows.dragModifier").flatMap(DragModifier.init(rawValue:)) ?? Self.dragModifierStart
         // Sven, 2026-11-18, a tester's first run: windows tiled while onboarding was still open.
         tiling = defaults.object(forKey: Self.tilingKey) as? Bool ?? Install.startsOn
-        // Off for a new install. Once, an install that ran before the switch existed (onboarding left its key) starts on, so
-        // Configs stays where it was (Sven's Mac among them); saved at once, so it never asks again.
-        let developer = defaults.object(forKey: Self.developerKey) as? Bool ?? (defaults.object(forKey: OnboardingWindow.unfinishedKey) != nil)
-        defaults.set(developer, forKey: Self.developerKey)
-        self.developer = developer
-        // System and Fonts the same way (the feature trim, 2026-11-19): off for a new install, on once for one that ran before.
+        // System and Fonts (the feature trim, 2026-11-19): off for a new install. Once, an install that ran before the
+        // switch existed (onboarding left its key) starts on; saved at once, so it never asks again.
         let more = defaults.object(forKey: Self.morePagesKey) as? Bool ?? (defaults.object(forKey: OnboardingWindow.unfinishedKey) != nil)
         defaults.set(more, forKey: Self.morePagesKey)
         morePages = more
@@ -165,12 +161,6 @@ final class PilotSettings {
     }
     /// The engine hands the running mouse tap the new modifier here.
     @ObservationIgnored var onDragModifierChange: () -> Void = {}
-    /// General's Developer switch (Pilot 1.0.2, Sven Q715): Configs, its Agents tab, and Repos show only while it is on
-    /// (AppPage.isDeveloper); DeveloperPages reads it.
-    var developer: Bool {
-        didSet { defaults.set(developer, forKey: Self.developerKey) }
-    }
-    static let developerKey = "general.developer"
     /// General's More pages switch: System and Fonts in the sidebar (AppPage.isMore); MorePages reads it.
     var morePages: Bool {
         didSet { defaults.set(morePages, forKey: Self.morePagesKey) }
@@ -1026,7 +1016,7 @@ final class Engine {
         // Dress or reset the folders selected in Finder (P43).
         if let folders = FolderDesigns.dynamic(id) { return folders }
         // Named as the drive catalogue names it, "Ghostty: New window", where it holds the id.
-        let action = (AppsModule.dynamic(id) ?? SystemModule.dynamic(id) ?? DriveModule.dynamic(id) ?? ConfigsModule.dynamic(id)
+        let action = (AppsModule.dynamic(id) ?? SystemModule.dynamic(id) ?? DriveModule.dynamic(id)
                       ?? ScriptsModule.dynamic(id) ?? ExtensionsModule.dynamic(id)).map { a in
             DriveModule.catalogue.label(for: id).map { Action(id: id, label: $0, module: a.module, run: a.run) } ?? a
         }

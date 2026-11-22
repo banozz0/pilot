@@ -7,18 +7,18 @@ import Foundation
 /// new (the file converter, and File search from Menu), and the tools you use all day sit in a Tools group. Stats left
 /// Activity for a page of its own after it (Sven 2026-10-10: "set Stats as its own page under Activity").
 /// Voice holds Dictation (was on Open with) and Read aloud (was System › Keyboard), so both sit with the tools (2026-10-16).
-/// Page map (Sven, 2026-10-17, Q207-Q211): Agent instructions is Configs' Agents tab, Ask is AI. The menu's page is Launcher, in an
+/// Page map (Sven, 2026-10-17, Q207-Q211): Ask is AI. The menu's page is Launcher, in an
 /// area of its own (P37, Sven 2026-10-18, Q284, Q285); still `menu` in links. Update & Clean left the top of Activity ›
 /// Reports for a Mac page of its own (Sven 2026-10-20: "update and clean should be in the Pilot app under Mac"). Fonts left
-/// Install for a page of its own after Configs (Sven, 2026-11-01: "for fonts i think its better to have its own page").
-/// Repos (Pilot 1.0.2, Sven Q716) browses own repos' files after Configs; it and Configs are developer pages (isDeveloper).
+/// Install for a page of its own (Sven, 2026-11-01: "for fonts i think its better to have its own page"). The Developer
+/// pages, Configs and Repos, left Pilot (Sven, 2026-11-22, Q351).
 /// The pages split (Sven, 2026-11-15) made Workspaces and Tiling one page with tabs across its top; on build 19 he kept the
 /// split but not the top tabs ("instead of top rail keep the sidebar", Q291), so they are two pages again, listed in the
 /// Windows area's sidebar. Reports came onto Update & Clean's front under the Update and Clean block
 /// (Sven, 2026-11-16).
 public enum AppPage: String, CaseIterable, Sendable {
     case home, binds, menu, workspaces, tiling, menuBar, dock, look, system, upkeep, clipboard, captures, snippets, notes, files, ai, voice,
-         install, openWith, configs, repos, fonts, general, extensions, widgets
+         install, openWith, fonts, general, extensions, widgets
 
     /// The area the page sits in (window directions, Sven 2026-10-11).
     public var area: AppArea { AppArea.allCases.first { $0.pages.contains(self) } ?? .home }
@@ -42,8 +42,6 @@ public enum AppPage: String, CaseIterable, Sendable {
         case .files: "Files"
         case .install: "Install"
         case .openWith: "Open with"
-        case .configs: "Configs"
-        case .repos: "Repos"
         case .fonts: "Fonts"
         case .general: "Pilot"
         case .ai: "AI"
@@ -73,8 +71,6 @@ public enum AppPage: String, CaseIterable, Sendable {
         case .files: "doc.on.doc"
         case .install: "shippingbox"
         case .openWith: "arrow.up.forward.app"
-        case .configs: "doc.badge.gearshape"
-        case .repos: "arrow.triangle.branch"
         case .fonts: "textformat"
         case .general: "gearshape"
         case .ai: "sparkles"
@@ -91,14 +87,11 @@ public enum AppPage: String, CaseIterable, Sendable {
         case .binds, .look, .ai, .snippets, .widgets: 1
         case .workspaces, .tiling, .system, .voice: 2
         case .menu, .menuBar, .dock, .general: 3
-        case .install, .extensions, .files, .fonts, .repos: 4
-        case .openWith, .configs, .notes: 5
+        case .install, .extensions, .files, .fonts: 4
+        case .openWith, .notes: 5
         }
     }
 
-    /// Developer pages (Pilot 1.0.2, Sven Q715): Configs, with its Agents tab, and Repos show only while General's Developer
-    /// switch is on; off, the sidebar, the searches and `pilot open` leave them out and nothing reads their files.
-    public var isDeveloper: Bool { self == .configs || self == .repos }
     /// System and Fonts (the feature trim, Sven 2026-11-19: hide): off the sidebar and Ctrl+Tab unless General's More pages
     /// switch is on; a link, the window's search and `pilot open` still reach them.
     public var isMorePage: Bool { self == .system || self == .fonts }
@@ -132,7 +125,6 @@ public enum AppPage: String, CaseIterable, Sendable {
         case .binds: "Keyboard"
         case .menu: "Your menu"
         case .files: "Files"
-        case .configs: "Apps"
         case .ai: "Chat"
         case .captures: "Capture"
         default: title
@@ -179,8 +171,6 @@ public enum AppPage: String, CaseIterable, Sendable {
         // The front's words; the role keys' moved with them to More (simplify-pages T11).
         case .openWith: ["default app", "open with", "main editor", "editor", "vs code", "browser", "defaults", "text", "markdown",
                          "all kinds"]
-        case .configs: ["config", "dotfiles", "ghostty", "neovim", "zshrc", "gitconfig", "starship", "tmux", "settings.json"]
-        case .repos: ["repo", "repos", "repository", "git", "branch", "commit", "code folder", "file tree", "source code"]
         case .fonts: ["font", "fonts", "typeface", "mono", "use fonts in", "nerd font"]
         // The front's words; the rest moved with their controls to Pilot's More places (simplify-pages T8).
         case .general: ["general", "hyper", "layer key", "caps lock", "launch at login", "startup", "setup again", "onboarding", "updates",
@@ -202,12 +192,11 @@ public enum AppPage: String, CaseIterable, Sendable {
 /// any Mac app's settings. Page names and pilot:// links stay as they were: an area is only where a page sits.
 public enum AppArea: String, CaseIterable, Sendable {
     // The rail's order (the panel's is `tabOrder`); each area's Cmd key is pinned in `key`, Pilot's ",".
-    // Look left Desktop for an area of its own, and Developer took Configs and Repos from Apps, shown only while the
-    // Developer pages switch is on, last above Pilot so switching it never renumbers the keys (the pages split, Sven 2026-11-15).
+    // Look left Desktop for an area of its own (the pages split, Sven 2026-11-15).
     // Windows (Workspaces and Tiling, listed in its sidebar as any area's pages, Q291) sits under Keys (Sven on Q289:
     // "Workspaces and Tiling as its own page on the sidebar under Keys"). Extensions joined Launcher on build 19 and is an
     // area of its own again after AI (Sven's notes on build 19); the eleventh keyed area, it has no Cmd key.
-    case home, keys, windows, launcher, desktop, look, mac, tools, apps, ai, extensions, developer, pilot
+    case home, keys, windows, launcher, desktop, look, mac, tools, apps, ai, extensions, pilot
 
     /// Its pages in order. Voice is Dictation and Read aloud (in Tools, Sven 2026-10-16); AI (the chat and its setup) and
     /// Extensions are areas of their own, Extensions listing every installed extension under its page (Sven 2026-10-16);
@@ -230,7 +219,6 @@ public enum AppArea: String, CaseIterable, Sendable {
         case .mac: [.upkeep, .system]
         case .tools: [.clipboard, .notes, .files, .voice, .captures, .snippets]
         case .apps: [.openWith, .install]
-        case .developer: [.configs, .repos]
         case .ai: [.ai]
         case .extensions: [.extensions]
         case .pilot: [.general]
@@ -250,7 +238,6 @@ public enum AppArea: String, CaseIterable, Sendable {
         case .apps: "Apps"
         case .ai: "AI"
         case .extensions: "Extensions"
-        case .developer: "Developer"
         case .pilot: "Pilot"
         }
     }
@@ -268,13 +255,12 @@ public enum AppArea: String, CaseIterable, Sendable {
         case .apps: "shippingbox"
         case .ai: "sparkles"
         case .extensions: "puzzlepiece.extension"
-        case .developer: "hammer"
         case .pilot: "gearshape"
         }
     }
 
     /// The key that opens it with Cmd: "1" to "9" in the rail's order, then "0" for AI (the tenth since the pages split),
-    /// "," for Pilot; Extensions and Developer have none. Pinned per area, never by position, so the panel's tab order
+    /// "," for Pilot; Extensions has none. Pinned per area, never by position, so the panel's tab order
     /// (`tabOrder`) and More move no key (pilot-ui-redesign T1).
     public var key: Character? {
         switch self {
@@ -289,30 +275,24 @@ public enum AppArea: String, CaseIterable, Sendable {
         case .apps: "9"
         case .ai: "0"
         case .pilot: ","
-        case .extensions, .developer: nil
+        case .extensions: nil
         }
     }
 
     /// "⌘1", or "" for an area with no key.
     public var keyHint: String { key.map { "⌘\($0)" } ?? "" }
 
-    /// Its pages the window lists: the developer pages only while `developer` is on, System and Fonts while `more` is.
-    public func pages(developer: Bool, more: Bool = true) -> [AppPage] {
-        pages.filter { (developer || !$0.isDeveloper) && (more || !$0.isMorePage) }
+    /// Its pages the window lists: System and Fonts only while `more` is on.
+    public func pages(more: Bool) -> [AppPage] {
+        pages.filter { more || !$0.isMorePage }
     }
 
     /// The areas above the foot, in order; Pilot sits apart at the foot.
     public static let main: [AppArea] = allCases.filter { $0 != .pilot }
 
-    /// The areas above the foot the window shows: Developer only while `developer` is on.
-    public static func main(developer: Bool) -> [AppArea] { main.filter { $0.shown(developer: developer) } }
-
-    /// Whether the window shows it: Developer only while `developer` is on.
-    func shown(developer: Bool) -> Bool { developer || self != .developer }
-
     /// The panel's order, the most used first (pilot-ui-redesign T1): its first `count` are tabs, the rest sit in More.
     public static let tabOrder: [AppArea] = [.home, .keys, .windows, .launcher, .tools, .look, .desktop, .ai,
-                                             .mac, .apps, .extensions, .pilot, .developer]
+                                             .mac, .apps, .extensions, .pilot]
 
     /// How many of `tabOrder` the panel shows as tabs before its bar is measured, and where no window is (`pilot open
     /// --where`): what fits the narrowest window, 780 pt, with every name on one line (T3's render, WindowRailRenders,
@@ -336,16 +316,15 @@ public enum AppArea: String, CaseIterable, Sendable {
         return max(count, 1)
     }
 
-    /// The panel's tabs and More's areas: the first `count` of `tabOrder` (Home at least) are tabs, the rest More's,
-    /// Developer only while `developer` is on.
-    public static func tabs(count: Int = tabCount, developer: Bool) -> (tabs: [AppArea], more: [AppArea]) {
-        let shown = tabOrder.filter { $0.shown(developer: developer) }, split = max(count, 1)
-        return (Array(shown.prefix(split)), Array(shown.dropFirst(split)))
+    /// The panel's tabs and More's areas: the first `count` of `tabOrder` (Home at least) are tabs, the rest More's.
+    public static func tabs(count: Int = tabCount) -> (tabs: [AppArea], more: [AppArea]) {
+        let split = max(count, 1)
+        return (Array(tabOrder.prefix(split)), Array(tabOrder.dropFirst(split)))
     }
 
     /// The page after `page` among its area's listed pages, round to the first (Ctrl+Tab).
-    public static func next(after page: AppPage, developer: Bool = true, more: Bool = true) -> AppPage {
-        let pages = page.area.pages(developer: developer, more: more)
+    public static func next(after page: AppPage, more: Bool = true) -> AppPage {
+        let pages = page.area.pages(more: more)
         return pages[((pages.firstIndex(of: page) ?? -1) + 1) % pages.count]
     }
 }
@@ -424,9 +403,6 @@ public enum AppSection: String, CaseIterable, Sendable {
     case rings
     /// Binds' tab: export binds as a pack and import one (General › Data's until the page map, Sven 2026-10-17).
     case exportImport
-    /// Configs' tab: agents' settings (on Configs until 2026-10-19) and the files they read before they work (the Agent
-    /// instructions page until the page map).
-    case agents
     /// AI's tab: providers, models, keys and when a chat starts over (the chat's popovers until the page map).
     case aiSetup
     /// Captures' tab: screen recording's own settings and keys.
@@ -520,7 +496,6 @@ public enum AppSection: String, CaseIterable, Sendable {
         case .voiceMore, .voiceDictation, .voiceTakes, .voiceWords, .voiceReplacements, .voiceReadAloud, .voiceModels, .voiceShows: .voice
         case .capturesMore, .captureOptions, .captureKeys, .recordingQuality: .captures
         case .extensionCatalogue: .extensions
-        case .agents: .configs
         case .aiSetup, .aiFallback, .aiKeys, .aiCommands, .aiNewChat: .ai
         case .recording, .captureHistory: .captures
         case .wallpaper, .themeCatalogue, .glassTuning, .cursor, .wallpaperCycle: .look
@@ -674,7 +649,6 @@ public enum AppSection: String, CaseIterable, Sendable {
         case .mouse: "Mouse"
         case .keySwaps: "Swap keys"
         case .rings: "Rings"
-        case .agents: "Agents"
         case .aiSetup: "Setup"
         case .recording: "Recording"
         case .captureHistory: "History"
@@ -706,7 +680,7 @@ public enum AppSection: String, CaseIterable, Sendable {
         case .hyperKey: ["hyper keys", "layer keys", "left option", "right option", "left command", "right command", "left control",
                          "right control", "escape", "quick tap", "hold hyper", "overlay delay"]
         case .status: ["key engine", "keyboard engine", "password field lock", "secure input", "tiler", "health", "diagnostics", "log", "running"]
-        case .data: ["folder", "application support", "pilot command", "cli", "link", "developer", "developer pages", "more pages", "uninstall", "terminal",
+        case .data: ["folder", "application support", "pilot command", "cli", "link", "more pages", "uninstall", "terminal",
                      "ghostty"]
         case .notifications: ["notification", "notifications", "banner", "bell", "cards", "notification center", "hide banner"]
         case .voiceMore, .capturesMore, .menuMore, .installMore, .upkeepMore, .bindsMore, .workspacesMore, .dockMore, .clipMore,
@@ -769,8 +743,6 @@ public enum AppSection: String, CaseIterable, Sendable {
         case .mouse: ["mouse", "mouse button", "side button", "extra button", "hyperx", "learn button", "hold button"]
         case .keySwaps: ["swap keys", "swap", "remap", "key mapping", "hidutil"]
         case .rings: ["ring", "ring menu", "radial menu", "pie menu", "wheel", "flick", "opie", "wedge", "hold to open"]
-        case .agents: ["agent instructions", "instructions", "agents.md", "claude.md", "soul", "persona", "agent brief", "ai agents",
-                       "agent settings", "codex", "hermes", "empryo", "opencode"]
         // Its keys, fallback and new chat are places of their own on Setup (pages round 4).
         case .aiSetup: ["provider", "api key", "model", "effort", "anthropic", "openai", "ollama", "codex", "sign in"]
         case .recording: ["recording", "screen recording", "record", "movies", "mp4", "countdown", "count down", "recordings folder"]
@@ -794,8 +766,7 @@ public struct AppPlace: Hashable, Sendable {
     public init(_ page: AppPage, _ section: AppSection? = nil) { self.page = page; self.section = section }
     public init(_ section: AppSection) { self.init(section.page, section) }
 
-    /// Names that are neither a page's nor a part's now, each where it went: the page map's (2026-10-17) Agent instructions
-    /// (Configs › Agents) and Launcher (the menu page's name since P37, still `menu` in links); the Menu bar page's lower-case spellings
+    /// Names that are neither a page's nor a part's now, each where it went: Launcher (the menu page's name since P37, still `menu` in links); the Menu bar page's lower-case spellings
     /// (card agent-bo-95422913), Pomodoro (an extension now), and every page and part the C3 rework renamed, moved or
     /// folded: Pilot is General, Setup is System, History is Stats, Defaults and its Default apps are Open with,
     /// Snapshots are on Workspaces, and the on/off switch (Other apps' old name) is on Home; convert lands on Files.
@@ -808,7 +779,7 @@ public struct AppPlace: Hashable, Sendable {
         "pilot": AppPlace(.general), "setup": AppPlace(.system), "history": AppPlace(.menuBar), "stats": AppPlace(.menuBar), "defaults": AppPlace(.openWith),
         "defaultApps": AppPlace(.openWith), "snapshots": AppPlace(.workspaceRules), "onOff": AppPlace(.home), "otherApps": AppPlace(.general),
         "convert": AppPlace(.files), "ask": AppPlace(.ai), "monitors": AppPlace(.workspaceMonitors), "swipe": AppPlace(.workspaceSwipe),
-        "instructions": AppPlace(.agents), "launcher": AppPlace(.menu), "windows": AppPlace(.workspaces),
+        "launcher": AppPlace(.menu), "windows": AppPlace(.workspaces),
         // System's More, gone since its parts came back to the front (Sven, 2026-11-11, after 2276).
         "systemMore": AppPlace(.system),
         // More tabs gone since Sven ticked their blocks back onto the fronts (pages round 4).
@@ -826,7 +797,7 @@ public struct AppPlace: Hashable, Sendable {
     /// The place `pilot://open?page=<page>[&tab=<section>]` names, the old page names included; nil when it names none or
     /// an unknown one (the window opens as usual). A tab that moved off its old page in C3 follows it there:
     /// `page=workspaces&tab=tiling` opens Tiling, `page=binds&tab=abilities` Launcher › Abilities, `page=install&tab=reports`
-    /// Update & Clean at its Reports, `page=defaults&tab=configs` Configs. Sven 2026-10-10: `page=clipboard&tab=snippets` opens
+    /// Update & Clean at its Reports. Sven 2026-10-10: `page=clipboard&tab=snippets` opens
     /// Snippets, `page=menu&tab=fileSearch` Files › File search; `page=stats` opens Menu bar, where the readings are.
     public static func linked(_ url: URL) -> AppPlace? {
         guard let place = url.queryValue("page").flatMap(named) else { return nil }
@@ -841,7 +812,7 @@ public struct AppPlace: Hashable, Sendable {
 
     /// The tabs that left their page in C3, or took a new name, by their old `tab=` name.
     static let movedTabs: [String: AppPlace] = [
-        "tiling": AppPlace(.tiling), "abilities": AppPlace(.abilities), "reports": AppPlace(.reports), "configs": AppPlace(.configs),
+        "tiling": AppPlace(.tiling), "abilities": AppPlace(.abilities), "reports": AppPlace(.reports),
         "defaultApps": AppPlace(.openWith), "snapshots": AppPlace(.workspaceRules), "history": AppPlace(.menuBar),
         "snippets": AppPlace(.snippets), "fileSearch": AppPlace(.fileSearch), "stats": AppPlace(.menuBar),
         "monitors": AppPlace(.workspaceMonitors), "swipe": AppPlace(.workspaceSwipe),
@@ -857,13 +828,12 @@ public struct AppPlace: Hashable, Sendable {
 
     /// Places whose title holds the query first (a page's, then a part's), then places with a setting that does; when
     /// none, those a typo of it finds, the closest first, a title before a setting (FuzzyRanker.Filter); empty for a
-    /// blank query. Developer pages and their parts only while `developer` is on.
-    public static func search(_ query: String, developer: Bool = true) -> [AppPlace] {
+    /// blank query.
+    public static func search(_ query: String) -> [AppPlace] {
         let filter = FuzzyRanker.Filter(query)
         guard !filter.typed.isEmpty else { return [] }
         // A More tab is found by its blocks, each a place of its own, never by its title.
-        let all = (AppPage.allCases.map { AppPlace($0) } + AppSection.allCases.filter { !$0.isMore }.map { AppPlace($0) })
-            .filter { developer || !$0.page.isDeveloper }
+        let all = AppPage.allCases.map { AppPlace($0) } + AppSection.allCases.filter { !$0.isMore }.map { AppPlace($0) }
         let byTitle = all.filter { filter.holds([$0.title]) }
         let held = byTitle + all.filter { place in !byTitle.contains(place) && filter.holds(place.keywords) }
         guard held.isEmpty else { return held }
@@ -886,8 +856,8 @@ public struct AppPlace: Hashable, Sendable {
     /// The path from the panel's tab bar (pilot-ui-redesign T1): its tab, or More and its area, then `path`, a page named
     /// as its area once: "Tools › Captures", "More › Extensions", "More › Mac › Update & Clean". Under More a page's own More
     /// tab is not named again, so More reads once: "More › Mac › Update & Clean › Reports" (pilot-ui-redesign T3).
-    public func tabPath(count: Int = AppArea.tabCount, developer: Bool) -> String {
-        let area = page.area, inMore = AppArea.tabs(count: count, developer: developer).more.contains(area)
+    public func tabPath(count: Int = AppArea.tabCount) -> String {
+        let area = page.area, inMore = AppArea.tabs(count: count).more.contains(area)
         var rest = page.title == area.title ? Array(parts.dropFirst()) : parts
         if inMore, let more = section?.onMore?.title, let at = rest.firstIndex(of: more) { rest.remove(at: at) }
         return ((inMore ? ["More", area.title] : [area.title]) + rest).joined(separator: " › ")

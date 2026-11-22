@@ -20,7 +20,6 @@ struct BindSearchTests {
         scripts: [.init(id: "scripts.run:kill-port.sh", label: "Kill port", module: "drive")],
         extensions: [.init(id: "ext.pomodoro.focus", label: "Focus", module: "drive", keywords: "Pomodoro")],
         quicklinks: BindSearch.quicklinks([Quicklink(name: "GitHub", keyword: "gh", url: "https://github.com/search?q={query}")]),
-        configs: [.init(id: "configs.edit:zed", label: "Zed config", module: "apps")],
         soundOutputs: [.init(id: "system.output:73", label: "Play through AirPods Pro", module: "system")],
         focusPresets: [.init(id: "focus.session:Deep work", label: "Deep work", module: "focus")],
         shortcuts: ["Morning routine"])
@@ -71,8 +70,8 @@ struct BindSearchTests {
         #expect(shottr.first?.group == .appURL)
     }
 
-    @Test("A config, sound output, focus preset, script, extension command, quicklink or Shortcut name gives its row first",
-          arguments: [("zed", "configs.edit:zed", BindSearch.Group.configs), ("airpods", "system.output:73", .soundOutputs),
+    @Test("A sound output, focus preset, script, extension command, quicklink or Shortcut name gives its row first",
+          arguments: [("airpods", "system.output:73", BindSearch.Group.soundOutputs),
                       ("deep work", "focus.session:Deep work", .focusPresets), ("kill", "scripts.run:kill-port.sh", .scripts),
                       ("pomodoro", "ext.pomodoro.focus", .extensions), ("morning", "drive.shortcut:Morning routine", .shortcuts)])
     func source(query: String, id: String, group: BindSearch.Group) {

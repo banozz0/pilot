@@ -53,7 +53,7 @@ private struct PageKeys: View {
 
     var body: some View {
         ZStack {
-            // Developer has no key; its pages show only while the switch is on.
+            // Extensions has no key.
             ForEach(AppArea.allCases.filter { $0.key != nil }, id: \.self) { area in
                 Button(area.title) { model.go(AppPlace(area.pages[0])) }.keyboardShortcut(KeyEquivalent(area.key ?? ","), modifiers: .command)
             }
@@ -114,7 +114,6 @@ struct PageView: View {
         case .captures: section == .captureHistory ? "captures.history" : "captures"
         case .files: section == .folders ? "files.folders" : "files"
         case .install: section == .webApps ? "install.webApps" : section == .installMore ? "install.more" : "install"
-        case .configs: section == .agents ? "configs.agents" : "configs"
         case .ai: section == .aiSetup ? "ai.setup" : "ai"
         case .extensions: extensionPage.map { "extension." + $0 } ?? "extensions"
         default: page.rawValue
@@ -196,8 +195,6 @@ private struct PagePart: View {
             default: CataloguePage(query: model.installQuery ?? "", search: InstallSearcher.search)
             }
         case .openWith: OpenWithPage()
-        case .configs: if section == .agents { InstructionsPage() } else { ConfigsPage() }
-        case .repos: ReposPage(start: .init(repo: model.repoPick)).id(model.repoOpens)
         case .fonts: FontsPage(getMore: { model.go(AppPlace(.catalogue)); model.installQuery = CataloguePage.fonts })
         case .general: GeneralPage()
         case .ai:
@@ -293,7 +290,7 @@ struct KeptPages<Content: View>: NSViewRepresentable {
         deck.showing = { [weak model] in model?.live == true }
         // What a part's frame (PartFrame) shows beyond its page: its picture is stale once any of it changed while hidden.
         deck.chrome = { [weak model, more] page in
-            "\(DeveloperPages.on) \(more.tabs) \(more.open) \(ExtensionPages.shared.entries.map(\.id)) \(String(describing: model?.section(of: page)))"
+            "\(more.tabs) \(more.open) \(ExtensionPages.shared.entries.map(\.id)) \(String(describing: model?.section(of: page)))"
         }
         return deck
     }

@@ -407,7 +407,7 @@ public enum FuzzyRanker {
 /// One level of the menu (GLOSSARY.md, Branch): the ten under the root, Learn → Keybindings and Trigger → Capture inside
 /// them, and the categories Install, Remove and Update are browsed by.
 public indirect enum MenuBranch: Hashable, Sendable {
-    case apps, learn, trigger, install, remove, update, clean, system, config, keybindings, capture, homebrew, translate, reminders,
+    case apps, learn, trigger, install, remove, update, clean, system, keybindings, capture, homebrew, translate, reminders,
          snippets, notes
     /// Extensions (story 158): a sub-branch per installed extension holding its commands, then Browse catalogue; above
     /// System.
@@ -432,16 +432,16 @@ public indirect enum MenuBranch: Hashable, Sendable {
     /// Every fixed branch, by hand since `category` takes a value; a new case goes here too, or the root misses it.
     /// The root's default order is theirs (Sven's own is MenuRoot): System last, where Omarchy keeps it, About right above
     /// it as Omarchy has it (Q446), Extensions above that (story 158). A saved order puts About after Extensions.
-    public static let allCases: [MenuBranch] = [.apps, .learn, .trigger, .install, .remove, .update, .clean, .config, .extensions, .about, .system,
+    public static let allCases: [MenuBranch] = [.apps, .learn, .trigger, .install, .remove, .update, .clean, .extensions, .about, .system,
                                                 .keybindings, .capture,
                                                 .homebrew, .translate, .reminders, .snippets, .notes, .stickers, .emoji,
                                                 .activity, .qr, .define]
 
-    /// The branches under the root, which a root search finds by name: `top` and Config.
+    /// The branches under the root, which a root search finds by name: `top` and Activity.
     public static let searched = allCases.filter { $0.parent == nil }
 
-    /// The branches the root lists. Config and Activity are extra rows, off until switched on (Sven 2026-10-21).
-    public static let top = searched.filter { ![.config, .activity].contains($0) }
+    /// The branches the root lists. Activity is an extra row, off until switched on (Sven 2026-10-21).
+    public static let top = searched.filter { $0 != .activity }
 
     /// The branch a category browses (Install, Remove or Update); any other branch itself.
     public var browsed: MenuBranch { if case .category(_, let b) = self { b } else { self } }
@@ -845,7 +845,7 @@ public struct MenuNavigator: Sendable {
     public private(set) var only: MenuEntry.Kind?
     /// Each tab kind's count at the root, set with the rows; read through `count(of:)`.
     private var kindCounts: [MenuEntry.Kind: Int] = [:]
-    /// Every root branch, which a root search finds, hidden ones and Config too; `rootRows` the ones the root lists before typing,
+    /// Every root branch, which a root search finds, hidden ones too; `rootRows` the ones the root lists before typing,
     /// in Sven's order (MenuRoot, story 152).
     private let branchRows: [MenuEntry], rootRows: [MenuEntry]
     /// Your fallbacks in your order (MenuEntry.isFallback), kept out of the entries so no search or provider touches them;
@@ -1611,7 +1611,7 @@ public enum MenuEntries {
                       running: running.contains(app.bundle))
         }
         let labels = Dictionary(actions.map { ($0.id, $0.label) }, uniquingKeysWith: { first, _ in first })
-        // A branch filled only by extras (Config) has no layout rows.
+        // A branch filled only by extras has no layout rows.
         let laidOut = Set(MenuLayout.rows.keys).union(extras.keys).union(branches.keys).flatMap { home in
             (MenuLayout.rows[home] ?? []).compactMap { row -> MenuEntry? in
                 switch row {

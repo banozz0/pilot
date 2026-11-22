@@ -116,7 +116,7 @@ struct MenuLookTests {
             #expect(MenuPanelSize.shape(branch: b, query: "x", isList: false) == .narrow, "a filter inside a branch keeps its width")
         }
         #expect(MenuPanelSize.shape(branch: .system, query: "", isList: false) == .system)
-        for b in [MenuBranch.apps, .learn, .keybindings, .install, .homebrew, .remove, .update, .clean, .config, .translate, .reminders, .category("Fonts")] {
+        for b in [MenuBranch.apps, .learn, .keybindings, .install, .homebrew, .remove, .update, .clean, .translate, .reminders, .category("Fonts")] {
             #expect(MenuPanelSize.shape(branch: b, query: "", isList: false) == .wide)
         }
         #expect(MenuPanelSize.shape(branch: nil, query: "", isList: true) == .wide, "a picker")

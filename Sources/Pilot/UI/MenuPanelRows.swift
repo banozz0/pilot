@@ -60,7 +60,7 @@ extension MenuBranch {
         .trigger: ("bolt", 2, "captures, media, timer"), .install: ("arrow.down.circle", 3, "apps, fonts, web apps"),
         .remove: ("trash", 5, "apps you added"), .update: ("arrow.clockwise", 4, "what can upgrade"),
         .clean: ("sparkles", 2, "caches, with a preview"), .system: ("power", 5, "lock, sleep, Wi-Fi"),
-        .config: ("doc.text", 0, "open a config file"), .extensions: ("puzzlepiece.extension", 3, "yours, and the catalogue"), .keybindings: ("command", 1, ""), .capture: ("camera.viewfinder", 2, ""),
+        .extensions: ("puzzlepiece.extension", 3, "yours, and the catalogue"), .keybindings: ("command", 1, ""), .capture: ("camera.viewfinder", 2, ""),
         .homebrew: ("text.magnifyingglass", 3, ""), .translate: ("character.bubble", 3, ""), .define: ("character.book.closed", 3, ""), .reminders: ("bell", 4, ""),
         .snippets: ("text.quote", 1, ""),
         .notes: ("note.text", 1, ""), .qr: ("qrcode", 0, ""),

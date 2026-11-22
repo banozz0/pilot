@@ -169,7 +169,6 @@ public enum Abilities {
         ("apps.url:", "Opens @ in your browser."),
         ("apps.private:", "Opens @ in a private window."),
         ("links.open:", "Opens the quicklink @."),
-        ("configs.edit:", "Opens @ in your editor."),
         ("scripts.run:", "Runs your script @."),
         ("ext.", "Runs the extension command @."),
         ("drive.shell:", "Runs a shell command: @."),

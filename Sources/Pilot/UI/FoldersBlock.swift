@@ -5,8 +5,7 @@ import SwiftUI
 /// Story 160's folders, each under the ability it configures on Launcher › Abilities (page map, Sven 2026-10-17: a
 /// command's settings under the command; Menu's Folders block until then): `.repos`, where
 /// lazygit's repo picker looks, under lazygit; `.gifs`, the GIFs folder Stickers and GIFs lists, the GIPHY key that
-/// searches the web's and the highest rating it shows (story 164), under Stickers and GIFs. `.repos` heads Developer ›
-/// Repos too (tester's feedback 2026-11-18). Each folder has Change…,
+/// searches the web's and the highest rating it shows (story 164), under Stickers and GIFs. Each folder has Change…,
 /// Show and Reset. Rows alone, no block: the Abilities list draws them beneath their ability's row.
 struct FoldersBlock: View {
     enum Part { case repos, gifs }
@@ -22,12 +21,8 @@ struct FoldersBlock: View {
     @State private var draft = ""
     @State private var problem: String?
 
-    /// Its first row heads a block (Developer › Repos), with no line over it.
-    var first = false
-
-    init(_ part: Part, folders: PilotFolders = .shared, giphy: any StoredKey = Giphy.keychain, first: Bool = false) {
+    init(_ part: Part, folders: PilotFolders = .shared, giphy: any StoredKey = Giphy.keychain) {
         self.part = part
-        self.first = first
         self.folders = folders
         self.giphy = giphy
     }
@@ -36,8 +31,8 @@ struct FoldersBlock: View {
         VStack(spacing: 0) {
             switch part {
             case .repos:
-                BlockRow(first: first) {
-                    row("Repos", info: "Developer › Repos, the Repos and GitHub checks widgets and lazygit's picker list the git repos directly inside this folder.",
+                BlockRow {
+                    row("Repos", info: "The Repos and GitHub checks widgets and lazygit's picker list the git repos directly inside this folder.",
                         path: $folders.repos, standard: PilotFolders.standardRepos)
                 }
             case .gifs:

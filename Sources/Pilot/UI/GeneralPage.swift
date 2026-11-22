@@ -265,7 +265,6 @@ struct GeneralPage: View {
     }
 
     /// Pilot's folder and the pilot command's link; export and import of the binds is Binds' (page map, Sven 2026-10-17).
-    /// The Developer switch (Q715) sits with the command's link: both are for people who live in a terminal.
     private var data: some View {
         @Bindable var settings = engine.settings
         return KitBlock(title: "Data", symbol: "folder") {
@@ -276,9 +275,6 @@ struct GeneralPage: View {
                 Button("Show in Finder") { NSWorkspace.shared.open(PilotFolder.support) }.buttonStyle(.pilot)
             }
             CommandLineRow()
-            BlockRow {
-                Toggle("Developer pages", isOn: $settings.developer).toggleStyle(.pilotSwitchRow(info: DeveloperPages.help))
-            }
             BlockRow {
                 Toggle("More pages", isOn: $settings.morePages).toggleStyle(.pilotSwitchRow(info: MorePages.help))
             }
