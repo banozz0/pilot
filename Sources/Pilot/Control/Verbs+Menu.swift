@@ -27,7 +27,7 @@ extension ControlVerbs {
             case "history": branch = .history
             case let other?: throw ControlError(.badValue, "--branch takes bookmarks or history, not \(other)")
             }
-            let nav = try await Self.navigator(query, branch: branch)
+            let (nav, browsers) = try await Self.navigator(query, branch: branch)
             let headings = MenuGroups.headings(of: nav)
             let rows: [JSONValue] = nav.rows.enumerated().map { index, row in
                 let favourite = row.frecencyKey.map(nav.favourites.contains) ?? false
@@ -44,6 +44,11 @@ extension ControlVerbs {
                 ])
             }
             var answer: [String: JSONValue] = ["query": .string(query), "rows": .array(rows)]
+            // Bookmarks' line with no rows, as the menu says it once its read has landed (T9).
+            if branch == .bookmarks, nav.rows.isEmpty {
+                answer["empty"] = .string(BrowserBookmarks.emptyLine(from: browsers, on: BrowserSettings.shared.bookmarks,
+                                                                     any: nav.count(home: .bookmarks) > 0) ?? "Nothing matches.")
+            }
             if args.has("size") {
                 let noMatch = !query.isEmpty && !nav.rows.isEmpty && nav.rows.allSatisfy(\.isOffer)
                 let shape = MenuPanelSize.shape(branch: nav.branch, query: query, isList: nav.isList, only: nav.only)
@@ -56,8 +61,9 @@ extension ControlVerbs {
         })
     }
 
-    /// The navigator the menu would open with `query` typed at its root, or in `branch`.
-    private static func navigator(_ query: String, branch: MenuBranch? = nil) async throws(ControlError) -> MenuNavigator {
+    /// The navigator the menu would open with `query` typed at its root, or in `branch`, and the browsers its bookmarks
+    /// read looked in.
+    private static func navigator(_ query: String, branch: MenuBranch? = nil) async throws(ControlError) -> (MenuNavigator, [String]) {
         guard let engine = Engine.shared else { throw ControlError(.notReady, "the key engine is not up yet") }
         let scripts = ScriptCommand.find(), extensions = Extension.find().extensions
         await DockCalendar.shared.readCalls(now: .now) // As the menu's open reads it, the call to join (T5).
@@ -68,7 +74,7 @@ extension ControlVerbs {
         // browsers either way), history pages at `hist` (or the off row), and up to 3 in a plain search while on; in
         // History the pages its words find, the newest with none.
         let marks = await BrowserReader.shared.bookmarks(listed: Set(entries.map(\.target)))
-        if BrowserSettings.shared.bookmarks { nav.provide(.bookmark, home: .bookmarks, marks) }
+        if BrowserSettings.shared.bookmarks { nav.provide(.bookmark, home: .bookmarks, marks.rows) }
         nav.query = query
         if branch == .history {
             nav.provide(.history, await BrowserReader.shared.history(query.split(separator: " ").map(String.init), on: BrowserSettings.shared.history))
@@ -78,7 +84,7 @@ extension ControlVerbs {
             nav.provide(.history, BrowserBookmarks.searchPages(await BrowserReader.shared.history(words, on: true), words: words))
         }
         nav.provideSettings(query, developer: DeveloperPages.on)
-        return nav
+        return (nav, marks.browsers)
     }
 
     /// `menu pick <words> <row>` (spec launcher-best T7): a pick of a row `menu search <words>` lists, by its frecency key,
@@ -87,7 +93,7 @@ extension ControlVerbs {
     private static func pick(_ words: [String], peer: ControlPeer?) async throws(ControlError) -> JSONValue {
         guard words.count >= 2, let key = words.last else { throw ControlError(.badValue, "pilot menu pick <words> <row>: a row's frecencyKey from pilot menu search") }
         let query = words.dropLast().joined(separator: " ")
-        let nav = try await navigator(query)
+        let (nav, _) = try await navigator(query)
         guard let row = nav.rows.first(where: { $0.frecencyKey == key }) else {
             throw ControlError(.badValue, "\(key) is not listed for \"\(query)\"; pilot menu search \(query) lists its rows")
         }

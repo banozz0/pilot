@@ -221,7 +221,7 @@ struct MenuExtrasBlock: View {
     @Environment(\.ink) private var ink
     @Bindable var settings: MenuRootSettings
 
-    static let note = "Rows Hyper+Space can list too, off until you switch them on; one switched on joins What the menu shows first, to move there. Browser bookmarks start on, history off; a search finds their pages too."
+    static let note = "Rows Hyper+Space can list too, off until you switch them on; one switched on joins What the menu shows first, to move there. Browser bookmarks start on, history off; a search finds their pages too, and hiding either row on Your menu turns its search off."
 
     var body: some View {
         let extras = MenuRoot.extraRows.filter { !MenuRoot.browserExtras.contains($0.id) }

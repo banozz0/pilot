@@ -254,6 +254,34 @@ public enum BrowserBookmarks {
         return row
     }()
 
+    /// Bookmarks while Pilot lacks Full Disk Access (Sven via the coordinator on f1bbdba): the Files view's row in the
+    /// branch, Return opening that setting; never in a search.
+    public static let bookmarksNeedAccess: MenuEntry = {
+        var row = MenuEntries.allowFullDiskAccess(search: "")
+        row.title = "Allow Full Disk Access to list browser bookmarks"
+        row.subtitle = "macOS keeps your browsers' bookmarks from Pilot until you allow it"
+        row.keywords = nil
+        row.inSearch = false
+        row.ownKind = .bookmark
+        row.home = .bookmarks
+        return row
+    }()
+
+    /// What Bookmarks says with no rows while it holds none: reading until the menu's read lands (`from` nil), then off,
+    /// no browser installed, or none found in the browsers read. Nil while it holds some, so a filter that misses says
+    /// Nothing matches.
+    public static func emptyLine(from browsers: [String]?, on: Bool, any: Bool) -> String? {
+        guard !any else { return nil }
+        guard let browsers else { return "Reading bookmarks…" }
+        guard on else { return "Browser bookmarks are off: switch them on in Launcher › More rows." }
+        guard !browsers.isEmpty else { return "No bookmarks found: none of " + Self.browsers.map(\.name).formatted(.list(type: .or)) + " is installed." }
+        return "No bookmarks found in " + browsers.formatted(.list(type: .and)) + "."
+    }
+
+    /// Whether a history read waits for typing to pause (0.2 s): every one but the History branch's as it opens, nothing
+    /// typed; a root `hist ` with nothing after it still waits.
+    public static func pauses(inHistory: Bool, words: [String]) -> Bool { !(inHistory && words.isEmpty) }
+
     /// `hist` while history is off (Q328): the one row, Return opening Launcher › More rows where it is switched on.
     public static let historyOff = MenuEntry(title: "Browser history is off", target: .openPage(AppPlace(.menuExtras)),
                                              detail: "Return opens Launcher › More rows to switch it on", inSearch: false, ownKind: .history)

@@ -15,9 +15,18 @@ final class BrowserSettings {
         didSet {
             defaults.set(bookmarks, forKey: Self.bookmarksKey)
             if !bookmarks { Task { await BrowserReader.shared.forget() } }
+            if !bookmarks, oldValue { switchedOff("bookmarks") }
         }
     }
-    var history: Bool { didSet { defaults.set(history, forKey: Self.historyKey) } }
+    var history: Bool {
+        didSet {
+            defaults.set(history, forKey: Self.historyKey)
+            if !history, oldValue { switchedOff("history") }
+        }
+    }
+    /// A switch going off, by its root row's id (MenuRoot.browserExtras): MenuRootSettings forgets the row's place, so
+    /// on again it stands last, as any extra does.
+    @ObservationIgnored var switchedOff: (String) -> Void = { _ in }
     @ObservationIgnored private let defaults: UserDefaults
 
     static let bookmarksKey = "menu.browserBookmarks", historyKey = "menu.browserHistory"
@@ -70,10 +79,13 @@ actor BrowserReader {
     }
 
     /// The home to read from while the browsers' files may be read: only under Full Disk Access, as every family's is
-    /// guarded (a sandbox's stand-in always); nil reads nothing.
+    /// guarded; a sandbox's stand-in while its `Library` reads, so a fixture with that folder unreadable (`chmod 000`)
+    /// stands in for Pilot without the grant. Nil reads nothing.
     nonisolated static func readableHome() -> URL? {
-        guard let home = home(), isIsolatedTestRun || FileIndex.hasFullDiskAccess() else { return nil }
-        return home
+        guard let home = home() else { return nil }
+        let readable = isIsolatedTestRun ? FileManager.default.isReadableFile(atPath: home.appendingPathComponent("Library").path)
+            : FileIndex.hasFullDiskAccess()
+        return readable ? home : nil
     }
 
     /// Each bookmarks file's rows, by its path, with the date and size it was read at.
@@ -104,11 +116,15 @@ actor BrowserReader {
     /// The switch is read first, past the one wait, so a read asked for before it went off and reaching the reader after
     /// forget() keeps nothing; one already reading finishes before forget() runs. The menu asks as it opens, switch on or
     /// off, so the browsers installed are looked up then, once, for history's reads too.
-    func bookmarks(listed: Set<MenuEntry.Target> = []) async -> [MenuEntry] {
+    /// Returns the rows and the installed browsers' names (Bookmarks' empty line); the rows are Bookmarks' Full Disk
+    /// Access row while the home does not read.
+    func bookmarks(listed: Set<MenuEntry.Target> = []) async -> (rows: [MenuEntry], browsers: [String]) {
         let on = await MainActor.run { BrowserSettings.shared.bookmarks }
         let browsers = Self.installed()
         onMac = browsers
-        guard on, let home = Self.readableHome() else { kept = [:]; return [] }
+        let names = browsers.map(\.name)
+        guard on else { kept = [:]; return ([], names) }
+        guard let home = Self.readableHome() else { kept = [:]; return (Self.home() == nil ? [] : [BrowserBookmarks.bookmarksNeedAccess], names) }
         var rows: [MenuEntry] = [], paths = Set<String>(), seen = listed
         for browser in browsers {
             for file in BrowserBookmarks.profiles(browser, home: home).flatMap(\.bookmarks) {
@@ -121,7 +137,7 @@ actor BrowserReader {
         }
         // A profile gone since the last read leaves nothing kept.
         kept = kept.filter { paths.contains($0.key) }
-        return Array(rows.prefix(BrowserBookmarks.bookmarkCap))
+        return (Array(rows.prefix(BrowserBookmarks.bookmarkCap)), names)
     }
 
     /// The bookmark rows kept, dropped when the switch goes off.
@@ -131,9 +147,8 @@ actor BrowserReader {
     /// row that says so. Read from copies, never kept; only the installed browsers' (as the menu last opened).
     func history(_ words: [String], on: Bool) -> [MenuEntry] {
         guard on else { return [BrowserBookmarks.historyOff] }
-        guard let home = Self.home() else { return [] }
         // Switched on without Full Disk Access: the row that opens its setting, as the Files view's does.
-        guard isIsolatedTestRun || FileIndex.hasFullDiskAccess() else { return [BrowserBookmarks.historyNeedsAccess] }
+        guard let home = Self.readableHome() else { return Self.home() == nil ? [] : [BrowserBookmarks.historyNeedsAccess] }
         let browsers = onMac ?? Self.installed()
         onMac = browsers
         var found: [(page: BrowserBookmarks.Page, browser: BrowserBookmarks.Browser)] = []

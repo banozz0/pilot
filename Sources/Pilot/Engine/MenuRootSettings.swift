@@ -10,7 +10,7 @@ import PilotCore
 /// opens, and the Ring menu's Pilot ring reads `root.shownExtras()`.
 /// The Bookmarks and History rows (MenuRoot.browserExtras, spec launcher-best T9) are on while BrowserSettings' switches
 /// are, their one owner: `root` reads them from there, a switch on Your menu writes them there, and only their places
-/// are kept here.
+/// are kept here, forgotten when a switch goes off.
 @Observable @MainActor
 final class MenuRootSettings {
     static let shared = MenuRootSettings(browsers: .shared)
@@ -56,6 +56,7 @@ final class MenuRootSettings {
                          hidden: Set(defaults.stringArray(forKey: Self.hiddenKey) ?? []),
                          extras: Set(defaults.stringArray(forKey: Self.extrasKey) ?? []).subtracting(MenuRoot.browserExtras))
         fallbacks = defaults.stringArray(forKey: Self.fallbacksKey)
+        browsers?.switchedOff = { [weak self] id in self?.saved.show(extra: id, false) }
     }
 
     /// The fallbacks there are to pick today: Pilot's four, your quicklinks taking words, your scripts asking for them.

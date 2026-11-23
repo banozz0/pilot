@@ -1148,6 +1148,11 @@ public struct MenuNavigator: Sendable {
         }
         // The emoji grid lists its provider's rows as they came: EmojiGrid already matched and ordered them (P39).
         if branch == .emoji { rows = entries.filter { $0.home == .emoji }; return }
+        // Bookmarks without Full Disk Access (T9): its one row, whatever is typed, Return opening that setting.
+        if branch == .bookmarks, let access = entries.first(where: { $0.home == .bookmarks && $0.target == .allowFullDiskAccess }) {
+            rows = [access]
+            return
+        }
         // History (T9): the pages its read found, newest first as read, each while it answers the words typed now (an
         // older read's during the pause), or the row saying history is off; never ranked, so the newest stays first.
         if branch == .history {
@@ -1178,6 +1183,9 @@ public struct MenuNavigator: Sendable {
     /// counted; nothing typed, every app, window and action. Nil leaves it blank: files under All, which wait for Search
     /// files (a file-index query per key), files and packages before a search, and every kind in a branch or a picker.
     public func count(of kind: MenuEntry.Kind) -> Int? { kindCounts[kind] }
+
+    /// How many rows `home` holds, listed or not: Bookmarks' empty line tells none read from none matching (T9).
+    public func count(home: MenuBranch) -> Int { entries.count { $0.home == home } }
 
     /// What an empty list says before anything is typed in the Files view or Packages; nil elsewhere, where the panel
     /// says it.

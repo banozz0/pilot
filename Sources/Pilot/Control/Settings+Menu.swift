@@ -52,9 +52,10 @@ extension SettingsSchema {
         return found
     }
 
-    /// The Hyper+Space root's extra rows (Sven 2026-10-20), one switch each as Launcher › Your menu shows them, off by
-    /// default: `menu.extra.<id>`, but for Bookmarks and History, which `menu.bookmarks` and `menu.browserHistory` list. The root's order and hidden branches stay the menu-root collection. `menu.fallbacks` is
-    /// Your menu's When nothing matches.
+    /// The Hyper+Space root's extra rows (Sven 2026-10-20), one switch each as Launcher › Your menu shows them:
+    /// `menu.extra.<id>`, off by default. Bookmarks and History have none: `menu.bookmarks` (on by default) and
+    /// `menu.browserHistory` (off) list them. The root's order and hidden branches stay the menu-root collection.
+    /// `menu.fallbacks` is Your menu's When nothing matches.
     func registerMenuRoot(_ settings: MenuRootSettings) {
         register(MenuRoot.extraRows.filter { !MenuRoot.browserExtras.contains($0.id) }.map { extra -> SettingKey in
             .bool("menu.extra.\(extra.id)", "Hyper+Space root lists \(extra.title)", page: "menu", standard: false,

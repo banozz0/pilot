@@ -299,9 +299,6 @@ final class PilotMenu {
                 guard let self, let panel, panel.occlusionState.contains(.visible) else { return }
                 self.endFirstFrame()
                 let ms = Int(((ProcessInfo.processInfo.systemUptime - pressedAt) * 1000).rounded())
-                // A key-down that carried no time of its own reads 0, so the gap is the Mac's uptime (Sven on build 3160:
-                // 413852105 ms): no line, so lean-check's figures stay true.
-                guard pressedAt > 0, ms < 60_000 else { return mlog.debug("menu open: the key-down carried no usable time") }
                 mlog.notice("menu open: \(ms, privacy: .public) ms from key down to first frame, build \(Self.build, privacy: .public)")
             }
         }
@@ -444,10 +441,12 @@ final class PilotMenu {
         guard let model else { return }
         let targets = Set(listed.map(\.target))
         Task { [weak self] in
-            let rows = await BrowserReader.shared.bookmarks(listed: targets)
-            guard self?.model === model, BrowserSettings.shared.bookmarks else { return }
+            let (rows, browsers) = await BrowserReader.shared.bookmarks(listed: targets)
+            guard self?.model === model else { return }
+            model.bookmarksFrom = browsers
+            guard BrowserSettings.shared.bookmarks else { return }
             model.nav.provide(.bookmark, home: .bookmarks, rows)
-            mlog.notice("menu: \(rows.count) bookmarks listed")
+            mlog.notice("menu: \(rows.count(where: { $0.target != .allowFullDiskAccess })) bookmarks listed")
         }
     }
 
@@ -470,8 +469,7 @@ final class PilotMenu {
         let on = BrowserSettings.shared.history
         guard on else { return model.nav.provide(.history, [BrowserBookmarks.historyOff]) }
         historyRead = Task { [weak self] in
-            // The History branch as it opens, nothing typed, reads at once.
-            if !words.isEmpty { try? await Task.sleep(for: .milliseconds(200)) }
+            if BrowserBookmarks.pauses(inHistory: inBranch, words: words) { try? await Task.sleep(for: .milliseconds(200)) }
             guard !Task.isCancelled else { return }
             let read = await BrowserReader.shared.history(words, on: true)
             let rows = typed == nil ? BrowserBookmarks.searchPages(read, words: words) : read
@@ -1930,6 +1928,8 @@ final class MenuModel {
     var forceArmed: String?
     /// Activity's first read has landed, so an empty list means nothing matches, not Reading….
     var activityRead = false
+    /// The browsers whose bookmarks the menu's open read (T9), for Bookmarks' empty line; nil until that read lands.
+    var bookmarksFrom: [String]?
     /// Emoji's category ⌘P picked (P39); nil shows them all. Kept while the menu is open.
     var emojiCategory: String?
     /// Opens Emoji's category list; the panel sets it, as it knows the list and the picks.
@@ -2089,6 +2089,8 @@ final class MenuModel {
         if let loadFailed { return loadFailed }
         if nav.branch == .snippets, nav.query.isEmpty { return "No snippets yet. Add one on the Snippets page." }
         if nav.branch == .activity { return activityRead ? "Nothing running matches." : "Reading what runs on this Mac…" }
+        if nav.branch == .bookmarks, let line = BrowserBookmarks.emptyLine(from: bookmarksFrom, on: BrowserSettings.shared.bookmarks,
+                                                                           any: nav.count(home: .bookmarks) > 0) { return line }
         if nav.branch == .reminders, nav.query.isEmpty { return "No reminders pending. Type “20m stretch” at the root to set one." }
         if nav.branch == .clean, nav.query.isEmpty { return CleanMenu.waiting(CleanModule.previewer.progress) }
         if nav.branch == .emoji {
