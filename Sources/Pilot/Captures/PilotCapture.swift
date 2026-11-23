@@ -131,9 +131,15 @@ final class PilotCapture {
             grabbing = false
             tell("The screen did not answer. Press again.", nil)
         }
-        Task { @MainActor in
+        // The window list is read beside the grab, off the main actor, for the overlay alone (capture-lag: read after it,
+        // on the main actor, it held the overlay back by up to 60 ms).
+        // Repeat area and a full screen bind take the still at once; every other press puts the overlay up.
+        let direct = request == .repeatArea || (request == .fullScreen && box == nil)
+        Task { @MainActor [grabber] in
+            async let stills = grabber.displays()
+            async let listed: [CaptureSelection.Window] = direct ? [] : ((try? await grabber.windows()) ?? [])
             do {
-                let grabs = try await grabber.displays()
+                let grabs = try await stills
                 guard attempt == mine else { return }
                 defer { grabbing = false }
                 let grabbed = ContinuousClock.now - start
@@ -151,9 +157,15 @@ final class PilotCapture {
                     taken?()
                     return
                 }
-                let windows = (try? await grabber.windows()) ?? []
-                show(grabs, windows: windows, mode: request == .window ? .window : .area, purpose: Self.purpose(request), box: box)
-                Self.log.notice("capture \(request.rawValue, privacy: .public): grab \(Self.ms(grabbed), privacy: .public) ms, shown \(Self.ms(ContinuousClock.now - start), privacy: .public) ms")
+                let windows = await listed
+                let listing = ContinuousClock.now - start
+                let hyper = Engine.shared?.hyperHeld == true
+                // One line as the overlay closes, every time from the press: how soon it showed, drew and followed the pointer.
+                show(grabs, windows: windows, mode: request == .window ? .window : .area, purpose: Self.purpose(request), box: box) { t in
+                    func since(_ at: ContinuousClock.Instant?) -> String { at.map { "\(Self.ms($0 - start)) ms" } ?? "none" }
+                    let move = t.move.map { "\(since($0.at)) (\($0.source)); key panel \($0.key ? "yes" : "no"), Pilot active \($0.active ? "yes" : "no")" } ?? "none"
+                    Self.log.notice("capture \(request.rawValue, privacy: .public): grab \(Self.ms(grabbed), privacy: .public) ms, windows \(Self.ms(listing), privacy: .public) ms, shown \(since(t.shown), privacy: .public), first frame \(since(t.frame), privacy: .public), first move \(move, privacy: .public), first mouse-moved event \(since(t.event), privacy: .public), Hyper held at show \(hyper ? "yes" : "no", privacy: .public)")
+                }
             } catch {
                 guard attempt == mine else { return }
                 grabbing = false
@@ -250,7 +262,7 @@ final class PilotCapture {
     }
 
     private func show(_ grabs: [DisplayGrab], windows: [CaptureSelection.Window], mode: CaptureSelection.Mode, purpose: CaptureOverlay.Purpose,
-                      box: CaptureBox? = nil) {
+                      box: CaptureBox? = nil, tracked: ((CaptureOverlay.Tracking) -> Void)? = nil) {
         let overlay = CaptureOverlay(grabs: grabs, windows: windows, mode: mode, purpose: purpose, box: box, visible: overlaysVisible) { [weak self] outcome in
             guard let self else { return }
             // The box's letters may have changed what the pick is for: the mode it ends in decides.
@@ -261,6 +273,7 @@ final class PilotCapture {
             guard let box, box.timer > 0, outcome.picked else { return self.take(outcome, purpose: purpose, windows: windows) }
             self.after(box.timer, outcome, purpose: purpose, windows: windows)
         }
+        overlay.tracked = tracked
         self.overlay = overlay
         overlay.show()
     }
@@ -431,7 +444,7 @@ final class PilotCapture {
         return grabs.first { $0.frame.contains(flipped) } ?? grabs[0]
     }
 
-    static func ms(_ d: Duration) -> Int { Int(d.components.seconds * 1000 + d.components.attoseconds / 1_000_000_000_000_000) }
+    nonisolated static func ms(_ d: Duration) -> Int { Int(d.components.seconds * 1000 + d.components.attoseconds / 1_000_000_000_000_000) }
 
     // MARK: Output
 

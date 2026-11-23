@@ -42,6 +42,23 @@ final class CaptureOverlay {
     private var done: ((Result) -> Void)?
     private var observers: [NSObjectProtocol] = []
 
+    /// When the overlay was put up and drew its first frame, tracked its first pointer move (and how: the pointer read
+    /// at a display frame, or a drag) and heard its first mouse-moved event, with whether one of its panels held the keys
+    /// and Pilot was the active app at that move (capture-lag). Nil: none before it closed.
+    struct Tracking {
+        var shown: ContinuousClock.Instant?
+        var frame: ContinuousClock.Instant?
+        var move: (at: ContinuousClock.Instant, source: String, key: Bool, active: Bool)?
+        var event: ContinuousClock.Instant?
+    }
+    /// Hears the Tracking once, at close.
+    var tracked: ((Tracking) -> Void)?
+    private var tracking = Tracking()
+    /// Stops the display frames the pointer is read at.
+    private var stopTicking: (() -> Void)?
+    /// The display the pointer was on at the last frame.
+    private var under: CaptureOverlayView?
+
     init(grabs: [DisplayGrab], windows: [CaptureSelection.Window], mode: CaptureSelection.Mode, purpose: Purpose = .capture,
          box: CaptureBox? = nil, visible: Bool = true, done: @escaping (Result) -> Void) {
         self.grabs = grabs
@@ -58,7 +75,7 @@ final class CaptureOverlay {
 
     func show() {
         let pointer = NSEvent.mouseLocation
-        var key: KeyPanel?
+        var key: CaptureOverlayView?
         for grab in grabs {
             // Offscreen in a test, the grab's own frame stands in for its screen.
             guard let frame = NSScreen.screens.first(where: { $0.displayID == grab.id })?.frame
@@ -73,24 +90,38 @@ final class CaptureOverlay {
             view.pressed = { [weak self] in self?.press($0) }
             view.holding = { [weak self] in self?.hold($0) }
             view.takeHeld = { [weak self] in self?.takeHeld() ?? false }
+            view.drawn = { [weak self] in if self?.tracking.frame == nil { self?.tracking.frame = .now } }
+            view.moved = { [weak self] in self?.moved($0) }
+            view.heard = { [weak self] in if self?.tracking.event == nil { self?.tracking.event = .now } }
             let panel = KeyPanel(contentRect: frame, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
             panel.level = .screenSaver
             panel.isOpaque = true
             panel.backgroundColor = .black
             panel.acceptsMouseMovedEvents = true
             panel.escape = { [weak self] in self?.close() }
-            panel.contentView = view
+            // The still is the panel's own layer, which the compositor shows; the view over it draws only the marks.
+            let still = CaptureStillView(grab: grab, frame: CGRect(origin: .zero, size: frame.size))
+            view.drawsStill = false
+            view.frame = still.bounds
+            view.autoresizingMask = [.width, .height]
+            still.addSubview(view)
+            panel.contentView = still
             panel.setFrame(frame, display: false)
             panels.append(panel)
             views.append(view)
             if visible { panel.orderFrontRegardless() }
-            if frame.contains(pointer) { key = panel }
+            if frame.contains(pointer) { key = view }
         }
-        guard let first = key ?? panels.first else { return close() }
+        guard let first = key ?? views.first, let panel = first.window else { return close() }
         guard visible else { return }
-        first.makeKey()
-        first.makeFirstResponder(first.contentView)
-        (first.contentView as? CaptureOverlayView)?.cursor.set()
+        panel.makeKey()
+        panel.makeFirstResponder(first)
+        first.cursor.set()
+        // The pointer is read at every display frame, so the crosshair follows it from the first frame whether or not
+        // macOS sends this inactive app's panel its mouse-moved events (capture-lag); the events are only timed.
+        for view in views { view.followed = true }
+        stopTicking = DragFollower.displayTicker(rate: nil) { [weak self] in self?.tick() }
+        tracking.shown = .now
         let center = NotificationCenter.default
         observers = [
             center.addObserver(forName: NSWindow.didResignKeyNotification, object: nil, queue: .main) { [weak self] _ in
@@ -140,6 +171,10 @@ final class CaptureOverlay {
     func close(_ result: Result = .cancelled) {
         observers.forEach(NotificationCenter.default.removeObserver)
         observers = []
+        stopTicking?()
+        stopTicking = nil
+        tracked?(tracking)
+        tracked = nil
         for panel in panels { panel.orderOut(nil); panel.contentView = nil }
         panels = []
         views = []
@@ -170,6 +205,25 @@ final class CaptureOverlay {
             // Over the overlay only: the cursor moves on this display, nothing reaches an app.
             CGWarpMouseCursorPosition(CGPoint(x: view.grab.frame.minX + point.x, y: view.grab.frame.minY + point.y))
         }
+    }
+
+    /// One display frame: the pointer read where it is now, without waiting for a mouse-moved event, on the display it
+    /// is on. Coming onto a display gives its panel the keys; a press held is the drag's, which its events carry.
+    private func tick() {
+        let mouse = NSEvent.mouseLocation
+        guard let view = views.first(where: { $0.window?.frame.contains(mouse) == true }) else { return under = nil }
+        if view !== under {
+            under = view
+            view.enter()
+        }
+        guard NSEvent.pressedMouseButtons == 0 else { return }
+        view.track(view.local(mouse), by: "frame read")
+    }
+
+    /// The first pointer move tracked.
+    private func moved(_ source: String) {
+        guard tracking.move == nil else { return }
+        tracking.move = (.now, source, panels.contains(where: \.isKeyWindow), NSApp.isActive)
     }
 
     /// The picked style's one signal colour, as Hyper and the selected tool use it.
@@ -218,6 +272,22 @@ final class CaptureOverlayView: NSView {
     private struct BarPress { let part: CaptureBox.Part? }
     /// The pointer last set over a held area's handle or body, so a move sets it only when it changes.
     private var gripCursor: NSCursor?
+    /// False over a CaptureStillView, whose layer shows the still: the view then draws only its marks.
+    var drawsStill = true
+    /// The crosshair's two lines and the loupe, views of their own over the marks: a move only moves them and redraws
+    /// the loupe's own points, never the whole display (capture-lag: a full redraw per move held the 3440x1440 display's
+    /// main thread over 100 ms a move).
+    private let across = CaptureLine(), down = CaptureLine()
+    private let magnifier = CaptureLoupeView()
+    /// Each pointer move tracked, with how it came, each frame drawn and each mouse-moved event heard: the overlay
+    /// times the first of each.
+    var moved: ((String) -> Void)?
+    var drawn: (() -> Void)?
+    var heard: (() -> Void)?
+    /// The overlay reads the pointer at each display frame and tracks it here; mouse-moved events then only count.
+    var followed = false
+    /// The last point tracked, so a still pointer tracks nothing.
+    private var tracked: CGPoint?
 
     init(grab: DisplayGrab, selection: CaptureSelection, accent: NSColor, purpose: CaptureOverlay.Purpose = .capture, box: CaptureBox? = nil,
          report: @escaping (CaptureSelection.Outcome, CaptureOverlayView) -> Void) {
@@ -231,6 +301,9 @@ final class CaptureOverlayView: NSView {
         super.init(frame: CGRect(origin: .zero, size: grab.frame.size))
         addTrackingArea(NSTrackingArea(rect: .zero, options: [.mouseMoved, .mouseEnteredAndExited, .activeAlways, .inVisibleRect],
                                        owner: self, userInfo: nil))
+        magnifier.owner = self
+        for part in [across, down, magnifier] { addSubview(part) }
+        placePointer()
     }
 
     @available(*, unavailable)
@@ -255,7 +328,7 @@ final class CaptureOverlayView: NSView {
     func show(_ box: CaptureBox) {
         let moved = box.how != self.box?.how
         self.box = box
-        needsDisplay = true
+        redrawAll()
         // The timer, Record or Text leave the pick as it was: the elements found and the pointer stay.
         guard moved else { return }
         if selection.mode != box.mode { _ = selection.key(.space) }
@@ -287,23 +360,41 @@ final class CaptureOverlayView: NSView {
     func drop() {
         held = nil
         gripping = nil
-        needsDisplay = true
+        redrawAll()
     }
 
     private func point(_ event: NSEvent) -> CGPoint { convert(event.locationInWindow, from: nil) }
 
+    /// `screen`, a point in AppKit's global coordinates, in this view's points.
+    func local(_ screen: CGPoint) -> CGPoint {
+        guard let window else { return screen }
+        return convert(window.convertPoint(fromScreen: screen), from: nil)
+    }
+
     /// The pointer came onto this display; the overlay gives its panel the keys.
     var entered: ((CaptureOverlayView) -> Void)?
 
-    override func mouseEntered(with event: NSEvent) {
+    override func mouseEntered(with event: NSEvent) { enter() }
+
+    /// The pointer came onto this display, by its event or the overlay's frame read.
+    func enter() {
         entered?(self)
         cursor.set()
     }
 
     override func mouseMoved(with event: NSEvent) {
-        update { $0.move(to: point(event)) }
+        heard?()
+        if !followed { track(point(event), by: "event") }
+    }
+
+    /// The pointer at `p`, from a mouse-moved event or the overlay's frame read.
+    func track(_ p: CGPoint, by source: String) {
+        guard p != tracked else { return }
+        tracked = p
+        update { $0.move(to: p) }
         lookUpElement()
         pointHeld(at: selection.pointer)
+        moved?(source)
     }
 
     /// Over a held area's handle a resize arrow, over the area a hand, elsewhere the overlay's own pointer.
@@ -334,15 +425,19 @@ final class CaptureOverlayView: NSView {
     /// Holds `rect` as a let-go drag would, for the renders.
     func hold(_ rect: CGRect) {
         held = rect
-        needsDisplay = true
+        redrawAll()
     }
     #endif
     override func mouseDragged(with event: NSEvent) {
         guard barPress == nil else { return }
         let p = point(event)
-        if let gripping { held = CaptureBox.adjusted(gripping.from, gripping.grip, from: gripping.start, to: p, within: bounds) }
-        update { $0.move(to: p) }
+        tracked = p
+        repaint {
+            if let gripping { held = CaptureBox.adjusted(gripping.from, gripping.grip, from: gripping.start, to: p, within: bounds) }
+            selection.move(to: p)
+        }
         pointHeld(at: p)
+        moved?("drag")
     }
     override func mouseUp(with event: NSEvent) {
         let p = point(event)
@@ -366,7 +461,7 @@ final class CaptureOverlayView: NSView {
             let dragged = selection.isDragging
             let released = selection.release(at: p)
             let outcome = dragged ? snapped(released) : released
-            needsDisplay = true
+            redrawAll()
             // An area is held for its handles and Return; a click on a window still takes the window.
             guard case .area(let rect) = outcome else { return report(outcome, self) }
             held = rect
@@ -417,7 +512,7 @@ final class CaptureOverlayView: NSView {
     private func finish(_ change: (inout CaptureSelection) -> CaptureSelection.Outcome) {
         let dragged = selection.isDragging
         let outcome = change(&selection)
-        needsDisplay = true
+        redrawAll()
         report(dragged ? snapped(outcome) : outcome, self)
     }
 
@@ -445,7 +540,7 @@ final class CaptureOverlayView: NSView {
               elements.first?.contains(selection.pointer) != true else { return showElement() }
         guard let owner = selection.hovered?.owner, owner > 0, owner != getpid() else {
             elements = []
-            selection.element = nil
+            if selection.element != nil { repaint { selection.element = nil } }
             return
         }
         looking = true
@@ -469,8 +564,7 @@ final class CaptureOverlayView: NSView {
         level = min(level, max(elements.count - 1, 0))
         let element = elements.indices.contains(level) && elements[level].contains(selection.pointer) ? elements[level] : nil
         guard element != selection.element else { return }
-        selection.element = element
-        needsDisplay = true
+        repaint { selection.element = element }
     }
 
     override func scrollWheel(with event: NSEvent) {
@@ -488,10 +582,65 @@ final class CaptureOverlayView: NSView {
         return scrolled > 0 ? 1 : -1
     }
 
-    private func update(_ change: (inout CaptureSelection) -> Void) {
-        change(&selection)
+    /// A key, a release or the box's mode changed what the whole display shows.
+    private func redrawAll() {
         needsDisplay = true
+        placePointer()
     }
+
+    private func update(_ change: (inout CaptureSelection) -> Void) {
+        repaint { change(&selection) }
+    }
+
+    /// What the view's own drawing stands on as the pointer moves: the selection's hole and ring, the area and its size,
+    /// the held area's handles, the box's bar.
+    private struct Marks: Equatable {
+        var hole: CGRect?, area: CGRect?, held: CGRect?, bar: CGRect?
+    }
+
+    private var marks: Marks { Marks(hole: hole, area: selection.area, held: held, bar: box.flatMap { barFrame($0) }) }
+
+    /// The points `marks` can paint: the hole, the area and the held area with room round them for the ring, the
+    /// handles and the size label or chip beside them (which can sit a chip's width to the side), and the bar.
+    private func painted(_ m: Marks) -> CGRect {
+        let near = [m.hole, m.area, m.held].compactMap { $0 }.reduce(CGRect.null) { $0.union($1) }
+        let round = near.isNull ? near : near.insetBy(dx: -320, dy: -64)
+        return m.bar.map { round.union($0.insetBy(dx: -2, dy: -2)) } ?? round
+    }
+
+    /// Applies `change`, then redraws only what it moved: the marks it changed, old and new, and the crosshair and the
+    /// loupe at the pointer. A move over an area with nothing picked redraws nothing of the display itself.
+    private func repaint(_ change: () -> Void) {
+        let before = marks
+        change()
+        let after = marks
+        if before != after {
+            let dirty = painted(before).union(painted(after)).intersection(bounds)
+            if !dirty.isNull { setNeedsDisplay(dirty) }
+        }
+        placePointer()
+    }
+
+    /// The crosshair's lines through the pointer and the loupe beside it, while an area or a colour is picked; the
+    /// lines go while a drag draws its area.
+    private func placePointer() {
+        across.isHidden = !pointing || selection.isDragging
+        down.isHidden = across.isHidden
+        magnifier.isHidden = !pointing
+        guard pointing else { return }
+        let p = selection.pointer
+        across.frame = CGRect(x: bounds.minX, y: p.y, width: bounds.width, height: 1)
+        down.frame = CGRect(x: p.x, y: bounds.minY, width: 1, height: bounds.height)
+        // The loupe is laid out and redrawn only when the pointer or the zoom changed, once for the move and its draw.
+        guard placed?.pointer != p || placed?.level != loupeLevel else { return }
+        let layout = loupeLayout()
+        placed = (p, loupeLevel, layout)
+        magnifier.frame = layout.whole
+        magnifier.needsDisplay = true
+    }
+
+    /// The loupe as last placed: for which pointer and zoom, and where.
+    private var placed: (pointer: CGPoint, level: Int, layout: LoupeLayout)?
 
     /// The pixel under `point` as #RRGGBB, read from the still.
     func hex(at point: CGPoint) -> String? { colour(at: point).map(ColourAnswer.hex) }
@@ -509,13 +658,21 @@ final class CaptureOverlayView: NSView {
         return UInt32(rgba[0]) << 16 | UInt32(rgba[1]) << 8 | UInt32(rgba[2])
     }
 
-    override func draw(_ dirtyRect: NSRect) {
-        still.draw(in: bounds, from: .zero, operation: .copy, fraction: 1, respectFlipped: true, hints: [.interpolation: NSImageInterpolation.none])
-        let hole: CGRect? = switch selection.mode {
+    /// The part of the display left undimmed: the area picked or dragged, the element or the window under the pointer.
+    private var hole: CGRect? {
+        switch selection.mode {
         case .area where full: bounds.insetBy(dx: 1.5, dy: 1.5)
         case .area: held ?? selection.area ?? selection.element
         case .window: selection.hovered?.frame
         }
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        defer { drawn?() }
+        if drawsStill {
+            still.draw(in: bounds, from: .zero, operation: .copy, fraction: 1, respectFlipped: true, hints: [.interpolation: NSImageInterpolation.none])
+        }
+        let hole = hole
         let area = held ?? selection.area
         let ringed = selection.mode == .window || area == nil
         // Dim all but the selection: an even-odd path with the hole cut out.
@@ -535,10 +692,6 @@ final class CaptureOverlayView: NSView {
                 label(size(area), below: area)
             }
             if let held { chrome.handles(held, accent: accent) }
-        }
-        if pointing {
-            if !selection.isDragging { crosshair() }
-            loupe()
         }
         if let box { drawBar(box) } else { hint(hintText) }
     }
@@ -616,16 +769,6 @@ final class CaptureOverlayView: NSView {
         image.draw(in: frame, from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
     }
 
-    private func crosshair() {
-        let p = selection.pointer
-        let line = NSBezierPath()
-        line.move(to: CGPoint(x: bounds.minX, y: p.y + 0.5)); line.line(to: CGPoint(x: bounds.maxX, y: p.y + 0.5))
-        line.move(to: CGPoint(x: p.x + 0.5, y: bounds.minY)); line.line(to: CGPoint(x: p.x + 0.5, y: bounds.maxY))
-        line.lineWidth = 1
-        NSColor.white.withAlphaComponent(0.55).setStroke()
-        line.stroke()
-    }
-
     /// The magnifier's pixels a side, odd so one sits in the middle; the scroll wheel steps through them (P72).
     static let loupeCells: [CGFloat] = [7, 9, 11, 15, 21, 31]
     private var loupeLevel = 3
@@ -634,20 +777,39 @@ final class CaptureOverlayView: NSView {
     private func zoomLoupe(_ event: NSEvent) {
         guard let step = wheelStep(event) else { return }
         loupeLevel = min(max(loupeLevel - step, 0), Self.loupeCells.count - 1)
-        needsDisplay = true
+        placePointer()
+    }
+
+    /// Where the loupe goes for the pointer: its magnifier, its colour panel under it with the pixel's colour, text and
+    /// line height, and both with room for their strokes (the loupe view's frame).
+    private struct LoupeLayout {
+        let frame: CGRect, panel: CGRect, colour: UInt32?, text: String, line: CGFloat, whole: CGRect
+    }
+
+    /// The magnifier's side, in points.
+    private static let loupeSide: CGFloat = 120
+
+    private func loupeLayout() -> LoupeLayout {
+        let p = selection.pointer, side = Self.loupeSide
+        let colour = colour(at: p)
+        let text = colour.map { ColourAnswer.formats($0)[0...1].joined(separator: "  ") } ?? ""
+        var frame = CGRect(x: p.x + 24, y: p.y + 24, width: side, height: side)
+        if frame.maxX > bounds.maxX - 8 { frame.origin.x = p.x - 24 - side }
+        if frame.maxY + 46 > bounds.maxY - 8 { frame.origin.y = p.y - 24 - side - 46 }
+        let size = (text as NSString).size(withAttributes: Self.attributes), line = size.height
+        let panel = CGRect(x: frame.minX, y: frame.maxY + 6, width: max(side, size.width + 34), height: line * 2 + 12)
+        return LoupeLayout(frame: frame, panel: panel, colour: colour, text: text, line: line,
+                           whole: frame.union(panel).insetBy(dx: -2, dy: -2).integral)
     }
 
     /// The magnifier (P72, after Snapzy's): 15 by 15 pixels round the pointer at 8x (the scroll wheel zooms from 4x to
     /// 17x), a grid between the pixels and the middle one ringed; under it a swatch, the pixel's hex and rgb, and the
-    /// point.
-    private func loupe() {
-        let p = selection.pointer, side: CGFloat = 120, cells = Self.loupeCells[loupeLevel], half = (cells - 1) / 2
-        let colour = colour(at: p)
-        let text = colour.map { ColourAnswer.formats($0)[0...1].joined(separator: "  ") } ?? ""
+    /// point. In this view's points, as last placed; its own view draws it.
+    fileprivate func loupe() {
+        let p = selection.pointer, side = Self.loupeSide, cells = Self.loupeCells[loupeLevel], half = (cells - 1) / 2
+        let layout = placed?.layout ?? loupeLayout()
+        let (frame, panel, colour, text, line) = (layout.frame, layout.panel, layout.colour, layout.text, layout.line)
         let coords = "\(Int(p.x)), \(Int(p.y))"
-        var frame = CGRect(x: p.x + 24, y: p.y + 24, width: side, height: side)
-        if frame.maxX > bounds.maxX - 8 { frame.origin.x = p.x - 24 - side }
-        if frame.maxY + 46 > bounds.maxY - 8 { frame.origin.y = p.y - 24 - side - 46 }
         let px = (p.x * grab.scale).rounded(.down), py = (p.y * grab.scale).rounded(.down)
         let source = CGRect(x: px - half, y: py - half, width: cells, height: cells)
         let cell = side / cells
@@ -683,8 +845,6 @@ final class CaptureOverlayView: NSView {
         NSBezierPath(roundedRect: frame.insetBy(dx: 0.5, dy: 0.5), xRadius: 10, yRadius: 10).stroke()
         // The colour panel: swatch, hex and rgb, then the point.
         let attrs = Self.attributes
-        let size = (text as NSString).size(withAttributes: attrs), line = size.height
-        let panel = CGRect(x: frame.minX, y: frame.maxY + 6, width: max(side, size.width + 34), height: line * 2 + 12)
         NSColor.black.withAlphaComponent(0.75).setFill()
         NSBezierPath(roundedRect: panel, xRadius: 6, yRadius: 6).fill()
         let swatch = CGRect(x: panel.minX + 7, y: panel.minY + 5, width: line, height: line)
@@ -742,4 +902,46 @@ final class CaptureOverlayView: NSView {
     private static let attributes: [NSAttributedString.Key: Any] = [
         .font: NSFont.monospacedSystemFont(ofSize: 11, weight: .medium), .foregroundColor: NSColor.white,
     ]
+}
+
+/// The frozen still under a display's overlay, shown as its layer's contents: the compositor draws it, so neither the
+/// overlay's first frame nor a pointer move redraws its pixels on the main thread (capture-lag).
+final class CaptureStillView: NSView {
+    init(grab: DisplayGrab, frame: CGRect) {
+        super.init(frame: frame)
+        wantsLayer = true
+        layer?.contents = grab.image
+        layer?.contentsGravity = .resize
+        layer?.magnificationFilter = .nearest
+        layer?.isOpaque = true
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+
+    override var isFlipped: Bool { true }
+    override var wantsUpdateLayer: Bool { true }
+    /// The contents were set once; nothing to draw.
+    override func updateLayer() {}
+}
+
+/// One of the crosshair's lines: the pointer's row or column, which a move only moves. Clicks go through to the overlay.
+private final class CaptureLine: NSView {
+    override var isFlipped: Bool { true }
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
+    override func draw(_ dirtyRect: NSRect) {
+        NSColor.white.withAlphaComponent(0.55).setFill()
+        bounds.fill(using: .sourceOver)
+    }
+}
+
+/// The loupe beside the pointer, drawn by its overlay in the overlay's points. Clicks go through to the overlay.
+private final class CaptureLoupeView: NSView {
+    weak var owner: CaptureOverlayView?
+    override var isFlipped: Bool { true }
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
+    override func draw(_ dirtyRect: NSRect) {
+        NSGraphicsContext.current?.cgContext.translateBy(x: -frame.minX, y: -frame.minY)
+        owner?.loupe()
+    }
 }
