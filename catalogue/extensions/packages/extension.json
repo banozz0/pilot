@@ -2,26 +2,23 @@
   "id": "packages",
   "title": "Packages",
   "icon": "📦",
-  "version": "1.1.0",
-  "description": "Keep your parcels in Hyper+Space, on its page and in the menu bar: type a tracking number and a name, and Return on it opens its tracking page (the carrier's own when the number shows which, else 17track's, which finds it; opening sends the number to that site). Mark it delivered and it moves to Delivered. The menu bar item, and its widget in Pilot's dock, show how many are on the way. With your own TrackingMore API key (its paid plans) each parcel also gets its carrier found, its status, its last event and every event, and Delivered on its own; each new parcel takes one credit, refreshing none, at most every 15 minutes.",
-  "examples": ["Hyper+Space › Packages, type LX123456789CN shoes and press Return: kept as shoes, and Return on it opens its tracking page", "Type track 1Z999AA10123456784 in Hyper+Space and press Return: Packages keeps it in one step, and the menu bar shows 📦 1"],
+  "version": "2.0.0",
+  "description": "Your parcels in Hyper+Space, on its page and in the menu bar, no account or key: type a tracking number and a name, and Packages names the carrier from the number. Opening a parcel reads its events from the carrier's own public tracking where that works without a key (MaltaPost, and Cainiao for China Post and AliExpress; on a Mac set to Malta, MaltaPost for every international post number too), only when you open it or press Refresh, never in the background; the number goes to that site. For other carriers (DHL, UPS, USPS, Royal Mail) Return opens their tracking page, or 17track's. Rename a parcel, mark it delivered, remove it. The menu bar item and its Dock widget show how many are on the way.",
+  "examples": ["Hyper+Space › Packages, type LX123456789CN shoes and press Return: kept as shoes", "Type track 1Z999AA10123456784 lamp in Hyper+Space and press Return: Packages keeps it, and the menu bar shows 📦 1"],
   "runtime": "process",
   "requires": ["python3", "curl"],
-  "permissions": { "network": ["api.trackingmore.com"] },
-  "preferences": [
-    { "name": "apiKey", "type": "password", "title": "TrackingMore API key", "required": false,
-      "description": "Optional: without it Packages keeps your parcels and opens their tracking pages, and you mark them delivered. With it, live status and events from TrackingMore: its paid plans include a key (Developer › API Key › Generate API key), free accounts have none. Kept in the Keychain. Each new parcel uses one credit of your plan; refreshing uses none, at most every 15 minutes while one is on its way." }
-  ],
+  "permissions": { "network": ["www.maltapost.com", "global.cainiao.com"] },
   "surfaces": { "page": { "command": "page", "every": 300 }, "bar": { "command": "bar", "every": 300 } },
   "commands": [
     { "name": "packages", "title": "Packages", "mode": "list", "filter": "self", "run": "main.py" },
     { "name": "page", "title": "Packages page", "mode": "no-view", "hidden": true, "run": "main.py" },
     { "name": "bar", "title": "Packages in the menu bar", "mode": "no-view", "hidden": true, "run": "main.py" },
-    { "name": "add", "title": "Track a parcel", "mode": "no-view", "hidden": true, "keyword": "track", "run": "main.py" },
-    { "name": "pick-carrier", "title": "Pick the carrier", "mode": "list", "hidden": true, "run": "main.py" },
-    { "name": "parcel", "title": "A parcel's events", "mode": "detail", "hidden": true, "run": "main.py" },
+    { "name": "add", "title": "Add a parcel", "mode": "no-view", "hidden": true, "keyword": "track", "run": "main.py" },
+    { "name": "parcel", "title": "A parcel's details", "mode": "detail", "hidden": true, "run": "main.py" },
+    { "name": "details", "title": "A parcel's details in the menu bar", "mode": "no-view", "hidden": true, "run": "main.py" },
+    { "name": "rename", "title": "Rename a parcel", "mode": "no-view", "hidden": true, "run": "main.py" },
     { "name": "mark", "title": "Mark a parcel delivered", "mode": "no-view", "hidden": true, "run": "main.py" },
-    { "name": "remove", "title": "Stop tracking a parcel", "mode": "no-view", "hidden": true, "run": "main.py" },
-    { "name": "refresh", "title": "Refresh the parcels", "mode": "no-view", "hidden": true, "run": "main.py" }
+    { "name": "remove", "title": "Remove a parcel", "mode": "no-view", "hidden": true, "run": "main.py" },
+    { "name": "refresh", "title": "Read the parcels again", "mode": "no-view", "hidden": true, "run": "main.py" }
   ]
 }

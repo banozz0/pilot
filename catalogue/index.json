@@ -514,11 +514,11 @@
       "id": "packages",
       "title": "Packages",
       "icon": "📦",
-      "version": "1.1.0",
-      "description": "Keep your parcels in Hyper+Space, on its page and in the menu bar: type a tracking number and a name, and Return on it opens its tracking page (the carrier's own when the number shows which, else 17track's, which finds it; opening sends the number to that site). Mark it delivered and it moves to Delivered. The menu bar item, and its widget in Pilot's dock, show how many are on the way. With your own TrackingMore API key (its paid plans) each parcel also gets its carrier found, its status, its last event and every event, and Delivered on its own; each new parcel takes one credit, refreshing none, at most every 15 minutes.",
+      "version": "2.0.0",
+      "description": "Your parcels in Hyper+Space, on its page and in the menu bar, no account or key: type a tracking number and a name, and Packages names the carrier from the number. Opening a parcel reads its events from the carrier's own public tracking where that works without a key (MaltaPost, and Cainiao for China Post and AliExpress; on a Mac set to Malta, MaltaPost for every international post number too), only when you open it or press Refresh, never in the background; the number goes to that site. For other carriers (DHL, UPS, USPS, Royal Mail) Return opens their tracking page, or 17track's. Rename a parcel, mark it delivered, remove it. The menu bar item and its Dock widget show how many are on the way.",
       "examples": [
-        "Hyper+Space › Packages, type LX123456789CN shoes and press Return: kept as shoes, and Return on it opens its tracking page",
-        "Type track 1Z999AA10123456784 in Hyper+Space and press Return: Packages keeps it in one step, and the menu bar shows 📦 1"
+        "Hyper+Space › Packages, type LX123456789CN shoes and press Return: kept as shoes",
+        "Type track 1Z999AA10123456784 lamp in Hyper+Space and press Return: Packages keeps it, and the menu bar shows 📦 1"
       ],
       "requires": [
         "python3",
@@ -533,7 +533,8 @@
       ],
       "permissions": {
         "network": [
-          "api.trackingmore.com"
+          "www.maltapost.com",
+          "global.cainiao.com"
         ],
         "clipboard": false,
         "files": [],
@@ -542,14 +543,14 @@
       "files": [
         {
           "path": "extension.json",
-          "sha256": "2663aa41cf388940bf9126d5a5f51a7c3635653c4b4225be3b9adf1460a44105",
-          "size": 2793,
+          "sha256": "83afaa70fe5707416ad6641260ad9692f81dd7375bee9fec9f4316f0102ba982",
+          "size": 2410,
           "executable": false
         },
         {
           "path": "main.py",
-          "sha256": "db56ad9febe28d63d07ca5ccd475c4770db857d7c0f75b5a96118bfeefbbcc6f",
-          "size": 45443,
+          "sha256": "4ecf9420054ff85258182c7a40da25ae285b0b157a61b7920085391170b16bf0",
+          "size": 34933,
           "executable": true
         }
       ]
