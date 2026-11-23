@@ -481,7 +481,7 @@
       "id": "news",
       "title": "News",
       "icon": "📰",
-      "version": "1.3.0",
+      "version": "1.3.1",
       "description": "Headlines from the sources you tick in its Settings, Malta first (Times of Malta, MaltaToday, Newsbook, Lovin Malta, TVM and more), then world and tech, or any RSS or Atom feed you add there, newest first in Hyper+Space, on its page and in Pilot's dock. In the menu bar, 📰 counts what is new since you last looked; its popover counts the day's headlines per group (Malta 20 · World 8), each opening that group's, then the three newest. Press Summarise the last 24 hours for a newspaper front page made by Pilot's AI from the day's headlines, saved as an HTML file and opened in your browser; it never runs on its own.",
       "examples": [
         "Type news, Return on a headline: the article opens in your browser",
@@ -516,7 +516,7 @@
       "files": [
         {
           "path": "extension.json",
-          "sha256": "c7c5f26c1da0127dcd6f581d3abeebc8adc97ad2533a6d02e879942394b12078",
+          "sha256": "dfda03fa8c8775d9d4df67ea807f306f8c354af6e7afcf065b2f6f536c6e4abf",
           "size": 8528,
           "executable": false
         },
@@ -528,8 +528,8 @@
         },
         {
           "path": "main.py",
-          "sha256": "94a1aff9394e544d07fc9ec8cdbaaefcf2abbf79d89298bfc8216ae54d7ec219",
-          "size": 34423,
+          "sha256": "e23b3f411050861ecb1b5cc99c41e797b1422d76083a00bc9e19acb8ea69ceae",
+          "size": 34568,
           "executable": true
         },
         {

@@ -650,12 +650,13 @@ def summary_links(view):
 
 def new_since_opened(view, opened):
     """How many of the last 24 hours' headlines came since the popover last opened (SEEN keeps the ids it showed); an
-    open counts them seen. With no record yet (the first run of 1.3.0) every one counts seen, so the item never
-    starts at 60."""
+    open counts them seen. With no record yet (the first run, or an empty cache) every one counts seen, so the item
+    never starts at 60; a record is kept only once there are headlines, so a first refresh never counts as new (1.3.1)."""
     ids = [i["id"] for i in view.items]
     seen = load(view.data, SEEN)
-    if opened or not isinstance(seen.get("ids"), list):
-        save(view.data, SEEN, {"ids": ids, "at": view.now})
+    if opened or not isinstance(seen.get("ids"), list) or not seen["ids"]:
+        if ids:
+            save(view.data, SEEN, {"ids": ids, "at": view.now})
         return 0
     known = set(seen["ids"])
     return sum(1 for i in last_day(view.items, view.now) if i["id"] not in known)

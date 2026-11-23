@@ -328,9 +328,10 @@ class NewsTests(ExtensionTestCase):
     # ---- the menu bar and the dock ----
 
     def test_the_bar_item_counts_new_headlines_its_popover_counts_per_group_then_the_newest_and_summarise(self):
+        self.assertEqual(self.bar()["text"], "📰", "an empty cache: nothing new, and nothing recorded as seen")
         self.fetched()
         bar = self.bar()
-        self.assertEqual(bar["text"], "📰", "1.3.0's first run counts nothing new")
+        self.assertEqual(bar["text"], "📰", "the first headlines after an empty cache count nothing new (1.3.1)")
         [face] = bar["faces"]
         self.assertEqual((face["label"], face["symbol"]), ("News", "newspaper"))
         self.assertEqual(face["value"], "Is-settur marittimu ġġe…")
