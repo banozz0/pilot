@@ -5,14 +5,17 @@ page in one HTML file.
 
 `news` is the Hyper+Space list: a row that makes the summary, then every headline (its source and age; Return opens
 it in the browser). `page` is the extension's page: the summary's button and the last one, the headlines and the
-sources not answering. `bar` is the menu-bar item and Pilot's dock face (ADR 0010, amended 2026-11-13): its popover has
-the latest headlines and the summary's button, Pilot drawing Open page under them.
+sources not answering. `bar` is the menu-bar item and Pilot's dock face (ADR 0010, amended 2026-11-13): 📰 and the
+count of headlines new since its popover last opened; the popover has a count per ticked group (each opening that
+group's headlines, the hidden `group` command), the three newest headlines and the summary's links beside Pilot's Open
+page (Sven on build 3160).
 Sources are ticked in the extension's Settings (Sven, build 3142): a checkbox per built-in source, `source-<id>`, by
 place and kind, and Your feeds, a text of RSS or Atom links or words to follow through a Google News search. Those
 preferences alone pick what is read and summarised; 1.1.0's ticks on the page (paths.data/sources.json) are not read.
 Headlines are read from the cache alone; a view finding them older than FRESH starts one refresh, a detached child
 (`main.py --refresh`) holding a lock, so no view waits on the network and two never fetch at once. The bar item is
-asked every 5 minutes while the screen is in use, so the picked feeds are read at most every FRESH then. No AI reads
+asked every 2 minutes while the screen is in use (its count catching up after an open), the picked feeds still read at
+most every FRESH then. No AI reads
 them.
 `summarise` gathers the picked sources' items of the last 24 hours and sends their headlines and short descriptions
 (never whole articles) through Pilot's AI with an `ai` action (ADR 0010, amended 2026-10-25); `summarised` gets the
@@ -54,11 +57,14 @@ MOST_READ = 200  # items one summary sends at most
 PER_SOURCE = 40  # of them, from one source at most
 ROWS = 150  # headlines in Hyper+Space
 PAGE_ROWS = 50  # on the page (a list block's most)
-BAR_ROWS = 5  # in the bar item's popover
+BAR_ROWS = 3  # in the bar item's popover, under the counts
+GROUPS_PER_ROW = 3  # group counts on one popover row
+TITLE_ROOM = 40  # characters of a headline on a popover row
+SOURCE_ROOM = 16  # of its source
 LONGEST = 24  # Pilot's bar text and a dock face's value
 MINE = 20  # feeds of his own read at most
 ICONS = {"Malta": "🇲🇹", "World": "🌍", "Tech": "💻", "Business": "💼", "Reddit": "👽", "Yours": "📡"}
-CACHE, LOCK, OLD_PICKS, SUMMARY = "headlines.json", "refresh.lock", "sources.json", "summary.json"
+CACHE, LOCK, OLD_PICKS, SUMMARY, SEEN = "headlines.json", "refresh.lock", "sources.json", "summary.json", "seen.json"
 
 
 def send(message):
@@ -602,25 +608,97 @@ def clipped(text, most=LONGEST):
     return text if len(text) <= most else text[:most - 1].rstrip() + "…"
 
 
+def short_source(title):
+    """A source's name as a popover row shows it: before any bracket ("TVM News (English)" is TVM News), held short."""
+    return clipped(title.split(" (")[0], SOURCE_ROOM)
+
+
+def bar_rows(items, titles, now, most):
+    """Popover rows on one line each (Sven on build 3160, "the menu bar can look better"): the headline held to
+    TITLE_ROOM, so its source (dimmed) and its age keep their room in the 340-point popover; the whole title on hover."""
+    return [{"id": i["id"], "title": clipped(i["title"], TITLE_ROOM), "subtitle": short_source(titles.get(i["source"], i["source"])),
+             "accessory": age(i["at"], now), "actions": [{"type": "open", "url": i["link"], "title": i["title"][:200]}]}
+            for i in items[:most]]
+
+
+def group_counts(view):
+    """Each group he ticks a source in, in Settings' order, with its headlines of the last 24 hours."""
+    groups, recent = view.sources.groups(), last_day(view.items, view.now)
+    order = []
+    for s in view.on:
+        if s["group"] not in order:
+            order.append(s["group"])
+    return [(g, sum(1 for i in recent if groups.get(i["source"]) == g)) for g in order]
+
+
+def count_links(view):
+    """The popover's first rows: Malta 20 · World 8 · Tech 12, each opening that group's headlines in the popover (a push
+    to the hidden group command), at most GROUPS_PER_ROW to a row, so a row never passes the popover's edge."""
+    links = [{"title": g, "word": str(n), "help": "%s: %d headline%s in the last 24 hours" % (g, n, "" if n == 1 else "s"),
+              "actions": [{"type": "push", "command": "group", "title": g, "context": {"group": g}}]}
+             for g, n in group_counts(view)]
+    return [{"type": "links", "items": links[i:i + GROUPS_PER_ROW]} for i in range(0, len(links), GROUPS_PER_ROW)]
+
+
+def summary_links(view):
+    """The summary's buttons as the popover's last links row, which Pilot draws beside Open page: short words, the whole
+    one on hover."""
+    words = {"Summarise the last 24 hours": "Summarise", "Open the last summary": "Last summary"}
+    return {"type": "links", "items": [{"title": words.get(a["title"], a["title"]), "help": a["title"], "actions": [a]}
+                                       for a in view.buttons]}
+
+
+def new_since_opened(view, opened):
+    """How many of the last 24 hours' headlines came since the popover last opened (SEEN keeps the ids it showed); an
+    open counts them seen. With no record yet (the first run of 1.3.0) every one counts seen, so the item never
+    starts at 60."""
+    ids = [i["id"] for i in view.items]
+    seen = load(view.data, SEEN)
+    if opened or not isinstance(seen.get("ids"), list):
+        save(view.data, SEEN, {"ids": ids, "at": view.now})
+        return 0
+    known = set(seen["ids"])
+    return sum(1 for i in last_day(view.items, view.now) if i["id"] not in known)
+
+
 def bar(run):
-    """The menu-bar item and its popover (ADR 0010, surfaces v2), and Pilot's dock face (amended 2026-11-13): 📰 News, the
-    latest BAR_ROWS headlines of the ticked sources and the summary's button. Read from the cache alone: a stale one
-    starts a refresh and the popover asks again in 2 s."""
+    """The menu-bar item and its popover (ADR 0010, surfaces v2), and Pilot's dock face (amended 2026-11-13). The item
+    is 📰 and the count of headlines new since the popover last opened; the popover leads with a count per ticked group,
+    then the BAR_ROWS newest headlines and the summary's links beside Pilot's Open page. Read from the cache alone: a
+    stale one starts a refresh and the popover asks again in 2 s."""
     view = View(run)
-    rows = view.rows(BAR_ROWS)
-    blocks = [{"type": "list", "title": "Latest", "items": rows} if rows else
-              {"type": "markdown", "text": none_yet(view.on, view.running)},
-              {"type": "buttons", "actions": view.buttons}] + view.note()
-    if run.get("surface") == "popover":
+    popover = run.get("surface") == "popover"
+    if not view.on:
+        blocks = [{"type": "markdown", "text": none_yet(view.on, view.running)}, summary_links(view)]
+    else:
+        rows = bar_rows(view.items, view.sources.titles(), view.now, BAR_ROWS)
+        blocks = count_links(view) + [{"type": "list", "title": "Newest", "items": rows} if rows else
+                                      {"type": "markdown", "text": none_yet(view.on, view.running)}] + view.note() + [summary_links(view)]
+    new = new_since_opened(view, popover) if view.on else 0
+    if popover:
         return send(view.answer(blocks))
     value = "Summarising…" if view.waiting else clipped(view.items[0]["title"]) if view.items else (
         NO_SOURCES if not view.on else "No headlines yet")
-    send({"type": "bar", "text": "📰 Summarising…" if view.waiting else "📰 News", "blocks": blocks,
+    send({"type": "bar", "text": "📰 %s" % ("99+" if new > 99 else new) if new else "📰", "blocks": blocks,
           "faces": [{"label": "News", "value": value, "symbol": "newspaper"}]})
 
 
+def group(run):
+    """A group's headlines of the last 24 hours, pushed over the popover from its count (Malta 20), newest first."""
+    view = View(run)
+    name = str((run.get("context") or {}).get("group") or "")
+    groups = view.sources.groups()
+    items = [i for i in last_day(view.items, view.now) if groups.get(i["source"]) == name]
+    rows = bar_rows(items, view.sources.titles(), view.now, PAGE_ROWS)
+    blocks = [{"type": "list", "items": rows} if rows else
+              {"type": "markdown", "text": "_Nothing from %s in the last 24 hours._" % (name or "this group")}]
+    if len(items) > len(rows):  # a list's most is 50: the rest are named, so the count it opened from still adds up
+        blocks.append({"type": "note", "text": "%d older ones in Hyper+Space: type news" % (len(items) - len(rows)), "icon": "info"})
+    send(view.answer(blocks))
+
+
 COMMANDS = {"news": news, "summarise": summarise, "summarised": summarised, "refresh": refresh_now, "moved": moved,
-            "page": page, "bar": bar}
+            "page": page, "bar": bar, "group": group}
 
 
 def main():

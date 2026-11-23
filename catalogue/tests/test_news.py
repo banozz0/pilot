@@ -327,22 +327,37 @@ class NewsTests(ExtensionTestCase):
 
     # ---- the menu bar and the dock ----
 
-    def test_the_bar_item_shows_news_its_popover_the_latest_headlines_and_summarise_and_the_dock_the_newest(self):
+    def test_the_bar_item_counts_new_headlines_its_popover_counts_per_group_then_the_newest_and_summarise(self):
         self.fetched()
         bar = self.bar()
-        self.assertEqual(bar["text"], "📰 News")
+        self.assertEqual(bar["text"], "📰", "1.3.0's first run counts nothing new")
         [face] = bar["faces"]
         self.assertEqual((face["label"], face["symbol"]), ("News", "newspaper"))
         self.assertEqual(face["value"], "Is-settur marittimu ġġe…")
         self.assertLessEqual(len(face["value"]), 24)
         popover = self.popover()
-        latest = popover[0]
-        self.assertEqual((latest["title"], len(latest["items"])), ("Latest", 5))
-        self.assertEqual(latest["items"][1]["actions"][0]["url"], "https://timesofmalta.com/a/budget")
-        self.assertEqual(popover[1]["actions"][0], {"type": "run", "command": "summarise", "title": "Summarise the last 24 hours",
-                                                    "icon": "📰"})
+        counts, newest, summary = popover[0], popover[1], popover[-1]
+        self.assertEqual([(l["title"], l["word"]) for l in counts["items"]], [("Malta", "5"), ("Tech", "2")])
+        self.assertEqual(counts["items"][0]["actions"], [{"type": "push", "command": "group", "title": "Malta",
+                                                          "context": {"group": "Malta"}}])
+        self.assertEqual((newest["title"], len(newest["items"])), ("Newest", 3))
+        row = newest["items"][1]
+        self.assertEqual((row["subtitle"], row["actions"][0]["url"]), ("Times of Malta", "https://timesofmalta.com/a/budget"))
+        self.assertTrue(all(len(r["title"]) <= 40 and len(r["subtitle"]) <= 16 for r in newest["items"]))
+        self.assertEqual([l["title"] for l in summary["items"]], ["Summarise"])
+        self.assertEqual(summary["items"][0]["actions"][0]["command"], "summarise")
+        # A group's count opens just its day's headlines, as many as it said.
+        malta = self.blocks("group", "popover", context={"group": "Malta"})
+        self.assertEqual(len(malta[0]["items"]), 5)
+        self.assertEqual({r["subtitle"] for r in malta[0]["items"]}, {"Times of Malta", "TVM Aħbarijiet"})
+        # New since the popover opened: counted on the item, seen again once it opens.
+        seen = json.loads((self.box.data / "seen.json").read_text())
+        (self.box.data / "seen.json").write_text(json.dumps(dict(seen, ids=seen["ids"][2:])))
+        self.assertEqual(self.bar()["text"], "📰 2")
+        self.popover()
+        self.assertEqual(self.bar()["text"], "📰")
         self.press()
-        self.assertEqual(self.bar()["text"], "📰 Summarising…")
+        self.assertEqual((self.bar()["text"], self.bar()["faces"][0]["value"]), ("📰", "Summarising…"))
         self.assertEqual(self.blocks_message("bar", "popover")["refresh"], 2, "waiting: asked again soon")
 
     # ---- the summary ----
