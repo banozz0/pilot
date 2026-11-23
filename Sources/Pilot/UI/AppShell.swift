@@ -134,8 +134,7 @@ private struct PagePart: View {
     }
 
     /// The settings each page keeps on its More tab, by their `pilot` keys (pilot-ui-redesign T16, T17, T18; S1 B).
-    static let ringsOnMore: [AppPage: Set<String>] = [.dock: DockPage.moreKeys, .clipboard: ClipboardSettingsView.moreKeys,
-                                                      .tiling: FocusedWindowMore.moreKeys, .captures: CapturesPage.moreKeys,
+    static let ringsOnMore: [AppPage: Set<String>] = [.dock: DockPage.moreKeys, .tiling: FocusedWindowMore.moreKeys, .captures: CapturesPage.moreKeys,
                                                       .voice: VoicePage.moreKeys]
 
     /// A page that reads on a repeat takes `model.live`; one that reads once as it shows takes `model.onScreen`. Each is
@@ -180,7 +179,7 @@ private struct PagePart: View {
         case .system: WhileShown { SetupPage(onScreen: $0 && model.onScreen, section: model.setupSection, tookSection: { model.setupSection = nil }).equatable() }
         // Reports is on Update & Clean's More since the feature trim (2026-11-19): Open report goes there.
         case .upkeep: UpkeepPage(more: section == .upkeepMore) { model.go($0) }
-        case .clipboard: ClipboardSettingsView(more: section == .clipMore)
+        case .clipboard: ClipboardSettingsView()
         case .captures:
             if section == .captureHistory { CaptureHistoryPage() } else { CapturesPage(recording: section == .recording, more: section == .capturesMore) }
         case .snippets: SnippetsSettingsView(editSnippet: model.editSnippet, tookSnippet: { model.editSnippet = nil }).equatable()

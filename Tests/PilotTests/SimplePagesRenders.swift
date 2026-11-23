@@ -6,8 +6,8 @@ import SwiftUI
 import Testing
 @testable import Pilot
 
-/// Dock and Clipboard, simpler (pilot-ui-redesign T17, S1 B): each page's front, one switch per simple feature, and its
-/// More, the rest, in the 780 by 560 panel, Instrument in Tokyo Night and Porcelain; and a search result for a setting on
+/// Dock and Clipboard, simpler (pilot-ui-redesign T17, S1 B): each page's front, one switch per simple feature, and the
+/// Dock's More, the rest (Clipboard's More went back onto its page, Sven 2026-11-23), in the 780 by 560 panel, Instrument in Tokyo Night and Porcelain; and a search result for a setting on
 /// More (Dock's Magnification), which opens More with the row ringed. Clipboard's Recent seeded as the fill renders seed
 /// it. Opt-in, in a moved home:
 /// `CFFIXED_USER_HOME=<fresh dir> PILOT_RENDER_DIR=<fresh dir> swift test --filter SimplePagesRenders`
@@ -57,7 +57,6 @@ struct SimplePagesRenders {
             try shot("\(name)-dock-front", AppPlace(.dock))
             try shot("\(name)-dock-more", AppPlace(.dockMore))
             try shot("\(name)-clipboard-front", AppPlace(.clipboard))
-            try shot("\(name)-clipboard-more", AppPlace(.clipMore))
         }
         // A search result for a setting on More: the page's front first, then More with the row ringed.
         look.themeID = Self.looks[0].theme

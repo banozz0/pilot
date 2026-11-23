@@ -58,7 +58,7 @@ struct AppWindowTests {
         #expect(AppPage.menu.tabs.map(\.title) == ["Your menu", "Abilities", "Rings", "More"])
         #expect(AppPage.files.tabs.map(\.title) == ["Files", "Folders"])
         // Clipboard and the Dock: the simple settings in front, the rest on More (pilot-ui-redesign T17).
-        #expect(AppPage.clipboard.tabs.map(\.title) == ["Clipboard", "More"] && AppPage.dock.tabs.map(\.title) == ["Dock", "More"])
+        #expect(AppPage.clipboard.tabs.isEmpty && AppPage.dock.tabs.map(\.title) == ["Dock", "More"])
         #expect(AppPage.snippets.tabs.isEmpty)
         // Reports on Update & Clean's More since the feature trim (2026-11-19), Install's tools and hidden apps on its More (simplify-pages T16).
         #expect(AppPage.upkeep.tabs.map(\.title) == ["Update & Clean", "More"])
