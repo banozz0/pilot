@@ -38,7 +38,8 @@ struct InstrumentHome: View {
                     // presses beside the binds pressed most; one column and two tiles a row in a small window (home-layout).
                     let now = sources.now(.now)
                     // Built a piece at a time on a first visit, as every page is (Staged, PageDeck.buildInView): the
-                    // switches, then each card, so no frame waits on all of them.
+                    // switches, then each card, so no frame waits on all of them. Today is as tall as a full Most pressed,
+                    // so neither resizes the other as it lands.
                     VStack(spacing: HomeGrid.spacing) { Staged {
                         HomeSwitches()
                         HomeCardGrid { Staged {
@@ -157,12 +158,13 @@ private struct HomeCard<Content: View>: View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
                 InstrumentEyebrow(text: title, role: \.text2)
-                if let trailing { Text(trailing).styleText(\.small).foregroundStyle(style.color(\.text3)).lineLimit(1) }
+                if let trailing { Text(trailing).styleText(\.small).foregroundStyle(style.color(\.text2)).lineLimit(1) }
                 Spacer(minLength: 8)
                 if let page {
                     Button { open(AppPlace(page)) } label: {
                         HStack(spacing: 3) {
-                            Text(page.title)
+                            // The page's name, or Open when the eyebrow already says it.
+                            Text(page.title.lowercased() == title.lowercased() ? "Open" : page.title)
                             Image(systemName: "chevron.right").font(.system(size: 9, weight: .semibold))
                         }
                         .styleText(\.small).foregroundStyle(style.color(\.text2)).contentShape(.rect)
@@ -227,10 +229,14 @@ private struct HomeSwitches: View {
     }
 }
 
-/// Jump back in: the settings changed last, newest first, each its page's glyph, its name, its page and its value; a click
-/// opens its page and rings its row. Until one changes, a line says what will show here.
+/// Jump back in: the settings changed last, newest first, each its name, its page and its value; a click opens its page
+/// and rings its row. Until one changes, a line says what will show here.
 private struct HomeJumpBack: View {
     @Environment(\.style) private var style
+
+    /// The most it lists: what the window's first size holds beside the workspaces, the switches and the cards under them
+    /// unscrolled (HomeRecent keeps six).
+    static let most = 5
     let keys: [String]
     let schema: () -> SettingsSchema
     /// Opens a setting's page, its key to ring.
@@ -248,8 +254,6 @@ private struct HomeJumpBack: View {
             ForEach(rows, id: \.key) { row in
                 Button { open(row.key, row.place) } label: {
                     HStack(spacing: 10) {
-                        Image(systemName: row.place.page.symbol).font(.system(size: 12)).foregroundStyle(style.color(\.text3))
-                            .frame(width: 18).accessibilityHidden(true)
                         Text(row.name).styleText(\.row).foregroundStyle(style.color(\.text)).layoutPriority(1)
                         Text(row.place.page.title).styleText(\.body).foregroundStyle(style.color(\.text3))
                         Spacer(minLength: 12)
@@ -257,7 +261,7 @@ private struct HomeJumpBack: View {
                             .frame(maxWidth: 220, alignment: .trailing)
                     }
                     .lineLimit(1)
-                    .padding(.horizontal, 16).frame(height: style.points(42))
+                    .padding(.horizontal, 16).frame(height: style.points(40))
                     .contentShape(.rect)
                 }
                 .buttonStyle(.plain)
@@ -285,19 +289,23 @@ private struct HomeJumpBack: View {
                   let value = try? schema.get(key) else { return nil }
             return Row(key: key, label: setting.label, place: place, value: SearchHits.words(value, kind: setting.kind))
         }
-        .prefix(HomeRecent.most).map(\.self)
+        .prefix(most).map(\.self)
     }
 
     /// A setting's name, short enough to scan (Sven on build 3160: a row was the setting's whole sentence): its label up
     /// to the first colon or semicolon when that is short ("Top bar background"), else its key's last word in plain words
-    /// ("menu.browserHistory": "Browser history"). The whole label is the row's help.
+    /// ("menu.browserHistory": "Browser history", "menu.fallbacks": "Fallbacks"). The whole label is the row's help.
     static func name(label: String, key: String) -> String {
         let lead = String(label.prefix { $0 != ":" && $0 != ";" }).trimmingCharacters(in: .whitespaces)
         if lead.count <= 34 { return lead }
         let last = key.split(separator: ".").last.map(String.init) ?? key
-        var words = ""
+        // A run of capitals stays one word ("recordFPS": "Record FPS").
+        var words = "", previous: Character?
         for c in last {
-            if c.isUppercase, !words.isEmpty { words += " " + c.lowercased() } else { words.append(c) }
+            if c.isUppercase, previous?.isUppercase == true { words.append(c) }
+            else if c.isUppercase, !words.isEmpty { words += " " + c.lowercased() }
+            else { words.append(c) }
+            previous = c
         }
         return words.prefix(1).uppercased() + words.dropFirst()
     }
@@ -310,17 +318,19 @@ private struct HomeWorkspacesCard: View {
     @Environment(\.style) private var style
     let open: (AppPlace) -> Void
 
+    @Environment(\.pageShown) private var shown
+    @State private var held = HomeHeld()
+
     var body: some View {
-        let tiler = engine.observers.tiler
-        let cells = tiler.isAnswering ? tiler.homeCells : []
-        HomeCard(title: "Workspaces", trailing: tiler.isAnswering ? nil : "Stopped", page: .workspaces, open: open) {
-            if !tiler.isAnswering {
+        let (answering, cells, focused) = held.workspaces(engine, shown: shown)
+        HomeCard(title: "Workspaces", trailing: answering ? nil : "Stopped", page: .workspaces, open: open) {
+            if !answering {
                 Text("Tiling is stopped; the workspaces come back once it restarts.").styleText(\.caption).foregroundStyle(style.color(\.text3))
                     .padding(.horizontal, 16).frame(minHeight: style.points(40), alignment: .leading)
                     .overlay(alignment: .top) { InstrumentRule() }
             }
             ForEach(cells, id: \.name) { cell in
-                let current = cell.name == tiler.focused
+                let current = cell.name == focused
                 let shape = RoundedRectangle(cornerRadius: style.radii.control + 2, style: .continuous)
                 HStack(spacing: 10) {
                     Text(cell.name).font(style.font(\.key, size: 12)).lineLimit(1)
@@ -354,28 +364,54 @@ private struct HomeWorkspacesCard: View {
 private struct HomeTodayCard: View {
     @Environment(Engine.self) private var engine
     @Environment(\.style) private var style
+    @Environment(\.pageShown) private var shown
     let now: Date
+    @State private var held = HomeHeld()
 
     var body: some View {
-        let today = engine.today
+        let today = held.today(engine, shown: shown)
         let total = today.total(now: now), hours = today.hours(now: now)
         let hour = Calendar.current.component(.hour, from: now)
-        HomeCard(title: "Today", trailing: total == 1 ? "1 press" : "\(total) presses") {
+        HomeCard(title: "Today") {
             VStack(alignment: .leading, spacing: 6) {
                 HStack(alignment: .lastTextBaseline, spacing: 8) {
                     Text("\(total)").font(style.font(\.display, size: 30)).tracking(-0.6).foregroundStyle(style.color(\.text))
                     Text(total == 0 ? "No binds run yet today." : "binds run since midnight").styleText(\.body).foregroundStyle(style.color(\.text2))
                 }
                 HomeHourBars(hours: hours, now: hour, bar: style.color(\.text3), lit: style.color(\.text2), track: style.color(\.line))
-                    .frame(height: style.points(96))
+                    .frame(minHeight: style.points(80), maxHeight: .infinity)
                     .accessibilityHidden(true)
                 HStack(spacing: 0) {
                     ForEach(["00", "06", "12", "18"], id: \.self) { Text($0).frame(maxWidth: .infinity, alignment: .leading) }
                 }
-                .styleText(\.small).foregroundStyle(style.color(\.text3)).accessibilityHidden(true)
+                .styleText(\.small).foregroundStyle(style.color(\.text2)).accessibilityHidden(true)
             }
             .padding(.horizontal, 16).padding(.top, 2).padding(.bottom, 14)
         }
+        // A full Most pressed's height: its eyebrow and five rows.
+        .frame(minHeight: style.points(40) * CGFloat(HomeBusiestCard.most + 1))
+    }
+}
+
+/// What a card last read from the engine, kept while Home is hidden behind another page: a hidden Home reads nothing
+/// that changes on a press or a focus change, so none redraws it (pageShown, as HeldSearch keeps a page's words); shown
+/// again, it reads afresh.
+@MainActor
+final class HomeHeld {
+    private var presses = TodayPresses()
+    private var cells: (answering: Bool, cells: [OccupiedWorkspace], focused: String?) = (true, [], nil)
+
+    func today(_ engine: Engine, shown: Bool) -> TodayPresses {
+        if shown { presses = engine.today }
+        return presses
+    }
+
+    func workspaces(_ engine: Engine, shown: Bool) -> (Bool, [OccupiedWorkspace], String?) {
+        if shown {
+            let tiler = engine.observers.tiler
+            cells = (tiler.isAnswering, tiler.isAnswering ? tiler.homeCells : [], tiler.focused)
+        }
+        return cells
     }
 }
 
@@ -408,8 +444,11 @@ private struct HomeBusiestCard: View {
 
     static let most = 5
 
+    @Environment(\.pageShown) private var shown
+    @State private var held = HomeHeld()
+
     var body: some View {
-        let top = engine.today.top(Self.most, now: now)
+        let top = held.today(engine, shown: shown).top(Self.most, now: now)
         HomeCard(title: "Most pressed", page: .binds, open: open) {
             if top.isEmpty {
                 Text("The binds you press most today show here.").styleText(\.caption).foregroundStyle(style.color(\.text3))
