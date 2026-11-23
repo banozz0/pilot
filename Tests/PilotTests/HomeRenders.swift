@@ -101,7 +101,7 @@ struct HomeRenders {
     static let looks: [(name: String, theme: String)] = [("dark", "tokyo-night"), ("light", "porcelain")]
 
     /// The settings the render's Jump back in lists, newest first: short labels and whole sentences (home-layout).
-    static let recent = ["capture.afterCapture", "look.windowBorder", "look.defocusPreset", "capture.historyCap", "look.material",
+    static let recent = ["capture.afterCapture", "look.windowBorder", "look.defocusPreset", "capture.historyCap", "look.windowBorderPreset",
                          "capture.autoScroll"]
 
     /// The window sizes Home is shot at besides the window's first (home-layout): a big tiled window, as Sven's on
@@ -188,34 +188,54 @@ struct HomeRenders {
     }
 
     /// How long Home takes to build, lay out and draw as a first visit does, alone in a host at the window's first size and
-    /// at 1700 by 1290, in Tokyo Night: the first run warms up and is left out, the median of the next nine is written to
-    /// `home/first-visit.txt` (home-layout). A debug build's before-and-after measure, not the app's own milliseconds.
+    /// at 1700 by 1290, in Tokyo Night: whole, and a piece at a time as PageDeck.buildInView builds it (passes until its
+    /// 8 ms frame budget is spent, drawn, then the next frame), its first frame and the time until it is whole. The first
+    /// run warms up and is left out, the median of the next nine is written to `home/first-visit.txt` (home-layout). A
+    /// debug build's before-and-after measure, not the app's own milliseconds.
     static func firstVisit(engine: Engine, sources: HomeSources, look: Look, to dir: URL) throws {
         look.themeID = "tokyo-night"
-        func once(_ size: CGSize) -> Double {
+        /// One build: whole (no stage), or staged, its first frame, its frames and the time until whole.
+        func once(_ size: CGSize, staged: Bool) -> (first: Double, frames: Int, whole: Double) {
             drawingQoS()
+            let stage = staged ? BuildStage() : nil
+            stage?.inView = true
             let start = ContinuousClock.now
             let host = NSHostingView(rootView: HomePage { _ in }.environment(engine).environment(\.homeSources, sources)
+                .environment(\.buildStage, stage)
                 .styled(.page(.home)).frame(width: size.width, height: size.height).pilotTheme(look: look))
             host.frame = CGRect(origin: .zero, size: size)
             let window = NSWindow(contentRect: host.frame, styleMask: [.borderless], backing: .buffered, defer: false)
             window.isReleasedWhenClosed = false
             window.contentView = host
-            host.layoutSubtreeIfNeeded()
-            host.display()
-            CATransaction.flush()
-            let ms = (ContinuousClock.now - start) / .milliseconds(1)
+            var frames: [Double] = [], frameStart = start
+            repeat {
+                // PageDeck.step until the frame's budget is spent, at least once.
+                repeat {
+                    if let stage { stage.step += 1; stage.held = false; stage.tickets = 1 }
+                    host.layoutSubtreeIfNeeded()
+                    if let stage, stage.held, stage.tickets == 1, !stage.holders.isEmpty { stage.holders.removeLast() }
+                } while stage?.held == true && ContinuousClock.now - frameStart < PageDeck.frameBudget
+                host.display()
+                CATransaction.flush()
+                frames.append((ContinuousClock.now - frameStart) / .milliseconds(1))
+                frameStart = .now
+            } while stage?.held == true && frames.count < 60
+            let whole = (ContinuousClock.now - start) / .milliseconds(1)
             window.close()
             PanelTestSupport.pump(0.05)
-            return ms
+            return (frames[0], frames.count, whole)
+        }
+        func line(_ values: [Double]) -> String {
+            String(format: "median %.1f ms (", values.sorted()[values.count / 2]) + values.map { String(format: "%.1f", $0) }.joined(separator: " ") + ")"
         }
         var lines: [String] = []
         for (name, size) in [("default", AppWindowController.size), ("1700", NSSize(width: 1700, height: 1290))] {
-            _ = once(size)
-            let runs = (0..<9).map { _ in once(size) }
-            let median = runs.sorted()[runs.count / 2]
-            lines.append("\(name) \(Int(size.width)) × \(Int(size.height)): median \(String(format: "%.1f", median)) ms ("
-                         + runs.map { String(format: "%.1f", $0) }.joined(separator: " ") + ")")
+            _ = once(size, staged: false)
+            let whole = (0..<9).map { _ in once(size, staged: false).whole }
+            let staged = (0..<9).map { _ in once(size, staged: true) }
+            lines.append("\(name) \(Int(size.width)) × \(Int(size.height)), whole: " + line(whole))
+            lines.append("\(name) \(Int(size.width)) × \(Int(size.height)), first frame: " + line(staged.map(\.first))
+                         + ", frames \(staged.map(\.frames).max() ?? 0), whole after " + line(staged.map(\.whole)))
         }
         try (lines + ["debug build"]).joined(separator: "\n").appending("\n").write(to: dir.appending(path: "first-visit.txt"), atomically: true, encoding: .utf8)
     }

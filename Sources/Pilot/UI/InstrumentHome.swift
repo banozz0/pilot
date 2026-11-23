@@ -37,17 +37,19 @@ struct InstrumentHome: View {
                     // The switches in a row of tiles, then the cards in pairs: Jump back in beside the workspaces, today's
                     // presses beside the binds pressed most; one column and two tiles a row in a small window (home-layout).
                     let now = sources.now(.now)
-                    VStack(spacing: HomeGrid.spacing) {
+                    // Built a piece at a time on a first visit, as every page is (Staged, PageDeck.buildInView): the
+                    // switches, then each card, so no frame waits on all of them.
+                    VStack(spacing: HomeGrid.spacing) { Staged {
                         HomeSwitches()
-                        HomeCardGrid {
+                        HomeCardGrid { Staged {
                             HomeJumpBack(keys: sources.recent(), schema: sources.schema) { key, place in
                                 if let model { model.go(place); model.ring(key) } else { go(place) }
                             }
                             HomeWorkspacesCard(open: place)
                             HomeTodayCard(now: now)
                             HomeBusiestCard(now: now, open: place)
-                        }
-                    }
+                        } }
+                    } }
                     .padding(.top, 14).padding(.bottom, 12)
                 }
             }
