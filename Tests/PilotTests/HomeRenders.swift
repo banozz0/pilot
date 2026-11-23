@@ -100,8 +100,13 @@ struct HomeRenders {
 
     static let looks: [(name: String, theme: String)] = [("dark", "tokyo-night"), ("light", "porcelain")]
 
-    /// The settings the render's Jump back in lists, newest first.
-    static let recent = ["capture.afterCapture", "look.windowBorder"]
+    /// The settings the render's Jump back in lists, newest first: short labels and whole sentences (home-layout).
+    static let recent = ["capture.afterCapture", "look.windowBorder", "look.defocusPreset", "capture.historyCap", "look.material",
+                         "capture.autoScroll"]
+
+    /// The window sizes Home is shot at besides the window's first (home-layout): a big tiled window, as Sven's on
+    /// build 3160, and the smallest the window goes.
+    static let sizes: [(name: String, size: NSSize)] = [("1700", NSSize(width: 1700, height: 1290)), ("min", AppWindowController.minSize)]
 
     /// The settings on the render's own engine, the stores in the moved home: Look, Captures and part 2 (Tiling's border
     /// among them), as the app's live schema registers them.
@@ -171,8 +176,48 @@ struct HomeRenders {
             try #require(model.ringed == "capture.afterCapture", "the ring went before the shot")
             let rep = try #require(snapshot(frame, scale: 2))
             try #require(rep.representation(using: .png, properties: [:])).write(to: dir.appendingPathComponent("\(name)-captures-ringed.png"))
+            for (suffix, size) in Self.sizes {
+                window.setContentSize(size)
+                try shot("\(name)-home-\(suffix)")
+                if suffix == "1700" { try shot("\(name)-home-searching-border-\(suffix)", query: "border") }
+            }
+            window.setContentSize(AppWindowController.size)
         }
         model.query = ""
+        try Self.firstVisit(engine: engine, sources: sources, look: look, to: dir)
+    }
+
+    /// How long Home takes to build, lay out and draw as a first visit does, alone in a host at the window's first size and
+    /// at 1700 by 1290, in Tokyo Night: the first run warms up and is left out, the median of the next nine is written to
+    /// `home/first-visit.txt` (home-layout). A debug build's before-and-after measure, not the app's own milliseconds.
+    static func firstVisit(engine: Engine, sources: HomeSources, look: Look, to dir: URL) throws {
+        look.themeID = "tokyo-night"
+        func once(_ size: CGSize) -> Double {
+            drawingQoS()
+            let start = ContinuousClock.now
+            let host = NSHostingView(rootView: HomePage { _ in }.environment(engine).environment(\.homeSources, sources)
+                .styled(.page(.home)).frame(width: size.width, height: size.height).pilotTheme(look: look))
+            host.frame = CGRect(origin: .zero, size: size)
+            let window = NSWindow(contentRect: host.frame, styleMask: [.borderless], backing: .buffered, defer: false)
+            window.isReleasedWhenClosed = false
+            window.contentView = host
+            host.layoutSubtreeIfNeeded()
+            host.display()
+            CATransaction.flush()
+            let ms = (ContinuousClock.now - start) / .milliseconds(1)
+            window.close()
+            PanelTestSupport.pump(0.05)
+            return ms
+        }
+        var lines: [String] = []
+        for (name, size) in [("default", AppWindowController.size), ("1700", NSSize(width: 1700, height: 1290))] {
+            _ = once(size)
+            let runs = (0..<9).map { _ in once(size) }
+            let median = runs.sorted()[runs.count / 2]
+            lines.append("\(name) \(Int(size.width)) × \(Int(size.height)): median \(String(format: "%.1f", median)) ms ("
+                         + runs.map { String(format: "%.1f", $0) }.joined(separator: " ") + ")")
+        }
+        try (lines + ["debug build"]).joined(separator: "\n").appending("\n").write(to: dir.appending(path: "first-visit.txt"), atomically: true, encoding: .utf8)
     }
 }
 }
