@@ -623,8 +623,14 @@ enum PageSwitchTiming {
         guard start == nil else { return }
         start = .now
         interval = signposts.beginInterval("page switch")
+        SwitchFrames.begin(on: window?.screen ?? NSScreen.main)
         arm()
     }
+
+    /// The window the deck is in, whose screen's frames a switch counts (SwitchFrames).
+    static weak var window: NSWindow?
+    /// Whether the deck is still building the shown part in view: the switch has not settled (SwitchFrames).
+    static var buildingInView: () -> Bool = { false }
 
     /// PageDeck put part `to` in the window, built now (`first`) or kept from before; `from` is the part it replaced, nil
     /// as the window opens.
@@ -663,10 +669,109 @@ enum PageSwitchTiming {
             let visit = shown.first ? "first" : "return"
             let first = picture.map { String(format: ", picture %.1f ms", ($0 - start) / .milliseconds(1)) } ?? ""
             log.notice("page switch: \(shown.from ?? "window open", privacy: .public) → \(shown.to, privacy: .public), \(visit, privacy: .public) visit\(first, privacy: .public), \(ms) ms to drawn")
+            SwitchFrames.running?.drawn("\(shown.from ?? "window open") → \(shown.to)")
+        } else {
+            // A pick that showed no other part: no switch line, so no frames line.
+            SwitchFrames.running?.stop()
         }
         if let interval { signposts.endInterval("page switch", interval) }
         if let done { CFRunLoopRemoveObserver(CFRunLoopGetMain(), done, .commonModes) }
         (Self.start, Self.interval, Self.shown, Self.done, Self.picture) = (nil, nil, nil, nil, nil)
+    }
+}
+
+/// The frames the window's screen showed around a page switch (page-frames; Sven on combined-13, build 3160: "the pages
+/// load faster now but are still kind of laggy … It's like a frame drop happens"): a display link from the pick until the
+/// page has settled (drawn, built as far as the window shows it, and a tenth of a second without a miss) or half a
+/// second, cut short by the next pick. Each tick is a refresh the main thread was free for; a gap over one and a half
+/// refreshes is a frame missed, the work SwiftUI and AppKit did in it holding the window's next frame. A frame the
+/// window server drops late (glass, compositing) is not seen here. One line a switch, after its "page switch" line:
+/// `page frames: home → look, 240 Hz, 96 frames in 412 ms, 14 missed (3 after drawn), longest gap 37.5 ms at 0 ms; gaps 37.5@0 8.3@51`
+/// (each gap's length and when it began, in ms after the pick). Nothing runs between switches.
+@MainActor
+final class SwitchFrames: NSObject {
+    private(set) static var running: SwitchFrames?
+    private static let log = Logger(subsystem: "dev.banozz.pilot", category: "window")
+    /// The longest a switch is watched, and how long it is calm before it counts as settled.
+    static let most: CFTimeInterval = 0.5
+    static let calm: CFTimeInterval = 0.1
+
+    private var link: CADisplayLink?
+    private let hz: Int
+    private let refresh: CFTimeInterval
+    private let start = CACurrentMediaTime()
+    private var last: CFTimeInterval
+    private var frames = 0
+    private var missed = 0
+    private var missedAfter = 0
+    /// Each gap over one and a half refreshes: its length and when it began, after the pick.
+    private var gaps: [(length: CFTimeInterval, at: CFTimeInterval)] = []
+    private var drawnAt: CFTimeInterval?
+    private var label: String?
+    private var calmSince: CFTimeInterval?
+
+    private init(screen: NSScreen) {
+        hz = max(screen.maximumFramesPerSecond, 1)
+        refresh = 1 / CFTimeInterval(hz)
+        last = start
+        super.init()
+    }
+
+    /// A pick: the switch before it, if still watched, logs what it saw, and this one is watched.
+    static func begin(on screen: NSScreen?) {
+        running?.finish()
+        guard let screen else { return }
+        let frames = SwitchFrames(screen: screen)
+        let link = screen.displayLink(target: frames, selector: #selector(tick(_:)))
+        let rate = Float(frames.hz)
+        link.preferredFrameRateRange = CAFrameRateRange(minimum: rate, maximum: rate, preferred: rate)
+        link.add(to: .main, forMode: .common)
+        frames.link = link
+        running = frames
+    }
+
+    /// The switch drew: from now a miss counts as after drawn.
+    func drawn(_ label: String) {
+        self.label = label
+        drawnAt = CACurrentMediaTime()
+    }
+
+    /// Not a switch after all: nothing logged.
+    func stop() {
+        link?.invalidate()
+        link = nil
+        if Self.running === self { Self.running = nil }
+    }
+
+    @objc private func tick(_ link: CADisplayLink) {
+        let now = link.timestamp
+        let gap = now - last
+        last = now
+        frames += 1
+        if gap > refresh * 1.5 {
+            let lost = max(Int((gap / refresh).rounded()) - 1, 1)
+            missed += lost
+            if drawnAt.map({ now - gap >= $0 }) == true { missedAfter += lost }
+            gaps.append((gap, max(now - gap - start, 0)))
+            calmSince = nil
+        } else if drawnAt != nil, !PageSwitchTiming.buildingInView() {
+            calmSince = calmSince ?? now
+        } else {
+            calmSince = nil
+        }
+        if now - start >= Self.most || calmSince.map({ now - $0 >= Self.calm }) == true { finish() }
+    }
+
+    private func finish() {
+        defer { stop() }
+        // Cut short before it drew: the next pick took over, no switch line to stand beside.
+        guard let label else { return }
+        let ms = { (s: CFTimeInterval) in String(format: "%.1f", s * 1000) }
+        let longest = gaps.max { $0.length < $1.length }
+        let list = gaps.prefix(8).map { "\(ms($0.length))@\(Int($0.at * 1000))" }.joined(separator: " ")
+        let line = "\(label), \(hz) Hz, \(frames) frames in \(Int((last - start) * 1000)) ms, \(missed) missed (\(missedAfter) after drawn), "
+            + "longest gap \(ms(longest?.length ?? 0)) ms at \(Int((longest?.at ?? 0) * 1000)) ms" + (gaps.isEmpty ? "" : "; gaps \(list)")
+        Self.log.notice("page frames: \(line, privacy: .public)")
     }
 }
 

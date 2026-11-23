@@ -388,6 +388,10 @@ final class PageDeck: NSView {
         var turns: [Duration] = []
         /// When its first piece was built, for the time it took to be whole.
         let began = ContinuousClock.now
+        /// Shown with all it shows drawn: the rest, below the fold, waits for the window to be quiet (`buildInView`).
+        var below = false
+        /// The page's scroll view, once found (`filled`).
+        weak var scroll: NSScrollView?
         init(stage: BuildStage) { self.stage = stage }
     }
     /// The parts not whole yet: the one shown is built in view, the others hidden while the window is quiet.
@@ -398,8 +402,11 @@ final class PageDeck: NSView {
     static let frameBudget: Duration = .milliseconds(8)
 
     /// One frame of part `key`, shown: pieces top down, each block whole before the next (BuildStage), until the frame's
-    /// budget is spent; the next frame goes on once this one is committed (AfterCommit), so each frame draws more of the
-    /// page and nothing drawn moves. A switch away leaves the rest to `buildNextAhead`, hidden.
+    /// budget is spent; the next frame goes on at the screen's next refresh, so each frame draws more of the page and
+    /// nothing drawn moves. Once the page fills the window, what is below the fold waits for the window to be
+    /// quiet (`buildNextAhead`), as a part built ahead does, and a scroll or a key finishes it at once (page-frames: on
+    /// combined-13 General, Binds and Menu bar held 45 to 170 ms frames after they drew, building blocks no one saw yet).
+    /// A switch away leaves the rest to `buildNextAhead`, hidden.
     private func buildInView(_ key: String, _ half: Building, _ host: PageHost) {
         let start = ContinuousClock.now
         let stage = half.stage
@@ -407,20 +414,38 @@ final class PageDeck: NSView {
         // At least a pass a frame: the first has the part's frame and the page's top, whatever they cost.
         repeat {
             step(stage, host)
-        } while stage.held && ContinuousClock.now - start < Self.frameBudget && stage.step < Self.turnsMost
+        } while stage.held && !filled(half, host) && ContinuousClock.now - start < Self.frameBudget && stage.step < Self.turnsMost
         half.turns.append(ContinuousClock.now - start)
         guard stage.held && stage.step < Self.turnsMost else { return finish(key, half) }
-        let main = CFRunLoopGetMain()
-        AfterCommit.observe(repeats: false) { [weak self, weak host] in
-            CFRunLoopPerformBlock(main, CFRunLoopMode.commonModes.rawValue) {
-                MainActor.assumeIsolated {
-                    guard let self, let host, self.shown == key, let half = self.building[key] else { return }
-                    self.buildInView(key, half, host)
-                }
-            }
-            CFRunLoopWakeUp(main)
+        if filled(half, host) {
+            half.below = true
+            quietAgain = true
+            return armAhead()
         }
-        CFRunLoopWakeUp(main)
+        // The next frame's pieces at the screen's next refresh: one pass a frame, the frame in between drawn and shown
+        // (page-frames: passes queued on the run loop ran back to back, the screen's frames waiting on them).
+        passKey = key
+        if passLink == nil, let window {
+            let link = window.screen != nil ? displayLink(target: self, selector: #selector(pass(_:)))
+                : (NSScreen.main ?? NSScreen.screens.first)?.displayLink(target: self, selector: #selector(pass(_:)))
+            link?.add(to: .main, forMode: .common)
+            passLink = link
+        }
+    }
+
+    /// The part built in view at the next refresh (`buildInView`), and the screen's refreshes that bring it.
+    private var passKey: String?
+    private var passLink: CADisplayLink?
+
+    @objc private func pass(_ link: CADisplayLink) {
+        let key = passKey
+        passKey = nil
+        if let key, shown == key, let half = building[key], !half.below, let host = hosts[key] { buildInView(key, half, host) }
+        // None next: the link holds the deck until it goes.
+        if passKey == nil {
+            passLink?.invalidate()
+            passLink = nil
+        }
     }
 
     /// One pass: the container holding children back built last adds one, and the part is laid out with it.
@@ -431,6 +456,23 @@ final class PageDeck: NSView {
         host.layoutSubtreeIfNeeded()
         // Held back, yet no container took the piece: the one built last went (a branch not taken any more).
         if stage.held, stage.tickets == 1, !stage.holders.isEmpty { stage.holders.removeLast() }
+    }
+
+    /// Whether `event` is a press on a scroller of `host`'s, which drags the page.
+    private func onScroller(_ event: NSEvent, _ host: PageHost?) -> Bool {
+        guard let host, event.window === window, let hit = host.hitTest(convert(event.locationInWindow, from: nil)) else { return false }
+        return sequence(first: hit, next: \.superview).contains { $0 is NSScroller }
+    }
+
+    /// Whether part `host`'s page runs past the window: its scroll view (the widest, not the page list's) holds more than
+    /// it shows.
+    private func filled(_ half: Building, _ host: PageHost) -> Bool {
+        if half.scroll?.isDescendant(of: host) != true {
+            func scrolls(_ view: NSView) -> [NSScrollView] { (view as? NSScrollView).map { [$0] } ?? view.subviews.flatMap(scrolls) }
+            half.scroll = scrolls(host).max { $0.frame.width < $1.frame.width }
+        }
+        guard let scroll = half.scroll, let page = scroll.documentView else { return false }
+        return page.frame.height > scroll.contentView.bounds.height
     }
 
     /// Part `key` is whole from now on: every container shows all its children.
@@ -474,8 +516,8 @@ final class PageDeck: NSView {
         order.count < Self.cap ? ahead.first { hosts[$0.key] == nil } : nil
     }
 
-    /// A part half built and hidden, the one shown longest ago first.
-    private var hiddenHalf: String? { order.first { $0 != shown && building[$0] != nil } }
+    /// A part half built, hidden or shown with its fold filled (`buildInView`), the one shown longest ago first.
+    private var quietHalf: String? { order.first { key in building[key].map { key != shown || $0.below } == true } }
 
     /// The most turns a part is built in a piece at a time.
     static let turnsMost = 400
@@ -485,18 +527,25 @@ final class PageDeck: NSView {
     private func armAhead() {
         aheadTimer?.invalidate()
         aheadTimer = nil
-        guard window != nil, hiddenHalf != nil || nextAhead != nil else { return stopAhead() }
+        guard window != nil, quietHalf != nil || nextAhead != nil else { return stopAhead() }
         if aheadInput == nil {
             aheadInput = NSEvent.addLocalMonitorForEvents(matching: Self.input) { [weak self] event in
                 MainActor.assumeIsolated {
-                    self?.quietAgain = true
-                    self?.armAhead()
+                    guard let self else { return }
+                    // The page shown is cut at the fold: whole before the scroll or the key reaches it.
+                    if let shown = self.shown, let half = self.building[shown], half.below, event.type == .scrollWheel || event.type == .keyDown
+                        || event.type == .leftMouseDown && self.onScroller(event, self.hosts[shown]) {
+                        self.finish(shown, half)
+                        self.hosts[shown]?.layoutSubtreeIfNeeded()
+                    }
+                    self.quietAgain = true
+                    self.armAhead()
                 }
                 return event
             }
         }
         // A part half built goes on at the next turn the run loop has free; a new one after the window was quiet.
-        let timer = Timer(timeInterval: hiddenHalf == nil || quietAgain ? Self.quiet : 0.001, repeats: false) { [weak self] _ in
+        let timer = Timer(timeInterval: quietHalf == nil || quietAgain ? Self.quiet : 0.001, repeats: false) { [weak self] _ in
             MainActor.assumeIsolated { self?.buildNextAhead() }
         }
         quietAgain = false
@@ -513,8 +562,9 @@ final class PageDeck: NSView {
 
     private func buildNextAhead() {
         aheadTimer = nil
-        guard let window, hiddenHalf != nil || nextAhead != nil else { return stopAhead() }
-        guard showing() else { stopAhead(); return waitToShow() }
+        guard let window, quietHalf != nil || nextAhead != nil else { return stopAhead() }
+        // The page shown, cut at the fold, goes on behind another window too: it scrolls there.
+        guard showing() || quietHalf != nil && quietHalf == shown else { stopAhead(); return waitToShow() }
         // A press already waiting goes first.
         if NSApp.nextEvent(matching: Self.input, until: .distantPast, inMode: .default, dequeue: false) != nil {
             quietAgain = true
@@ -522,7 +572,7 @@ final class PageDeck: NSView {
         }
         let start = ContinuousClock.now
         let key: String
-        if let half = hiddenHalf {
+        if let half = quietHalf {
             key = half
         } else {
             guard let next = nextAhead else { return stopAhead() }
@@ -542,15 +592,20 @@ final class PageDeck: NSView {
             key = next.key
         }
         guard let half = building[key], let host = hosts[key] else { return armAhead() }
-        // This turn's piece built and drawn, then hidden before its commit, so no frame shows it and no event reaches it;
-        // the keyboard stays where it was.
-        let responder = window.firstResponder
-        half.stage.inView = false
-        host.isHidden = false
-        step(half.stage, host)
-        host.displayIfNeeded()
-        host.isHidden = true
-        if window.firstResponder !== responder { window.makeFirstResponder(responder) }
+        if key == shown {
+            // The shown part's next piece below the fold, drawn as the window draws.
+            step(half.stage, host)
+        } else {
+            // This turn's piece built and drawn, then hidden before its commit, so no frame shows it and no event reaches
+            // it; the keyboard stays where it was.
+            let responder = window.firstResponder
+            half.stage.inView = false
+            host.isHidden = false
+            step(half.stage, host)
+            host.displayIfNeeded()
+            host.isHidden = true
+            if window.firstResponder !== responder { window.makeFirstResponder(responder) }
+        }
         half.turns.append(ContinuousClock.now - start)
         // Nothing held back: the part is whole, drawn at its size, so its first visit flips to it (picture). A part still
         // held back after `turnsMost` turns is finished whole in the next.
@@ -579,7 +634,16 @@ final class PageDeck: NSView {
     /// SwiftUI shows the first part before the deck is in the window: building ahead waits for the window.
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
-        if window == nil { stopAhead() } else { armAhead() }
+        if window == nil {
+            stopAhead()
+            passLink?.invalidate()
+            passLink = nil
+        } else {
+            // What a switch's frames line reads (SwitchFrames): this window's screen, and whether the page shown is settled.
+            PageSwitchTiming.window = window
+            PageSwitchTiming.buildingInView = { [weak self] in self?.shown.flatMap { self?.building[$0] }.map { !$0.below } == true }
+            armAhead()
+        }
     }
 
     /// A part left: hidden and out of the keyboard's way at once; its views are told with the shown one's (`tellSoon`).
