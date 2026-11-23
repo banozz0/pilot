@@ -89,7 +89,7 @@ struct WindowPagesRenders {
             let fronts = [AppPage.general, .menu, .openWith, .tiling, .captures, .system, .binds, .workspaces, .voice, .look, .clipboard,
                           .install].map { ($0.rawValue, AppPlace($0)) }
                 + [("captures-recording", AppPlace(.recording)), ("ai-setup", AppPlace(.aiSetup)),
-                   ("voice-more", AppPlace(.voiceMore)), ("workspaces-more", AppPlace(.workspacesMore)),
+                   ("voice-more", AppPlace(.voiceMore)),
                    ("binds-more", AppPlace(.bindsMore)), ("binds-mouse", AppPlace(.mouse)), ("menu-more", AppPlace(.menuMore)),
                    ("install-more", AppPlace(.installMore))]
             for (page, place) in fronts { try front(place, "\(name)-660-\(page)") }

@@ -167,7 +167,7 @@ private struct PagePart: View {
                         .equatable()
                 }
             }
-        case .workspaces: WorkspacesSettingsView(more: section == .workspacesMore)
+        case .workspaces: WorkspacesSettingsView()
         // Tiling's More: the focused window's exact rows (pilot-ui-redesign T16).
         case .tiling: if section == .tilingMore { FocusedWindowMore() } else { TilingSettingsView() }
         // The menu bar lane's page (card agent-bo-95422913).

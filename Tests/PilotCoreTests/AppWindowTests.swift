@@ -69,7 +69,8 @@ struct AppWindowTests {
         // The page map (Sven 2026-10-17): AI holds its setup, Captures its recording.
         #expect(AppPage.ai.tabs.map(\.title) == ["Chat", "Setup"])
         #expect(AppPage.captures.tabs.map(\.title) == ["Capture", "Recording", "History", "More"])
-        #expect(AppPage.workspaces.tabs.map(\.title) == ["Workspaces", "More"])
+        // Workspaces' More went (Sven, 2026-11-23): its blocks are on the page.
+        #expect(AppPage.workspaces.tabs.isEmpty)
         // System's parts are cards on its front, no More (Sven, 2026-11-11, after 2276).
         #expect(AppPage.system.tabs.isEmpty)
         // Open with's blocks back on its front, its More gone (pages round 4, Sven's Q103); Tiling's More back for the
