@@ -1,34 +1,29 @@
 #!/usr/bin/env python3
-"""Packages for Pilot: parcels kept by their number, and, with the person's own TrackingMore API key (the `apiKey`
-password preference, kept in the Keychain and handed over in each run message), tracked live through trackingmore.com.
+"""Packages for Pilot: parcels kept on this Mac by their tracking number, a name if given, and the carrier the number's
+shape names. No account and no key.
 
-Without a key (TrackingMore's free accounts have no API key) nothing reaches the network: a parcel is its number, a name
-and a carrier guessed from the number's shape, kept on this Mac. Return on it opens its tracking page: the carrier's own
-when the shape names one carrier for certain (UPS's 1Z numbers, USPS's 22-digit ones), else 17track's page for the
-number, which finds the carrier itself. Opening it sends the number to that site. Delivered is marked by hand.
+Details come from a carrier's own public tracking, the JSON its tracking web page itself asks for, where that works
+without a key (checked 2026-11-23; DHL, UPS, USPS, Royal Mail and 17track answer scripts with a bot wall, a captcha or
+terms that forbid it, so their details say so in one line and Return opens their page):
+  MaltaPost  GET https://www.maltapost.com/TrackAndTraceApi/v1/trackedItems?barcode=<n>  (its page's Angular bundle,
+             STT.constants.TrackingAPIURL + "/trackedItems?barcode="; terms silent on automated access, robots.txt
+             disallows /TrackAndTraceApi/*): movements[] {date, description, location, actionDescription, reasonDescription}.
+             MaltaPost tracks an item from abroad by its own number, so on a Mac set to Malta every UPU S10 number is
+             asked there too.
+  Cainiao    GET https://global.cainiao.com/global/detail.json?mailNos=<n>  (its page's bundle, global-track
+             js/index.js; no terms of use published for global.cainiao.com): module[] {detailList[] {timeStr, desc,
+             standerdDesc}}. For China Post's S10 numbers and AliExpress's LP numbers.
+Both are read only when the person asks: opening a parcel's details (when what was read is older than FRESH s) or
+Refresh (not within FORCE_FLOOR s of the last). Nothing runs in the background. Neither feed's delivered field is
+documented, so Delivered stays the person's mark; a row shows the carrier's newest event as its status.
 
-With a key TrackingMore's v4 API (https://api.trackingmore.com/v4, header Tracking-Api-Key) does the rest: POST
-couriers/detect names the carrier of a number, POST trackings/create starts tracking it (one credit for each new number
-and carrier; reading it again costs none), GET trackings/get?tracking_numbers=… (40 at most) reads the latest, DELETE
-trackings/delete/{id} stops it. Errors come back as HTTP 4xx with the envelope's meta.code in the body (4101 already
-exists, 4190 out of credits, 401 the key refused, 429 too fast), so curl runs without --fail and the body decides. A
-parcel kept before the key came stays local until "Track with TrackingMore" spends its credit: none is spent unasked.
+A read is a detached child (`main.py --read`, single under read.lock) so a view answers in its 2 s; the view that
+started it waits up to WAIT s for it. The URL (it holds the number) reaches curl as a config on its stdin (`curl -K -`),
+never as an argument, which `ps` shows. Nothing is logged: no number, name or event leaves stdout's protocol lines.
 
-The key, the URL (its query holds tracking numbers) and the body reach curl as a config on its stdin (`curl -K -`),
-never as arguments, which `ps` shows. Nothing is logged: no number, name, event or key leaves stdout's protocol lines.
-
-Refresh (with a key only): a view (the list, a parcel, the page, the menu bar item) shows what was read last at once
-and, when that is older than FRESH s (NEW_FRESH s while a parcel added in the last hour has no event yet), starts one
-detached child (`main.py --refresh`, single under refresh.lock) that reads every tracked parcel still on its way in one
-call per 40 numbers. The menu bar item is asked every 300 s, so with a key and a parcel on its way TrackingMore is read
-at most once every 15 minutes in the background (2 for a new parcel with no event yet), each read free of credits; with
-nothing on its way, or no key, never. Delivered parcels (TrackingMore's word or the person's mark) and ones TrackingMore
-stopped updating are never asked again. Refresh (⌘R) forces one, not within FORCE_FLOOR s of the last.
-
-Stores: paths.data/parcels.json (the list: id, number, carrier or its guess, name, added, a Delivered mark, `local` for
-one TrackingMore does not track) and paths.cache/status.json (what TrackingMore said for each id, and when), each written
-under store.lock, so a refresh landing late never brings back a removed parcel or drops a new one. A tracked parcel's id
-is TrackingMore's; a local one's is "local-" and 16 hex characters.
+Stores: paths.data/parcels.json (id, number, name, added, a Delivered mark) and paths.cache/reads.json (what each
+parcel's carriers said, and when), each written under store.lock, so a read landing late never brings back a removed
+parcel or drops a new one. Packages 1.x's parcels (version 2, TrackingMore's ids among them) are read as they are.
 """
 import fcntl
 import json
@@ -38,60 +33,32 @@ import shutil
 import subprocess
 import sys
 import time
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
-from urllib.parse import quote, urlencode
+from functools import lru_cache
+from urllib.parse import quote, urlsplit
 
-API = "https://api.trackingmore.com/v4"
-SIGNUP = "https://www.trackingmore.com/signup.html"
-PRICING = "https://www.trackingmore.com/pricing"
-KEY_HELP = "https://www.trackingmore.com/docs/trackingmore/zte58cee4mz0v-api-authentication"
 TRACK_ANY = "https://t.17track.net/en#nums=%s"  # 17track's page for a number; it finds the carrier
-FRESH = 15 * 60
-NEW_FRESH = 2 * 60
-NEW_FOR = 60 * 60
-FORCE_FLOOR = 60
-RETRY = 60
+MALTAPOST = "https://www.maltapost.com/TrackAndTraceApi/v1/trackedItems?barcode=%s"
+CAINIAO = "https://global.cainiao.com/global/detail.json?mailNos=%s"
+FRESH = 10 * 60
+FORCE_FLOOR = 30
 CURL_TIMEOUT = 10
-REFRESH_BUDGET = 25  # Refresh is a no-view run, stopped at 30 s
-BATCH = 40  # trackings/get takes 40 numbers at most
-MOST_CARRIERS = 8  # a run's ask lists 8 choices at most; the pick list keeps to the same
-EVENTS_SHOWN = 40
+WAIT = 1.2  # a list or detail answers within 2 s
+READ_BUDGET = 25  # Refresh is a no-view run, stopped at 30 s
+EVENTS_SHOWN = 30
+POPOVER_EVENTS = 12
 FACE_LABEL, FACE_VALUE = 16, 24  # a dock face's label and value, at most
+LINE = 44  # a row's carrier and status, at most: one line under its name in the popover
+NAME_MOST = 40
 PARCELS = "parcels.json"
-STATUS = "status.json"
+READS = "reads.json"
 STORE_LOCK = "store.lock"
-REFRESH_LOCK = "refresh.lock"
-KEY = re.compile(r"^[A-Za-z0-9_-]{8,128}$")
+READ_LOCK = "read.lock"
 NUMBER = re.compile(r"^[A-Za-z0-9-]{5,50}$")
-ID = re.compile(r"^[A-Za-z0-9_-]{1,64}$")  # TrackingMore's tracking ids are 32 hex characters
-GONE = {404, 4102, 4112}  # TrackingMore has no such tracking: removing it is done
-# Numbers whose shape names one carrier, and its own tracking page: UPS's 1Z and 16 more (UPS's tracking support), USPS's
-# Intelligent Mail package barcode, 92 to 95 and 20 more digits (USPS Publication 199).
-CERTAIN = [(re.compile(r"^1Z[0-9A-Z]{16}$"), "UPS", "https://www.ups.com/track?loc=en_US&tracknum=%s"),
-           (re.compile(r"^9[2-5]\d{20}$"), "USPS", "https://tools.usps.com/go/TrackConfirmAction?tLabels=%s")]
-# The UPU's S10 shape (two letters, nine digits, the sending country's ISO code) names the post it left from, not the one
-# that brings it, so its page is 17track's.
-S10 = re.compile(r"^[A-Z]{2}\d{9}([A-Z]{2})$")
-POSTS = {"AU": "Australia Post", "CA": "Canada Post", "CN": "China Post", "DE": "Deutsche Post", "ES": "Correos",
-         "FR": "La Poste", "GB": "Royal Mail", "HK": "Hongkong Post", "IT": "Poste Italiane", "JP": "Japan Post",
-         "KR": "Korea Post", "MT": "MaltaPost", "NL": "PostNL", "SG": "Singapore Post", "US": "USPS"}
-GUESSES = [(re.compile(r"^TBA\d{12}$"), "Amazon Logistics")]
-# TrackingMore's delivery statuses (docs: Courier Delivery Status): words, emoji, tone.
-STATUSES = {"pending": ("Pending", "⏳", None), "notfound": ("Not found yet", "⏳", None),
-            "inforeceived": ("Label created", "🏷\ufe0f", None), "transit": ("In transit", "🚚", None),
-            "pickup": ("Out for delivery", "🛵", "fine"), "undelivered": ("Delivery failed", "⚠\ufe0f", "warn"),
-            "delivered": ("Delivered", "✅", "fine"), "exception": ("Problem", "❗", "alert"),
-            "expired": ("No news for 30 days", "💤", "warn")}
-TONE_RANK = {None: 0, "fine": 1, "warn": 2, "alert": 3}
 MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]  # whatever the Mac's language
-NO_KEY_TITLE = "Live status needs a TrackingMore API key"
-NO_KEY = ("Packages keeps your parcels without one: Return opens a parcel's tracking page and you mark it delivered. "
-          "For live status, last events and Delivered on its own, add a TrackingMore API key in Packages' settings "
-          "(Extensions › Packages). TrackingMore's paid plans include one (Developer › API Key › Generate API key); "
-          "each new parcel then uses one credit, refreshing it none.")
-NO_KEY_ACTIONS = [{"type": "open", "title": "See TrackingMore's plans", "url": PRICING},
-                  {"type": "open", "title": "How to make an API key", "url": KEY_HELP}]
-BAD_KEY = "that TrackingMore API key does not look right: check it in Packages' settings"
+HOW = ("Opening a parcel reads it from its carrier's own tracking (MaltaPost, Cainiao), never in the background; for "
+       "other carriers Return opens their page.")
 
 
 def send(message):
@@ -108,6 +75,177 @@ def hud(text):
 
 def context_of(run):
     return run.get("context") if isinstance(run.get("context"), dict) else {}
+
+
+# ---- carriers ----
+
+DHL_PAGE = "https://www.dhl.de/en/privatkunden/dhl-sendungsverfolgung.html?piececode=%s"
+CAINIAO_PAGE = "https://global.cainiao.com/newDetail.htm?mailNoList=%s"
+# Each carrier: its name, its tracking page for a number (None: 17track's) and the feeds (FEEDS) that know its numbers.
+# On a Mac set to Malta, MaltaPost is asked for every S10 number too (feeds_of).
+CARRIERS = {
+    "ups": ("UPS", "https://www.ups.com/track?loc=en_US&tracknum=%s", ()),
+    "usps": ("USPS", "https://tools.usps.com/go/TrackConfirmAction?tLabels=%s", ()),
+    "dhl": ("DHL", DHL_PAGE, ()),
+    "deutschepost": ("Deutsche Post", DHL_PAGE, ()),
+    "maltapost": ("MaltaPost", "https://www.maltapost.com/tracking#/tracking?barcode=%s", ("maltapost",)),
+    "chinapost": ("China Post", CAINIAO_PAGE, ("cainiao",)),
+    "cainiao": ("Cainiao", CAINIAO_PAGE, ("cainiao",)),
+    "royalmail": ("Royal Mail", None, ()),
+}
+# Numbers whose shape names one carrier: UPS's 1Z and 16 more (UPS's tracking support); USPS's Intelligent Mail package
+# barcode, 92 to 95 and 20 more digits (USPS Publication 199); DHL Paket's 20 digits from 00340 and JJD numbers;
+# AliExpress's LP numbers (Cainiao). The UPU's S10 shape (two letters, nine digits, the sending country's code) names the
+# post it left from.
+SHAPES = [(re.compile(r"^1Z[0-9A-Z]{16}$"), "ups"), (re.compile(r"^9[2-5]\d{20}$"), "usps"),
+          (re.compile(r"^(00340\d{15}|JJD\d{10,})$"), "dhl"), (re.compile(r"^LP\d{12,16}$"), "cainiao")]
+S10 = re.compile(r"^[A-Z]{2}\d{9}([A-Z]{2})$")
+S10_CARRIERS = {"CN": "chinapost", "DE": "deutschepost", "GB": "royalmail", "MT": "maltapost", "US": "usps"}
+POSTS = {"AU": "Australia Post", "CA": "Canada Post", "ES": "Correos", "FR": "La Poste", "HK": "Hongkong Post",
+         "IT": "Poste Italiane", "JP": "Japan Post", "KR": "Korea Post", "NL": "PostNL", "SG": "Singapore Post"}
+
+
+def carrier_of(number):
+    """(carrier id or None, its name or "")."""
+    for pattern, cid in SHAPES:
+        if pattern.match(number):
+            return cid, CARRIERS[cid][0]
+    post = S10.match(number)
+    if post:
+        cid = S10_CARRIERS.get(post.group(1))
+        return (cid, CARRIERS[cid][0]) if cid else (None, POSTS.get(post.group(1), "%s's post" % post.group(1)))
+    return None, ""
+
+
+def page_url(parcel):
+    cid, _ = carrier_of(parcel["number"])
+    page = CARRIERS[cid][1] if cid else None
+    return (page or TRACK_ANY) % quote(parcel["number"], safe="")
+
+
+def site_of(url):
+    host = urlsplit(url).hostname or url
+    return host[4:] if host.startswith("www.") else host
+
+
+@lru_cache(maxsize=None)
+def in_malta():
+    """Whether this Mac's region is Malta (its AppleLocale ends _MT): then MaltaPost brings an S10 item from abroad."""
+    binary = shutil.which("defaults") or "/usr/bin/defaults"
+    try:
+        said = subprocess.run([binary, "read", "-g", "AppleLocale"], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+                              timeout=2).stdout.decode("utf-8", "replace").strip()
+    except (OSError, subprocess.TimeoutExpired):
+        said = ""
+    return said.split("@")[0].endswith("_MT")
+
+
+def feeds_of(number):
+    """The feeds that may know `number`."""
+    cid, _ = carrier_of(number)
+    feeds = list(CARRIERS[cid][2]) if cid else []
+    if "maltapost" not in feeds and S10.match(number) and in_malta():
+        feeds.append("maltapost")
+    return feeds
+
+
+def readable(parcel):
+    return bool(feeds_of(parcel["number"]))
+
+
+def feed_names(parcel):
+    return " and ".join(FEEDS[f][0] for f in feeds_of(parcel["number"]))
+
+
+# ---- reading a carrier ----
+
+def quoted(text):
+    """A value for curl's config file: double quotes, with backslash and quote escaped."""
+    return '"%s"' % text.replace("\\", "\\\\").replace('"', '\\"')
+
+
+def get_json(url):
+    """(value, why): the JSON at `url`, or None and words for the person."""
+    lines = ["url = " + quoted(url), "silent", "show-error", "compressed", "max-time = %d" % CURL_TIMEOUT,
+             "user-agent = " + quoted("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) Pilot-Packages"),
+             "header = " + quoted("Accept: application/json"), "write-out = " + quoted("\\n%{http_code}")]
+    binary = shutil.which("curl") or "/usr/bin/curl"
+    try:
+        done = subprocess.run([binary, "-K", "-"], input=("\n".join(lines) + "\n").encode(), stdout=subprocess.PIPE,
+                              stderr=subprocess.PIPE, timeout=CURL_TIMEOUT + 2)
+    except (OSError, subprocess.TimeoutExpired):
+        return None, "no answer"
+    if done.returncode != 0:
+        said = done.stderr.decode("utf-8", "replace").strip().splitlines()
+        return None, re.sub(r"^curl: (\(\d+\) )?", "", said[-1] if said else "no answer")[:100]
+    text, _, http = done.stdout.decode("utf-8", "replace").rpartition("\n")
+    if http.strip() != "200":
+        return None, "it answered %s" % (http.strip() or "nothing")
+    try:
+        return json.loads(text), None
+    except ValueError:
+        return None, "its answer was not readable"
+
+
+def words(*parts):
+    return " · ".join(p for p in (" ".join(str(p or "").split()) for p in parts) if p)
+
+
+def an_event(at, head, text="", place=""):
+    """An event as kept: its time as the carrier wrote it, its headline, the detail and where."""
+    event = {"at": at.strip() if isinstance(at, str) else "", "head": words(head)[:80], "text": words(text)[:200],
+             "place": words(place)[:60]}
+    return event if event["head"] or event["text"] else None
+
+
+def read_maltapost(number):
+    value, why = get_json(MALTAPOST % quote(number, safe=""))
+    if why:
+        return None, why
+    movements = value.get("movements") if isinstance(value, dict) else None
+    if not isinstance(movements, list):
+        return None, "its answer had no movements"
+    return [e for e in (an_event(m.get("date"), m.get("description"), words(m.get("actionDescription"),
+                                                                            m.get("reasonDescription")), m.get("location"))
+                        for m in movements if isinstance(m, dict)) if e], None
+
+
+def read_cainiao(number):
+    value, why = get_json(CAINIAO % quote(number, safe=""))
+    if why:
+        return None, why
+    found = value.get("module") if isinstance(value, dict) and value.get("success") else None
+    if not isinstance(found, list):
+        return None, "its answer had no module"
+    entry = next((m for m in found if isinstance(m, dict) and m.get("mailNo") == number), found[0] if found else {})
+    details = entry.get("detailList") if isinstance(entry, dict) else None
+    return [e for e in (an_event(d.get("timeStr"), d.get("standerdDesc") or d.get("desc"),
+                                 d.get("desc") if d.get("standerdDesc") else "")
+                        for d in details or [] if isinstance(d, dict)) if e], None
+
+
+FEEDS = {"maltapost": ("MaltaPost", read_maltapost), "cainiao": ("Cainiao", read_cainiao)}
+
+
+def read_feed(feed, number):
+    """(name, events or None, why)."""
+    name, reader = FEEDS[feed]
+    try:
+        found, why = reader(number)
+    except (AttributeError, KeyError, TypeError, ValueError):
+        found, why = None, "its answer was in a shape Packages does not know"
+    return name, found, why
+
+
+def read_number(number):
+    """Every feed's events for `number`, newest first (the feeds asked at once), why each feed that failed did, and
+    whether any answered."""
+    feeds = feeds_of(number)
+    with ThreadPoolExecutor(max_workers=max(1, len(feeds))) as pool:
+        said = list(pool.map(lambda feed: read_feed(feed, number), feeds))
+    events = [dict(e, source=name) for name, found, _ in said if found is not None for e in found]
+    events.sort(key=lambda e: moment(e.get("at")) or 0, reverse=True)
+    return events, ["%s: %s" % (name, why) for name, _, why in said if why], any(why is None for _, _, why in said)
 
 
 # ---- stores ----
@@ -137,9 +275,21 @@ def save(path, value):
     os.replace(temp, path)
 
 
+def parcel_of(value):
+    """A parcel as stored, Packages 1.x's too: an id and a number; the rest it had (a carrier code, `local`) dropped."""
+    if not (isinstance(value, dict) and all(isinstance(value.get(k), str) and value[k] for k in ("id", "number"))):
+        return None
+    parcel = {"id": value["id"], "number": value["number"],
+              "name": value["name"] if isinstance(value.get("name"), str) else "",
+              "added": value["added"] if isinstance(value.get("added"), (int, float)) else 0}
+    if isinstance(value.get("delivered"), (int, float)) and value["delivered"]:
+        parcel["delivered"] = value["delivered"]
+    return parcel
+
+
 class Store:
-    """The parcel list and what TrackingMore last said, read together; `with store:` holds store.lock, reads both again
-    and writes them back at its end."""
+    """The parcel list and what each carrier last said, read together; `with store:` holds store.lock, reads both
+    again and writes them back at its end."""
 
     def __init__(self, data, cache):
         self.data, self.cache = data, cache
@@ -152,10 +302,10 @@ class Store:
 
     def read(self):
         raw = load(os.path.join(self.data, PARCELS)).get("parcels")
-        self.parcels = [p for p in raw if parcel_of(p)] if isinstance(raw, list) else []
-        self.status = load(os.path.join(self.cache, STATUS))
-        if not isinstance(self.status.get("byId"), dict):
-            self.status["byId"] = {}
+        self.parcels = [p for p in map(parcel_of, raw if isinstance(raw, list) else []) if p]
+        self.reads = load(os.path.join(self.cache, READS))
+        if not isinstance(self.reads.get("byId"), dict):
+            self.reads["byId"] = {}
 
     def __enter__(self):
         self.lock = open(os.path.join(self.cache, STORE_LOCK), "a")
@@ -167,199 +317,25 @@ class Store:
         try:
             if kind is None:
                 ids = {p["id"] for p in self.parcels}
-                self.status["byId"] = {k: v for k, v in self.status["byId"].items() if k in ids}
-                save(os.path.join(self.data, PARCELS), {"version": 2, "parcels": self.parcels})
-                save(os.path.join(self.cache, STATUS), self.status)
+                self.reads["byId"] = {k: v for k, v in self.reads["byId"].items() if k in ids}
+                save(os.path.join(self.data, PARCELS), {"version": 3, "parcels": self.parcels})
+                save(os.path.join(self.cache, READS), self.reads)
+                old = os.path.join(self.cache, "status.json")  # Packages 1.x's TrackingMore answers
+                if os.path.exists(old):
+                    os.remove(old)
         finally:
             self.lock.close()
         return False
 
-    def tracking(self, parcel):
-        entry = self.status["byId"].get(parcel["id"])
+    def got(self, parcel):
+        entry = self.reads["byId"].get(parcel["id"])
         return entry if isinstance(entry, dict) else {}
 
     def find(self, parcel_id):
         return next((p for p in self.parcels if p["id"] == parcel_id), None)
 
-    def active(self, force=False):
-        """The tracked parcels still worth asking about: not delivered, and still updated by TrackingMore; forced, any
-        not delivered."""
-        return [p for p in self.parcels if state(p, self.tracking(p)) in (("active", "stopped") if force else ("active",))]
 
-    def read_at(self):
-        """When the stalest parcel on its way was last read (an add reads its own), 0 for one never read; with none on
-        its way, the last refresh."""
-        active = self.active()
-        if not active:
-            return self.status.get("refreshedAt") or 0
-        return min(self.tracking(p).get("fetchedAt") or 0 for p in active)
-
-
-def parcel_of(value):
-    """A parcel as stored: an id and a number, a carrier (empty for a local one, which may have only a guess)."""
-    return (isinstance(value, dict) and all(isinstance(value.get(k), str) and value[k] for k in ("id", "number"))
-            and isinstance(value.get("courier", ""), str) and (value.get("local") or value.get("courier"))
-            and isinstance(value.get("added", 0), (int, float)))
-
-
-def state(parcel, tracking):
-    """"delivered" (TrackingMore's word or the person's mark), "local" (TrackingMore does not track it), "stopped"
-    (TrackingMore no longer updates it) or "active"; only an active parcel is asked again."""
-    if parcel.get("delivered") or tracking.get("delivery_status") == "delivered":
-        return "delivered"
-    if parcel.get("local"):
-        return "local"
-    return "stopped" if tracking.get("updating") is False else "active"
-
-
-def guess(number):
-    """(the carrier's name or "", its own tracking page when the number's shape names it for certain, else None)."""
-    for pattern, name, url in CERTAIN:
-        if pattern.match(number):
-            return name, url % quote(number, safe="")
-    post = S10.match(number)
-    if post:
-        return POSTS.get(post.group(1), "%s's post" % post.group(1)), None
-    return next((name for pattern, name in GUESSES if pattern.match(number)), ""), None
-
-
-def page_url(parcel, tracking):
-    """Where a parcel's tracking page is: TrackingMore's link to the carrier's page, the carrier's own for a number
-    whose shape names it, else 17track's for the number."""
-    if isinstance(tracking.get("link"), str) and tracking["link"].startswith("https://"):
-        return tracking["link"]
-    return guess(parcel["number"])[1] or TRACK_ANY % quote(parcel["number"], safe="")
-
-
-def site_of(url):
-    host = url.split("/")[2] if url.count("/") >= 2 else url
-    return host[4:] if host.startswith("www.") else host
-
-
-# ---- TrackingMore ----
-
-def api_key(run):
-    """(key, None), (None, None) when none is set, or (None, why) for one that cannot be sent."""
-    key = str((run.get("preferences") or {}).get("apiKey") or "").strip()
-    if not key:
-        return None, None
-    return (key, None) if KEY.match(key) else (None, BAD_KEY)
-
-
-def quoted(text):
-    """A value for curl's config file: double quotes, with backslash and quote escaped."""
-    return '"%s"' % text.replace("\\", "\\\\").replace('"', '\\"')
-
-
-def call(key, method, path, query=None, body=None):
-    """(meta code, data, why): TrackingMore's answer; code 200 with its data, or another code (or 0: no answer) with
-    words for the person."""
-    url = "%s/%s" % (API, path) + ("?" + urlencode(query) if query else "")
-    lines = ["url = " + quoted(url), "request = " + quoted(method), "silent", "show-error",
-             "max-time = %d" % CURL_TIMEOUT, "header = " + quoted("Tracking-Api-Key: " + key),
-             "header = " + quoted("Accept: application/json"), "header = " + quoted("Content-Type: application/json"),
-             "write-out = " + quoted("\\n%{http_code}")]
-    if body is not None:
-        lines.append("data-binary = " + quoted(json.dumps(body)))
-    binary = shutil.which("curl") or "/usr/bin/curl"
-    try:
-        done = subprocess.run([binary, "-K", "-"], input=("\n".join(lines) + "\n").encode(), stdout=subprocess.PIPE,
-                              stderr=subprocess.PIPE, timeout=CURL_TIMEOUT + 2)
-    except (OSError, subprocess.TimeoutExpired):
-        return 0, None, "could not reach TrackingMore"
-    if done.returncode != 0:
-        said = done.stderr.decode("utf-8", "replace").strip().splitlines()
-        return 0, None, "could not reach TrackingMore (%s)" % (said[-1] if said else "no answer").replace("curl: ", "")[:120]
-    text, _, http = done.stdout.decode("utf-8", "replace").rpartition("\n")
-    try:
-        answer = json.loads(text)
-    except ValueError:
-        answer = None
-    meta = answer.get("meta") if isinstance(answer, dict) else None
-    code = meta.get("code") if isinstance(meta, dict) else None
-    if not isinstance(code, int) or isinstance(code, bool):
-        code = int(http) if http.strip().isdigit() else 0
-    if code == 200:
-        return 200, answer.get("data") if isinstance(answer, dict) else None, None
-    message = meta.get("message") if isinstance(meta, dict) and isinstance(meta.get("message"), str) else ""
-    return code, None, words(code, message)
-
-
-def words(code, message):
-    if code in (401, 403):
-        return "TrackingMore refused the API key: check it in Packages' settings"
-    if code == 429:
-        return "TrackingMore asked to slow down: try again in a minute"
-    if code == 4190:
-        return "your TrackingMore plan has no credits left this month: a new parcel waits for next month or a bigger plan"
-    if code in (4110, 4111):
-        return "TrackingMore says this is not a tracking number"
-    if code == 4120:
-        return "TrackingMore does not know that carrier"
-    if code == 4121:
-        return "TrackingMore could not tell the carrier from this number: check it and try again"
-    if code == 4122:
-        return "this carrier needs more than the number (a postcode or a date), which Packages does not ask for"
-    if 500 <= code < 600:  # 500, and TrackingMore's 511 to 513
-        return "TrackingMore had a problem: try again later"
-    return "TrackingMore: %s" % (message or "answered %d" % code)[:140]
-
-
-def trimmed(t):
-    """What Packages keeps of a tracking: its status, its latest event and every checkpoint, and the carrier's page."""
-    if not isinstance(t, dict):
-        return {}
-    keep = {k: t.get(k) for k in ("id", "tracking_number", "courier_code", "delivery_status", "substatus", "updating",
-                                  "latest_event", "latest_checkpoint_time", "scheduled_delivery_date", "transit_time",
-                                  "created_at")}
-    events, link = [], None
-    for side in ("destination_info", "origin_info"):
-        info = t.get(side)
-        if not isinstance(info, dict):
-            continue
-        link = link or next((info.get(k) for k in ("tracking_link", "weblink") if isinstance(info.get(k), str) and info.get(k)), None)
-        for e in info.get("trackinfo") or []:
-            if isinstance(e, dict) and isinstance(e.get("tracking_detail"), str) and e["tracking_detail"].strip():
-                events.append({k: e.get(k) for k in ("checkpoint_date", "tracking_detail", "location",
-                                                      "checkpoint_delivery_status")})
-    seen, unique = set(), []
-    for e in sorted(events, key=lambda e: moment(e.get("checkpoint_date")) or 0, reverse=True):
-        mark = (e.get("checkpoint_date"), e["tracking_detail"])
-        if mark not in seen:
-            seen.add(mark)
-            unique.append(e)
-    keep["events"] = unique
-    keep["link"] = link
-    keep["fetchedAt"] = time.time()
-    return keep
-
-
-def detect(key, number):
-    """(candidates [{"code", "name"}], None), at least one, or (None, why)."""
-    code, data, why = call(key, "POST", "couriers/detect", body={"tracking_number": number})
-    if code != 200:
-        return None, why
-    found = []
-    for c in data if isinstance(data, list) else []:
-        if isinstance(c, dict) and isinstance(c.get("courier_code"), str) and c["courier_code"]:
-            found.append({"code": c["courier_code"], "name": str(c.get("courier_name") or c["courier_code"])})
-    return (found, None) if found else (None, words(4121, ""))
-
-
-def read_trackings(key, numbers):
-    """({id: tracking}, why): the latest for `numbers`, 40 to a call."""
-    found = {}
-    for start in range(0, len(numbers), BATCH):
-        code, data, why = call(key, "GET", "trackings/get", query={"tracking_numbers": ",".join(numbers[start:start + BATCH])})
-        if code != 200:
-            return found, why
-        for t in data if isinstance(data, list) else [data] if isinstance(data, dict) else []:
-            if isinstance(t, dict) and isinstance(t.get("id"), str):
-                found[t["id"]] = t
-    return found, None
-
-
-# ---- the refresh ----
+# ---- the reads ----
 
 def locked(f):
     try:
@@ -369,100 +345,91 @@ def locked(f):
         return False
 
 
-def refreshing(cache):
+def reading(cache):
     try:
-        with open(os.path.join(cache, REFRESH_LOCK), "a") as f:
+        with open(os.path.join(cache, READ_LOCK), "a") as f:
             return not locked(f)
     except OSError:
         return False
 
 
-def fetch(key, store, force=False):
-    """One read of every tracked parcel on its way (forced, every one not delivered); its answer, or why it failed,
-    saved in status.json. A tracking is matched by id, else by number and carrier. Holds no lock while it waits on
-    TrackingMore."""
-    numbers = sorted({p["number"] for p in store.active(force)})
-    if not numbers:
-        return None
-    found, why = read_trackings(key, numbers)
-    by_number = {(t.get("tracking_number"), t.get("courier_code")): t for t in found.values()}
+def read_parcel(store, parcel_id):
+    """Reads a parcel from its feeds and keeps what they said, or why they failed; a failed read keeps what was read
+    before. Holds no lock while it waits on a carrier."""
+    parcel = store.find(parcel_id)
+    if not parcel:
+        return
+    events, problems, answered = read_number(parcel["number"])
     with store:
-        now = time.time()
-        for parcel in store.parcels:
-            if parcel.get("local"):
-                continue
-            t = found.get(parcel["id"]) or by_number.get((parcel["number"], parcel["courier"]))
-            if t is not None:
-                store.status["byId"][parcel["id"]] = trimmed(t)
-        store.status["triedAt"] = now
-        store.status["error"] = why
-        if why is None:
-            store.status["refreshedAt"] = now
-    return why
+        if store.find(parcel_id):
+            now = time.time()
+            entry = dict(store.got(parcel), triedAt=now, error="; ".join(problems) or None)
+            if answered:
+                entry.update(events=events, readAt=now)
+            store.reads["byId"][parcel_id] = entry
 
 
-def due(store, now, force=False):
-    """Whether to read TrackingMore now: something on its way whose last read is older than the pace (FORCE_FLOOR when
-    forced), and for a view not within RETRY s of a failure. The last whole refresh bounds it, so a parcel TrackingMore
-    leaves out of its answer (archived, or gone after its 180 days) waits like the rest."""
-    active = store.active(force)
-    if not active:
-        return False
-    gone = now - max(store.read_at(), store.status.get("refreshedAt") or 0)
-    if force:
-        return gone >= FORCE_FLOOR
-    status = store.status
-    if status.get("error") and now - (status.get("triedAt") or 0) < RETRY:
-        return False
-    waiting = any(not store.tracking(p).get("events") and now - p.get("added", 0) < NEW_FOR for p in active)
-    return gone >= (NEW_FRESH if waiting else FRESH)
-
-
-def start_refresh(key, store):
-    """A detached `main.py --refresh` holding the refresh lock from before it starts; None when one runs already."""
+def start_read(store, parcel_id):
+    """A detached `main.py --read` holding the read lock from before it starts; None when one runs already."""
     try:
-        lock = open(os.path.join(store.cache, REFRESH_LOCK), "a")
+        lock = open(os.path.join(store.cache, READ_LOCK), "a")
     except OSError:
         return None
     with lock:
         if not locked(lock):
             return None
         try:
-            child = subprocess.Popen([sys.executable, os.path.abspath(__file__), "--refresh"], stdin=subprocess.PIPE,
+            child = subprocess.Popen([sys.executable, os.path.abspath(__file__), "--read"], stdin=subprocess.PIPE,
                                      stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, pass_fds=(lock.fileno(),),
                                      start_new_session=True, cwd=os.path.dirname(os.path.abspath(__file__)))
-            child.stdin.write(json.dumps({"key": key, "data": store.data, "cache": store.cache}).encode())
+            child.stdin.write(json.dumps({"data": store.data, "cache": store.cache, "id": parcel_id}).encode())
             child.stdin.close()
         except OSError:
             return None
     return child
 
 
-def refresh_main():
+def read_main():
     job = json.loads(sys.stdin.read())
-    fetch(job["key"], Store(job["data"], job["cache"]))
+    read_parcel(Store(job["data"], job["cache"]), job["id"])
 
 
-def look(run, key):
-    """The store as a view shows it, a refresh started when one is due (never without a key); (store, running)."""
+def stale(store, parcel, older, now):
+    return readable(parcel) and now - (store.got(parcel).get("triedAt") or 0) >= older
+
+
+def look_at(run):
+    """The store and the context's parcel, read first when what was read is older than FRESH s, waiting up to WAIT s;
+    (store, parcel, still reading)."""
     store = Store.of(run)
-    if not key:
-        return store, False
-    started = due(store, time.time()) and start_refresh(key, store)
-    return store, bool(started) or refreshing(store.cache)
+    parcel = store.find(context_of(run).get("id"))
+    if parcel and stale(store, parcel, FRESH, time.time()):
+        child = start_read(store, parcel["id"])
+        if child:
+            try:
+                child.wait(timeout=WAIT)
+            except subprocess.TimeoutExpired:
+                pass
+        else:  # another run's read: wait for its lock
+            started = time.monotonic()
+            while time.monotonic() - started < WAIT and reading(store.cache):
+                time.sleep(0.05)
+        store.read()
+        parcel = store.find(parcel["id"])
+    return store, parcel, reading(store.cache)
 
 
 # ---- words ----
 
-def moment(stamp):
-    """Seconds since 1970 for TrackingMore's YYYY-MM-DD, YYYY-MM-DDTHH:MM:SS and …+HH:MM (a time without a zone read
-    as this Mac's); None when it does not read."""
-    if not isinstance(stamp, str) or not stamp.strip():
+def moment(text):
+    """Seconds since 1970 for an ISO 8601 time or "YYYY-MM-DD HH:MM:SS" (a time without a zone read as this Mac's);
+    None when it does not read."""
+    if not isinstance(text, str) or not text.strip():
         return None
-    text = stamp.strip().replace(" ", "T", 1)
+    text = text.strip().replace(" ", "T", 1)
     if text.endswith("Z"):
         text = text[:-1] + "+00:00"
-    for candidate in (text, text[:19]):
+    for candidate in (text, text[:19], text[:10]):
         try:
             return datetime.fromisoformat(candidate).timestamp()
         except ValueError:
@@ -471,7 +438,7 @@ def moment(stamp):
 
 
 def age(seconds, now):
-    if seconds is None:
+    if not seconds:
         return ""
     gone = max(0, now - seconds)
     if gone < 60:
@@ -490,487 +457,384 @@ def ago(seconds, now):
     return "just now" if said == "now" else (said + " ago" if said else "never")
 
 
-def clock(stamp):
-    seconds = moment(stamp)
+def clock(text):
+    """Nov 22, 07:19, or the carrier's own words when they do not read as a time."""
+    seconds = moment(text)
     if seconds is None:
-        return ""
+        return fit(text or "", 18)
     t = time.localtime(seconds)
     day = "%s %d" % (MONTHS[t.tm_mon - 1], t.tm_mday)
-    return day if len(stamp.strip()) <= 10 else "%s, %02d:%02d" % (day, t.tm_hour, t.tm_min)
+    return day if len(text.strip()) <= 10 else "%s, %02d:%02d" % (day, t.tm_hour, t.tm_min)
 
 
 def fit(text, most):
     text = " ".join(str(text).split())
-    return text if len(text) <= most else text[:most - 1] + "…"
+    return text if len(text) <= most else text[:most - 1].rstrip() + "…"
 
 
 def title(parcel):
     return parcel.get("name") or parcel["number"]
 
 
-def carrier(parcel):
-    """The carrier's name: TrackingMore's, the certain one, "maybe" before a guess, or ""."""
-    if not parcel.get("local"):
-        return parcel.get("courierName") or parcel.get("courier") or ""
-    name, certain = guess(parcel["number"])
-    return name if certain else ("maybe " + name if name else "")
-
-
-def tracked(parcel, key):
-    """Whether TrackingMore tracks it and this run can ask it."""
-    return bool(key) and not parcel.get("local")
-
-
-def status_of(parcel, tracking):
-    if parcel.get("delivered"):
-        return ("Delivered (marked)", "✅", "fine")
-    if parcel.get("local"):
-        return ("On the way", "📦", None)
-    if not tracking:
-        return ("Waiting for TrackingMore", "⏳", None)
-    return STATUSES.get(tracking.get("delivery_status"), ("Pending", "⏳", None))
-
-
-def last_event(tracking):
-    events = tracking.get("events") or []
+def latest(got):
+    events = got.get("events") or []
     return events[0] if events else None
 
 
-def event_line(event):
-    parts = [" ".join(str(event.get("tracking_detail") or "").split())[:100]]
-    place = " ".join(str(event.get("location") or "").split())
-    if place:
-        parts.append(place[:40])
-    return " · ".join(parts)
+def status_of(parcel, got):
+    """Its status in words: Delivered (the person's mark), the carrier's newest event, or On the way."""
+    if parcel.get("delivered"):
+        return "Delivered"
+    event = latest(got)
+    return (event.get("head") or event.get("text")) if event else "On the way"
 
 
-def summary(parcel, tracking):
-    """A row's subtitle: the status and last event, or for a parcel with none the carrier and where Return goes."""
-    event = last_event(tracking)
-    if event:
-        return status_of(parcel, tracking)[0] + " · " + event_line(event)
-    if parcel.get("local") or not tracking:
-        where = "Return opens " + site_of(page_url(parcel, tracking))
-        said = carrier(parcel)
-        head = status_of(parcel, tracking)[0] if parcel.get("delivered") else said[:1].upper() + said[1:]
-        return " · ".join(part for part in (head, where) if part)
-    return status_of(parcel, tracking)[0]
+def short(parcel, status):
+    """A row's one line: its carrier and its status, short."""
+    return fit(words(carrier_of(parcel["number"])[1], status), LINE)
 
 
-def when_last(tracking):
-    event = last_event(tracking)
-    return moment(event.get("checkpoint_date")) if event else moment(tracking.get("latest_checkpoint_time"))
+def bullet(event):
+    """An event as a Markdown list line: when, what, the detail and where."""
+    return "- **%s** · %s" % (clock(event.get("at")) or "–", words(
+        event.get("head"), event.get("text") if event.get("text") != event.get("head") else "", event.get("place")))
 
+
+def no_feed(parcel):
+    return "%s has no tracking Packages may read" % (carrier_of(parcel["number"])[1] or "its carrier")
+
+
+# ---- actions ----
 
 def staying(action, stay):
     return dict(action, stay=True) if stay else action
 
 
-def remove_action(parcel, key, stay=False):
-    if tracked(parcel, key):
-        title_, ask = "Stop tracking", "Stop tracking %s? Adding it again later uses a new TrackingMore credit." % title(parcel)
+def details_action(parcel, view):
+    """Its details: the detail view in Hyper+Space, blocks pushed over the popover or the page."""
+    return {"type": "push", "title": "Show details", "command": "parcel" if view == "list" else "details",
+            "context": {"id": parcel["id"]}}
+
+
+def open_action(parcel):
+    url = page_url(parcel)
+    return {"type": "open", "title": "Open on %s" % site_of(url), "url": url}
+
+
+def rename_action(parcel, stay):
+    return staying({"type": "run", "title": "Rename…", "command": "rename", "context": {"id": parcel["id"]},
+                    "key": "cmd+e", "ask": {"text": parcel.get("name") or ""}}, stay)
+
+
+def remove_action(parcel, stay):
+    return staying({"type": "run", "title": "Remove", "command": "remove", "context": {"id": parcel["id"]},
+                    "destructive": True, "key": "cmd+delete",
+                    "ask": {"confirm": "Remove %s from Packages?" % title(parcel)}}, stay)
+
+
+def mark_action(parcel, stay):
+    marked = bool(parcel.get("delivered"))
+    return staying({"type": "run", "title": "Mark on the way" if marked else "Mark delivered", "command": "mark",
+                    "context": {"id": parcel["id"], "delivered": not marked}}, stay)
+
+
+def refresh_action(parcel, stay):
+    return staying({"type": "run", "title": "Refresh", "command": "refresh", "key": "cmd+r",
+                    "context": {"id": parcel["id"]}}, stay)
+
+
+def parcel_actions(parcel, view):
+    """Every action of a parcel; `view` is "list" (Hyper+Space), "blocks" (popover and page) or "detail". Return shows
+    the details of a parcel Packages can read, else opens its tracking page."""
+    stay = view != "blocks"
+    if view == "detail":
+        actions = [open_action(parcel)]
+    elif readable(parcel):
+        actions = [details_action(parcel, view), dict(open_action(parcel), key="cmd+o")]
     else:
-        title_, ask = "Remove", "Remove %s from Packages?" % title(parcel)
-    return staying({"type": "run", "title": title_, "command": "remove", "context": {"id": parcel["id"]},
-                    "destructive": True, "key": "cmd+delete", "ask": {"confirm": ask}}, stay)
+        actions = [open_action(parcel), details_action(parcel, view)]
+    if readable(parcel):
+        actions.append(refresh_action(parcel, stay))
+    return actions + [{"type": "copy", "title": "Copy tracking number", "text": parcel["number"], "key": "cmd+shift+c"},
+                      rename_action(parcel, stay), mark_action(parcel, stay), remove_action(parcel, stay)]
 
 
-def mark_action(parcel, tracking, stay=False):
-    """Mark delivered, or take a mark back; None when TrackingMore itself says delivered."""
-    if parcel.get("delivered"):
-        return staying({"type": "run", "title": "Mark on the way", "command": "mark",
-                        "context": {"id": parcel["id"], "delivered": False}}, stay)
-    if state(parcel, tracking) == "delivered":
-        return None
-    return staying({"type": "run", "title": "Mark delivered", "command": "mark",
-                    "context": {"id": parcel["id"], "delivered": True}}, stay)
+def keywords(parcel, status):
+    return " ".join([parcel["number"], carrier_of(parcel["number"])[1], status])
 
 
-def refresh_action(stay=False):
-    return staying({"type": "run", "title": "Refresh", "command": "refresh", "key": "cmd+r"}, stay)
-
-
-def parcel_actions(parcel, tracking, key, menu=False):
-    url = page_url(parcel, tracking)
-    opened = {"type": "open", "title": "Open on %s" % site_of(url), "url": url}
-    shown = {"type": "push", "title": "Show events" if tracked(parcel, key) else "Show details", "command": "parcel",
-             "context": {"id": parcel["id"]}}
-    actions = [shown, dict(opened, key="cmd+o")] if tracked(parcel, key) else [opened, shown]
-    actions.append({"type": "copy", "title": "Copy tracking number", "text": parcel["number"], "key": "cmd+shift+c"})
-    mark = mark_action(parcel, tracking, stay=menu)
-    if mark:
-        actions.append(mark)
-    if key and parcel.get("local") and not parcel.get("delivered"):
-        actions.append(staying({"type": "run", "title": "Track with TrackingMore (uses one credit)", "command": "add",
-                                "context": {"from": parcel["id"]}}, menu))
-    actions.append(remove_action(parcel, key, stay=menu))
-    if tracked(parcel, key):
-        actions.append(refresh_action(stay=menu))
-    return actions
-
-
-def keywords(parcel, tracking):
-    return " ".join([parcel["number"], carrier(parcel), status_of(parcel, tracking)[0]])
-
-
-def row(parcel, tracking, now, key, menu=False):
-    _, icon, tone = status_of(parcel, tracking)
-    item = {"id": parcel["id"], "title": title(parcel), "subtitle": summary(parcel, tracking), "icon": icon,
-            "keywords": keywords(parcel, tracking), "actions": parcel_actions(parcel, tracking, key, menu)}
-    when = age(when_last(tracking) or parcel.get("added"), now)
+def row(parcel, got, now, view, aged=True):
+    """A parcel's row; `aged` adds how long ago its newest event (else its adding) was."""
+    status = status_of(parcel, got)
+    item = {"id": parcel["id"], "title": title(parcel), "subtitle": short(parcel, status),
+            "icon": "✅" if parcel.get("delivered") else "📦", "keywords": keywords(parcel, status),
+            "actions": parcel_actions(parcel, view)}
+    event = latest(got)
+    when = age((moment(event.get("at")) if event else None) or parcel.get("added"), now) if aged else ""
     if when:
-        item["accessory"] = {"text": when, "tone": tone} if tone else when
+        item["accessory"] = when
     return item
 
 
 def split_input(text):
     """(number, name) from "<number> [a name]"; number None when the first word is no tracking number."""
-    words_ = str(text or "").split(None, 1)
-    number = words_[0].upper() if words_ and NUMBER.match(words_[0]) and re.search(r"\d", words_[0]) else None
-    name = " ".join(words_[1].split())[:60] if len(words_) > 1 else ""
+    parts = str(text or "").split(None, 1)
+    number = parts[0].upper() if parts and NUMBER.match(parts[0]) and re.search(r"\d", parts[0]) else None
+    name = words(parts[1])[:NAME_MOST] if len(parts) > 1 else ""
     return number, name
 
 
 def grouped(store):
+    """(on the way, delivered), newest first."""
     on_way, done = [], []
     for p in sorted(store.parcels, key=lambda p: -(p.get("added") or 0)):
-        (done if state(p, store.tracking(p)) == "delivered" else on_way).append(p)
+        (done if p.get("delivered") else on_way).append(p)
     return on_way, done
 
 
-def key_row(why):
-    if why:
-        return {"title": "That TrackingMore API key does not look right", "icon": "🔑", "subtitle": BAD_KEY[0].upper() + BAD_KEY[1:],
-                "actions": NO_KEY_ACTIONS}
-    return {"title": NO_KEY_TITLE, "icon": "🔑", "actions": NO_KEY_ACTIONS,
-            "subtitle": "Parcels are kept and opened without one; TrackingMore's paid plans include a key"}
+def edited(run, change):
+    """Changes the context's parcel under the store's lock; the parcel, or None (said) when it is gone."""
+    with Store.of(run) as store:
+        parcel = store.find(context_of(run).get("id"))
+        if parcel:
+            change(store, parcel)
+    if not parcel:
+        hud("not kept any more")
+    return parcel
 
 
 # ---- commands ----
 
-def list_command(run, key):
-    store, running = look(run, key)
+def list_command(run):
+    store = Store.of(run)
     now = time.time()
-    query = " ".join(str(run.get("query") or "").split())
+    query = words(run.get("query"))
     items = []
     number, name = split_input(query)
     if number and not any(p["number"] == number for p in store.parcels):
-        if key:
-            subtitle, verb = "TrackingMore finds the carrier", "Track"
-        else:
-            said = carrier({"number": number, "local": True})
-            subtitle, verb = " · ".join(p for p in (said[:1].upper() + said[1:], "Return will open its tracking page") if p), "Keep"
-        items.append({"title": "%s %s" % (verb, number), "subtitle": ("as %s · " % name if name else "") + subtitle,
-                      "icon": "➕", "actions": [{"type": "run", "title": verb, "command": "add", "clear": True,
+        items.append({"title": "Add %s" % number, "subtitle": words("as " + name if name else "", carrier_of(number)[1]),
+                      "icon": "➕", "actions": [{"type": "run", "title": "Add", "command": "add", "clear": True,
                                                 "context": {"number": number, "name": name}}]})
-    if key and store.status.get("error"):
-        items.append({"title": "Could not refresh", "subtitle": store.status["error"], "icon": "⚠\ufe0f",
-                      "actions": [refresh_action(stay=True)]})
     on_way, done = grouped(store)
     needle = "" if number else query.lower()
     for section, parcels in (("On the way", on_way), ("Delivered", done)):
         for p in parcels:
-            tracking = store.tracking(p)
-            if needle and needle not in " ".join([title(p), keywords(p, tracking), summary(p, tracking)]).lower():
+            if needle and needle not in (title(p) + " " + keywords(p, status_of(p, store.got(p)))).lower():
                 continue
-            items.append(dict(row(p, tracking, now, key, menu=True), section=section))
+            items.append(dict(row(p, store.got(p), now, "list"), section=section))
     if not store.parcels and not number:
         items.append({"title": "No parcels yet", "icon": "📦",
                       "subtitle": "Type a tracking number, then a name if you like, and press Return"})
-    elif running:
-        items.append({"title": "Refreshing…", "subtitle": "Open Packages again in a moment for the latest", "icon": "🔄"})
-    if not key and not needle:
-        items.append(dict(key_row(run.get("keyProblem")), section="TrackingMore"))
     send({"type": "list", "items": items})
 
 
-def keep_local(store, number, name):
-    said, _ = guess(number)
-    parcel = {"id": "local-" + os.urandom(8).hex(), "number": number, "courier": "", "courierName": said, "name": name,
-              "added": time.time(), "local": True}
-    with store:
-        store.parcels.append(parcel)
-    hud("keeping %s · Return opens it on %s" % (title(parcel), site_of(page_url(parcel, {}))))
-
-
-def add(run, key):
+def add(run):
     context = context_of(run)
     store = Store.of(run)
-    source = store.find(context.get("from")) if isinstance(context.get("from"), str) else None
-    if context.get("from") and not (source and source.get("local")):
-        hud("that parcel is not kept here any more")
-        return
-    if source:
-        number, name = source["number"], source.get("name") or ""
-    elif context.get("number"):
+    if context.get("number"):
         number, name = split_input(context.get("number"))
-        name = " ".join(str(context.get("name") or "").split())[:60] or name
+        name = words(context.get("name"))[:NAME_MOST] or name
     else:
         number, name = split_input(run.get("input"))
     if not number:
         fail("type a tracking number first, then a name if you like")
         return
-    if run.get("keyProblem") and (source or not key):
-        fail(run["keyProblem"])
-        return
-    courier = context.get("courier") if isinstance(context.get("courier"), str) else None
-    have = next((p for p in store.parcels if p is not source and p["number"] == number
-                 and (courier is None or p.get("local") or p["courier"] == courier)), None)
+    have = next((p for p in store.parcels if p["number"] == number), None)
     if have:
-        hint = ": Track with TrackingMore on it tracks it live" if key and have.get("local") else ""
-        hud("already %s %s%s" % ("keeping" if have.get("local") else "tracking", title(have), hint))
+        hud("already keeping %s" % title(have))
         return
-    if not key:
-        keep_local(store, number, name)
-        return
-    courier_name = str(context.get("courierName") or courier or "")
-    if not courier:
-        found, why = detect(key, number)
-        if not found:
-            fail(why)
-            return
-        if len(found) > 1:
-            ask = {"number": number, "name": name, "carriers": found[:MOST_CARRIERS]}
-            if source:
-                ask["from"] = source["id"]
-            send({"type": "action", "action": {"type": "push", "title": "Pick the carrier", "command": "pick-carrier",
-                                                "context": ask}})
-            return
-        courier, courier_name = found[0]["code"], found[0]["name"]
-    code, tracking, why = call(key, "POST", "trackings/create", body={"tracking_number": number, "courier_code": courier})
-    if code == 4101:  # tracked already in this TrackingMore account: read it, no new credit
-        found, why = read_trackings(key, [number])
-        tracking = next((t for t in found.values() if t.get("courier_code") == courier), None)
-        code = 200 if tracking else code
-        why = why or "TrackingMore lists it already but did not send it"
-    if code != 200 or not isinstance(tracking, dict) or not ID.match(str(tracking.get("id"))):
-        fail(why or "TrackingMore did not start tracking it")
-        return
-    parcel = {"id": tracking["id"], "number": number, "courier": courier, "courierName": courier_name,
-              "name": name, "added": source.get("added", time.time()) if source else time.time()}
-    kept = trimmed(tracking)
+    parcel = {"id": "p-" + os.urandom(8).hex(), "number": number, "name": name, "added": time.time()}
     with store:
-        gone = {parcel["id"], source["id"] if source else None}
-        store.parcels = [p for p in store.parcels if p["id"] not in gone] + [parcel]
-        store.status["byId"][parcel["id"]] = kept
-    hud("tracking %s with %s · %s" % (title(parcel), courier_name, status_of(parcel, kept)[0]))
+        store.parcels.append(parcel)
+    hud(words("added " + title(parcel), carrier_of(number)[1]))
 
 
-def pick_carrier(run, key):
-    context = context_of(run)
-    number, name = context.get("number"), context.get("name") or ""
-    items = []
-    for c in (context.get("carriers") or [])[:MOST_CARRIERS]:
-        if isinstance(c, dict) and isinstance(c.get("code"), str):
-            picked = {"number": number, "name": name, "courier": c["code"], "courierName": str(c.get("name") or c["code"])}
-            if isinstance(context.get("from"), str):
-                picked["from"] = context["from"]
-            items.append({"title": str(c.get("name") or c["code"]), "subtitle": c["code"], "icon": "🚚",
-                          "actions": [{"type": "run", "title": "Track with it", "command": "add", "context": picked}]})
-    if not items or not isinstance(number, str):
-        items = [{"title": "No carriers to pick from", "subtitle": "Track the number again from Packages", "icon": "⚠\ufe0f"}]
-    send({"type": "list", "items": items})
+def rename(run):
+    name = words(run.get("input"))[:NAME_MOST]
+    if edited(run, lambda store, parcel: parcel.update(name=name)):
+        hud("renamed %s" % name if name else "it shows its number")
 
 
-def parcel_detail(run, key):
-    store, running = look(run, key)
+def remove(run):
+    def drop(store, parcel):
+        store.parcels.remove(parcel)
+    parcel = edited(run, drop)
+    if parcel:
+        hud("removed %s" % title(parcel))
+
+
+def mark(run):
+    marked = context_of(run).get("delivered") is not False
+
+    def change(store, parcel):
+        if marked:
+            parcel["delivered"] = time.time()
+        else:
+            parcel.pop("delivered", None)
+    parcel = edited(run, change)
+    if parcel:
+        hud("%s %s" % (title(parcel), "marked delivered" if marked else "back on the way"))
+
+
+def refresh(run):
+    """Reads the context's parcel from its feeds now, not within FORCE_FLOOR s of its last read."""
+    store = Store.of(run)
     parcel = store.find(context_of(run).get("id"))
+    if not parcel:
+        hud("not kept any more")
+        return
+    if not readable(parcel):
+        hud(no_feed(parcel) + ": open its page")
+        return
+    with open(os.path.join(store.cache, READ_LOCK), "a") as lock:
+        started = time.monotonic()
+        while not locked(lock):  # a read runs: wait for it, then read again only if it is still due
+            if time.monotonic() - started > READ_BUDGET:
+                fail("could not refresh: a read did not end in time")
+                return
+            time.sleep(0.1)
+        store.read()
+        if stale(store, parcel, FORCE_FLOOR, time.time()):
+            read_parcel(store, parcel["id"])
+    got = store.got(parcel)
+    if got.get("error") and not got.get("events"):
+        fail("could not read it: %s" % got["error"])
+        return
+    hud(words(title(parcel), status_of(parcel, got)))
+
+
+def explained(parcel, got, still):
+    """Why there are no events to show, in one line; None when there are."""
+    if not readable(parcel):
+        said = no_feed(parcel)
+        return "%s%s: Return opens %s." % (said[0].upper(), said[1:], site_of(page_url(parcel)))
+    if got.get("events"):
+        return None
+    if still or not got.get("triedAt"):
+        return "Reading %s…" % feed_names(parcel)
+    if got.get("error"):
+        return "Could not read it: %s." % got["error"]
+    return "%s has no events for it yet." % feed_names(parcel)
+
+
+def read_words(parcel, got, still, now, source=True):
+    if still:
+        return "reading…"
+    if not got.get("readAt"):
+        return ""
+    return "read " + ago(got.get("readAt"), now) + (" from " + feed_names(parcel) if source else "")
+
+
+def parcel_detail(run):
+    """Hyper+Space's detail view of a parcel, read first when what was read is older than FRESH s."""
+    store, parcel, still = look_at(run)
     if not parcel:
         send({"type": "detail", "markdown": "## Not kept any more\n\nThis parcel was removed from Packages.",
               "metadata": [], "actions": []})
         return
-    tracking = store.tracking(parcel)
-    now = time.time()
-    words_, icon, _ = status_of(parcel, tracking)
-    lines = ["## %s %s" % (icon, title(parcel)), "", "**%s**" % words_, ""]
-    events = tracking.get("events") or []
-    for e in events[:EVENTS_SHOWN]:
-        lines.append("- **%s** · %s" % (clock(e.get("checkpoint_date")) or "–", event_line(e)))
-    if len(events) > EVENTS_SHOWN:
-        lines.append("- … %d older events" % (len(events) - EVENTS_SHOWN))
-    if not events:
-        url = page_url(parcel, tracking)
-        if tracked(parcel, key):
-            lines.append("No events yet: the carrier has not scanned it, or TrackingMore has not read it yet.")
-        else:
-            lines.append("Packages keeps this parcel without TrackingMore: its events are on its tracking page, "
-                         "[%s](%s)." % (site_of(url), url))
-    metadata = [{"label": "Number", "text": parcel["number"]}]
-    if carrier(parcel):
-        metadata.append({"label": "Carrier", "text": carrier(parcel)})
-    metadata.append({"label": "Status", "text": words_})
-    if tracking.get("scheduled_delivery_date"):
-        expected = tracking["scheduled_delivery_date"]
-        metadata.append({"label": "Expected", "text": clock(expected) or str(expected)})
-    metadata.append({"label": "Added", "text": ago(parcel.get("added"), now)})
-    if tracked(parcel, key):
-        metadata.append({"label": "Read", "text": "refreshing…" if running else ago(tracking.get("fetchedAt"), now)})
-        why_not = {"delivered": "delivered", "stopped": "TrackingMore stopped updating it"}.get(state(parcel, tracking))
-        if why_not:
-            metadata.append({"label": "Refresh", "text": "no longer asked (%s)" % why_not})
-    send({"type": "detail", "markdown": "\n".join(lines), "metadata": metadata,
-          "actions": [a for a in parcel_actions(parcel, tracking, key) if a["type"] != "push"]})
-
-
-def remove(run, key):
-    store = Store.of(run)
-    parcel = store.find(context_of(run).get("id"))
-    if not parcel:
-        hud("not kept any more")
-        return
-    if tracked(parcel, key):
-        code, _, why = call(key, "DELETE", "trackings/delete/" + quote(parcel["id"], safe=""))
-        if code != 200 and code not in GONE:
-            fail("could not stop tracking it: %s" % why)
-            return
-    with store:
-        store.parcels = [p for p in store.parcels if p["id"] != parcel["id"]]
-    if tracked(parcel, key):
-        hud("stopped tracking %s" % title(parcel))
-    else:
-        hud("removed %s%s" % (title(parcel), "" if parcel.get("local") else " (TrackingMore still lists it, at no cost)"))
-
-
-def mark(run, key):
-    context = context_of(run)
-    delivered = context.get("delivered") is not False
-    with Store.of(run) as store:
-        parcel = store.find(context.get("id"))
-        if parcel:
-            if delivered:
-                parcel["delivered"] = time.time()
-            else:
-                parcel.pop("delivered", None)
-    if not parcel:
-        hud("not kept any more")
-    else:
-        hud("%s %s" % (title(parcel), "marked delivered" if delivered else "back on the way"))
-
-
-def refresh(run, key):
-    if not key:
-        fail(run.get("keyProblem") or "refreshing needs a TrackingMore API key: without one, open a parcel's tracking page")
-        return
-    store = Store.of(run)
-    count = len(store.active(force=True))
-    if not count:
-        hud("nothing on its way to refresh")
-        return
-    if not due(store, time.time(), force=True):
-        hud("refreshed %s" % ago(store.read_at(), time.time()))
-        return
-    with open(os.path.join(store.cache, REFRESH_LOCK), "a") as lock:
-        started, waited = time.monotonic(), False
-        while not locked(lock):  # another refresh runs: its answer is this one's
-            if time.monotonic() - started > REFRESH_BUDGET:
-                fail("could not refresh: TrackingMore did not answer in time")
-                return
-            waited = True
-            time.sleep(0.2)
-        if waited:
-            store.read()
-            why = store.status.get("error")
-        else:
-            why = fetch(key, store, force=True)
+    got, now = store.got(parcel), time.time()
+    lines = ["## %s" % title(parcel), "", "**%s**" % status_of(parcel, got), ""]
+    lines += [bullet(e) for e in (got.get("events") or [])[:EVENTS_SHOWN]]
+    why = explained(parcel, got, still)
     if why:
-        fail("could not refresh: %s" % why)
+        lines.append(why + (" Refresh (⌘R) shows it in a moment." if still else ""))
+    _, name = carrier_of(parcel["number"])
+    metadata = [{"label": "Number", "text": parcel["number"]}]
+    if name:
+        metadata.append({"label": "Carrier", "text": name})
+    metadata.append({"label": "Added", "text": ago(parcel.get("added"), now)})
+    read = read_words(parcel, got, still, now)
+    if read:
+        metadata.append({"label": "Read", "text": read})
+    send({"type": "detail", "markdown": "\n".join(lines), "metadata": metadata,
+          "actions": parcel_actions(parcel, "detail")})
+
+
+def details(run):
+    """A parcel's details as blocks, pushed over the popover or the page; asked again every 2 s while a read runs."""
+    store, parcel, still = look_at(run)
+    if not parcel:
+        send({"type": "blocks", "blocks": [{"type": "markdown", "text": "This parcel was removed from Packages."}]})
         return
-    hud("%d parcel%s refreshed" % (count, "" if count == 1 else "s"))
-
-
-def view_blocks(run, key, store, running):
-    """The page's blocks, and the menu bar item's popover's."""
-    now = time.time()
-    blocks = [{"type": "input", "placeholder": "Tracking number, then a name if you like",
-               "action": {"type": "run", "title": "Track" if key else "Keep", "command": "add"}}]
-    if key and store.status.get("error"):
-        blocks.append({"type": "note", "text": "Could not refresh: %s" % store.status["error"], "icon": "info"})
-    on_way, done = grouped(store)
-    for heading, parcels in (("On the way", on_way), ("Delivered", done)):
-        if parcels:
-            items = []
-            for p in parcels:
-                tracking = store.tracking(p)
-                inline = [dict(remove_action(p, key), icon="xmark")]
-                marked = mark_action(p, tracking)
-                if marked:
-                    inline.insert(0, dict(marked, icon="reset" if p.get("delivered") else "checkmark.circle"))
-                items.append(dict(row(p, tracking, now, key), inline=inline))
-            blocks.append({"type": "list", "title": heading, "items": items})
-    if not store.parcels:
-        blocks.append({"type": "markdown", "text": "No parcels yet. Type a tracking number above and press Return: "
-                                                   + ("TrackingMore finds the carrier." if key else
-                                                      "Packages keeps it, and Return on it opens its tracking page.")})
-    if key:
-        read = "refreshing…" if running else "read %s" % ago(store.read_at() or None, now)
-        blocks.append({"type": "note", "text": "TrackingMore · %s · delivered parcels are not asked again" % read,
-                       "icon": "info"})
-        blocks.append({"type": "buttons", "actions": [refresh_action()]})
-    else:
-        problem = run.get("keyProblem")
-        blocks.append({"type": "note", "icon": "info", "text": (problem[0].upper() + problem[1:]) if problem else
-                       "No TrackingMore key: Return opens a parcel's tracking page (the carrier's, or 17track's), "
-                       "and you mark it delivered. A key, on TrackingMore's paid plans, adds live status."})
-        blocks.append({"type": "buttons", "actions": NO_KEY_ACTIONS})
-    return blocks
-
-
-def send_blocks(run, key, store, running):
-    answer = {"type": "blocks", "blocks": view_blocks(run, key, store, running)}
-    if running:
-        answer["refresh"] = 3
+    got, now = store.got(parcel), time.time()
+    _, name = carrier_of(parcel["number"])
+    blocks = [{"type": "note", "icon": "info", "text": fit(status_of(parcel, got), LINE)},
+              {"type": "note", "icon": "tag", "text": words(parcel["number"], name)}]
+    read = read_words(parcel, got, still, now, source=False)
+    if read:
+        blocks[0]["aside"] = read
+    events = (got.get("events") or [])[:POPOVER_EVENTS]
+    if events:  # Markdown, which wraps: a list row at 340 pt cuts an event's words
+        blocks.append({"type": "markdown", "text": "\n".join(map(bullet, events))})
+    why = explained(parcel, got, still)
+    if why:
+        blocks.append({"type": "markdown", "text": why})
+    buttons = [dict(open_action(parcel), title="Tracking page")]
+    if readable(parcel):
+        buttons.append(refresh_action(parcel, True))
+    blocks.append({"type": "buttons", "actions": buttons})
+    answer = {"type": "blocks", "blocks": blocks}
+    if still:
+        answer["refresh"] = 2
     send(answer)
 
 
-def page(run, key):
-    send_blocks(run, key, *look(run, key))
+def view_blocks(store, popover):
+    """The page's blocks, and the menu bar item's popover's: an add field, the parcels one short line each."""
+    now = time.time()
+    blocks = [{"type": "input", "placeholder": "Tracking number, then a name",
+               "action": {"type": "run", "title": "Add", "command": "add"}}]
+    on_way, done = grouped(store)
+    for heading, parcels in (("On the way", on_way), ("Delivered", done)):
+        if not parcels:
+            continue
+        items = []
+        for p in parcels:
+            item = row(p, store.got(p), now, "blocks", aged=not popover)  # in the popover its age takes its line's room
+            # Its mark as a button: a popover row with one draws its carrier and status under its name, so neither is
+            # cut at the popover's 340 pt; the page has room for rename and remove too.
+            item["inline"] = [dict(mark_action(p, False), icon="reset" if p.get("delivered") else "checkmark.circle")]
+            if not popover:
+                item["inline"] += [dict(rename_action(p, False), icon="pencil"), dict(remove_action(p, False), icon="xmark")]
+            items.append(item)
+        blocks.append({"type": "list", "title": heading, "items": items})
+    if not store.parcels:
+        blocks.append({"type": "markdown", "text": "No parcels yet."})
+    if not popover:
+        blocks.append({"type": "note", "icon": "info", "text": HOW})
+    return blocks
 
 
-def newest(store, parcels):
-    """The tracked parcel on its way whose last event is newest, and that event's time; (None, None) without one."""
-    best, at = None, None
-    for p in parcels:
-        when = when_last(store.tracking(p)) if not p.get("local") else None
-        if when is not None and (at is None or when > at):
-            best, at = p, when
-    return best, at
+def page(run):
+    send({"type": "blocks", "blocks": view_blocks(Store.of(run), popover=False)})
 
 
-def bar(run, key):
-    """The menu bar item: 📦 and how many are on their way, with the newest event's status when TrackingMore tracks
-    one; its dock faces say the same. Clicked, the page's blocks."""
-    store, running = look(run, key)
+def bar(run):
+    """The menu bar item: 📦 and how many are on their way; its Dock faces say the same, with the newest event read.
+    Clicked, the add field and the parcels. It reads nothing."""
+    store = Store.of(run)
     if run.get("surface") == "popover":
-        send_blocks(run, key, store, running)
+        send({"type": "blocks", "blocks": view_blocks(store, popover=True)})
         return
     on_way, _ = grouped(store)
     count = len(on_way)
     faces = [{"label": "Parcels", "value": "%d on the way" % count if count else "None on the way", "symbol": "shippingbox"}]
-    text = "📦 %d" % count if count else "📦"
-    lead, _ = newest(store, on_way) if key else (None, None)
-    if lead:
-        tracking = store.tracking(lead)
-        words_, _, tone = status_of(lead, tracking)
-        event = last_event(tracking)
-        text += " · " + words_
-        faces.append({"label": fit(title(lead), FACE_LABEL), "symbol": "truck.box",
-                      "value": fit(event.get("tracking_detail") if event else words_, FACE_VALUE)})
-        if tone:
-            faces[-1]["tone"] = tone
-    loudest = max((status_of(p, store.tracking(p))[2] for p in on_way if tracked(p, key)), key=TONE_RANK.get, default=None)
-    message = {"type": "bar", "text": text, "faces": faces, "blocks": view_blocks(run, key, store, running)}
-    if loudest in ("warn", "alert"):
-        message["tone"] = loudest
-    send(message)
+    newest = [(moment(latest(store.got(p)).get("at")) or 0, p) for p in on_way if latest(store.got(p))]
+    if newest:
+        lead = max(newest, key=lambda pair: pair[0])[1]
+        faces.append({"label": fit(title(lead), FACE_LABEL), "value": fit(status_of(lead, store.got(lead)), FACE_VALUE),
+                      "symbol": "truck.box"})
+    send({"type": "bar", "text": "📦 %d" % count if count else "📦", "faces": faces,
+          "blocks": view_blocks(store, popover=True)})
 
 
-COMMANDS = {"packages": list_command, "page": page, "bar": bar, "add": add, "pick-carrier": pick_carrier,
-            "parcel": parcel_detail, "remove": remove, "mark": mark, "refresh": refresh}
+COMMANDS = {"packages": list_command, "page": page, "bar": bar, "add": add, "parcel": parcel_detail, "details": details,
+            "rename": rename, "remove": remove, "mark": mark, "refresh": refresh}
 
 
 def main():
-    if sys.argv[1:] == ["--refresh"]:
-        refresh_main()
+    if sys.argv[1:] == ["--read"]:
+        read_main()
         return
     try:
         run = json.loads(sys.stdin.readline())
@@ -981,9 +845,7 @@ def main():
     if command not in COMMANDS:
         fail("has no command %s" % command)
         return
-    key, why = api_key(run)
-    run["keyProblem"] = why  # a key that cannot be sent: shown, and no TrackingMore call
-    COMMANDS[command](run, key)
+    COMMANDS[command](run)
 
 
 if __name__ == "__main__":

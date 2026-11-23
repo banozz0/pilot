@@ -3,8 +3,6 @@ import importlib.util
 import json
 import time
 import unittest
-from unittest import mock
-from urllib.parse import parse_qs, urlsplit
 
 from harness import EXTENSIONS, ExtensionTestCase
 
@@ -12,17 +10,13 @@ _spec = importlib.util.spec_from_file_location("packages_main", EXTENSIONS / "pa
 main = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(main)
 
-KEY = "FAKE_packages_test_key"  # a placeholder, never a real key
-PREFS = {"apiKey": KEY}
-
-# A stand-in for curl: reads the config Packages writes on its stdin (`curl -K -`), logs what it asked (method, path,
-# query, body, the key header and its own arguments) one JSON line each, and answers from responses.json:
-# {"METHOD path": {"http": 200, "body": {...}}}, or a list of such answers used in turn (the last one repeated).
-FAKE_CURL = r'''
+# A stand-in for curl: reads the config Packages writes on its stdin (`curl -K -`), logs what it asked (the URL, the
+# headers and its own arguments) one JSON line each, and answers from responses.json: {"<a part of the URL>": {"http":
+# 200, "body": <JSON>}} (or "text" for a body that is not JSON), the first part found in the URL deciding.
+FAKE_CURL = r"""
 import json, os, sys
 root = sys.argv[1]
-config = {}
-headers = []
+config, headers = {}, []
 for line in sys.stdin.read().splitlines():
     name, _, value = line.partition(" = ")
     value = value.strip()
@@ -33,62 +27,43 @@ for line in sys.stdin.read().splitlines():
     else:
         config[name.strip()] = value
 url = config.get("url", "")
-path = url.split("/v4/", 1)[-1].split("?", 1)[0]
-method = config.get("request", "GET")
-entry = {"method": method, "path": path, "url": url, "body": config.get("data-binary"), "headers": headers,
-         "argv": sys.argv[2:]}
 with open(os.path.join(root, "calls.jsonl"), "a") as f:
-    f.write(json.dumps(entry) + "\n")
+    f.write(json.dumps({"url": url, "headers": headers, "agent": config.get("user-agent"), "argv": sys.argv[2:]}) + "\n")
 with open(os.path.join(root, "responses.json")) as f:
     routes = json.load(f)
-route = method + " " + (path if not path.startswith("trackings/delete/") else "trackings/delete")
-answers = routes.get(route)
-if answers is None:
-    sys.stderr.write("curl: (6) Could not resolve host: api.trackingmore.com\n")
+answer = next((a for part, a in routes.items() if part in url), None)
+if answer is None:
+    sys.stderr.write("curl: (6) Could not resolve host\n")
     sys.exit(6)
-if isinstance(answers, list):
-    count_path = os.path.join(root, "count-" + route.replace(" ", "_").replace("/", "_"))
-    n = int(open(count_path).read()) if os.path.exists(count_path) else 0
-    open(count_path, "w").write(str(n + 1))
-    answers = answers[min(n, len(answers) - 1)]
-sys.stdout.write(json.dumps(answers["body"]) + "\n" + str(answers.get("http", 200)))
-'''
+text = answer["text"] if "text" in answer else json.dumps(answer["body"])
+sys.stdout.write(text + "\n" + str(answer.get("http", 200)))
+"""
+
+# MaltaPost's trackedItems answer, its fields as its tracking page's bundle and template read them (movements[]: date,
+# description, location, code, actionDescription, reasonDescription; isForeign, foreignBarcode).
+def maltapost(*movements):
+    return {"isSendOnParcel": False, "isForeign": True, "foreignBarcode": "RR123456785DE", "localBarcode": None,
+            "requiresPayment": False, "isUntrackable": False, "movements": list(movements)}
 
 
-def envelope(data, code=200, message="Request response is successful"):
-    """TrackingMore's envelope, with the HTTP status it comes with (docs: Response Code)."""
-    return {"http": {200: 200, 401: 401, 429: 429}.get(code, 400),
-            "body": {"meta": {"code": code, "message": message}, "data": data}}
+def movement(date, description, location="", code="EMD", action=None, reason=None):
+    return {"date": date, "description": description, "location": location, "code": code,
+            "actionDescription": action, "reasonDescription": reason}
 
 
-def event(date, detail, location="", status="transit"):
-    return {"checkpoint_date": date, "checkpoint_delivery_status": status, "checkpoint_delivery_substatus": status + "001",
-            "tracking_detail": detail, "location": location, "country_iso2": None, "state": None, "city": None,
-            "zip": None, "raw_status": None}
+# Cainiao's detail.json answer, its fields as its tracking page's bundle reads them (module[]: mailNo, status,
+# statusDesc, latestTrace, detailList[]: timeStr, desc, standerdDesc).
+def cainiao(number, *details):
+    details = [{"timeStr": t, "desc": d, "standerdDesc": h, "group": {}} for t, h, d in details]
+    return {"module": [{"mailNo": number, "mailNoSource": "EXTERNAL", "status": "TRANSPORT", "statusDesc": "In transit",
+                        "originCountry": "China", "destCountry": "Malta", "latestTrace": details[0] if details else {},
+                        "detailList": details}], "success": True}
 
 
-def tracking(tid, number, courier="usps", status="transit", events=(), updating=True, link=None):
-    """A tracking as trackings/get and trackings/create answer (the docs' quick start sample, trimmed)."""
-    events = list(events)
-    return {"id": tid, "tracking_number": number, "courier_code": courier, "order_number": number,
-            "created_at": "2026-11-20T06:07:40+00:00", "update_at": "2026-11-22T06:18:46+00:00",
-            "delivery_status": status, "archived": "tracking", "updating": updating, "substatus": status + "001",
-            "latest_event": events[0]["tracking_detail"] if events else None,
-            "latest_checkpoint_time": events[0]["checkpoint_date"] if events else None, "transit_time": 2,
-            "scheduled_delivery_date": None,
-            "origin_info": {"courier_code": courier, "weblink": "https://www.usps.com/", "tracking_link": link,
-                            "trackinfo": events},
-            "destination_info": {"courier_code": None, "weblink": None, "trackinfo": []}}
-
-
-USPS = {"courier_name": "USPS", "courier_code": "usps", "courier_country_iso2": "US", "courier_type": "postal"}
-DHL = {"courier_name": "DHL Express", "courier_code": "dhl", "courier_country_iso2": "DE", "courier_type": "express"}
-NUMBER = "9400111206209393241432"  # the docs' sample number
-OTHER = "LX123456789CN"
-TRANSIT_EVENTS = [event("2026-11-21T21:19:00-04:00", "Accepted at USPS Origin Facility", "FORT LAUDERDALE,FL,33309"),
-                  event("2026-11-22T07:19:00", "Arrived at USPS Regional Facility", "MIAMI,FL", "transit"),
-                  event("2026-11-21", "Shipping Label Created, USPS Awaiting Item", "", "inforeceived")]
-DELIVERED_EVENTS = [event("2026-11-04T14:31:00-04:00", "Delivered, In/At Mailbox", "HEMINGWAY,SC,29554", "delivered")]
+UPS_NUMBER = "1Z999AA10123456784"
+USPS_NUMBER = "9400111206209393241432"
+FROM_CHINA = "LX123456789CN"
+OTHER = "RR123456785FR"  # La Poste: no feed Packages reads
 
 
 class PackagesTests(ExtensionTestCase):
@@ -99,19 +74,23 @@ class PackagesTests(ExtensionTestCase):
         self.addCleanup(self.settle)
         (self.box.root / "fake_curl.py").write_text(FAKE_CURL)
         self.box.shim("curl", 'exec /usr/bin/python3 "%s" "%s" "$@"' % (self.box.root / "fake_curl.py", self.box.root))
+        self.region("en_US")
         self.answer({})
+
+    def region(self, locale):
+        """The Mac's region as `defaults read -g AppleLocale` says it."""
+        self.box.shim("defaults", 'echo "%s"' % locale)
 
     def answer(self, routes):
         (self.box.root / "responses.json").write_text(json.dumps(routes))
-        for f in self.box.root.glob("count-*"):
-            f.unlink()
 
     def calls(self):
         path = self.box.root / "calls.jsonl"
         return [json.loads(line) for line in path.read_text().splitlines()] if path.exists() else []
 
     def settle(self):
-        lock = self.box.cache / "refresh.lock"
+        """Waits for a read to end, so a test never leaves one running."""
+        lock = self.box.cache / "read.lock"
         if lock.exists():
             with open(str(lock), "a") as f:
                 fcntl.flock(f, fcntl.LOCK_EX)
@@ -119,15 +98,8 @@ class PackagesTests(ExtensionTestCase):
     def stored(self):
         return json.loads((self.box.data / "parcels.json").read_text())["parcels"]
 
-    def status(self):
-        return json.loads((self.box.cache / "status.json").read_text())
-
-    def seed(self, parcels, trackings, refreshed_at=None):
-        """Parcels already tracked, with what TrackingMore said (`trackings` by id), read `refreshed_at`."""
-        (self.box.data / "parcels.json").write_text(json.dumps({"version": 1, "parcels": parcels}))
-        read = time.time() if refreshed_at is None else refreshed_at
-        status = {"byId": {tid: dict(main.trimmed(t), fetchedAt=read) for tid, t in trackings.items()}, "refreshedAt": read}
-        (self.box.cache / "status.json").write_text(json.dumps(status))
+    def reads(self):
+        return json.loads((self.box.cache / "reads.json").read_text())["byId"]
 
     def hud(self, result):
         return result.of_type("hud")[0]["text"]
@@ -135,403 +107,254 @@ class PackagesTests(ExtensionTestCase):
     def error(self, result):
         return result.of_type("error")[0]["text"]
 
-    def parcel(self, tid, number, courier="usps", name="", added=None, courier_name="USPS"):
-        return {"id": tid, "number": number, "courier": courier, "courierName": courier_name, "name": name,
-                "added": time.time() - 3 * 86400 if added is None else added}
-
-    def two_parcels(self, refreshed_at=None):
-        self.seed([self.parcel("t1", NUMBER, name="Shoes"), self.parcel("t2", OTHER, "china-post", added=time.time() - 5 * 86400, courier_name="China Post")],
-                  {"t1": tracking("t1", NUMBER, events=TRANSIT_EVENTS, link="https://tools.usps.com/go/TrackConfirmAction?tLabels=" + NUMBER),
-                   "t2": tracking("t2", OTHER, "china-post", "delivered", DELIVERED_EVENTS, updating=False)},
-                  refreshed_at)
-
-    # ---- no key ----
-
-    def keep(self, text):
-        """A parcel kept without a key, as the `track` keyword adds it; its HUD."""
+    def add(self, text):
         return self.hud(self.run_ext("add", input=text))
 
-    def test_without_a_key_a_parcel_is_kept_with_its_carrier_guessed_and_nothing_is_asked(self):
+    def seed(self, parcels, reads=None):
+        (self.box.data / "parcels.json").write_text(json.dumps({"version": 3, "parcels": parcels}))
+        (self.box.cache / "reads.json").write_text(json.dumps({"byId": reads or {}}))
+
+    def parcel(self, pid, number, name="", added=None, **extra):
+        return dict({"id": pid, "number": number, "name": name,
+                     "added": time.time() - 3 * 86400 if added is None else added}, **extra)
+
+    def details(self, pid):
+        """The details pushed over the popover once its read has ended, as the popover's next ask (every 2 s) sees them."""
+        message = self.blocks_message("details", "popover", context={"id": pid})
+        if "refresh" in message:
+            self.settle()
+            message = self.blocks_message("details", "popover", context={"id": pid})
+        self.assertNotIn("refresh", message)
+        return message["blocks"]
+
+    # ---- keeping parcels ----
+
+    def test_a_parcel_is_added_with_its_carrier_from_the_number_and_its_name(self):
         typed = self.run_ext("packages", query="1z999aa10123456784 lamp").items
         self.assertItemShape(typed)
-        self.assertEqual((typed[0]["title"], typed[0]["subtitle"]),
-                         ("Keep 1Z999AA10123456784", "as lamp · UPS · Return will open its tracking page"))
-        self.assertEqual(typed[-1]["section"], "TrackingMore")
-        self.assertEqual(typed[-1]["actions"][0]["url"], "https://www.trackingmore.com/pricing")
-        done = self.run_ext("add", context=typed[0]["actions"][0]["context"])
-        self.assertEqual(self.hud(done), "Packages: keeping lamp · Return opens it on ups.com")
-        self.assertEqual(self.keep("%s shoes" % OTHER.lower()), "Packages: keeping shoes · Return opens it on t.17track.net")
-        self.assertEqual(self.keep("TBA123456789012"), "Packages: keeping TBA123456789012 · Return opens it on t.17track.net")
-        self.assertEqual(self.keep(OTHER), "Packages: already keeping shoes")
+        self.assertEqual((typed[0]["title"], typed[0]["subtitle"]), ("Add " + UPS_NUMBER, "as lamp · UPS"))
+        self.assertEqual(self.hud(self.run_ext("add", context=typed[0]["actions"][0]["context"])), "Packages: added lamp · UPS")
+        self.assertEqual(self.add("%s shoes" % OTHER.lower()), "Packages: added shoes · La Poste")
+        self.assertEqual(self.add("TBA123456789012"), "Packages: added TBA123456789012")
+        self.assertEqual(self.add(OTHER), "Packages: already keeping shoes")
+        self.assertEqual(self.error(self.run_ext("add", input="hello")), "type a tracking number first, then a name if you like")
         items = self.run_ext("packages").items
         self.assertItemShape(items)
-        rows = {i["title"]: i for i in items if i.get("section") == "On the way"}
+        rows = {i["title"]: i for i in items}
         self.assertEqual(list(rows), ["TBA123456789012", "shoes", "lamp"])  # newest first
-        self.assertEqual(rows["lamp"]["actions"][0], {"type": "open", "title": "Open on ups.com",
-                                                      "url": "https://www.ups.com/track?loc=en_US&tracknum=1Z999AA10123456784"})
-        self.assertEqual(rows["shoes"]["actions"][0]["url"], "https://t.17track.net/en#nums=" + OTHER)
-        self.assertEqual(rows["shoes"]["subtitle"], "Maybe China Post · Return opens t.17track.net")
-        self.assertEqual(rows["TBA123456789012"]["subtitle"], "Maybe Amazon Logistics · Return opens t.17track.net")
+        self.assertEqual(rows["shoes"]["subtitle"], "La Poste · On the way")
+        self.assertEqual(rows["shoes"]["actions"][0],
+                         {"type": "open", "title": "Open on t.17track.net", "url": "https://t.17track.net/en#nums=" + OTHER})
+        self.assertEqual(rows["lamp"]["actions"][0]["url"], "https://www.ups.com/track?loc=en_US&tracknum=" + UPS_NUMBER)
         self.assertEqual([a["title"] for a in rows["lamp"]["actions"]],
-                         ["Open on ups.com", "Show details", "Copy tracking number", "Mark delivered", "Remove"])
-        self.assertEqual([i["title"] for i in self.run_ext("packages", query="china").items], ["shoes"])
-        self.assertEqual(items[-1]["title"], "Live status needs a TrackingMore API key")
-        stored = self.stored()
-        self.assertTrue(all(p["local"] and p["id"].startswith("local-") for p in stored))
-        self.assertEqual(sorted(p["courierName"] for p in stored), ["Amazon Logistics", "China Post", "UPS"])
-        self.assertEqual(self.calls(), [])  # no key: nothing reaches the network
+                         ["Open on ups.com", "Show details", "Copy tracking number", "Rename…", "Mark delivered", "Remove"])
+        self.assertEqual([i["title"] for i in self.run_ext("packages", query="poste").items], ["shoes"])
+        self.assertEqual(self.calls(), [])  # adding reads nothing
 
-    def test_the_carrier_page_is_its_own_only_when_the_number_names_it_for_certain(self):
-        self.assertEqual(main.guess("1Z999AA10123456784"), ("UPS", "https://www.ups.com/track?loc=en_US&tracknum=1Z999AA10123456784"))
-        self.assertEqual(main.guess(NUMBER), ("USPS", "https://tools.usps.com/go/TrackConfirmAction?tLabels=" + NUMBER))
-        self.assertEqual(main.guess("RR123456785MT"), ("MaltaPost", None))
-        self.assertEqual(main.guess("RR123456785ZZ"), ("ZZ's post", None))
-        self.assertEqual(main.guess("123456789012"), ("", None))  # a bare 12 digits: FedEx, or many others
-        self.assertEqual(main.page_url({"number": "123456789012", "local": True}, {}), "https://t.17track.net/en#nums=123456789012")
+    def test_a_number_names_its_carrier_only_when_its_shape_does(self):
+        self.assertEqual(main.carrier_of(UPS_NUMBER), ("ups", "UPS"))
+        self.assertEqual(main.carrier_of(USPS_NUMBER), ("usps", "USPS"))
+        self.assertEqual(main.carrier_of("RR123456785MT"), ("maltapost", "MaltaPost"))
+        self.assertEqual(main.carrier_of("RR123456785DE"), ("deutschepost", "Deutsche Post"))
+        self.assertEqual(main.carrier_of("LP00123456789012"), ("cainiao", "Cainiao"))
+        self.assertEqual(main.carrier_of("RR123456785ZZ"), (None, "ZZ's post"))
+        self.assertEqual(main.carrier_of("123456789012"), (None, ""))  # a bare 12 digits: FedEx, or many others
+        self.assertEqual(main.page_url({"number": "123456789012"}), "https://t.17track.net/en#nums=123456789012")
+        self.assertEqual(main.page_url({"number": "RR123456785GB"}), "https://t.17track.net/en#nums=RR123456785GB")
+        self.assertEqual(main.page_url({"number": "RR123456785MT"}), "https://www.maltapost.com/tracking#/tracking?barcode=RR123456785MT")
+        self.assertEqual(main.page_url({"number": "RR123456785DE"}),
+                         "https://www.dhl.de/en/privatkunden/dhl-sendungsverfolgung.html?piececode=RR123456785DE")
 
-    def test_without_a_key_delivered_is_marked_by_hand_and_taken_back(self):
-        self.keep("%s shoes" % OTHER)
-        parcel = self.stored()[0]
+    def test_packages_1_parcels_are_kept_and_trackingmore_is_gone(self):
+        (self.box.data / "parcels.json").write_text(json.dumps({"version": 2, "parcels": [
+            {"id": "local-0011223344556677", "number": FROM_CHINA, "courier": "", "courierName": "China Post",
+             "name": "shoes", "added": time.time() - 86400, "local": True},
+            {"id": "9a" * 16, "number": UPS_NUMBER, "courier": "ups", "courierName": "UPS", "name": "",
+             "added": time.time() - 2 * 86400, "delivered": time.time() - 3600}]}))
+        (self.box.cache / "status.json").write_text(json.dumps({"byId": {"9a" * 16: {"delivery_status": "transit"}}}))
+        items = self.run_ext("packages").items
+        self.assertEqual([(i["title"], i["section"]) for i in items], [("shoes", "On the way"), (UPS_NUMBER, "Delivered")])
+        self.run_ext("rename", context={"id": "9a" * 16}, input="lamp")
+        kept = self.stored()
+        self.assertEqual(kept[1], {"id": "9a" * 16, "number": UPS_NUMBER, "name": "lamp", "added": kept[1]["added"],
+                                   "delivered": kept[1]["delivered"]})
+        self.assertEqual(kept[0]["name"], "shoes")
+        self.assertFalse((self.box.cache / "status.json").exists())
+        manifest = (EXTENSIONS / "packages" / "extension.json").read_text()
+        source = (EXTENSIONS / "packages" / "main.py").read_text()
+        said = json.dumps([self.blocks_message("page", "page"), self.bar()], ensure_ascii=False)
+        for text in (manifest, said):
+            self.assertNotIn("trackingmore", text.lower())
+        self.assertNotIn("api.trackingmore", source.lower())
+        self.assertNotIn("preferences", json.loads(manifest))
+
+    def test_rename_sets_the_name_shown_and_the_number_stays_in_its_details(self):
+        self.add(OTHER)
+        pid = self.stored()[0]["id"]
+        rename = next(a for a in self.run_ext("packages").items[0]["actions"] if a["title"] == "Rename…")
+        self.assertEqual((rename["command"], rename["context"], rename["ask"], rename["stay"]),
+                         ("rename", {"id": pid}, {"text": ""}, True))
+        self.assertEqual(self.hud(self.run_ext("rename", context={"id": pid}, input="  winter   boots ")),
+                         "Packages: renamed winter boots")
         row = self.run_ext("packages").items[0]
-        mark = next(a for a in row["actions"] if a["title"] == "Mark delivered")
-        self.assertEqual((mark["command"], mark["context"], mark["stay"]), ("mark", {"id": parcel["id"], "delivered": True}, True))
+        self.assertEqual(row["title"], "winter boots")
+        self.assertEqual(next(a for a in row["actions"] if a["title"] == "Rename…")["ask"], {"text": "winter boots"})
+        detail = self.run_ext("parcel", context={"id": pid}).detail
+        self.assertIn({"label": "Number", "text": OTHER}, detail["metadata"])
+        self.assertIn("## winter boots", detail["markdown"])
+        self.assertEqual(self.hud(self.run_ext("rename", context={"id": "gone"}, input="x")), "Packages: not kept any more")
+
+    def test_delivered_is_marked_by_hand_and_taken_back_and_remove_asks_first(self):
+        self.add("%s shoes" % OTHER)
+        pid = self.stored()[0]["id"]
+        mark = next(a for a in self.run_ext("packages").items[0]["actions"] if a["title"] == "Mark delivered")
+        self.assertEqual((mark["command"], mark["context"]), ("mark", {"id": pid, "delivered": True}))
         self.assertEqual(self.hud(self.run_ext("mark", context=mark["context"])), "Packages: shoes marked delivered")
         row = self.run_ext("packages").items[0]
-        self.assertEqual((row["section"], row["subtitle"]), ("Delivered", "Delivered (marked) · Return opens t.17track.net"))
-        back = next(a for a in row["actions"] if a["title"] == "Mark on the way")
-        self.assertEqual(self.hud(self.run_ext("mark", context=back["context"])), "Packages: shoes back on the way")
-        self.assertEqual(self.run_ext("packages").items[0]["section"], "On the way")
-        self.assertEqual(self.calls(), [])
+        self.assertEqual((row["section"], row["subtitle"], row["icon"]), ("Delivered", "La Poste · Delivered", "✅"))
+        self.assertIn("Mark on the way", [a["title"] for a in row["actions"]])
+        self.assertEqual(self.hud(self.run_ext("mark", context={"id": pid, "delivered": False})), "Packages: shoes back on the way")
+        remove = next(a for a in self.run_ext("packages").items[0]["actions"] if a["title"] == "Remove")
+        self.assertEqual(remove["ask"], {"confirm": "Remove shoes from Packages?"})
+        self.assertEqual(self.hud(self.run_ext("remove", context={"id": pid})), "Packages: removed shoes")
+        self.assertEqual(self.stored(), [])
+        self.assertEqual(self.calls(), [])  # La Poste: nothing is read
 
-    def test_without_a_key_a_parcel_opens_shows_its_details_and_is_removed_here_only(self):
-        self.two_parcels()  # kept from when a key was set
-        self.keep("1Z999AA10123456784 lamp")
-        lamp = next(p for p in self.stored() if p.get("local"))
-        detail = self.run_ext("parcel", context={"id": lamp["id"]}).detail
-        self.assertIn("[ups.com](https://www.ups.com/track?loc=en_US&tracknum=1Z999AA10123456784)", detail["markdown"])
-        self.assertEqual({m["label"]: m["text"] for m in detail["metadata"]}["Carrier"], "UPS")
-        self.assertNotIn("push", [a["type"] for a in detail["actions"]])
-        shoes = next(i for i in self.run_ext("packages").items if i["title"] == "Shoes")
-        self.assertEqual(shoes["actions"][0]["url"], "https://tools.usps.com/go/TrackConfirmAction?tLabels=" + NUMBER)
-        self.assertNotIn("Refresh", [a["title"] for a in shoes["actions"]])
-        self.assertEqual(self.hud(self.run_ext("remove", context={"id": lamp["id"]})), "Packages: removed lamp")
-        self.assertEqual(self.hud(self.run_ext("remove", context={"id": "t1"})),
-                         "Packages: removed Shoes (TrackingMore still lists it, at no cost)")
-        self.assertEqual([p["id"] for p in self.stored()], ["t2"])
-        self.assertIn("needs a TrackingMore API key", self.error(self.run_ext("refresh")))
-        self.assertEqual(self.calls(), [])
+    # ---- the menu bar, its popover, the page ----
 
-    def test_without_a_key_the_page_keeps_marks_and_removes(self):
-        self.keep("%s shoes" % OTHER)
-        blocks = self.page()
-        self.assertEqual((blocks[0]["type"], blocks[0]["action"]["title"]), ("input", "Keep"))
-        shoes = [b for b in blocks if b["type"] == "list"][0]["items"][0]
-        self.assertEqual([(a["command"], a["icon"]) for a in shoes["inline"]], [("mark", "checkmark.circle"), ("remove", "xmark")])
-        self.assertIn("No TrackingMore key", [b for b in blocks if b["type"] == "note"][0]["text"])
-        self.assertEqual(self.calls(), [])
-
-    # ---- the menu bar and the dock ----
-
-    def test_the_menu_bar_counts_parcels_on_the_way_and_its_dock_faces_say_so(self):
-        empty = self.bar()
-        self.assertEqual((empty["text"], empty["faces"]),
-                         ("📦", [{"label": "Parcels", "value": "None on the way", "symbol": "shippingbox"}]))
-        self.keep("%s shoes" % OTHER)
-        self.keep("1Z999AA10123456784 lamp")
-        self.run_ext("mark", context={"id": self.stored()[0]["id"], "delivered": True})
+    def test_the_menu_bar_item_is_the_box_and_the_count_and_its_popover_one_short_line_a_parcel(self):
+        self.seed([self.parcel("a", FROM_CHINA, "Winter boots for the kids", added=time.time() - 100),
+                   self.parcel("b", OTHER, "lamp", added=time.time() - 200),
+                   self.parcel("c", UPS_NUMBER, "", added=time.time() - 300, delivered=time.time())],
+                  {"a": {"readAt": time.time() - 7200, "triedAt": time.time() - 7200, "error": None,
+                         "events": [{"at": "2026-11-22 07:19:00", "head": "Departed from sorting center",
+                                     "text": "[Guangzhou] Departed from sorting center", "place": "", "source": "Cainiao"}]}})
         line = self.bar()
-        self.assertEqual((line["text"], line["faces"][0]["value"], len(line["faces"])), ("📦 1", "1 on the way", 1))
+        self.assertEqual(line["text"], "📦 2")
         self.assertNotIn("tone", line)
-        popover = self.popover()
-        self.assertEqual([b["title"] for b in popover if b["type"] == "list"], ["On the way", "Delivered"])
-        self.assertEqual(self.calls(), [])
+        self.assertEqual(line["faces"], [{"label": "Parcels", "value": "2 on the way", "symbol": "shippingbox"},
+                                         {"label": "Winter boots fo…", "value": "Departed from sorting c…",
+                                          "symbol": "truck.box"}])
+        blocks = self.popover()
+        self.assertEqual([b["type"] for b in blocks], ["input", "list", "list"])
+        self.assertEqual(blocks[0]["placeholder"], "Tracking number, then a name")
+        rows = blocks[1]["items"]
+        self.assertEqual([(r["title"], r["subtitle"]) for r in rows],
+                         [("Winter boots for the kids", "China Post · Departed from sorting center"), ("lamp", "La Poste · On the way")])
+        self.assertEqual([[a["command"] for a in r["inline"]] for r in rows], [["mark"], ["mark"]])  # stacks its line
+        self.assertEqual(rows[0]["actions"][0], {"type": "push", "title": "Show details", "command": "details",
+                                                 "context": {"id": "a"}})
+        self.assertEqual(rows[1]["actions"][0]["type"], "open")  # La Poste: Return opens its page
+        self.assertEqual(blocks[2]["items"][0]["subtitle"], "UPS · Delivered")
+        for r in rows:
+            self.assertLessEqual(len(r["subtitle"]), main.LINE)
+        self.assertEqual(self.calls(), [])  # the bar and its popover never read a carrier
+        self.seed([])
+        self.assertEqual(self.bar()["text"], "📦")
 
-    def test_with_a_key_the_menu_bar_shows_the_newest_event(self):
-        self.two_parcels()
-        line = self.bar(preferences=PREFS)
-        self.assertEqual(line["text"], "📦 1 · In transit")
-        self.assertEqual(line["faces"][1], {"label": "Shoes", "value": "Arrived at USPS Regiona…", "symbol": "truck.box"})
-        for face in line["faces"]:
-            self.assertLessEqual((len(face["label"]), len(face["value"])), (16, 24))
-        self.settle()
-        self.assertEqual(self.calls(), [])  # read just now
-        self.two_parcels(refreshed_at=time.time() - 16 * 60)
-        self.answer({"GET trackings/get": envelope([tracking("t1", NUMBER, status="exception", events=TRANSIT_EVENTS)])})
-        self.bar(preferences=PREFS)
-        self.settle()
-        self.assertEqual(len(self.calls()), 1)  # stale: one read in the background, at the views' pace
-        self.assertEqual(self.bar(preferences=PREFS)["tone"], "alert")
+    def test_the_page_has_inline_buttons_and_one_line_on_how_it_works(self):
+        self.add("%s shoes" % OTHER)
+        blocks = self.page()
+        self.assertEqual([b["type"] for b in blocks], ["input", "list", "note"])
+        self.assertEqual([a["command"] for a in blocks[1]["items"][0]["inline"]], ["mark", "rename", "remove"])
+        self.assertEqual(blocks[-1]["text"], main.HOW)
+        manifest = json.loads((EXTENSIONS / "packages" / "extension.json").read_text())
+        self.assertIn("never in the background", manifest["description"])
+        self.assertEqual(manifest["permissions"]["network"], ["www.maltapost.com", "global.cainiao.com"])
 
-    # ---- a key added later ----
+    # ---- details from the carrier ----
 
-    def test_a_parcel_kept_without_a_key_is_tracked_live_only_when_asked(self):
-        self.keep("%s shoes" % NUMBER)
-        local = self.stored()[0]
-        row = self.run_ext("packages", preferences=PREFS).items[0]
-        self.assertEqual(row["actions"][0]["title"], "Open on tools.usps.com")
-        track = next(a for a in row["actions"] if a.get("command") == "add")
-        self.assertEqual((track["title"], track["context"]), ("Track with TrackingMore (uses one credit)", {"from": local["id"]}))
-        self.page(preferences=PREFS)
-        self.bar(preferences=PREFS)
-        self.settle()
-        self.assertEqual(self.calls(), [])  # no credit is spent unasked
-        self.assertIn("Track with TrackingMore on it", self.hud(self.run_ext("add", input=NUMBER, preferences=PREFS)))
-        self.answer({"POST couriers/detect": envelope([USPS]),
-                     "POST trackings/create": envelope(tracking("t1", NUMBER, events=TRANSIT_EVENTS))})
-        done = self.run_ext("add", context=track["context"], preferences=PREFS)
-        self.assertEqual(self.hud(done), "Packages: tracking shoes with USPS · In transit")
-        self.assertEqual([(p["id"], p["name"], p["added"], p.get("local")) for p in self.stored()],
-                         [("t1", "shoes", local["added"], None)])
-        self.assertEqual(self.run_ext("packages", preferences=PREFS).items[0]["actions"][0]["title"], "Show events")
-
-    def test_a_tracked_parcel_marked_delivered_is_not_asked_again(self):
-        self.two_parcels(refreshed_at=time.time() - 20 * 60)
-        self.run_ext("mark", context={"id": "t1", "delivered": True}, preferences=PREFS)
-        self.run_ext("packages", preferences=PREFS)
-        self.bar(preferences=PREFS)
-        self.settle()
-        self.assertEqual(self.calls(), [])
-        self.assertIn("nothing on its way", self.hud(self.run_ext("refresh", preferences=PREFS)))
-
-    # ---- add ----
-
-    def test_add_detects_one_carrier_creates_it_and_keeps_the_key_off_the_command_line(self):
-        self.answer({"POST couriers/detect": envelope([USPS]),
-                     "POST trackings/create": envelope(tracking("t1", NUMBER, status="pending"))})
-        result = self.run_ext("add", input="%s shoes for mum" % NUMBER.lower(), preferences=PREFS)
-        self.assertEqual(self.hud(result), "Packages: tracking shoes for mum with USPS · Pending")
+    def test_details_read_cainiao_when_opened_and_not_again_while_fresh(self):
+        self.answer({"global.cainiao.com/global/detail.json": {"body": cainiao(
+            FROM_CHINA, ("2026-11-20 22:10:05", "Departed from sorting center", "[Guangzhou] Departed from sorting center"),
+            ("2026-11-21 09:30:00", "Arrived at destination country", "[Malta] Arrived at destination country"),
+            ("2026-11-19 10:00:00", "Accepted", ""))}})
+        self.add(FROM_CHINA + " shoes")
+        pid = self.stored()[0]["id"]
+        blocks = self.details(pid)
+        self.assertEqual([b["type"] for b in blocks], ["note", "note", "markdown", "buttons"])
+        self.assertEqual((blocks[0]["text"], blocks[0]["aside"]), ("Arrived at destination country", "read just now"))
+        self.assertEqual(blocks[1], {"type": "note", "icon": "tag", "text": FROM_CHINA + " · China Post"})
+        self.assertEqual(blocks[2]["text"].splitlines(), [  # newest first
+            "- **Nov 21, 09:30** · Arrived at destination country · [Malta] Arrived at destination country",
+            "- **Nov 20, 22:10** · Departed from sorting center · [Guangzhou] Departed from sorting center",
+            "- **Nov 19, 10:00** · Accepted"])
+        self.assertEqual([a["title"] for a in blocks[3]["actions"]], ["Tracking page", "Refresh"])
+        self.assertEqual(blocks[3]["actions"][0]["url"], "https://global.cainiao.com/newDetail.htm?mailNoList=" + FROM_CHINA)
         calls = self.calls()
-        self.assertEqual([(c["method"], c["path"]) for c in calls], [("POST", "couriers/detect"), ("POST", "trackings/create")])
-        self.assertEqual(json.loads(calls[1]["body"]), {"tracking_number": NUMBER, "courier_code": "usps"})
-        for c in calls:
-            self.assertEqual(c["argv"], ["-K", "-"])  # the key and the number never reach the arguments `ps` shows
-            self.assertIn("Tracking-Api-Key: " + KEY, c["headers"])
-        self.assertEqual([(p["id"], p["number"], p["courier"], p["name"]) for p in self.stored()],
-                         [("t1", NUMBER, "usps", "shoes for mum")])
-        again = self.run_ext("add", input=NUMBER, preferences=PREFS)
-        self.assertEqual(self.hud(again), "Packages: already tracking shoes for mum")
-        self.run_ext("packages", preferences=PREFS)  # just read by its add: the list asks nothing
-        self.settle()
+        self.assertEqual([c["url"] for c in calls], ["https://global.cainiao.com/global/detail.json?mailNos=" + FROM_CHINA])
+        self.assertEqual(calls[0]["argv"], ["-K", "-"])  # the number never reaches curl's arguments
+        self.assertIn("Pilot-Packages", calls[0]["agent"])
+        self.details(pid)
+        self.assertEqual(len(self.calls()), 1)  # read under 10 minutes ago: not again
+        row = self.run_ext("packages").items[0]
+        self.assertEqual(row["subtitle"], "China Post · Arrived at destination country")
+        self.assertEqual(row["actions"][0]["command"], "parcel")  # Return shows its details
+        self.assertEqual(next(a for a in row["actions"] if a["title"] == "Refresh")["context"], {"id": pid})
+        self.assertEqual(self.reads()[pid]["events"][0]["source"], "Cainiao")
+
+    def test_on_a_mac_set_to_malta_maltapost_reads_a_parcel_from_abroad(self):
+        number = "RR123456785DE"
+        self.answer({"maltapost.com/TrackAndTraceApi/v1/trackedItems": {"body": maltapost(
+            movement("2026-11-21T09:12:00", "Item received at the Central Mail Room", "Marsa"),
+            movement("2026-11-22T08:05:00", "Item out for delivery", "Qormi", "EMH", action="Delivery attempted",
+                     reason="Addressee absent"))}})
+        self.add(number + " book")
+        pid = self.stored()[0]["id"]
+        self.assertEqual(self.run_ext("packages").items[0]["actions"][0]["type"], "open")  # en_US: no feed for it
+        self.assertIn("Deutsche Post has no tracking Packages may read: Return opens dhl.de.",
+                      self.run_ext("parcel", context={"id": pid}).detail["markdown"])
+        self.assertEqual(self.calls(), [])
+        self.region("en_MT")
+        detail = self.run_ext("parcel", context={"id": pid}).detail
+        if "Reading" in detail["markdown"]:  # the read outlived the detail's wait: Refresh shows it
+            self.settle()
+            detail = self.run_ext("parcel", context={"id": pid}).detail
+        self.assertIn("**Item out for delivery**", detail["markdown"])
+        self.assertIn("· Item out for delivery · Delivery attempted · Addressee absent · Qormi", detail["markdown"])
+        self.assertIn("· Item received at the Central Mail Room · Marsa", detail["markdown"])
+        self.assertEqual([c["url"] for c in self.calls()],
+                         ["https://www.maltapost.com/TrackAndTraceApi/v1/trackedItems?barcode=" + number])
+        self.assertIn({"label": "Carrier", "text": "Deutsche Post"}, detail["metadata"])
+        self.assertTrue(next(m for m in detail["metadata"] if m["label"] == "Read")["text"].endswith("from MaltaPost"))
+        self.assertEqual([a["title"] for a in detail["actions"]][:2], ["Open on dhl.de", "Refresh"])
+
+    def test_a_parcel_from_china_in_malta_shows_both_carriers_events_in_one_list(self):
+        self.region("en_MT")
+        self.answer({"global.cainiao.com": {"body": cainiao(FROM_CHINA, ("2026-11-18 10:00:00", "Departed", ""))},
+                     "maltapost.com": {"body": maltapost(movement("2026-11-22T08:05:00", "Item delivered", "Qormi", "EMI"))}})
+        self.add(FROM_CHINA)
+        blocks = self.details(self.stored()[0]["id"])
+        self.assertEqual([line.split(" · ")[1] for line in blocks[2]["text"].splitlines()], ["Item delivered", "Departed"])
         self.assertEqual(len(self.calls()), 2)
+        row = self.run_ext("packages").items[0]
+        self.assertEqual((row["section"], row["subtitle"]), ("On the way", "China Post · Item delivered"))  # marked by hand only
 
-    def test_add_with_several_carriers_asks_which_then_tracks_with_the_one_picked(self):
-        self.answer({"POST couriers/detect": envelope([DHL, USPS]),
-                     "POST trackings/create": envelope(tracking("t9", OTHER, "dhl", "inforeceived"))})
-        result = self.run_ext("add", input=OTHER, preferences=PREFS)
-        push = result.actions[0]
-        self.assertActionShape(push)
-        self.assertEqual((push["type"], push["command"]), ("push", "pick-carrier"))
-        self.assertEqual(self.calls()[-1]["path"], "couriers/detect")
-        self.assertFalse((self.box.data / "parcels.json").exists())
-        rows = self.run_ext("pick-carrier", context=push["context"], preferences=PREFS).items
-        self.assertItemShape(rows)
-        self.assertEqual([r["title"] for r in rows], ["DHL Express", "USPS"])
-        pick = rows[0]["actions"][0]
-        done = self.run_ext("add", context=pick["context"], preferences=PREFS)
-        self.assertEqual(self.hud(done), "Packages: tracking %s with DHL Express · Label created" % OTHER)
-        self.assertEqual([c["path"] for c in self.calls()], ["couriers/detect", "trackings/create"])
-        self.assertEqual(self.stored()[0]["courier"], "dhl")
+    def test_refresh_reads_now_and_a_failed_read_keeps_what_was_read(self):
+        self.region("en_MT")
+        self.answer({"maltapost.com": {"body": maltapost(movement("2026-11-21T09:12:00", "Item received", "Marsa"))}})
+        self.add("RR123456785MT")
+        pid = self.stored()[0]["id"]
+        self.assertEqual(self.hud(self.run_ext("refresh", context={"id": pid})), "Packages: RR123456785MT · Item received")
+        self.assertEqual(self.hud(self.run_ext("refresh", context={"id": pid})), "Packages: RR123456785MT · Item received")
+        self.assertEqual(len(self.calls()), 1)  # within 30 s of the last read: not again
+        reads = json.loads((self.box.cache / "reads.json").read_text())
+        reads["byId"][pid]["triedAt"] -= 3600
+        (self.box.cache / "reads.json").write_text(json.dumps(reads))
+        self.answer({})
+        self.assertEqual(self.hud(self.run_ext("refresh", context={"id": pid})), "Packages: RR123456785MT · Item received")
+        self.assertEqual(self.reads()[pid]["error"], "MaltaPost: Could not resolve host")
+        self.answer({"maltapost.com": {"http": 503, "text": "<html>busy</html>"}})
+        self.seed([self.parcel("x", "RR000000000MT")])
+        self.assertEqual(self.error(self.run_ext("refresh", context={"id": "x"})), "could not read it: MaltaPost: it answered 503")
+        detail = self.run_ext("parcel", context={"id": "x"}).detail
+        self.assertIn("Could not read it: MaltaPost: it answered 503.", detail["markdown"])
 
-    def test_a_number_already_in_the_account_is_read_not_created_again(self):
-        self.answer({"POST couriers/detect": envelope([USPS]),
-                     "POST trackings/create": envelope(None, 4101, "Tracking No. already exists."),
-                     "GET trackings/get": envelope([tracking("t1", NUMBER, events=TRANSIT_EVENTS)])})
-        result = self.run_ext("add", input=NUMBER, preferences=PREFS)
-        self.assertEqual(self.hud(result), "Packages: tracking %s with USPS · In transit" % NUMBER)
-        get = self.calls()[-1]
-        self.assertEqual(parse_qs(urlsplit(get["url"]).query), {"tracking_numbers": [NUMBER]})
-        self.assertEqual(self.stored()[0]["id"], "t1")
-
-    def test_add_says_why_trackingmore_refused(self):
-        cases = [({"POST couriers/detect": envelope(None, 401, "Authorization verification failed")}, "refused the API key"),
-                 ({"POST couriers/detect": envelope([])}, "could not tell the carrier"),
-                 ({"POST couriers/detect": envelope(None, 4121, "Cannot detect courier.")}, "could not tell the carrier"),
-                 ({"POST couriers/detect": envelope([USPS]), "POST trackings/create": envelope(None, 4190, "quota")}, "no credits left"),
-                 ({"POST couriers/detect": envelope(None, 429, "Too many")}, "slow down"),
-                 ({}, "could not reach TrackingMore")]
-        for routes, said in cases:
-            self.answer(routes)
-            result = self.run_ext("add", input=NUMBER, preferences=PREFS)
-            self.assertIn(said, self.error(result), routes)
-        self.assertFalse((self.box.data / "parcels.json").exists())
-        self.assertEqual(self.error(self.run_ext("add", input="hello", preferences=PREFS)),
-                         "type a tracking number first, then a name if you like")
-
-    def test_a_key_that_could_break_curls_config_is_never_sent(self):
-        bad = {"apiKey": 'abc"\nurl = "https://example.com'}
-        self.assertIn("does not look right", self.error(self.run_ext("add", input=NUMBER, preferences=bad)))
-        self.assertEqual(self.run_ext("packages", preferences=bad).items[-1]["title"], "That TrackingMore API key does not look right")
-        self.assertIn("does not look right", [b for b in self.page(preferences=bad) if b["type"] == "note"][0]["text"])
-        self.assertEqual(self.calls(), [])
-
-    # ---- list and detail ----
-
-    def test_the_list_shows_status_last_event_and_age_in_two_sections(self):
-        self.two_parcels()
-        items = self.run_ext("packages", preferences=PREFS).items
-        self.assertItemShape(items)
-        self.assertEqual([(i["title"], i.get("section")) for i in items], [("Shoes", "On the way"), (OTHER, "Delivered")])
-        shoes = items[0]
-        self.assertEqual(shoes["subtitle"], "In transit · Arrived at USPS Regional Facility · MIAMI,FL")
-        self.assertRegex(shoes["accessory"], r"^\d+[mhdw]$|^now$")
-        self.assertEqual(items[1]["accessory"]["tone"], "fine")
-        self.assertEqual([a["title"] for a in shoes["actions"]],
-                         ["Show events", "Open on tools.usps.com", "Copy tracking number", "Mark delivered", "Stop tracking", "Refresh"])
-        self.assertIn("new TrackingMore credit", shoes["actions"][4]["ask"]["confirm"])
-        self.assertNotIn("Mark delivered", [a["title"] for a in items[1]["actions"]])  # TrackingMore says so: no mark to take back
-        self.assertEqual(self.calls(), [])  # read just now: nothing asked
-        self.assertEqual([i["title"] for i in self.run_ext("packages", query="china", preferences=PREFS).items], [OTHER])
-        typed = self.run_ext("packages", query="1z999aa10123456784 lamp", preferences=PREFS).items
-        self.assertEqual(typed[0]["title"], "Track 1Z999AA10123456784")
-        self.assertEqual(typed[0]["actions"][0]["context"], {"number": "1Z999AA10123456784", "name": "lamp"})
-
-    def test_a_parcel_shows_every_event_newest_first_whatever_its_date_form(self):
-        self.two_parcels()
-        detail = self.run_ext("parcel", context={"id": "t1"}, preferences=PREFS).detail
-        lines = [l for l in detail["markdown"].splitlines() if l.startswith("- ")]
-        self.assertEqual([l.split(" · ", 1)[1] for l in lines],
-                         ["Arrived at USPS Regional Facility · MIAMI,FL", "Accepted at USPS Origin Facility · FORT LAUDERDALE,FL,33309",
-                          "Shipping Label Created, USPS Awaiting Item"])
-        self.assertIn("**Nov 21** · Shipping", lines[2])
-        facts = {m["label"]: m["text"] for m in detail["metadata"]}
-        self.assertEqual((facts["Number"], facts["Carrier"], facts["Status"]), (NUMBER, "USPS", "In transit"))
-        delivered = {m["label"]: m["text"] for m in self.run_ext("parcel", context={"id": "t2"}, preferences=PREFS).detail["metadata"]}
-        self.assertEqual(delivered["Refresh"], "no longer asked (delivered)")
-        for action in detail["actions"]:
-            self.assertActionShape(action)
-
-    def test_the_page_adds_lists_and_removes(self):
-        self.two_parcels()
-        blocks = self.page(preferences=PREFS)
-        self.assertEqual(blocks[0]["type"], "input")
-        self.assertEqual(blocks[0]["action"]["command"], "add")
-        lists = [b for b in blocks if b["type"] == "list"]
-        self.assertEqual([(b["title"], [i["title"] for i in b["items"]]) for b in lists],
-                         [("On the way", ["Shoes"]), ("Delivered", [OTHER])])
-        self.assertEqual([a["command"] for a in lists[0]["items"][0]["inline"]], ["mark", "remove"])
-        self.assertEqual([a["command"] for a in lists[1]["items"][0]["inline"]], ["remove"])
-
-    # ---- remove ----
-
-    def test_remove_stops_it_at_trackingmore_and_drops_it(self):
-        self.two_parcels()
-        self.answer({"DELETE trackings/delete": envelope({"id": "t1", "tracking_number": NUMBER, "courier_code": "usps"})})
-        result = self.run_ext("remove", context={"id": "t1"}, preferences=PREFS)
-        self.assertEqual(self.hud(result), "Packages: stopped tracking Shoes")
-        self.assertEqual([(c["method"], c["path"]) for c in self.calls()], [("DELETE", "trackings/delete/t1")])
-        self.assertEqual([p["id"] for p in self.stored()], ["t2"])
-        self.assertNotIn("t1", self.status()["byId"])
-
-    def test_remove_offline_keeps_it_and_gone_at_trackingmore_drops_it(self):
-        self.two_parcels()
-        self.assertIn("could not stop tracking", self.error(self.run_ext("remove", context={"id": "t1"}, preferences=PREFS)))
-        self.assertEqual(len(self.stored()), 2)
-        self.answer({"DELETE trackings/delete": envelope(None, 4102, "Tracking No. no exists.")})
-        self.run_ext("remove", context={"id": "t1"}, preferences=PREFS)
-        self.assertEqual([p["id"] for p in self.stored()], ["t2"])
-
-    # ---- refresh and quota ----
-
-    def test_a_stale_list_refreshes_once_in_the_background_and_never_asks_for_delivered_parcels(self):
-        self.two_parcels(refreshed_at=time.time() - 16 * 60)
-        delivered_now = tracking("t1", NUMBER, status="delivered", updating=True,
-                                 events=[event("2026-11-22T10:00:00+01:00", "Delivered, Front Door", "MIAMI,FL", "delivered")] + TRANSIT_EVENTS)
-        self.answer({"GET trackings/get": envelope([delivered_now])})
-        first = self.run_ext("packages", preferences=PREFS).items
-        self.assertEqual(first[0]["subtitle"].split(" · ")[0], "In transit")  # shown at once, from what was read
-        self.settle()
-        gets = [c for c in self.calls() if c["path"] == "trackings/get"]
-        self.assertEqual(len(gets), 1)
-        self.assertEqual(parse_qs(urlsplit(gets[0]["url"]).query)["tracking_numbers"], [NUMBER])  # not the delivered one
-        items = self.run_ext("packages", preferences=PREFS).items
-        self.assertEqual([(i["title"], i["section"]) for i in items], [("Shoes", "Delivered"), (OTHER, "Delivered")])
-        self.run_ext("packages", preferences=PREFS)
-        self.page(preferences=PREFS)
-        self.settle()
-        self.assertEqual(len(self.calls()), 1)  # all delivered: nothing is ever asked again
-        self.assertIn("nothing on its way", self.hud(self.run_ext("refresh", preferences=PREFS)))
-
-    def test_views_wait_fifteen_minutes_between_reads_and_two_while_a_new_parcel_has_no_event(self):
-        self.assertEqual((main.FRESH, main.NEW_FRESH, main.FORCE_FLOOR), (900, 120, 60))
-        self.two_parcels(refreshed_at=time.time() - 14 * 60)
-        self.answer({"GET trackings/get": envelope([tracking("t1", NUMBER, events=TRANSIT_EVENTS)])})
-        self.run_ext("packages", preferences=PREFS)
-        self.run_ext("parcel", context={"id": "t1"}, preferences=PREFS)
-        self.settle()
-        self.assertEqual(self.calls(), [])
-        self.seed([self.parcel("t3", OTHER, added=time.time() - 300)], {"t3": tracking("t3", OTHER, status="pending")},
-                  refreshed_at=time.time() - 3 * 60)
-        self.answer({"GET trackings/get": envelope([tracking("t3", OTHER, events=TRANSIT_EVENTS[:1])])})
-        self.run_ext("packages", preferences=PREFS)
-        self.settle()
-        self.assertEqual([c["path"] for c in self.calls()], ["trackings/get"])
-
-    def test_refresh_forces_a_read_but_not_twice_in_a_minute(self):
-        self.two_parcels(refreshed_at=time.time() - 5 * 60)
-        self.answer({"GET trackings/get": envelope([tracking("t1", NUMBER, status="pickup", events=TRANSIT_EVENTS)])})
-        self.assertEqual(self.hud(self.run_ext("refresh", preferences=PREFS)), "Packages: 1 parcel refreshed")
-        self.assertEqual(self.status()["byId"]["t1"]["delivery_status"], "pickup")
-        self.assertEqual(self.hud(self.run_ext("refresh", preferences=PREFS)), "Packages: refreshed just now")
-        self.assertEqual(len(self.calls()), 1)
-
-    def test_a_failed_refresh_shows_its_reason_and_waits_before_trying_again(self):
-        self.two_parcels(refreshed_at=time.time() - 20 * 60)
-        self.answer({"GET trackings/get": envelope(None, 401, "Authorization verification failed")})
-        self.run_ext("packages", preferences=PREFS)
-        self.settle()
-        items = self.run_ext("packages", preferences=PREFS).items
-        self.assertEqual(items[0]["title"], "Could not refresh")
-        self.assertIn("refused the API key", items[0]["subtitle"])
-        self.settle()
-        self.assertEqual(len(self.calls()), 1)
-
-    def test_more_than_forty_parcels_are_read_forty_at_a_time(self):
-        parcels = [self.parcel("id%d" % i, "LX%09dCN" % i) for i in range(45)]
-        self.seed(parcels, {}, refreshed_at=0)
-        self.answer({"GET trackings/get": envelope([])})
-        self.assertEqual(self.hud(self.run_ext("refresh", preferences=PREFS)), "Packages: 45 parcels refreshed")
-        sizes = [len(parse_qs(urlsplit(c["url"]).query)["tracking_numbers"][0].split(",")) for c in self.calls()]
-        self.assertEqual(sizes, [40, 5])
-
-    def test_a_parcel_trackingmore_leaves_out_waits_like_the_rest(self):
-        self.two_parcels(refreshed_at=time.time() - 20 * 60)
-        self.answer({"GET trackings/get": envelope([])})  # archived at TrackingMore, or gone after its 180 days
-        self.run_ext("packages", preferences=PREFS)
-        self.settle()
-        self.run_ext("packages", query="s", preferences=PREFS)
-        self.run_ext("packages", query="sh", preferences=PREFS)
-        self.settle()
-        self.assertEqual(len(self.calls()), 1)
-
-    def test_a_tracking_answered_under_another_id_is_matched_by_number_and_carrier(self):
-        self.two_parcels(refreshed_at=0)
-        self.answer({"GET trackings/get": envelope([tracking("other-id", NUMBER, status="pickup", events=TRANSIT_EVENTS)])})
-        self.run_ext("refresh", preferences=PREFS)
-        self.assertEqual(self.status()["byId"]["t1"]["delivery_status"], "pickup")
-
-    def test_a_forced_refresh_also_asks_a_parcel_trackingmore_stopped_updating(self):
-        self.seed([self.parcel("t4", OTHER)], {"t4": tracking("t4", OTHER, status="expired", updating=False)}, refreshed_at=0)
-        self.answer({"GET trackings/get": envelope([tracking("t4", OTHER, status="transit", events=TRANSIT_EVENTS)])})
-        self.run_ext("packages", preferences=PREFS)
-        self.settle()
-        self.assertEqual(self.calls(), [])  # a view never asks it
-        self.assertEqual(self.hud(self.run_ext("refresh", preferences=PREFS)), "Packages: 1 parcel refreshed")
-        self.assertEqual(self.status()["byId"]["t4"]["delivery_status"], "transit")
-
-    def test_a_refresh_landing_late_never_brings_back_a_removed_parcel_or_drops_a_new_one(self):
-        self.two_parcels(refreshed_at=0)
-        data, cache = str(self.box.data), str(self.box.cache)
-
-        def slow_read(key, numbers):
-            # While TrackingMore answers, the person removes Shoes and adds a new parcel.
-            with main.Store(data, cache) as store:
-                store.parcels = [p for p in store.parcels if p["id"] != "t1"] + [self.parcel("t5", "NEW123456")]
-            return {"t1": tracking("t1", NUMBER, status="pickup")}, None
-
-        with mock.patch.object(main, "read_trackings", slow_read):
-            self.assertIsNone(main.fetch(KEY, main.Store(data, cache)))
-        self.assertEqual([p["id"] for p in self.stored()], ["t2", "t5"])
-        self.assertNotIn("t1", self.status()["byId"])
+    def test_an_unreadable_answer_is_said_and_shown_as_such(self):
+        self.answer({"global.cainiao.com": {"text": "<html>slide to verify</html>"}})
+        self.add(FROM_CHINA)
+        blocks = self.details(self.stored()[0]["id"])
+        self.assertEqual(blocks[-2], {"type": "markdown", "text": "Could not read it: Cainiao: its answer was not readable."})
 
 
 if __name__ == "__main__":
