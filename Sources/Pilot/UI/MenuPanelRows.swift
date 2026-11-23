@@ -66,6 +66,7 @@ extension MenuBranch {
         .notes: ("note.text", 1, ""), .qr: ("qrcode", 0, ""),
         .stickers: ("face.smiling", 2, ""), .emoji: ("face.smiling", 2, ""),
         .activity: ("gauge.with.dots.needle.67percent", 5, "what runs, quit it"),
+        .bookmarks: ("bookmark", 3, "by browser"), .history: ("clock.arrow.circlepath", 4, "pages you visited"),
         .about: ("info.circle", 0, "this Mac and Pilot"),
     ]
 

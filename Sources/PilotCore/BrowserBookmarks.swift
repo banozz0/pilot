@@ -229,13 +229,17 @@ public enum BrowserBookmarks {
     /// The menu's rows for `pages` kept by `browser`: the title (else the address's host), the browser as its subtitle and
     /// icon, Return opening the page in that browser. A bookmark is found by its title and host as any row is and ranks
     /// with picks; a history page is listed only as its read found it (up to 3 in a plain search, all behind `hist`) and
-    /// is never a pick (MenuEntry.frecencyKey), so no visited address lands in Pilot's ranking.
+    /// is never a pick (MenuEntry.frecencyKey), so no visited address lands in Pilot's ranking. A bookmark lives in the
+    /// Bookmarks branch under its browser's heading, which a root search finds it outside of all the same.
     public static func rows(_ pages: [Page], browser: Browser, kind: MenuEntry.Kind) -> [MenuEntry] {
         web(pages).map { page in
             let host = URL(string: page.url)?.host() ?? page.url
             let title = page.title.trimmingCharacters(in: .whitespacesAndNewlines)
-            return MenuEntry(title: title.isEmpty ? host : title, target: .action(AppLink.url(bundle: browser.bundle, url: page.url).id),
-                             inSearch: kind == .bookmark, keywords: host, ownKind: kind, app: browser.bundle, subtitle: browser.name)
+            var row = MenuEntry(title: title.isEmpty ? host : title, target: .action(AppLink.url(bundle: browser.bundle, url: page.url).id),
+                                home: kind == .bookmark ? .bookmarks : nil, inSearch: kind == .bookmark, keywords: host, ownKind: kind,
+                                app: browser.bundle, subtitle: browser.name)
+            if kind == .bookmark { row.section = browser.name }
+            return row
         }
     }
 

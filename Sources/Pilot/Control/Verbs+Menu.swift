@@ -7,19 +7,28 @@ extension ControlVerbs {
     /// from the entries, picks, favourites, aliases and root PilotMenu's toggleNow hands MenuNavigator, plus the settings
     /// rows its search provides and the browsers' bookmarks and `hist` pages (T9); the rows that arrive after a keystroke from elsewhere (windows, files, app menu items,
     /// Install, emoji, answers, Translate, Define) are left out, and Search the web names no browser (webVia unread).
+    /// `--branch bookmarks` or `--branch history` searches inside that branch, as the menu fills it (T9).
     func registerMenu() {
-        let flags: [ControlVerb.Flag] = [.init("size", help: "also the face size the panel would take for these rows (MenuPanelSize, Line)", takesValue: false)]
+        let flags: [ControlVerb.Flag] = [.init("size", help: "also the face size the panel would take for these rows (MenuPanelSize, Line)", takesValue: false),
+                                         .init("branch", help: "search inside Bookmarks or History, as the menu lists them")]
         register(ControlVerb("menu", help: "What the Hyper+Space menu lists for a search, in its order, read without drawing it; pick records a pick "
                              + "of a listed row for that search, as Return does, without running it (learned abbreviations), after Allow.",
-                             usage: "pilot menu search <words> [--size] | pilot menu pick <words> <row>", flags: flags) { call throws(ControlError) in
+                             usage: "pilot menu search <words> [--size] [--branch bookmarks|history] | pilot menu pick <words> <row>", flags: flags) { call throws(ControlError) in
             let args = call.arguments()
             guard let word = args.positional.first, word == "search" || word == "pick" else {
                 throw ControlError(.badValue, "pilot menu takes search or pick: pilot menu search <words>, pilot menu pick <words> <row>")
             }
             if word == "pick" { return try await Self.pick(Array(args.positional.dropFirst()), peer: call.peer) }
             let query = args.positional.dropFirst().joined(separator: " ")
-            let nav = try await Self.navigator(query)
-            let headings = MenuGroups.headings(nav.rows, searching: !query.isEmpty)
+            let branch: MenuBranch?
+            switch args.value("branch") {
+            case nil: branch = nil
+            case "bookmarks": branch = .bookmarks
+            case "history": branch = .history
+            case let other?: throw ControlError(.badValue, "--branch takes bookmarks or history, not \(other)")
+            }
+            let nav = try await Self.navigator(query, branch: branch)
+            let headings = MenuGroups.headings(of: nav)
             let rows: [JSONValue] = nav.rows.enumerated().map { index, row in
                 let favourite = row.frecencyKey.map(nav.favourites.contains) ?? false
                 // As selectedActions lists them: Change languages only at the root.
@@ -47,20 +56,23 @@ extension ControlVerbs {
         })
     }
 
-    /// The navigator the menu would open with `query` typed at its root.
-    private static func navigator(_ query: String) async throws(ControlError) -> MenuNavigator {
+    /// The navigator the menu would open with `query` typed at its root, or in `branch`.
+    private static func navigator(_ query: String, branch: MenuBranch? = nil) async throws(ControlError) -> MenuNavigator {
         guard let engine = Engine.shared else { throw ControlError(.notReady, "the key engine is not up yet") }
         let scripts = ScriptCommand.find(), extensions = Extension.find().extensions
         await DockCalendar.shared.readCalls(now: .now) // As the menu's open reads it, the call to join (T5).
         let entries = PilotMenu.entries(engine, scripts: scripts, extensions: extensions)
-        var nav = MenuNavigator(entries: entries, frecency: PilotMenu.shared.frecency ?? Frecency(), favourites: FavouriteBook.shared.rows,
+        var nav = MenuNavigator(entries: entries, branch: branch, frecency: PilotMenu.shared.frecency ?? Frecency(), favourites: FavouriteBook.shared.rows,
                                 aliases: AliasBook.shared.aliases, root: MenuRootSettings.shared.root.listed)
         // As the menu's open and its `hist` search read them (T9): bookmarks while on (the read looks up the installed
-        // browsers either way), history pages at `hist` (or the off row), and up to 3 in a plain search while on.
+        // browsers either way), history pages at `hist` (or the off row), and up to 3 in a plain search while on; in
+        // History the pages its words find, the newest with none.
         let marks = await BrowserReader.shared.bookmarks(listed: Set(entries.map(\.target)))
-        if BrowserSettings.shared.bookmarks { nav.provide(.bookmark, marks) }
+        if BrowserSettings.shared.bookmarks { nav.provide(.bookmark, home: .bookmarks, marks) }
         nav.query = query
-        if let words = BrowserBookmarks.historyWords(query) {
+        if branch == .history {
+            nav.provide(.history, await BrowserReader.shared.history(query.split(separator: " ").map(String.init), on: BrowserSettings.shared.history))
+        } else if let words = BrowserBookmarks.historyWords(query) {
             nav.provide(.history, await BrowserReader.shared.history(words, on: BrowserSettings.shared.history))
         } else if BrowserSettings.shared.history, let words = nav.searchHistoryWords {
             nav.provide(.history, BrowserBookmarks.searchPages(await BrowserReader.shared.history(words, on: true), words: words))

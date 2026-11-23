@@ -3,7 +3,8 @@ import Observation
 import PilotCore
 
 /// Launcher › More rows' two browser switches (spec launcher-best T9): bookmarks in Hyper+Space's search, on; history
-/// in its search (up to 3 pages) and behind `hist <words>`, off until switched on (Sven, Q328). `pilot set menu.bookmarks` and `menu.browserHistory` flip
+/// in its search (up to 3 pages) and behind `hist <words>`, off until switched on (Sven, Q328); each lists its root row
+/// while on (MenuRootSettings). `pilot set menu.bookmarks` and `menu.browserHistory` flip
 /// the same.
 @MainActor @Observable
 final class BrowserSettings {
@@ -29,7 +30,8 @@ final class BrowserSettings {
 }
 
 /// Reads the browsers' bookmarks and history for Hyper+Space (spec launcher-best T9), only when the menu asks: bookmarks
-/// as it opens, history at a search of 3 characters or more or a `hist` one while history is switched on. The threat model:
+/// as it opens, history at a search of 3 characters or more, a `hist` one or the History branch while history is
+/// switched on. The threat model:
 /// - Another app's private record. Every browser's folder is read only under Full Disk Access, which Pilot never asks for
 ///   here: without it they are skipped. Safari's is TCC's; since macOS 27 Chrome's and Firefox's profiles under Application
 ///   Support are guarded too (Apple DTS: "This is an intentional change", developer forums thread 847030; build 2495's log:

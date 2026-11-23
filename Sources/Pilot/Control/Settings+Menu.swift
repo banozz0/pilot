@@ -53,10 +53,10 @@ extension SettingsSchema {
     }
 
     /// The Hyper+Space root's extra rows (Sven 2026-10-20), one switch each as Launcher › Your menu shows them, off by
-    /// default: `menu.extra.<id>`. The root's order and hidden branches stay the menu-root collection. `menu.fallbacks` is
+    /// default: `menu.extra.<id>`, but for Bookmarks and History, which `menu.bookmarks` and `menu.browserHistory` list. The root's order and hidden branches stay the menu-root collection. `menu.fallbacks` is
     /// Your menu's When nothing matches.
     func registerMenuRoot(_ settings: MenuRootSettings) {
-        register(MenuRoot.extraRows.map { extra -> SettingKey in
+        register(MenuRoot.extraRows.filter { !MenuRoot.browserExtras.contains($0.id) }.map { extra -> SettingKey in
             .bool("menu.extra.\(extra.id)", "Hyper+Space root lists \(extra.title)", page: "menu", standard: false,
                   read: { settings.root.extras.contains(extra.id) }, write: { settings.root.show(extra: extra.id, $0) })
         } + [
@@ -65,9 +65,9 @@ extension SettingsSchema {
                   page: "menu", standard: "default", read: { settings.fallbacks?.joined(separator: ",") ?? "default" },
                   write: { typed throws(ControlError) in settings.fallbacks = try Self.fallbacks(typed) }),
             // The browsers (spec launcher-best T9, Q328), on Launcher › More rows: bookmarks on, history off until switched on.
-            .bool("menu.bookmarks", "Hyper+Space search lists your browsers' bookmarks (read with Full Disk Access)", page: "menu", standard: true,
+            .bool("menu.bookmarks", "Hyper+Space's root lists Bookmarks, your browsers' bookmarks by browser, and its search finds them (read with Full Disk Access)", page: "menu", standard: true,
                   read: { BrowserSettings.shared.bookmarks }, write: { BrowserSettings.shared.bookmarks = $0 }),
-            .bool("menu.browserHistory", "Hyper+Space's search lists up to 3 pages from your browsers' history, and hist <words> only those; off until you switch it on", page: "menu",
+            .bool("menu.browserHistory", "Hyper+Space's root lists History, the pages you visited newest first, its search up to 3 of them, and hist <words> only those; off until you switch it on", page: "menu",
                   standard: false, read: { BrowserSettings.shared.history }, write: { BrowserSettings.shared.history = $0 }),
         ])
     }

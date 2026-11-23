@@ -116,6 +116,13 @@ public enum MenuGroups {
         return out
     }
 
+    /// The headings the menu draws over `nav`'s rows, and `pilot menu search` prints: a picker's, Activity's and Bookmarks'
+    /// sections (Bookmarks' browsers, T9), else a branch's sections or a root search's groups.
+    public static func headings(of nav: MenuNavigator) -> [Int: Group] {
+        if nav.isList || nav.branch == .activity || nav.branch == .bookmarks { return sections(nav.rows) }
+        return headings(nav.rows, searching: nav.branch == nil && !nav.isList && !nav.query.isEmpty, branch: nav.branch)
+    }
+
     /// A branch's ranked rows gathered by section: in the sections' order before typing, so System's sub-branches keep
     /// their order whatever was picked; while typing, each section where its best row stood, so the best match stays first.
     /// Install and Search packages keep their sources' order while typing too (N9): Homebrew to the web, then the branches.

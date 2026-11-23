@@ -299,6 +299,9 @@ final class PilotMenu {
                 guard let self, let panel, panel.occlusionState.contains(.visible) else { return }
                 self.endFirstFrame()
                 let ms = Int(((ProcessInfo.processInfo.systemUptime - pressedAt) * 1000).rounded())
+                // A key-down that carried no time of its own reads 0, so the gap is the Mac's uptime (Sven on build 3160:
+                // 413852105 ms): no line, so lean-check's figures stay true.
+                guard pressedAt > 0, ms < 60_000 else { return mlog.debug("menu open: the key-down carried no usable time") }
                 mlog.notice("menu open: \(ms, privacy: .public) ms from key down to first frame, build \(Self.build, privacy: .public)")
             }
         }
@@ -443,21 +446,22 @@ final class PilotMenu {
         Task { [weak self] in
             let rows = await BrowserReader.shared.bookmarks(listed: targets)
             guard self?.model === model, BrowserSettings.shared.bookmarks else { return }
-            model.nav.provide(.bookmark, rows)
+            model.nav.provide(.bookmark, home: .bookmarks, rows)
             mlog.notice("menu: \(rows.count) bookmarks listed")
         }
     }
 
     /// `hist <words>` at the root (T9): once typing pauses for 0.2 s, the history pages they find, read from copies of the
     /// browsers' databases; while history is off (Q328) only the row saying so, nothing read. While it is on, a plain root
-    /// search of 3 characters or more reads them too, and the navigator lists up to 3 after the rest. Any other search
-    /// drops them.
+    /// search of 3 characters or more reads them too, and the navigator lists up to 3 after the rest. The History branch
+    /// reads as it opens, the newest pages, and again for what is typed there. Any other search or branch drops them.
     private func provideHistory(_ query: String) {
         historyRead?.cancel()
         guard let model else { return }
-        let typed = BrowserBookmarks.historyWords(query)
+        let inBranch = model.nav.branch == .history
+        let typed = inBranch ? query.split(separator: " ").map(String.init) : BrowserBookmarks.historyWords(query)
         let words = typed ?? (BrowserSettings.shared.history ? model.nav.searchHistoryWords : nil)
-        guard model.nav.branch == nil, model.nav.only == nil, let words else {
+        guard inBranch || model.nav.branch == nil, model.nav.only == nil, let words else {
             // Dropped once on leaving a search that read them, not on every keystroke (a scan of every entry).
             if historyShown { historyShown = false; model.nav.provide(.history, []) }
             return
@@ -466,7 +470,8 @@ final class PilotMenu {
         let on = BrowserSettings.shared.history
         guard on else { return model.nav.provide(.history, [BrowserBookmarks.historyOff]) }
         historyRead = Task { [weak self] in
-            try? await Task.sleep(for: .milliseconds(200))
+            // The History branch as it opens, nothing typed, reads at once.
+            if !words.isEmpty { try? await Task.sleep(for: .milliseconds(200)) }
             guard !Task.isCancelled else { return }
             let read = await BrowserReader.shared.history(words, on: true)
             let rows = typed == nil ? BrowserBookmarks.searchPages(read, words: words) : read
@@ -966,6 +971,8 @@ final class PilotMenu {
             }
         }
         if branch == .notes { model?.nav.provide(.action, home: .notes, Notes.rows(NotesPanel.shared.notes())) }
+        // History reads its newest pages; any other branch, or the root, drops the pages a search or History listed (T9).
+        provideHistory(model?.nav.query ?? "")
         if branch == .snippets { provideSnippets(model?.nav.query ?? "") }
         if branch == .capture { provideCaptures() }
     }
@@ -2115,8 +2122,7 @@ extension MenuModel {
     /// no best match to head, and every window listed whole heads its workspace (frame B2).
     var headings: [Int: MenuGroups.Group] {
         if nav.branch == nil, !nav.isList, nav.query.isEmpty, nav.only == .window { return workspaceHeadings }
-        if nav.isList || nav.branch == .activity { return MenuGroups.sections(nav.rows) }
-        return MenuGroups.headings(nav.rows, searching: nav.branch == nil && !nav.isList && !nav.query.isEmpty, branch: nav.branch)
+        return MenuGroups.headings(of: nav)
     }
 
     /// "Workspace 2" over the first window of each workspace, as the provider lists them by workspace.

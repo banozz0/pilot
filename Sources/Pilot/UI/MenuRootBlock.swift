@@ -216,19 +216,21 @@ struct MenuRootPreview: View {
 /// switch is on, then last in What the menu shows first, to move there: a branch that lives deeper, opened where it lives (Notes in
 /// Actions), an action with no branch, run at once (Dictation), a page of Pilot's window (Stats), or the Files view.
 /// `pilot set menu.extra.<id>` flips the same switch; the Ring menu's Pilot ring lists the ones on, in that list's order.
+/// The browsers' two switches (T9) list Bookmarks and History the same way, and their pages in a search.
 struct MenuExtrasBlock: View {
     @Environment(\.ink) private var ink
     @Bindable var settings: MenuRootSettings
 
-    static let note = "Rows Hyper+Space can list too, off until you switch them on; one switched on joins What the menu shows first, to move there. Browser bookmarks and history are found by a search instead: bookmarks start on, history off."
+    static let note = "Rows Hyper+Space can list too, off until you switch them on; one switched on joins What the menu shows first, to move there. Browser bookmarks start on, history off; a search finds their pages too."
 
     var body: some View {
-        let extras = MenuRoot.extraRows
+        let extras = MenuRoot.extraRows.filter { !MenuRoot.browserExtras.contains($0.id) }
         KitBlock(title: "More rows", symbol: "plus.rectangle.on.rectangle", note: Self.note) {
             ForEach(Array(extras.enumerated()), id: \.element.id) { i, extra in
                 BlockRow(first: i == 0) { row(extra) }
             }
-            // The browsers' pages in search (spec launcher-best T9): bookmarks on, history off until you switch it on (Q328).
+            // The browsers' rows and their pages in search (spec launcher-best T9): bookmarks on, history off until you switch
+            // it on (Q328).
             BlockRow { switchRow("Browser bookmarks", "bookmark", Self.bookmarksInfo, isOn: $browsers.bookmarks) }
             BlockRow { switchRow("Browser history", "clock.arrow.circlepath", Self.historyInfo, isOn: $browsers.history) }
         }
@@ -236,9 +238,9 @@ struct MenuExtrasBlock: View {
 
     @Bindable var browsers: BrowserSettings = .shared
 
-    static let bookmarksInfo = "A search lists the bookmarks of " + BrowserBookmarks.browsers.map(\.name).formatted(.list(type: .and))
-        + ", read as the menu opens while Pilot has Full Disk Access."
-    static let historyInfo = "Search lists up to 3 pages you visited in those browsers, after the rest, or first when nothing else matches; hist and words lists only those. Read only then, never saved or logged. Off until you switch it on."
+    static let bookmarksInfo = "Bookmarks at the root lists the bookmarks of " + BrowserBookmarks.browsers.map(\.name).formatted(.list(type: .and))
+        + ", by browser, and a search finds them; read as the menu opens while Pilot has Full Disk Access."
+    static let historyInfo = "History at the root lists the pages you visited in those browsers, newest first. Search lists up to 3, after the rest, or first when nothing else matches; hist and words lists only those. Read only then, never saved or logged. Off until you switch it on."
 
     /// A row's symbol, title, info and switch, muted while off.
     private func switchRow(_ title: String, _ symbol: String, _ info: String, isOn: Binding<Bool>) -> some View {
