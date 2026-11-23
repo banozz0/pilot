@@ -63,11 +63,12 @@ struct DictationBlockRenders {
         (rig.pilot.showIn, rig.pilot.whileSpeaking, rig.pilot.waveColour) = (.both, .words, .theme)
         for theme in ["tokyo-night", "porcelain"] {
             look.themeID = theme
-            let front = Ground { DictationBlock(dictation: rig.pilot, microphone: rig.microphone).frame(width: width, height: 1000, alignment: .top) }
-            let more = Ground {
-                VStack(spacing: 16) { SpeechModelsBlock(dictation: rig.pilot); DictationShowsBlock(dictation: rig.pilot) }
+            // Dictation on screen under Dictation on the front since More lost it (Sven, 2026-11-23).
+            let front = Ground {
+                VStack(spacing: 16) { DictationBlock(dictation: rig.pilot, microphone: rig.microphone); DictationShowsBlock(dictation: rig.pilot) }
                     .frame(width: width, height: 1000, alignment: .top)
             }
+            let more = Ground { SpeechModelsBlock(dictation: rig.pilot).frame(width: width, height: 1000, alignment: .top) }
             for (tab, view) in [("front", AnyView(front)), ("more", AnyView(more))] {
                 try RestyledRenders.writeTrimmed(rendered(view.styled(.page(.voice)).pilotTheme(look: look)), from: 0,
                                                  to: dir.appendingPathComponent("dictation-\(tab)-\(theme).png"))

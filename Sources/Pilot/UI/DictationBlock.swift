@@ -83,8 +83,8 @@ struct SpeechModelsBlock: View {
     }
 }
 
-/// Voice's More: what shows while you speak and where, over its preview, and the waveform's colour (pilot-ui-redesign
-/// T18; on the front until then).
+/// Voice's Dictation on screen, under Dictation on its front: what shows while you speak and where, over its preview, and
+/// the waveform's colour (on More from pilot-ui-redesign T18 until Sven, 2026-11-23).
 struct DictationShowsBlock: View {
     @Environment(Engine.self) private var engine: Engine?
     var dictation: PilotDictation = .shared

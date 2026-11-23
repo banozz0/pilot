@@ -449,8 +449,9 @@ public enum AppSection: String, CaseIterable, Sendable {
     /// role key opens.
     case appsForKeys
     /// Voice's More (simplify-pages T12) and its places: the recent takes, the replacements, and Read aloud's media and
-    /// better voices; dictation's keys and switches (pilot-ui-redesign T18, S1 B) and the taught words (pages round 4,
-    /// Sven's Q101) are places on the front. Every speech model and what shows while you speak are on More since T18.
+    /// better voices; dictation's keys and switches (pilot-ui-redesign T18, S1 B), the taught words (pages round 4,
+    /// Sven's Q101) and what shows while you speak (on More from T18 until Sven, 2026-11-23) are places on the front.
+    /// Every speech model is on More since T18.
     case voiceMore, voiceDictation, voiceTakes, voiceWords, voiceReplacements, voiceReadAloud, voiceModels, voiceShows
     /// Captures' More (pilot-ui-redesign T18, S1 B: one row per simple feature on each tab, the rest behind More) and its
     /// places: the capture options, the other capture keys, and a recording's quality, resolution, frame rate and clicks
@@ -532,7 +533,7 @@ public enum AppSection: String, CaseIterable, Sendable {
 
     /// The places that are blocks on their page's More tab.
     private static let onMoreTab: Set<AppSection> = [
-                                                     .voiceTakes, .voiceReplacements, .voiceReadAloud, .voiceModels, .voiceShows,
+                                                     .voiceTakes, .voiceReplacements, .voiceReadAloud, .voiceModels,
                                                      .captureOptions, .captureKeys, .recordingQuality,
                                                      .translate, .aliases, .quicklinks,
                                                      .helpers, .hiddenApps, .reports,
@@ -548,7 +549,7 @@ public enum AppSection: String, CaseIterable, Sendable {
                                                      .aiFallback, .aiKeys, .aiCommands, .aiNewChat,
                                                      .hyperKey, .permissions, .status, .data, .notifications, .about,
                                                      .keySwaps, .overlay, .menuExtras, .glassTuning, .cursor, .lookFont, .wallpaperCycle,
-                                                     .soundInput, .keyboardLayout, .mouseSpeed, .voiceDictation,
+                                                     .soundInput, .keyboardLayout, .mouseSpeed, .voiceDictation, .voiceShows,
                                                      .voiceWords, .installLists, .fileSearch,
                                                      .clipNever, .clipExpire, .clipPanel, .clipTags]
 
