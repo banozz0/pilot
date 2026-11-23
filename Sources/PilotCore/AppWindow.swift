@@ -10,7 +10,8 @@ import Foundation
 /// Page map (Sven, 2026-10-17, Q207-Q211): Ask is AI. The menu's page is Launcher, in an
 /// area of its own (P37, Sven 2026-10-18, Q284, Q285); still `menu` in links. Update & Clean left the top of Activity ›
 /// Reports for a Mac page of its own (Sven 2026-10-20: "update and clean should be in the Pilot app under Mac"). Fonts left
-/// Install for a page of its own (Sven, 2026-11-01: "for fonts i think its better to have its own page"). The Developer
+/// Install for a page of its own (Sven, 2026-11-01: "for fonts i think its better to have its own page") and went again: Pilot's
+/// own font is Look's Font place, and Pilot no longer sets other apps' fonts (Sven, 2026-11-23). The Developer
 /// pages, Configs and Repos, left Pilot (Sven, 2026-11-22, Q351).
 /// The pages split (Sven, 2026-11-15) made Workspaces and Tiling one page with tabs across its top; on build 19 he kept the
 /// split but not the top tabs ("instead of top rail keep the sidebar", Q291), so they are two pages again, listed in the
@@ -18,7 +19,7 @@ import Foundation
 /// (Sven, 2026-11-16).
 public enum AppPage: String, CaseIterable, Sendable {
     case home, binds, menu, workspaces, tiling, menuBar, dock, look, system, upkeep, clipboard, captures, snippets, notes, files, ai, voice,
-         install, openWith, fonts, general, extensions, widgets
+         install, openWith, general, extensions, widgets
 
     /// The area the page sits in (window directions, Sven 2026-10-11).
     public var area: AppArea { AppArea.allCases.first { $0.pages.contains(self) } ?? .home }
@@ -42,7 +43,6 @@ public enum AppPage: String, CaseIterable, Sendable {
         case .files: "Files"
         case .install: "Install"
         case .openWith: "Open with"
-        case .fonts: "Fonts"
         case .general: "Pilot"
         case .ai: "AI"
         case .voice: "Voice"
@@ -71,7 +71,6 @@ public enum AppPage: String, CaseIterable, Sendable {
         case .files: "doc.on.doc"
         case .install: "shippingbox"
         case .openWith: "arrow.up.forward.app"
-        case .fonts: "textformat"
         case .general: "gearshape"
         case .ai: "sparkles"
         case .voice: "waveform"
@@ -87,14 +86,14 @@ public enum AppPage: String, CaseIterable, Sendable {
         case .binds, .look, .ai, .snippets, .widgets: 1
         case .workspaces, .tiling, .system, .voice: 2
         case .menu, .menuBar, .dock, .general: 3
-        case .install, .extensions, .files, .fonts: 4
+        case .install, .extensions, .files: 4
         case .openWith, .notes: 5
         }
     }
 
-    /// System and Fonts (the feature trim, Sven 2026-11-19: hide): off the sidebar and Ctrl+Tab unless General's More pages
-    /// switch is on; a link, the window's search and `pilot open` still reach them.
-    public var isMorePage: Bool { self == .system || self == .fonts }
+    /// System (the feature trim, Sven 2026-11-19: hide; Fonts too until it went, 2026-11-23): off the sidebar and Ctrl+Tab
+    /// unless General's More pages switch is on; a link, the window's search and `pilot open` still reach it.
+    public var isMorePage: Bool { self == .system }
 
     /// The parts a page holds as tabs or places on it (Binds' conflicts open as a sheet, not a tab).
     public var sections: [AppSection] { AppSection.allCases.filter { $0.page == self } }
@@ -171,7 +170,6 @@ public enum AppPage: String, CaseIterable, Sendable {
         // The front's words; the role keys' moved with them to More (simplify-pages T11).
         case .openWith: ["default app", "open with", "main editor", "editor", "vs code", "browser", "defaults", "text", "markdown",
                          "all kinds"]
-        case .fonts: ["font", "fonts", "typeface", "mono", "use fonts in", "nerd font"]
         // The front's words; the rest moved with their controls to Pilot's More places (simplify-pages T8).
         case .general: ["general", "hyper", "layer key", "caps lock", "launch at login", "startup", "setup again", "onboarding", "updates",
                         "check for updates", "support", "sponsor"]
@@ -211,9 +209,10 @@ public enum AppArea: String, CaseIterable, Sendable {
         // Dock beside Menu bar, its own page (round 4, Sven 2026-11-13: "maybe dock should have its own page in desktop").
         // The split (Sven, 2026-11-15: "the themes and all that go into one place and the rest into another"): Desktop keeps
         // what is on the desk and how it behaves; Look takes the theme, wallpaper, Material and cursor, and Fonts from Apps
-        // ("Fonts, I don't think it should be in Apps"). Windows left it for an area of its own under Keys (Q289).
+        // ("Fonts, I don't think it should be in Apps"), a place on Look's front since 2026-11-23. Windows left it for an
+        // area of its own under Keys (Q289).
         case .desktop: [.menuBar, .dock, .widgets]
-        case .look: [.look, .fonts]
+        case .look: [.look]
         // Majors first (simplify-pages T11): Update & Clean before System, so ⌘7 opens it; Clipboard, Notes, Files, Voice;
         // Open with first in Apps, so ⌘9 opens it (⌘7 until the pages split).
         case .mac: [.upkeep, .system]
@@ -282,7 +281,7 @@ public enum AppArea: String, CaseIterable, Sendable {
     /// "⌘1", or "" for an area with no key.
     public var keyHint: String { key.map { "⌘\($0)" } ?? "" }
 
-    /// Its pages the window lists: System and Fonts only while `more` is on.
+    /// Its pages the window lists: System only while `more` is on.
     public func pages(more: Bool) -> [AppPage] {
         pages.filter { more || !$0.isMorePage }
     }
@@ -420,6 +419,9 @@ public enum AppSection: String, CaseIterable, Sendable {
     /// and how apps show are places on Launcher's More since Sven's notes on build 19 (Look's until then); the glass's transparency and blur (under Glass, pages round 5), the cursor,
     /// and the folders and order the wallpaper cycles through are places on the front (pages round 4, Sven's Q99).
     case appsShowAs, glassTuning, cursor, wallpaperCycle
+    /// Look's Font place on its front: Pilot's own words and mono (Sven, 2026-11-23: "one fonts setting for pilot ... in
+    /// the look page"; the Fonts page and its fonts for other apps went).
+    case lookFont
     /// Pilot's places on its front beside `permissions` and `about` (on its More from simplify-pages T7 until pages round 4,
     /// Sven's Q106, when the page lost its More): the Hyper keys and their options, what runs, and Pilot's folder, command
     /// and Uninstall.
@@ -498,7 +500,7 @@ public enum AppSection: String, CaseIterable, Sendable {
         case .extensionCatalogue: .extensions
         case .aiSetup, .aiFallback, .aiKeys, .aiCommands, .aiNewChat: .ai
         case .recording, .captureHistory: .captures
-        case .wallpaper, .themeCatalogue, .glassTuning, .cursor, .wallpaperCycle: .look
+        case .wallpaper, .themeCatalogue, .glassTuning, .cursor, .wallpaperCycle, .lookFont: .look
         }
     }
 
@@ -546,7 +548,7 @@ public enum AppSection: String, CaseIterable, Sendable {
     private static let onFrontOf: Set<AppSection> = [.workspaceOpens, .workspaceRules, .workspaceMonitors, .focusedWindow, .floatApps, .floatTitles, .motion, .appsForKeys,
                                                      .aiFallback, .aiKeys, .aiCommands, .aiNewChat,
                                                      .hyperKey, .permissions, .status, .data, .notifications, .about,
-                                                     .keySwaps, .overlay, .menuExtras, .glassTuning, .cursor, .wallpaperCycle,
+                                                     .keySwaps, .overlay, .menuExtras, .glassTuning, .cursor, .lookFont, .wallpaperCycle,
                                                      .soundInput, .keyboardLayout, .mouseSpeed, .voiceDictation,
                                                      .voiceWords, .installLists, .fileSearch]
 
@@ -657,6 +659,7 @@ public enum AppSection: String, CaseIterable, Sendable {
         case .appsShowAs: "Apps show as"
         case .glassTuning: "Transparency and blur"
         case .cursor: "Cursor"
+        case .lookFont: "Font"
         case .wallpaperCycle: "Wallpaper folders"
         }
     }
@@ -752,6 +755,7 @@ public enum AppSection: String, CaseIterable, Sendable {
         case .glassTuning: ["transparency", "blur", "see through", "frosted"]
         case .cursor: ["cursor", "pointer", "trail", "ripple", "spotlight", "cursor colour", "cursor shape", "cursor size", "bigger cursor",
                        "pilot draws it", "restore cursor", "classic cursor"]
+        case .lookFont: ["font", "fonts", "typeface", "mono", "words font", "mono font", "pilot's font", "use fonts in"]
         case .wallpaperCycle: ["wallpaper folders", "own folders", "per workspace wallpaper", "per screen wallpaper", "cycle wallpaper", "shuffle",
                                "wallpaper order", "screens", "every screen", "browse as gallery", "next wallpaper key"]
         }
@@ -787,6 +791,8 @@ public struct AppPlace: Hashable, Sendable {
         "aiMore": AppPlace(.aiSetup), "pilotMore": AppPlace(.general),
         // Look's More, gone with its last two blocks: the window layout (pilot-ui-redesign T3) and the style (feature trim).
         "lookMore": AppPlace(.look),
+        // The Fonts page, gone with the fonts for other apps (Sven, 2026-11-23): Pilot's own font is Look's Font place.
+        "fonts": AppPlace(.lookFont),
     ]
 
     /// The place a page name stands for: a page, a part, an old name, or nil.

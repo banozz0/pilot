@@ -298,7 +298,7 @@ struct SettingsSchemaTests {
               case .array(let look)? = await rig.ask("settings", "--page", "look").result else { Issue.record("no list"); return }
         guard case .object(let first) = look[0] else { Issue.record("not an object"); return }
         #expect(first["page"] == .string("look") && first["type"] != nil && first["label"] != nil && first["default"] != nil)
-        #expect(all.count == rig.schema.keys.count && look.count == 15)
+        #expect(all.count == rig.schema.keys.count && look.count == 17)
         let nowhere = await rig.ask("settings", "--page", "nowhere")
         #expect(nowhere.error?.code == .unknownPage && nowhere.error?.message.contains("look") == true)
         guard case .object(let schema) = rig.verbs.schema, case .array(let verbs)? = schema["verbs"] else { Issue.record("no schema"); return }
@@ -334,11 +334,11 @@ struct SettingsSchemaTests {
         #expect(throws: ControlError.self) { try get("no.such.key") }
         let look = try #require(try settings("look"))
         #expect(look.hasPrefix("pilot settings --page look\n") && look.contains("look.theme") && !look.contains("look.windowLayout")
-                && !look.contains("look.style") && look.split(separator: "\n").count == 16)
+                && !look.contains("look.style") && look.split(separator: "\n").count == 18)
         guard case .object(let index) = rig.verbs.schemaIndex, case .array(let listed)? = index["verbs"],
               let entry = listed.first(where: { if case .object(let o) = $0 { o["name"] == .string("settings") } else { false } }),
               case .object(let part) = entry else { Issue.record("no settings entry"); return }
-        #expect(part["part"] == .object(["pages": .array(["ai", "binds", "clipboard", "files", "general", "home", "install", "look", "menu", "system", "tiling"].map(JSONValue.string))]))
+        #expect(part["part"] == .object(["pages": .array(["ai", "binds", "clipboard", "files", "general", "home", "look", "menu", "system", "tiling"].map(JSONValue.string))]))
         #expect(await rig.ask("get", "look.glass", "--page", "look").error?.code == .unknownFlag)
         #expect(await rig.ask("set", "look.glass", "on", "--force").error?.code == .unknownFlag && !rig.look.glass)
     }

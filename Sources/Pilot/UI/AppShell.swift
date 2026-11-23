@@ -192,10 +192,9 @@ private struct PagePart: View {
             switch section {
             case .webApps: WebAppsSettingsView()
             case .installMore: InstallMorePage()
-            default: CataloguePage(query: model.installQuery ?? "", search: InstallSearcher.search)
+            default: CataloguePage(search: InstallSearcher.search)
             }
         case .openWith: OpenWithPage()
-        case .fonts: FontsPage(getMore: { model.go(AppPlace(.catalogue)); model.installQuery = CataloguePage.fonts })
         case .general: GeneralPage()
         case .ai:
             switch section {

@@ -66,7 +66,7 @@ enum Theme {
     static func appearance(_ look: Look) -> NSAppearance? { NSAppearance(named: look.theme.dark ? .darkAqua : .aqua) }
 
     /// JetBrains Mono when installed (Sven has it), else the system monospace face, at the same size (Look.monoFont); the
-    /// mono picked in Use fonts in over both (PilotFonts).
+    /// mono picked in Look › Font over both (PilotFonts).
     static func mono(_ size: CGFloat, weight: Font.Weight = .regular) -> Font {
         PilotFonts.shared.face(.mono, size, weight) ?? Font(Look.shared.monoFont(size: size, medium: weight != .regular))
     }

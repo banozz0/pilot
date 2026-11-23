@@ -37,8 +37,6 @@ final class AppWindowModel {
     var extensionFocus: String?
     /// The extension whose page shows in place of the Extensions page (story 161); any other place clears it.
     var extensionPage: String? { didSet { if extensionPage != oldValue { PageSwitchTiming.began() } } }
-    /// What Install's search opens with, from Fonts' Get more fonts; going anywhere else clears it.
-    var installQuery: String?
     /// The block a link or the search asked for on a More tab (simplify-pages T7); More scrolls there, marks it in its
     /// index and clears it. Going anywhere else clears it too.
     var blockFocus: AppSection?
@@ -107,7 +105,6 @@ final class AppWindowModel {
         // Each only when it holds something: an Observable property set to what it holds still redraws every view that
         // reads it, the frame's and every kept page's, on every switch (perf-round).
         if extensionPage != nil { extensionPage = nil }
-        if installQuery != nil { installQuery = nil }
         if wallpaperFocus != nil { wallpaperFocus = nil }
         if blockFocus != nil { blockFocus = nil }
         ringEnd?.cancel()
@@ -584,15 +581,15 @@ final class MaterialBackdrop: NSView {
     }
 }
 
-/// General's More pages switch as the sidebar and Ctrl+Tab read it (the feature trim, 2026-11-19): System and Fonts listed
-/// only while it is on; on where there are no settings (a test), so a test's areas stay whole.
+/// General's More pages switch as the sidebar and Ctrl+Tab read it (the feature trim, 2026-11-19): System listed only
+/// while it is on; on where there are no settings (a test), so a test's areas stay whole.
 @MainActor enum MorePages {
     static var on: Bool { PilotSettings.live?.morePages ?? true }
-    static let help = "More pages: System, for sound, Bluetooth, Wi-Fi and displays, and Fonts. Links and the search reach them either way."
+    static let help = "More pages: System, for sound, Bluetooth, Wi-Fi and displays. Links and the search reach it either way."
 }
 
 extension AppArea {
-    /// Its pages the window lists now: System and Fonts only while the More pages switch is on.
+    /// Its pages the window lists now: System only while the More pages switch is on.
     @MainActor var shown: [AppPage] { pages(more: MorePages.on) }
     /// Every area the toolbar tabs list, Pilot last.
     @MainActor static var shownAll: [AppArea] { main + [.pilot] }

@@ -18,7 +18,7 @@ struct PagesSplitRenders {
 
     static let places: [(String, AppPlace)] = [
         ("workspaces", AppPlace(.workspaces)), ("tiling", AppPlace(.tiling)), ("menubar", AppPlace(.menuBar)),
-        ("look", AppPlace(.look)), ("fonts", AppPlace(.fonts)), ("openwith", AppPlace(.openWith)),
+        ("look", AppPlace(.look)), ("openwith", AppPlace(.openWith)),
         ("launcher", AppPlace(.menu)), ("extensions", AppPlace(.extensions)),
     ]
 

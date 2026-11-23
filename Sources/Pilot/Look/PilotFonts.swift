@@ -25,11 +25,14 @@ final class PilotFonts {
         mono = defaults.string(forKey: Part.mono.rawValue)
     }
 
+    /// A family that is not installed.
+    struct NotInstalled: Error {}
+
     /// Sets one, nil for the style's own; a family not installed is refused, so nothing draws in a fallback face. Mono takes
-    /// any family here, as the command may; Use fonts in offers it the fixed-pitch ones.
-    func set(_ part: Part, _ family: String?) throws(FontProblem) {
-        let installed = try family.map { family throws(FontProblem) in
-            guard let match = InstalledFonts.match(family) else { throw .badFamily }
+    /// any family here, as the command may; Look › Font offers it the fixed-pitch ones.
+    func set(_ part: Part, _ family: String?) throws(NotInstalled) {
+        let installed = try family.map { family throws(NotInstalled) in
+            guard let match = InstalledFonts.match(family) else { throw NotInstalled() }
             return match
         }
         switch part {
@@ -50,8 +53,8 @@ final class PilotFonts {
     }
 }
 
-/// The font families on this Mac, from CoreText, which any thread may ask: Use fonts in reads them off the main thread as
-/// it shows; the fixed-pitch ones for terminals, editors and Pilot's mono.
+/// The font families on this Mac, from CoreText, which any thread may ask: Look › Font reads them off the main thread as
+/// it shows; the fixed-pitch ones for Pilot's mono.
 enum InstalledFonts {
     static func families() -> [String] {
         ((CTFontManagerCopyAvailableFontFamilyNames() as? [String]) ?? []).filter { !$0.hasPrefix(".") }

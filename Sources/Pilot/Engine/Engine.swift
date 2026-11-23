@@ -31,7 +31,7 @@ final class PilotSettings {
         dragModifier = defaults.string(forKey: "windows.dragModifier").flatMap(DragModifier.init(rawValue:)) ?? Self.dragModifierStart
         // Sven, 2026-11-18, a tester's first run: windows tiled while onboarding was still open.
         tiling = defaults.object(forKey: Self.tilingKey) as? Bool ?? Install.startsOn
-        // System and Fonts (the feature trim, 2026-11-19): off for a new install. Once, an install that ran before the
+        // System (the feature trim, 2026-11-19; Fonts too until it went): off for a new install. Once, an install that ran before the
         // switch existed (onboarding left its key) starts on; saved at once, so it never asks again.
         let more = defaults.object(forKey: Self.morePagesKey) as? Bool ?? (defaults.object(forKey: OnboardingWindow.unfinishedKey) != nil)
         defaults.set(more, forKey: Self.morePagesKey)
@@ -161,7 +161,7 @@ final class PilotSettings {
     }
     /// The engine hands the running mouse tap the new modifier here.
     @ObservationIgnored var onDragModifierChange: () -> Void = {}
-    /// General's More pages switch: System and Fonts in the sidebar (AppPage.isMore); MorePages reads it.
+    /// General's More pages switch: System in the sidebar (AppPage.isMorePage); MorePages reads it.
     var morePages: Bool {
         didSet { defaults.set(morePages, forKey: Self.morePagesKey) }
     }
