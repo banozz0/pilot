@@ -32,8 +32,9 @@ final class CaptureSettingsStore {
 /// Pilot's own capture (spec `capture.html` CP2, CP3): a press grabs every display at once through ScreenCaptureKit,
 /// then full screen saves the one under the pointer, while area and window lay the frozen stills out to pick from. The
 /// result is copied and saved to the captures folder. Nothing here asks Screen Recording, or its state, before a press
-/// (ADR 0012, amended 2026-10-16). Every capture logs how long the grab and the overlay took, the targets being 17 ms and
-/// 165 ms.
+/// (ADR 0012, amended 2026-10-16). Every capture logs how long the grab took from the press, the targets being 17 ms and
+/// 165 ms; an overlay's line, at its close, adds the window list, the overlay shown, its first frame and its first
+/// tracked pointer move (capture-lag).
 @MainActor
 final class PilotCapture {
     static let shared = PilotCapture()

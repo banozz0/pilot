@@ -211,7 +211,7 @@ final class CaptureOverlay {
     /// is on. Coming onto a display gives its panel the keys; a press held is the drag's, which its events carry.
     private func tick() {
         let mouse = NSEvent.mouseLocation
-        guard let view = views.first(where: { $0.window?.frame.contains(mouse) == true }) else { return under = nil }
+        guard let view = views.first(where: { $0.window.map { NSMouseInRect(mouse, $0.frame, false) } == true }) else { return under = nil }
         if view !== under {
             under = view
             view.enter()
