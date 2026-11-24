@@ -286,6 +286,7 @@ struct KeptPages<Content: View>: NSViewRepresentable {
         let deck = PageDeck()
         model.picking = { [weak deck] in deck?.picture($0) }
         deck.showing = { [weak model] in model?.live == true }
+        model.screenChanged = { [weak deck] in deck?.screen(on: $0) }
         // What a part's frame (PartFrame) shows beyond its page: its picture is stale once any of it changed while hidden.
         deck.chrome = { [weak model, more] page in
             "\(more.tabs) \(more.open) \(ExtensionPages.shared.entries.map(\.id)) \(String(describing: model?.section(of: page)))"
@@ -366,16 +367,44 @@ final class PageDeck: NSView {
         if host.superview === self { host.isHidden = false } else { addSubview(host) }
         matchLayers()
         tellSoon()
-        while order.count > Self.cap {
-            // Its tree goes with it: emptied first, so nothing the views hold keeps the host alive.
-            let goes = order.removeFirst()
-            building[goes] = nil
-            guard let gone = hosts.removeValue(forKey: goes) else { continue }
-            gone.removeFromSuperview()
-            gone.rootView = AnyView(EmptyView())
-        }
+        keep(Self.cap)
         // Its first frame: as many pieces as fit now, the rest in the frames after.
         if let half = building[key] { buildInView(key, half, host) }
+    }
+
+    /// The window came on screen or left it (AppWindowModel.onScreen). Off it for `trimAfter`, only the part shown stays
+    /// (memory-2: Sven's window, left open behind others for 27 h, held four parts, 29 MB of the 56 MB it took); back on
+    /// it, building ahead refills the deck once the window is key and quiet, and a return visit to a part that went before
+    /// then is a first visit again.
+    func screen(on: Bool) {
+        stopTrim()
+        guard !on else { return armAhead() }
+        guard order.count > 1 else { return }
+        let timer = Timer(timeInterval: trimAfter, repeats: false) { [weak self] _ in MainActor.assumeIsolated { self?.keep(1) } }
+        timer.tolerance = 30
+        RunLoop.main.add(timer, forMode: .common)
+        trimTimer = timer
+    }
+    var trimAfter: TimeInterval = 300
+    private var trimTimer: Timer?
+
+    private func stopTrim() {
+        trimTimer?.invalidate()
+        trimTimer = nil
+    }
+
+    /// The `count` parts shown last stay; the rest go, the one shown longest ago first.
+    private func keep(_ count: Int) {
+        while order.count > count { drop(order[0]) }
+    }
+
+    private func drop(_ key: String) {
+        order.removeAll { $0 == key }
+        building[key] = nil
+        guard let gone = hosts.removeValue(forKey: key) else { return }
+        // Its tree goes with it: emptied first, so nothing the views hold keeps the host alive.
+        gone.removeFromSuperview()
+        gone.rootView = AnyView(EmptyView())
     }
 
     // MARK: Building a piece at a time (page-first, page-instant)
@@ -647,6 +676,7 @@ final class PageDeck: NSView {
         if window == nil {
             stopAhead()
             stopPass()
+            stopTrim()
         } else {
             // What a switch's frames line reads (SwitchFrames): this window's screen, and whether the page shown is settled.
             PageSwitchTiming.deck = self
