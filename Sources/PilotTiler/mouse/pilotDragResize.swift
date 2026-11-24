@@ -15,6 +15,21 @@ extension TilerDrag {
         return (try? window.edgeReach()) ?? EdgeReach()
     }
 
+    /// Pilot's modifier right-drag resizes floating window `id` (float-resize): its writes' AX moves and resizes ask for
+    /// nothing until resizeEnded. False when the tiler does not float it.
+    @MainActor public static func resizeBegan(_ id: UInt32) -> Bool {
+        guard floatingWindow(id) != nil else { return false }
+        pilotResizedWindowId = id
+        return true
+    }
+
+    /// A drag is over, its last frame written: a floating window's resize is laid out by one complete refresh.
+    @MainActor public static func resizeEnded() {
+        guard pilotResizedWindowId != nil else { return }
+        pilotResizedWindowId = nil
+        if isTilerEnabled { scheduleCancellableCompleteRefreshSession(.pilotCall("drag-resize")) }
+    }
+
     /// The release: the tiles beyond each moved edge give or take what it moved, kept inside the reach, then laid out.
     @MainActor public static func resize(_ id: UInt32, to frame: CGRect) async throws {
         guard isTilerEnabled else { throw TilerNotRunning() }
@@ -26,6 +41,13 @@ extension TilerDrag {
 @MainActor
 func tiledWindow(_ id: UInt32) -> Window? {
     guard isTilerEnabled, let window = Window.get(byId: id), window.parent is TilingContainer else { return nil }
+    return window
+}
+
+/// Window `id` while the tiler runs and floats it.
+@MainActor
+func floatingWindow(_ id: UInt32) -> Window? {
+    guard isTilerEnabled, let window = Window.get(byId: id), window.parent is FloatingWindowsContainer else { return nil }
     return window
 }
 

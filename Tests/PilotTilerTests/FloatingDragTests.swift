@@ -61,7 +61,7 @@ extension TilerTreeTests {
         /// Sven's report 2026-10-17 (a fast drag lagged the whole screen): each move of the held window still rebinds it,
         /// but asks for no complete refresh; the release's refresh lays it out once. Not held, a move refreshes as before.
         /// Its resizes too (Sven on combined-14, float-resize): each ran a light session, writing every tiled window, and
-        /// a complete refresh.
+        /// a complete refresh. Pilot's modifier right-drag resize too, with no left button down: its end refreshes once.
         @Test func aHeldWindowsMovesAndResizesAskForNoRefresh() async throws {
             defer { unitTestScreen.withLock { $0.leftMouseDown = false } }
             let (main, _, window) = try dragging()
@@ -84,10 +84,25 @@ extension TilerTreeTests {
             print("[float-resize] tiler: 100 resizes of a held floating window, \(completeRefreshesScheduled - before) complete refreshes asked for, \(tiled.frameWrites - writes) tiled frame writes")
             #expect(completeRefreshesScheduled == before, "a resize asked for a complete refresh")
             #expect(tiled.frameWrites == writes, "a resize laid the tiles out")
+            // Pilot's modifier right-drag resize: no left button, its writes' moves and resizes ask for nothing until its end
             unitTestScreen.withLock { $0.leftMouseDown = false }
+            isTilerEnabled = true
+            #expect(TilerDrag.resizeBegan(70))
+            for _ in 0..<100 {
+                windowResized(70, kAXResizedNotification as String)
+                windowMoved(70, kAXMovedNotification as String)
+                for _ in 0..<50 { await Task.yield() }
+            }
+            print("[float-resize] tiler: 100 modifier resizes of a floating window, \(completeRefreshesScheduled - before) complete refreshes asked for, \(tiled.frameWrites - writes) tiled frame writes")
+            #expect(completeRefreshesScheduled == before, "a modifier resize asked for a complete refresh")
+            #expect(tiled.frameWrites == writes, "a modifier resize laid the tiles out")
+            TilerDrag.resizeEnded()
+            isTilerEnabled = false // the refresh it asked for runs nothing here
+            #expect(completeRefreshesScheduled == before + 1, "its end refreshes once")
+            #expect(pilotResizedWindowId == nil)
             windowMoved(70, kAXMovedNotification as String)
             for _ in 0..<50 { await Task.yield() }
-            #expect(completeRefreshesScheduled == before + 1)
+            #expect(completeRefreshesScheduled == before + 2)
         }
 
         /// Its centre still on its own display: it stays on its workspace.

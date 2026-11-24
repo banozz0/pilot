@@ -362,7 +362,10 @@ final class MouseDragTap {
         primaryHeight = Screens.primaryHeight
         let tiled = tiler.isRunning ? UInt32(exactly: drag.windowID) : nil
         // The tiler's tree, read in-process: a tiled window's resize stays inside its reach, its move is the tiler's drag.
-        if drag.button == .right, let reach = tiled.flatMap(TilerDrag.reach) { tracker.tile(within: reach) }
+        if drag.button == .right, let tiled {
+            // A floating one's writes ask the tiler for nothing until the drag's end (TilerDrag.resizeEnded)
+            if let reach = TilerDrag.reach(tiled) { tracker.tile(within: reach) } else { _ = TilerDrag.resizeBegan(tiled) }
+        }
         if drag.button == .left { tilerHolds = tiled.map(TilerDrag.begin) ?? false }
         pump()
     }
@@ -457,6 +460,7 @@ final class MouseDragTap {
         }
         outline(nil)
         if tilerHolds { TilerDrag.end(at: releasePoint) }
+        TilerDrag.resizeEnded()
         tracker.end(); target = nil; pending = nil; counts = (0, 0, .now); generation += 1
         tilerHolds = false; releasePoint = nil
         followDrags()
