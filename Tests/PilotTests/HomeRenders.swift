@@ -100,8 +100,13 @@ struct HomeRenders {
 
     static let looks: [(name: String, theme: String)] = [("dark", "tokyo-night"), ("light", "porcelain")]
 
-    /// The settings the render's Jump back in lists, newest first.
-    static let recent = ["capture.afterCapture", "look.windowBorder"]
+    /// The settings the render's Jump back in lists, newest first: short labels and whole sentences (home-layout).
+    static let recent = ["capture.afterCapture", "look.windowBorder", "look.defocusPreset", "capture.historyCap", "look.windowBorderPreset",
+                         "capture.autoScroll"]
+
+    /// The window sizes Home is shot at besides the window's first (home-layout): a big tiled window, as Sven's on
+    /// build 3160, and the smallest the window goes.
+    static let sizes: [(name: String, size: NSSize)] = [("1700", NSSize(width: 1700, height: 1290)), ("min", AppWindowController.minSize)]
 
     /// The settings on the render's own engine, the stores in the moved home: Look, Captures and part 2 (Tiling's border
     /// among them), as the app's live schema registers them.
@@ -171,8 +176,68 @@ struct HomeRenders {
             try #require(model.ringed == "capture.afterCapture", "the ring went before the shot")
             let rep = try #require(snapshot(frame, scale: 2))
             try #require(rep.representation(using: .png, properties: [:])).write(to: dir.appendingPathComponent("\(name)-captures-ringed.png"))
+            for (suffix, size) in Self.sizes {
+                window.setContentSize(size)
+                try shot("\(name)-home-\(suffix)")
+                if suffix == "1700" { try shot("\(name)-home-searching-border-\(suffix)", query: "border") }
+            }
+            window.setContentSize(AppWindowController.size)
         }
         model.query = ""
+        try Self.firstVisit(engine: engine, sources: sources, look: look, to: dir)
+    }
+
+    /// How long Home takes to build, lay out and draw as a first visit does, alone in a host at the window's first size and
+    /// at 1700 by 1290, in Tokyo Night: whole, and a piece at a time as PageDeck.buildInView builds it (passes until its
+    /// 8 ms frame budget is spent, drawn, then the next frame), its first frame and the time until it is whole. The first
+    /// run warms up and is left out, the median of the next nine is written to `home/first-visit.txt` (home-layout). A
+    /// debug build's before-and-after measure, not the app's own milliseconds.
+    static func firstVisit(engine: Engine, sources: HomeSources, look: Look, to dir: URL) throws {
+        look.themeID = "tokyo-night"
+        /// One build: whole (no stage), or staged, its first frame, its frames and the time until whole.
+        func once(_ size: CGSize, staged: Bool) -> (first: Double, frames: Int, whole: Double) {
+            drawingQoS()
+            let stage = staged ? BuildStage() : nil
+            stage?.inView = true
+            let start = ContinuousClock.now
+            let host = NSHostingView(rootView: HomePage { _ in }.environment(engine).environment(\.homeSources, sources)
+                .environment(\.buildStage, stage)
+                .styled(.page(.home)).frame(width: size.width, height: size.height).pilotTheme(look: look))
+            host.frame = CGRect(origin: .zero, size: size)
+            let window = NSWindow(contentRect: host.frame, styleMask: [.borderless], backing: .buffered, defer: false)
+            window.isReleasedWhenClosed = false
+            window.contentView = host
+            var frames: [Double] = [], frameStart = start
+            repeat {
+                // PageDeck.step until the frame's budget is spent, at least once.
+                repeat {
+                    if let stage { stage.step += 1; stage.held = false; stage.tickets = 1 }
+                    host.layoutSubtreeIfNeeded()
+                    if let stage, stage.held, stage.tickets == 1, !stage.holders.isEmpty { stage.holders.removeLast() }
+                } while stage?.held == true && ContinuousClock.now - frameStart < PageDeck.frameBudget
+                host.display()
+                CATransaction.flush()
+                frames.append((ContinuousClock.now - frameStart) / .milliseconds(1))
+                frameStart = .now
+            } while stage?.held == true && frames.count < 60
+            let whole = (ContinuousClock.now - start) / .milliseconds(1)
+            window.close()
+            PanelTestSupport.pump(0.05)
+            return (frames[0], frames.count, whole)
+        }
+        func line(_ values: [Double]) -> String {
+            String(format: "median %.1f ms (", values.sorted()[values.count / 2]) + values.map { String(format: "%.1f", $0) }.joined(separator: " ") + ")"
+        }
+        var lines: [String] = []
+        for (name, size) in [("default", AppWindowController.size), ("1700", NSSize(width: 1700, height: 1290))] {
+            _ = once(size, staged: false)
+            let whole = (0..<9).map { _ in once(size, staged: false).whole }
+            let staged = (0..<9).map { _ in once(size, staged: true) }
+            lines.append("\(name) \(Int(size.width)) × \(Int(size.height)), whole: " + line(whole))
+            lines.append("\(name) \(Int(size.width)) × \(Int(size.height)), first frame: " + line(staged.map(\.first))
+                         + ", frames \(staged.map(\.frames).max() ?? 0), whole after " + line(staged.map(\.whole)))
+        }
+        try (lines + ["debug build"]).joined(separator: "\n").appending("\n").write(to: dir.appending(path: "first-visit.txt"), atomically: true, encoding: .utf8)
     }
 }
 }
