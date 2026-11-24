@@ -606,7 +606,7 @@ extension AppArea {
 /// `log stream --predicate 'subsystem == "dev.banozz.pilot" AND category == "window"'`.
 @MainActor
 enum PageSwitchTiming {
-    private static let log = Logger(subsystem: "dev.banozz.pilot", category: "window")
+    fileprivate static let log = Logger(subsystem: "dev.banozz.pilot", category: "window")
     private static let signposts = OSSignposter(subsystem: "dev.banozz.pilot", category: .pointsOfInterest)
     private static var start: ContinuousClock.Instant?
     private static var interval: OSSignpostIntervalState?
@@ -623,14 +623,13 @@ enum PageSwitchTiming {
         guard start == nil else { return }
         start = .now
         interval = signposts.beginInterval("page switch")
-        SwitchFrames.begin(on: window?.screen ?? NSScreen.main)
+        SwitchFrames.begin(on: deck?.window?.screen ?? NSScreen.main)
         arm()
     }
 
-    /// The window the deck is in, whose screen's frames a switch counts (SwitchFrames).
-    static weak var window: NSWindow?
-    /// Whether the deck is still building the shown part in view: the switch has not settled (SwitchFrames).
-    static var buildingInView: () -> Bool = { false }
+    /// The deck in the window: its screen's frames a switch counts, and whether it still builds the shown part in view
+    /// (SwitchFrames).
+    static weak var deck: PageDeck?
 
     /// PageDeck put part `to` in the window, built now (`first`) or kept from before; `from` is the part it replaced, nil
     /// as the window opens.
@@ -691,7 +690,6 @@ enum PageSwitchTiming {
 @MainActor
 final class SwitchFrames: NSObject {
     private(set) static var running: SwitchFrames?
-    private static let log = Logger(subsystem: "dev.banozz.pilot", category: "window")
     /// The longest a switch is watched, and how long it is calm before it counts as settled.
     static let most: CFTimeInterval = 0.5
     static let calm: CFTimeInterval = 0.1
@@ -706,8 +704,8 @@ final class SwitchFrames: NSObject {
     private var missedAfter = 0
     /// Each gap over one and a half refreshes: its length and when it began, after the pick.
     private var gaps: [(length: CFTimeInterval, at: CFTimeInterval)] = []
-    private var drawnAt: CFTimeInterval?
-    private var label: String?
+    /// The switch's "page switch" label and when it drew.
+    private var drawn: (label: String, at: CFTimeInterval)?
     private var calmSince: CFTimeInterval?
 
     private init(screen: NSScreen) {
@@ -732,8 +730,7 @@ final class SwitchFrames: NSObject {
 
     /// The switch drew: from now a miss counts as after drawn.
     func drawn(_ label: String) {
-        self.label = label
-        drawnAt = CACurrentMediaTime()
+        drawn = (label, CACurrentMediaTime())
     }
 
     /// Not a switch after all: nothing logged.
@@ -751,10 +748,10 @@ final class SwitchFrames: NSObject {
         if gap > refresh * 1.5 {
             let lost = max(Int((gap / refresh).rounded()) - 1, 1)
             missed += lost
-            if drawnAt.map({ now - gap >= $0 }) == true { missedAfter += lost }
+            if drawn.map({ now - gap >= $0.at }) == true { missedAfter += lost }
             gaps.append((gap, max(now - gap - start, 0)))
             calmSince = nil
-        } else if drawnAt != nil, !PageSwitchTiming.buildingInView() {
+        } else if drawn != nil, PageSwitchTiming.deck?.buildingInView != true {
             calmSince = calmSince ?? now
         } else {
             calmSince = nil
@@ -765,13 +762,13 @@ final class SwitchFrames: NSObject {
     private func finish() {
         defer { stop() }
         // Cut short before it drew: the next pick took over, no switch line to stand beside.
-        guard let label else { return }
+        guard let label = drawn?.label else { return }
         let ms = { (s: CFTimeInterval) in String(format: "%.1f", s * 1000) }
         let longest = gaps.max { $0.length < $1.length }
         let list = gaps.prefix(8).map { "\(ms($0.length))@\(Int($0.at * 1000))" }.joined(separator: " ")
         let line = "\(label), \(hz) Hz, \(frames) frames in \(Int((last - start) * 1000)) ms, \(missed) missed (\(missedAfter) after drawn), "
             + "longest gap \(ms(longest?.length ?? 0)) ms at \(Int((longest?.at ?? 0) * 1000)) ms" + (gaps.isEmpty ? "" : "; gaps \(list)")
-        Self.log.notice("page frames: \(line, privacy: .public)")
+        PageSwitchTiming.log.notice("page frames: \(line, privacy: .public)")
     }
 }
 

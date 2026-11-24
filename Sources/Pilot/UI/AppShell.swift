@@ -412,12 +412,14 @@ final class PageDeck: NSView {
         let stage = half.stage
         stage.inView = true
         // At least a pass a frame: the first has the part's frame and the page's top, whatever they cost.
+        var full = false
         repeat {
             step(stage, host)
-        } while stage.held && !filled(half, host) && ContinuousClock.now - start < Self.frameBudget && stage.step < Self.turnsMost
+            full = filled(half, host)
+        } while stage.held && !full && ContinuousClock.now - start < Self.frameBudget && stage.step < Self.turnsMost
         half.turns.append(ContinuousClock.now - start)
         guard stage.held && stage.step < Self.turnsMost else { return finish(key, half) }
-        if filled(half, host) {
+        if full {
             half.below = true
             quietAgain = true
             return armAhead()
@@ -426,8 +428,9 @@ final class PageDeck: NSView {
         // (page-frames: passes queued on the run loop ran back to back, the screen's frames waiting on them).
         passKey = key
         if passLink == nil, let window {
-            let link = window.screen != nil ? displayLink(target: self, selector: #selector(pass(_:)))
-                : (NSScreen.main ?? NSScreen.screens.first)?.displayLink(target: self, selector: #selector(pass(_:)))
+            let tick = #selector(pass(_:))
+            let link = window.screen != nil ? displayLink(target: self, selector: tick)
+                : (NSScreen.main ?? NSScreen.screens.first)?.displayLink(target: self, selector: tick)
             link?.add(to: .main, forMode: .common)
             passLink = link
         }
@@ -442,11 +445,16 @@ final class PageDeck: NSView {
         passKey = nil
         if let key, shown == key, let half = building[key], !half.below, let host = hosts[key] { buildInView(key, half, host) }
         // None next: the link holds the deck until it goes.
-        if passKey == nil {
-            passLink?.invalidate()
-            passLink = nil
-        }
+        if passKey == nil { stopPass() }
     }
+
+    private func stopPass() {
+        passLink?.invalidate()
+        passLink = nil
+    }
+
+    /// Whether the shown part is still built in view: its switch has not settled (SwitchFrames).
+    var buildingInView: Bool { shown.flatMap { building[$0] }.map { !$0.below } == true }
 
     /// One pass: the container holding children back built last adds one, and the part is laid out with it.
     private func step(_ stage: BuildStage, _ host: PageHost) {
@@ -458,9 +466,12 @@ final class PageDeck: NSView {
         if stage.held, stage.tickets == 1, !stage.holders.isEmpty { stage.holders.removeLast() }
     }
 
-    /// Whether `event` is a press on a scroller of `host`'s, which drags the page.
-    private func onScroller(_ event: NSEvent, _ host: PageHost?) -> Bool {
-        guard let host, event.window === window, let hit = host.hitTest(convert(event.locationInWindow, from: nil)) else { return false }
+    /// Whether `event` reaches below the fold of part `host`: a scroll, a key, or a press on one of its scrollers, which
+    /// drags the page.
+    private func passesFold(_ event: NSEvent, _ host: PageHost?) -> Bool {
+        if event.type == .scrollWheel || event.type == .keyDown { return true }
+        guard event.type == .leftMouseDown, let host, event.window === window,
+              let hit = host.hitTest(convert(event.locationInWindow, from: nil)) else { return false }
         return sequence(first: hit, next: \.superview).contains { $0 is NSScroller }
     }
 
@@ -527,14 +538,14 @@ final class PageDeck: NSView {
     private func armAhead() {
         aheadTimer?.invalidate()
         aheadTimer = nil
-        guard window != nil, quietHalf != nil || nextAhead != nil else { return stopAhead() }
+        let quiet = quietHalf
+        guard window != nil, quiet != nil || nextAhead != nil else { return stopAhead() }
         if aheadInput == nil {
             aheadInput = NSEvent.addLocalMonitorForEvents(matching: Self.input) { [weak self] event in
                 MainActor.assumeIsolated {
                     guard let self else { return }
                     // The page shown is cut at the fold: whole before the scroll or the key reaches it.
-                    if let shown = self.shown, let half = self.building[shown], half.below, event.type == .scrollWheel || event.type == .keyDown
-                        || event.type == .leftMouseDown && self.onScroller(event, self.hosts[shown]) {
+                    if let shown = self.shown, let half = self.building[shown], half.below, self.passesFold(event, self.hosts[shown]) {
                         self.finish(shown, half)
                         self.hosts[shown]?.layoutSubtreeIfNeeded()
                     }
@@ -545,7 +556,7 @@ final class PageDeck: NSView {
             }
         }
         // A part half built goes on at the next turn the run loop has free; a new one after the window was quiet.
-        let timer = Timer(timeInterval: quietHalf == nil || quietAgain ? Self.quiet : 0.001, repeats: false) { [weak self] _ in
+        let timer = Timer(timeInterval: quiet == nil || quietAgain ? Self.quiet : 0.001, repeats: false) { [weak self] _ in
             MainActor.assumeIsolated { self?.buildNextAhead() }
         }
         quietAgain = false
@@ -562,9 +573,10 @@ final class PageDeck: NSView {
 
     private func buildNextAhead() {
         aheadTimer = nil
-        guard let window, quietHalf != nil || nextAhead != nil else { return stopAhead() }
+        let quiet = quietHalf
+        guard let window, quiet != nil || nextAhead != nil else { return stopAhead() }
         // The page shown, cut at the fold, goes on behind another window too: it scrolls there.
-        guard showing() || quietHalf != nil && quietHalf == shown else { stopAhead(); return waitToShow() }
+        guard showing() || quiet != nil && quiet == shown else { stopAhead(); return waitToShow() }
         // A press already waiting goes first.
         if NSApp.nextEvent(matching: Self.input, until: .distantPast, inMode: .default, dequeue: false) != nil {
             quietAgain = true
@@ -572,8 +584,8 @@ final class PageDeck: NSView {
         }
         let start = ContinuousClock.now
         let key: String
-        if let half = quietHalf {
-            key = half
+        if let quiet {
+            key = quiet
         } else {
             guard let next = nextAhead else { return stopAhead() }
             let stage = BuildStage()
@@ -636,12 +648,10 @@ final class PageDeck: NSView {
         super.viewDidMoveToWindow()
         if window == nil {
             stopAhead()
-            passLink?.invalidate()
-            passLink = nil
+            stopPass()
         } else {
             // What a switch's frames line reads (SwitchFrames): this window's screen, and whether the page shown is settled.
-            PageSwitchTiming.window = window
-            PageSwitchTiming.buildingInView = { [weak self] in self?.shown.flatMap { self?.building[$0] }.map { !$0.below } == true }
+            PageSwitchTiming.deck = self
             armAhead()
         }
     }
