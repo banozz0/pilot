@@ -1470,16 +1470,11 @@ final class ThemeCoordinator {
         if !plan.wallpapers.isEmpty { short.append("wallpaper") }
         var roots: [String] = []
         for change in plan.mutations where !roots.contains(change.target.root) { roots.append(change.target.root) }
-        let vaults = Set(plan.obsidian.map(\.root))
         for root in roots {
             let files = plan.mutations.filter { $0.target.root == root }
-            let name: String
-            if root == binding.root { name = "Ghostty" }  // Apply and Restore reload it themselves; the result says if they couldn't.
-            else if root == plan.zed?.root { name = "Zed" }
-            else if vaults.contains(root) { name = "Obsidian vault " + vaultLabel(root, among: plan.obsidian.map(\.root)); if !next.contains("Reload Obsidian to see it.") { next.append("Reload Obsidian to see it.") } }
-            else if let app = plan.apps.first(where: { $0.root == root }) { name = app.kind.name; if let line = app.kind.followUp { next.append(line) } }
-            else if let id = files.first?.bindingID { name = "Custom app " + id }
-            else { name = "Ghostex terminal" }
+            let name = appName(root, in: plan)
+            if plan.obsidian.contains(where: { $0.root == root }) { if !next.contains("Reload Obsidian to see it.") { next.append("Reload Obsidian to see it.") } }
+            else if let line = plan.apps.first(where: { $0.root == root })?.kind.followUp { next.append(line) }
             var seen: [String] = []
             for file in files where !seen.contains(file.target.resolved) { seen.append(file.target.resolved) }
             entries.append(.init(name: name, paths: seen, linked: files.contains { $0.target.linkedOut }))
@@ -1496,6 +1491,15 @@ final class ThemeCoordinator {
         let skipped = plan.warnings.filter { $0.contains(" skipped") }
         return .init(entries: entries, skipped: skipped, details: plan.warnings.filter { !skipped.contains($0) }, short: short, next: next,
                      kept: keptWords(plan, done: false, appearance: appearance))
+    }
+    /// The app a plan's written folder belongs to, as Allow, the result and the `theme switch:` line name it.
+    private func appName(_ root: String, in plan: ThemePlan) -> String {
+        if root == binding.root { return "Ghostty" }  // Apply and Restore reload it themselves; the result says if they couldn't.
+        if root == plan.zed?.root { return "Zed" }
+        if plan.obsidian.contains(where: { $0.root == root }) { return "Obsidian vault " + vaultLabel(root, among: plan.obsidian.map(\.root)) }
+        if let app = plan.apps.first(where: { $0.root == root }) { return app.kind.name }
+        if let id = plan.mutations.first(where: { $0.target.root == root })?.bindingID { return "Custom app " + id }
+        return "Ghostex terminal"
     }
     /// What a person reads when a file Pilot owns is not among the plan's destinations (its app's binding changed). The
     /// only file a plan refuses: one that moved or was changed outside Pilot is written like any other.
@@ -1857,18 +1861,22 @@ final class ThemeCoordinator {
     /// one pressing; the result names what changed, and Restore undoes it. The pilot CLI, a link and an agent go through
     /// plan, then apply, which always asks.
     func press(_ id: String?) async throws(ControlError) -> JSONValue {
+        let clock = ThemeSwitchClock()
         // Pilot's own window first, from the pack's manifest alone, before the plan reads anything.
         let shown = id.flatMap { try? store.pack($0) }
         if let shown {
             showPressed(shown)
+            clock.mark("Pilot tried on", .step)
             try? await Task.sleep(for: Self.pressedFrame)
         }
         let planned: ThemePlan
         do { planned = try await plan(id) } catch {
             if shown != nil { showPressed(nil) }
+            looklog.notice("\(clock.line(shown?.title ?? id ?? "Restore", status: "not planned: \(error)"), privacy: .public)")
             throw ControlError(.badValue, String(describing: error))
         }
-        return try await apply(planned.id, peer: nil, pressed: true, shown: shown != nil)
+        clock.mark("planned", .step)
+        return try await apply(planned.id, peer: nil, pressed: true, shown: shown != nil, clock: clock)
     }
     /// The sandbox's stand-in for Look's button: the same press, only on a fixture host.
     func fixturePress(_ id: String?) async throws(ControlError) -> JSONValue {
@@ -1876,8 +1884,9 @@ final class ThemeCoordinator {
         return try await press(id)
     }
 
-    /// `shown`: a press already shows the pack in Pilot's own window.
-    func apply(_ planID: String, peer: ControlPeer?, pressed: Bool = false, shown: Bool = false) async throws(ControlError) -> JSONValue {
+    /// `shown`: a press already shows the pack in Pilot's own window. `clock`: a press's, started at the pick.
+    func apply(_ planID: String, peer: ControlPeer?, pressed: Bool = false, shown: Bool = false, clock: ThemeSwitchClock? = nil) async throws(ControlError) -> JSONValue {
+        let clock = clock ?? ThemeSwitchClock()
         // The theme a press shows in Pilot's own window comes off as the apply ends, however it ends: an applied pack
         // looks the same, a refused or failed one goes.
         var tried = shown
@@ -1891,6 +1900,8 @@ final class ThemeCoordinator {
             throw ControlError(.badValue, "unknown or spent plan (a plan applies once): plan again with pilot theme plan apply <theme> --summary, or plan restore --summary")
         }
         busy = true; defer { busy = false; removeMadeFolders() }  // Also after a throw: an empty folder from a failed Apply goes.
+        var outcome = "not applied"
+        defer { looklog.notice("\(clock.line(plan.selection?.title ?? "Restore", status: outcome), privacy: .public)") }
         // Pilot's own window takes the theme at the press, before any check or write: one frame for it to draw, then the
         // rest follows.
         if pressed, !tried, let pack = plan.selection {
@@ -1907,15 +1918,20 @@ final class ThemeCoordinator {
         let committed = try await gate.allow(pressed ? nil : ask, peer: peer) { () throws(ControlError) in
             do {
                 try await fresh(plan, contextRevision: revision, appearance: appearance)
+                clock.mark("checked", .step)
                 let ready = try self.makingFolders(plan)
                 try self.adoptDetected(ready)
-                return try await self.commit(ready, ownership: ownership, appearance: appearance)
+                return try await self.commit(ready, ownership: ownership, appearance: appearance, clock: clock)
             } catch { throw ControlError(.badValue, String(describing: error)) }
         }
-        guard case .object(var result) = committed, ["applied", "restored"].contains(result["status"]?.string ?? "") else { return committed }
+        guard case .object(var result) = committed else { return committed }
+        outcome = result["status"]?.string ?? outcome
+        guard ["applied", "restored"].contains(outcome) else { return committed }
         if plan.mutations.contains(where: { $0.target.root == binding.root }) {
             // Its menu item, never its key (ADR 0001). Colours reload in open windows (Ghostty's config docs).
-            switch await effects.ghostty() {
+            let reloaded = await effects.ghostty()
+            clock.mark("Ghostty reload", .reload)
+            switch reloaded {
             case true?: result["ghostty"] = .string("reloaded")
             case nil: result["ghostty"] = .string("not running; it reads the theme when it opens")
             case false?:
@@ -1925,6 +1941,7 @@ final class ThemeCoordinator {
         }
         if plan.apps.contains(where: { app in app.kind == .btop && plan.mutations.contains { $0.target.root == app.root } }) {
             let count = await effects.btop()
+            clock.mark("btop reload", .reload)
             result["btop"] = .string(count > 0 ? "reloaded \(count) running" : "not running; it reads the theme when it starts")
         }
         // Turning the theme on or off is a settings change an open Vesktop never reads; a new colour in its theme file it
@@ -1965,6 +1982,7 @@ final class ThemeCoordinator {
                     } catch { throw ControlError(.badValue, String(describing: error)) }
                 }
                 outcomes.append(.object(["binding": .string(intent.binding.id), "outcome": .string(outcome)]))
+                clock.mark(intent.binding.id + " reload", .reload)
             } catch {
                 outcomes.append(.object(["binding": .string(intent.binding.id), "outcome": .string((error as? ControlError)?.code == .denied ? "declined, so it did not run. Reload the app yourself to see it" : "failed: \(error). The theme is in place; reload the app yourself")]))
             }
@@ -1982,7 +2000,7 @@ final class ThemeCoordinator {
 
     /// The effects that wait on another app (macOS's mode, Ghostex) and the file writes are awaited off the main thread;
     /// every check, the wallpaper and Pilot's own look run on it.
-    private func commit(_ plan: ThemePlan, ownership: ThemeAppearanceOwnership?, appearance: ThemeAppearanceMutation?) async throws -> JSONValue {
+    private func commit(_ plan: ThemePlan, ownership: ThemeAppearanceOwnership?, appearance: ThemeAppearanceMutation?, clock: ThemeSwitchClock) async throws -> JSONValue {
         var (oldFile, old) = try ledger()
         if plan.mutations.isEmpty && plan.wallpapers.isEmpty && plan.keptWallpapers.isEmpty && plan.heldWallpapers.isEmpty && appearance == nil && old.claims.isEmpty && plan.ghostex.isEmpty && plan.ghostexClaims == (old.ghostexSettings ?? []) { return .object(["status": .string("unchanged"), "files": .string("unchanged"), "refresh": .string("not needed"), "warning": .string(plan.warnings.joined(separator: "; "))]) }
         // Files that moved or were changed outside Pilot, and wallpaper claims on a screen with a new UUID: their claims as the
@@ -2022,6 +2040,7 @@ final class ThemeCoordinator {
         let pending = try state("pending"), journalBytes = try ThemeDigest.encoded(journal)
         try fault("journal")
         _ = try await Self.offMain { try ThemeFiles.write(journalBytes, over: pending) }
+        clock.mark("journal", .step)
         var recovered: JSONValue?
         var warning: String?
         do {
@@ -2029,11 +2048,13 @@ final class ThemeCoordinator {
                 try fault("write:\(i)")
                 let (bytes, target, leaf) = (change.replacement, change.target, linked(change.target.root, change.target.path))
                 _ = try await Self.offMain { try ThemeFiles.write(bytes, over: target, linkedLeaf: leaf) }
+                clock.mark(appName(target.root, in: plan))
                 try fault("after-write:\(i)")
             }
             for (index, change) in plan.wallpapers.enumerated() {
                 try fault("wallpaper:\(index)")
                 try writeWallpaper(change)
+                clock.mark("wallpaper")
                 try fault("after-wallpaper:\(index)")
             }
             if let appearance {
@@ -2042,11 +2063,13 @@ final class ThemeCoordinator {
                 // parts with the old mode, the one in-between state recovery accepts (review 3, blocker 1).
                 guard try native?.read() == appearance.before else { throw ThemeFailure("later personal appearance edit") }
                 try native!.write(appearance.after)
+                clock.mark("Pilot look")
                 var parts = appearance.after; parts.dark = appearance.before.dark
                 guard try native?.read() == parts else { throw ThemeFailure("native appearance not verified") }
                 try fault("after-native")
                 if appearance.mode == true, let dark = appearance.after.dark, appearance.before.dark != dark, native!.mode != nil {
                     try await switchMode(dark)
+                    clock.mark("macOS mode")
                     try fault("after-mode")
                 }
                 // After the mode wait only the owned parts count: an edit to a part the theme leaves alone is the person's.
@@ -2055,6 +2078,7 @@ final class ThemeCoordinator {
             for (index, change) in plan.ghostex.enumerated() {
                 try fault("ghostex:\(index)")
                 try await ghostexColours!.write(change.key, change.after)
+                clock.mark("Ghostex")
                 try fault("after-ghostex:\(index)")
             }
             if !plan.ghostex.isEmpty {
@@ -2064,6 +2088,7 @@ final class ThemeCoordinator {
             try fault("ledger")
             let ledgerFile = oldFile
             _ = try await Self.offMain { try ThemeFiles.write(nextBytes, over: ledgerFile) }
+            clock.mark("ledger", .step)
             try fault("after-ledger")
             try fault("cleanup")
             let written = try state("pending")
@@ -2631,5 +2656,38 @@ struct ThemeFixture: Decodable {
         defer { try? FileManager.default.removeItem(at: hold) }
         let start = Date()
         while FileManager.default.fileExists(atPath: hold.path), Date().timeIntervalSince(start) < 600 { try await Task.sleep(for: .milliseconds(100)) }
+    }
+}
+
+/// One theme switch timed from the pick (Sven on combined-14, build 3188: a switch wasn't instant and the apps changed at
+/// different moments), for the one `theme switch:` line each logs: every target written and every reload sent.
+@MainActor final class ThemeSwitchClock {
+    enum Kind { case step, write, reload }
+    private let start = ContinuousClock.now
+    private var marks: [(name: String, at: Duration, kind: Kind)] = []
+    /// Past this the line names each part's time from the pick.
+    static let slow = Duration.milliseconds(250)
+
+    func mark(_ name: String, _ kind: Kind = .write) { marks.append((name, .now - start, kind)) }
+
+    /// "theme switch: <name>, written N targets in X ms, reloads sent in Y ms", and each part's time when it was slow.
+    func line(_ name: String, status: String) -> String {
+        func ms(_ time: Duration) -> Int { Int((time / .milliseconds(1)).rounded()) }
+        let writes = marks.filter { $0.kind == .write }, reloads = marks.filter { $0.kind == .reload }
+        var line = "theme switch: \(name), " + (["applied", "restored"].contains(status) ? "" : status + ", ")
+            + "written \(writes.count) targets in \(ms(writes.map(\.at).max() ?? .zero)) ms, "
+            + (reloads.isEmpty ? "no reloads to send" : "reloads sent in \(ms(reloads.map(\.at).max()!)) ms")
+        guard (marks.map(\.at).max() ?? .zero) > Self.slow else { return line }
+        // Each part once, at its last mark, with how many it covers (Ghostex's settings, an app's files).
+        var order: [String] = [], latest: [String: (at: Duration, count: Int)] = [:]
+        for mark in marks {
+            if latest[mark.name] == nil { order.append(mark.name) }
+            latest[mark.name] = (mark.at, (latest[mark.name]?.count ?? 0) + 1)
+        }
+        line += "; " + order.sorted { latest[$0]!.at < latest[$1]!.at }.map { name in
+            let part = latest[name]!
+            return "\(name) \(ms(part.at))" + (part.count > 1 ? " (\(part.count))" : "")
+        }.joined(separator: ", ")
+        return line
     }
 }
