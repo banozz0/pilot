@@ -557,6 +557,8 @@ struct InstrumentToolbar: View {
             if !tabs.isEmpty { self.tabs(page).padding(.leading, 8) }
             Spacer(minLength: 0)
         }
+        // The pages' measure, so the title starts over the page's blocks in a big window (wide-pages).
+        .pageMeasure(side: style.density.page)
     }
 
     /// A merged page's parts as a segmented control on a sunk track, the picked one raised, with ⌘⇧]'s hint beside it

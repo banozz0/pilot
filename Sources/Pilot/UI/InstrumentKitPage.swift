@@ -26,15 +26,21 @@ struct InstrumentPage<Content: View>: View {
                         Text(intro).styleText(\.body).foregroundStyle(style.color(\.text2)).fixedSize(horizontal: false, vertical: true)
                     }
                 }
-                // A block a turn while the part is built ahead (Staged).
+                // A block a turn while the part is built ahead (Staged); PageFlow told how many there will be, so the
+                // blocks drawn first already stand where they will once the rest arrive.
                 if flow {
-                    PageFlow(column: KitPage<EmptyView>.column(.instrument), gap: style.density.padding, spacing: spacing) { Staged { content } }
+                    Group(subviews: content) { blocks in
+                        PageFlow(column: KitPage<EmptyView>.column(.instrument), gap: style.density.padding, spacing: spacing, total: blocks.count) {
+                            Staged { ForEach(blocks) { $0 } }
+                        }
+                    }
                 } else {
                     Staged { content }
                 }
             }
             .padding(.horizontal, style.density.page).padding(.top, style.density.padding).padding(.bottom, style.density.page)
-            .frame(maxWidth: .infinity, alignment: .leading)
+            // Home's measure in a big window, centred (wide-pages).
+            .pageMeasure(side: style.density.page)
         }
         // What a part leaves to the page (a row's title, a field's words, a system control's tint) in the style, not the
         // theme pilotTheme() put at the window's root; the tint quiet, since the signal colour means Hyper.
@@ -100,11 +106,135 @@ struct InstrumentBlock<Trailing: View, Content: View>: View {
                 Text(note).styleText(\.caption).foregroundStyle(style.color(\.text3)).fixedSize(horizontal: false, vertical: true).padding(.bottom, 10)
             }
             // A row a turn while the part is built ahead (Staged); in view the block comes whole, so it never grows under
-            // what is drawn beside and below it.
-            Staged(inView: false) { content }
+            // what is drawn beside and below it. Rows stand in columns once the block is wide (wide-pages).
+            BlockRowColumns { Staged(inView: false) { content } }
         }
         .padding(.horizontal, style.density.padding).padding(.vertical, InstrumentKitPage.blockPadding)
         .frame(maxHeight: fill ? .infinity : nil, alignment: .top)
+    }
+}
+
+/// A block's children: a block of rows (every child a BlockRow, two or more) stands them in columns once it is wide
+/// enough for two rows side by side, each as wide as a page column's row (wide-pages: Update beside Clean, Open with's
+/// ten Apps for keys in three columns in a big window); the columns draw the rules, none over a column's top row. Any
+/// other block's children stay as they are.
+struct BlockRowColumns<Content: View>: View {
+    @Environment(\.style) private var style
+    @Environment(\.blockRowColumns) private var on
+    @ViewBuilder var content: Content
+
+    var body: some View {
+        Group(subviews: content) { children in
+            if on, let count = Self.rows(children) {
+                let firsts = children.map { $0.containerValues.blockRow == .first }
+                RowColumns(least: KitPage<EmptyView>.column(.instrument) - style.density.padding * 2, gap: style.density.padding * 2, firsts: firsts) {
+                    ForEach(children) { $0.environment(\.blockRowRule, false) }
+                    ForEach(0..<count, id: \.self) { _ in InstrumentRule() }
+                }
+            } else {
+                ForEach(children) { $0 }
+            }
+        }
+    }
+
+    /// How many rows a block holds when every child is one and there are two or more; nil for any other block.
+    static func rows(_ children: SubviewsCollection) -> Int? {
+        children.count >= 2 && children.allSatisfy { $0.containerValues.blockRow != nil } ? children.count : nil
+    }
+}
+
+/// BlockRowColumns' rows in as many columns as fit at `least` wide and they fill, top to bottom then the next column,
+/// split so the tallest column is as short as it can be; then a rule over each row but a column's top one (and the
+/// first row, as BlockRow's `first`). Its subviews are the rows, then one rule each.
+struct RowColumns: Layout {
+    var least: CGFloat
+    var gap: CGFloat
+    /// Each row's `first`: no rule over it.
+    var firsts: [Bool]
+
+    /// The rows' frames at the width they were last laid at: a block is asked its size, then placed, at one width, and
+    /// each row is measured once for both (a first visit's cost, page-first).
+    struct Cache { var width: CGFloat = -1; var frames: [CGRect] = [] }
+    func makeCache(subviews: Subviews) -> Cache { Cache() }
+    func updateCache(_ cache: inout Cache, subviews: Subviews) { cache = Cache() }
+
+    private func frames(_ width: CGFloat, _ subviews: Subviews, _ cache: inout Cache) -> [CGRect] {
+        if cache.width != width { cache = Cache(width: width, frames: arrange(width, subviews)) }
+        return cache.frames
+    }
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout Cache) -> CGSize {
+        let width = proposal.width.flatMap { $0.isFinite ? $0 : nil } ?? least
+        let frames = frames(width, subviews, &cache)
+        return CGSize(width: width, height: frames.map(\.maxY).max() ?? 0)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout Cache) {
+        let rows = firsts.count
+        let frames = frames(bounds.width, subviews, &cache)
+        for (i, frame) in frames.enumerated() {
+            subviews[i].place(at: CGPoint(x: bounds.minX + frame.minX, y: bounds.minY + frame.minY), proposal: ProposedViewSize(frame.size))
+        }
+        // The rules: over a row unless it is first or tops a column.
+        for i in 0..<rows where rows + i < subviews.count {
+            let frame = frames[i]
+            let tops = frame.minY == 0
+            let shown = !firsts[i] && !(tops && frame.minX > 0)
+            subviews[rows + i].place(at: CGPoint(x: bounds.minX + frame.minX, y: bounds.minY + frame.minY),
+                                     proposal: ProposedViewSize(width: shown ? frame.width : 0, height: 1))
+        }
+    }
+
+    /// The rows' frames: their columns' count from the width, then the split.
+    private func arrange(_ width: CGFloat, _ subviews: Subviews) -> [CGRect] {
+        let rows = min(firsts.count, subviews.count)
+        guard rows > 0 else { return [] }
+        let columns = max(1, min(rows, Int((width + gap) / (least + gap))))
+        let side = columns == 1 ? width : (width - gap * CGFloat(columns - 1)) / CGFloat(columns)
+        let heights = (0..<rows).map { subviews[$0].sizeThatFits(ProposedViewSize(width: side, height: nil)).height }
+        let starts = Self.split(heights, columns: columns)
+        var frames: [CGRect] = []
+        for (c, start) in starts.enumerated() {
+            let end = c + 1 < starts.count ? starts[c + 1] : rows
+            var y: CGFloat = 0
+            for i in start..<end {
+                frames.append(CGRect(x: CGFloat(c) * (side + gap), y: y, width: side, height: heights[i]))
+                y += heights[i]
+            }
+        }
+        return frames
+    }
+
+    /// Where each column starts: the rows in order, cut into at most `columns` runs whose tallest is the shortest it can
+    /// be (the least height every run fits under, found by halving), each run then ending nearest its even share of
+    /// what is left, so ten like rows stand 4, 3, 3 rather than 4, 4, 2.
+    static func split(_ heights: [CGFloat], columns: Int) -> [Int] {
+        func cuts(under most: CGFloat, from start: Int = 0) -> [Int] {
+            var starts = [start], sum: CGFloat = 0
+            for i in start..<heights.count {
+                if sum + heights[i] > most && sum > 0 { starts.append(i); sum = 0 }
+                sum += heights[i]
+            }
+            return starts
+        }
+        var low = heights.max() ?? 0, high = heights.reduce(0, +)
+        for _ in 0..<24 where high - low > 0.5 {
+            let mid = (low + high) / 2
+            if cuts(under: mid).count <= columns { high = mid } else { low = mid }
+        }
+        var starts = [0], i = 0
+        for c in 0..<max(0, columns - 1) {
+            let rest = heights[i...].reduce(0, +), share = rest / CGFloat(columns - c)
+            var sum: CGFloat = 0
+            while i < heights.count, sum + heights[i] <= high,
+                  sum == 0 || abs(sum + heights[i] - share) <= abs(sum - share) || cuts(under: high, from: i).count > columns - c - 1 {
+                sum += heights[i]
+                i += 1
+            }
+            guard i < heights.count else { break }
+            starts.append(i)
+        }
+        return starts
     }
 }
 
