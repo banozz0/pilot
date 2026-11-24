@@ -4,8 +4,9 @@ import SwiftUI
 
 /// Voice › Dictation (Q144; Q452: Pilot's own alone): since pilot-ui-redesign T18 (S1 B, shot 1b) one row per simple
 /// feature: the two binds and the dictation key, the speech model in use, Copy and Pause as one switch each, and the
-/// microphone grant. Every speech model (SpeechModelsBlock) and what shows while you speak (DictationShowsBlock) are on
-/// Voice's More. Each setting's row is tagged with its `pilot` key for the search's landing ring (T6).
+/// microphone grant. Every speech model (SpeechModelsBlock) is on Voice's More; what shows while you speak
+/// (DictationShowsBlock) sits under this block on the front (Sven, 2026-11-23). Each setting's row is tagged with its
+/// `pilot` key for the search's landing ring (T6).
 struct DictationBlock: View {
     @Environment(Engine.self) private var engine: Engine?
     var dictation: PilotDictation = .shared
@@ -34,8 +35,7 @@ struct DictationBlock: View {
         MicrophoneRow(microphone: microphone)
         BlockRow {
             FinePrint(text: "Pilot records while you dictate, \(models.active?.choice.name ?? "the speech model") writes it down on this Mac "
-                      + "and Pilot pastes it where you type. Nothing leaves the Mac. The other speech models and what shows while "
-                      + "you speak are on More.").frame(maxWidth: .infinity, alignment: .leading)
+                      + "and Pilot pastes it where you type. Nothing leaves the Mac. The other speech models are on More.").frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 }
@@ -102,7 +102,7 @@ struct DictationShowsBlock: View {
     }
 }
 
-/// Voice's preview on More (simplify-pages T27, the prototype's pill): a screen in small (MiniDesktop) with a take where
+/// Voice's Dictation on screen preview (simplify-pages T27, the prototype's pill): a screen in small (MiniDesktop) with a take where
 /// the take's own Setup puts it: the floating pill at the foot, a slot in the top bar at Position, or both (the pill alone
 /// while the top bar is off, as a take falls back), the words beside a smaller waveform at Words, in the Waveform colour;
 /// the pill's own parts and spacing (DictationCircle, DictationWave, DictationPill's), so it looks as it will.
@@ -155,7 +155,7 @@ struct DictationPreview: View {
     }
 }
 
-/// Pilot's own dictation on More: what shows while Sven speaks and where, and the waveform's colour.
+/// Pilot's own dictation on Voice's front: what shows while Sven speaks and where, and the waveform's colour.
 private struct PilotDictationRows: View {
     @Bindable var pilot: PilotDictation
     /// Pilot's top bar is on: off, Top bar falls back to the pill and the row says so.
