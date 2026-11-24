@@ -518,7 +518,7 @@ final class CursorOverlays: NSObject {
     }
 
     private func event(_ event: NSEvent) {
-        let now = CACurrentMediaTime(), at = Self.location(event)
+        let now = CACurrentMediaTime(), at = Self.location(event, on: state.screens)
         switch event.type {
         case .leftMouseDown, .otherMouseDown: state.click(at: at, right: false, at: now)
         case .rightMouseDown: state.click(at: at, right: true, at: now)
@@ -538,12 +538,18 @@ final class CursorOverlays: NSObject {
 
     /// The event's own place in global points, from its CG location (top-left origin) flipped against the zero-origin
     /// screen: a local event's window point, converted through its window's frame at handling time, lands wherever that
-    /// window has moved to since (T45).
-    static func location(_ event: NSEvent) -> CGPoint {
-        guard let cg = event.cgEvent?.location, let zero = NSScreen.screens.first(where: { $0.frame.origin == .zero }) else {
-            return event.window.map { $0.convertPoint(toScreen: event.locationInWindow) } ?? event.locationInWindow
+    /// window has moved to since (T45). Only the mouse's own events are the pointer: one a process posted or built (a
+    /// source pid) is where its poster said, an NSEvent built on another app's window carries that window's point as a
+    /// screen point, and a NaN or off-screen place draws a whole-screen layer; those, and one with no CG event, take the
+    /// pointer's place now (cursor-jump). `screens` are the overlays' frames in global points.
+    static func location(_ event: NSEvent, on screens: [CGRect]) -> CGPoint {
+        let cg = event.cgEvent, pid = cg?.getIntegerValueField(.eventSourceUnixProcessID) ?? -1
+        if let cg, pid == 0, let zero = screens.first(where: { $0.origin == .zero }) {
+            let p = CGPoint(x: cg.location.x, y: zero.maxY - cg.location.y)
+            if screens.contains(where: { NSPointInRect(p, $0.insetBy(dx: -1, dy: -1)) }) { return p }
         }
-        return CGPoint(x: cg.x, y: zero.frame.maxY - cg.y)
+        cursorlog.debug("effects: event \(event.type.rawValue) from pid \(pid) at \(cg.map { "\($0.location)" } ?? "no CG event") drawn at the pointer")
+        return NSEvent.mouseLocation
     }
 
     /// One one-shot timer for the Ring's 3 s hide, re-armed only when it fires early: moves never reschedule it.
