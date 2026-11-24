@@ -13,7 +13,7 @@ struct MenuRootSettingsTests {
     static func defaults() -> UserDefaults { UserDefaults(suiteName: testSuite())! }
 
     @Test("Order and hidden rows are kept; a stored unknown id is ignored, not a crash; Reset is today's root")
-    func kept() {
+    func kept() throws {
         let store = Self.defaults()
         store.set(["reports-from-the-future", "config", "apps"], forKey: "menu.rootOrder")
         store.set(["reports-from-the-future"], forKey: "menu.rootHidden")
@@ -26,6 +26,16 @@ struct MenuRootSettingsTests {
         #expect(again.root.shown() == [.clean, .apps, .trigger, .install, .remove, .update, .extensions, .about, .system])
         again.reset()
         #expect(MenuRootSettings(defaults: store).root.isDefault())
+
+        // Bookmarks' place goes when its switch does (spec launcher-best T9): moved first, off, on again, it stands last.
+        let browsers = BrowserSettings(defaults: Self.defaults()), marks = try #require(MenuRoot.extraRows.first { $0.id == "bookmarks" })
+        let mine = MenuRootSettings(defaults: store, browsers: browsers)
+        mine.root.move(.extra(marks), to: 0)
+        #expect(mine.root.shownRows().first == .extra(marks) && store.stringArray(forKey: "menu.rootOrder")?.first == "extra:bookmarks")
+        browsers.bookmarks = false
+        #expect(store.stringArray(forKey: "menu.rootOrder")?.contains("extra:bookmarks") == false)
+        browsers.bookmarks = true
+        #expect(mine.root.shownRows().last == .extra(marks))
     }
 
     @Test("The Menu block lists every root row with its switch, and Reset once changed")

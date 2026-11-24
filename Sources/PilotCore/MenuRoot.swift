@@ -41,7 +41,13 @@ public struct MenuRoot: Equatable, Sendable {
         Extra(id: "dictation", title: "Dictation", symbol: "mic", target: .action("dictation.toggle")),
         Extra(id: "aiChat", title: "AI chat", symbol: "bubble.left.and.text.bubble.right", target: .action("ai.chat")),
         Extra(id: "activity", title: "Activity", symbol: "gauge.with.dots.needle.67percent", target: .branch(.activity)),
+        Extra(id: "bookmarks", title: "Bookmarks", symbol: "bookmark", target: .branch(.bookmarks)),
+        Extra(id: "history", title: "History", symbol: "clock.arrow.circlepath", target: .branch(.history)),
     ]
+
+    /// The browsers' two rows (spec launcher-best T9, Sven on build 3160), on while Launcher › More rows' browser switches
+    /// are: those switches own them (MenuRootSettings), so they have no `menu.extra.<id>` of their own.
+    public static let browserExtras: Set<String> = ["bookmarks", "history"]
 
     /// One row of the root as Sven arranges it: a branch, or an extra switched on.
     public enum Row: Equatable, Sendable {

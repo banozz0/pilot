@@ -8,29 +8,55 @@ import PilotCore
 /// Build 76's pins is never read.
 /// Its own store, as FileSearchSettings is, so pages that render without an engine read it; the menu reads it as it
 /// opens, and the Ring menu's Pilot ring reads `root.shownExtras()`.
+/// The Bookmarks and History rows (MenuRoot.browserExtras, spec launcher-best T9) are on while BrowserSettings' switches
+/// are, their one owner: `root` reads them from there, a switch on Your menu writes them there, and only their places
+/// are kept here, forgotten when a switch goes off.
 @Observable @MainActor
 final class MenuRootSettings {
-    static let shared = MenuRootSettings()
+    static let shared = MenuRootSettings(browsers: .shared)
 
     var root: MenuRoot {
-        didSet {
-            defaults.set(root.order, forKey: Self.orderKey)
-            defaults.set(root.hidden.sorted(), forKey: Self.hiddenKey)
-            defaults.set(root.extras.sorted(), forKey: Self.extrasKey)
+        get {
+            var root = saved
+            if let browsers {
+                for (id, on) in [("bookmarks", browsers.bookmarks), ("history", browsers.history)] where on { root.extras.insert(id) }
+            }
+            return root
+        }
+        set {
+            if let browsers {
+                let bookmarks = newValue.extras.contains("bookmarks"), history = newValue.extras.contains("history")
+                if browsers.bookmarks != bookmarks { browsers.bookmarks = bookmarks }
+                if browsers.history != history { browsers.history = history }
+            }
+            var kept = newValue
+            kept.extras.subtract(MenuRoot.browserExtras)
+            saved = kept
         }
     }
+    private var saved: MenuRoot {
+        didSet {
+            defaults.set(saved.order, forKey: Self.orderKey)
+            defaults.set(saved.hidden.sorted(), forKey: Self.hiddenKey)
+            defaults.set(saved.extras.sorted(), forKey: Self.extrasKey)
+        }
+    }
+    /// The browser switches the two browser rows follow; nil (a test's store) lists neither.
+    @ObservationIgnored private let browsers: BrowserSettings?
     /// Your fallbacks (spec launcher-best T4): what a search that finds nothing offers, in order (MenuFallbacks ids);
     /// nil is Pilot's own offers.
     var fallbacks: [String]? { didSet { defaults.set(fallbacks, forKey: Self.fallbacksKey) } }
     @ObservationIgnored private let defaults: UserDefaults
     private static let orderKey = "menu.rootOrder", hiddenKey = "menu.rootHidden", extrasKey = "menu.rootExtras", fallbacksKey = "menu.fallbacks"
 
-    init(defaults: UserDefaults = .pilot()) {
+    init(defaults: UserDefaults = .pilot(), browsers: BrowserSettings? = nil) {
         self.defaults = defaults
-        root = MenuRoot(order: defaults.stringArray(forKey: Self.orderKey) ?? [],
-                        hidden: Set(defaults.stringArray(forKey: Self.hiddenKey) ?? []),
-                        extras: Set(defaults.stringArray(forKey: Self.extrasKey) ?? []))
+        self.browsers = browsers
+        saved = MenuRoot(order: defaults.stringArray(forKey: Self.orderKey) ?? [],
+                         hidden: Set(defaults.stringArray(forKey: Self.hiddenKey) ?? []),
+                         extras: Set(defaults.stringArray(forKey: Self.extrasKey) ?? []).subtracting(MenuRoot.browserExtras))
         fallbacks = defaults.stringArray(forKey: Self.fallbacksKey)
+        browsers?.switchedOff = { [weak self] id in self?.saved.show(extra: id, false) }
     }
 
     /// The fallbacks there are to pick today: Pilot's four, your quicklinks taking words, your scripts asking for them.

@@ -13,8 +13,9 @@ struct MenuEscapeTests {
     @Test("Escape inside every branch goes up to its parent with the branch just left selected; at the root it closes")
     func everyBranchGoesUp() {
         for branch in Self.branches {
-            // Activity is an extra row since Sven 2026-10-21: on, so the root lists it to select.
-            var nav = MenuNavigator(entries: Self.entries, branch: branch, root: MenuRoot(extras: ["activity"]))
+            // Activity is an extra row since Sven 2026-10-21, Bookmarks and History since build 3160: on, so the root lists
+            // them to select.
+            var nav = MenuNavigator(entries: Self.entries, branch: branch, root: MenuRoot(extras: ["activity", "bookmarks", "history"]))
             #expect(nav.handle(.escape) == .handled, "\(branch.rawValue) closed the menu")
             #expect(nav.branch == branch.parent, "\(branch.rawValue)")
             #expect(nav.selected?.target == .branch(branch), "\(branch.rawValue)")

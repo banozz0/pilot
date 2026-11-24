@@ -229,13 +229,17 @@ public enum BrowserBookmarks {
     /// The menu's rows for `pages` kept by `browser`: the title (else the address's host), the browser as its subtitle and
     /// icon, Return opening the page in that browser. A bookmark is found by its title and host as any row is and ranks
     /// with picks; a history page is listed only as its read found it (up to 3 in a plain search, all behind `hist`) and
-    /// is never a pick (MenuEntry.frecencyKey), so no visited address lands in Pilot's ranking.
+    /// is never a pick (MenuEntry.frecencyKey), so no visited address lands in Pilot's ranking. A bookmark lives in the
+    /// Bookmarks branch under its browser's heading, which a root search finds it outside of all the same.
     public static func rows(_ pages: [Page], browser: Browser, kind: MenuEntry.Kind) -> [MenuEntry] {
         web(pages).map { page in
             let host = URL(string: page.url)?.host() ?? page.url
             let title = page.title.trimmingCharacters(in: .whitespacesAndNewlines)
-            return MenuEntry(title: title.isEmpty ? host : title, target: .action(AppLink.url(bundle: browser.bundle, url: page.url).id),
-                             inSearch: kind == .bookmark, keywords: host, ownKind: kind, app: browser.bundle, subtitle: browser.name)
+            var row = MenuEntry(title: title.isEmpty ? host : title, target: .action(AppLink.url(bundle: browser.bundle, url: page.url).id),
+                                home: kind == .bookmark ? .bookmarks : nil, inSearch: kind == .bookmark, keywords: host, ownKind: kind,
+                                app: browser.bundle, subtitle: browser.name)
+            if kind == .bookmark { row.section = browser.name }
+            return row
         }
     }
 
@@ -249,6 +253,34 @@ public enum BrowserBookmarks {
         row.ownKind = .history
         return row
     }()
+
+    /// Bookmarks while Pilot lacks Full Disk Access (Sven via the coordinator on f1bbdba): the Files view's row in the
+    /// branch, Return opening that setting; never in a search.
+    public static let bookmarksNeedAccess: MenuEntry = {
+        var row = MenuEntries.allowFullDiskAccess(search: "")
+        row.title = "Allow Full Disk Access to list browser bookmarks"
+        row.subtitle = "macOS keeps your browsers' bookmarks from Pilot until you allow it"
+        row.keywords = nil
+        row.inSearch = false
+        row.ownKind = .bookmark
+        row.home = .bookmarks
+        return row
+    }()
+
+    /// What Bookmarks says with no rows while it holds none: reading until the menu's read lands (`from` nil), then off,
+    /// no browser installed, or none found in the browsers read. Nil while it holds some, so a filter that misses says
+    /// Nothing matches.
+    public static func emptyLine(from browsers: [String]?, on: Bool, any: Bool) -> String? {
+        guard !any else { return nil }
+        guard let browsers else { return "Reading bookmarks…" }
+        guard on else { return "Browser bookmarks are off: switch them on in Launcher › More rows." }
+        guard !browsers.isEmpty else { return "No bookmarks found: none of " + Self.browsers.map(\.name).formatted(.list(type: .or)) + " is installed." }
+        return "No bookmarks found in " + browsers.formatted(.list(type: .and)) + "."
+    }
+
+    /// Whether a history read waits for typing to pause (0.2 s): every one but the History branch's as it opens, nothing
+    /// typed; a root `hist ` with nothing after it still waits.
+    public static func pauses(inHistory: Bool, words: [String]) -> Bool { !(inHistory && words.isEmpty) }
 
     /// `hist` while history is off (Q328): the one row, Return opening Launcher › More rows where it is switched on.
     public static let historyOff = MenuEntry(title: "Browser history is off", target: .openPage(AppPlace(.menuExtras)),

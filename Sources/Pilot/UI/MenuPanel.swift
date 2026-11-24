@@ -440,23 +440,26 @@ final class PilotMenu {
         guard let model else { return }
         let targets = Set(listed.map(\.target))
         Task { [weak self] in
-            let rows = await BrowserReader.shared.bookmarks(listed: targets)
-            guard self?.model === model, BrowserSettings.shared.bookmarks else { return }
-            model.nav.provide(.bookmark, rows)
-            mlog.notice("menu: \(rows.count) bookmarks listed")
+            let (rows, browsers) = await BrowserReader.shared.bookmarks(listed: targets)
+            guard self?.model === model else { return }
+            model.bookmarksFrom = browsers
+            guard BrowserSettings.shared.bookmarks else { return }
+            model.nav.provide(.bookmark, home: .bookmarks, rows)
+            mlog.notice("menu: \(rows.count(where: { $0.target != .allowFullDiskAccess })) bookmarks listed")
         }
     }
 
     /// `hist <words>` at the root (T9): once typing pauses for 0.2 s, the history pages they find, read from copies of the
     /// browsers' databases; while history is off (Q328) only the row saying so, nothing read. While it is on, a plain root
-    /// search of 3 characters or more reads them too, and the navigator lists up to 3 after the rest. Any other search
-    /// drops them.
+    /// search of 3 characters or more reads them too, and the navigator lists up to 3 after the rest. The History branch
+    /// reads as it opens, the newest pages, and again for what is typed there. Any other search or branch drops them.
     private func provideHistory(_ query: String) {
         historyRead?.cancel()
         guard let model else { return }
-        let typed = BrowserBookmarks.historyWords(query)
+        let inBranch = model.nav.branch == .history
+        let typed = inBranch ? query.split(separator: " ").map(String.init) : BrowserBookmarks.historyWords(query)
         let words = typed ?? (BrowserSettings.shared.history ? model.nav.searchHistoryWords : nil)
-        guard model.nav.branch == nil, model.nav.only == nil, let words else {
+        guard inBranch || model.nav.branch == nil, model.nav.only == nil, let words else {
             // Dropped once on leaving a search that read them, not on every keystroke (a scan of every entry).
             if historyShown { historyShown = false; model.nav.provide(.history, []) }
             return
@@ -465,7 +468,7 @@ final class PilotMenu {
         let on = BrowserSettings.shared.history
         guard on else { return model.nav.provide(.history, [BrowserBookmarks.historyOff]) }
         historyRead = Task { [weak self] in
-            try? await Task.sleep(for: .milliseconds(200))
+            if BrowserBookmarks.pauses(inHistory: inBranch, words: words) { try? await Task.sleep(for: .milliseconds(200)) }
             guard !Task.isCancelled else { return }
             let read = await BrowserReader.shared.history(words, on: true)
             let rows = typed == nil ? BrowserBookmarks.searchPages(read, words: words) : read
@@ -971,6 +974,8 @@ final class PilotMenu {
             }
         }
         if branch == .notes { model?.nav.provide(.action, home: .notes, Notes.rows(NotesPanel.shared.notes())) }
+        // History reads its newest pages; any other branch, or the root, drops the pages a search or History listed (T9).
+        provideHistory(model?.nav.query ?? "")
         if branch == .snippets { provideSnippets(model?.nav.query ?? "") }
         if branch == .capture { provideCaptures() }
     }
@@ -1942,6 +1947,8 @@ final class MenuModel {
     var forceArmed: String?
     /// Activity's first read has landed, so an empty list means nothing matches, not Reading….
     var activityRead = false
+    /// The browsers whose bookmarks the menu's open read (T9), for Bookmarks' empty line; nil until that read lands.
+    var bookmarksFrom: [String]?
     /// Emoji's category ⌘P picked (P39); nil shows them all. Kept while the menu is open.
     var emojiCategory: String?
     /// Opens Emoji's category list; the panel sets it, as it knows the list and the picks.
@@ -2101,6 +2108,8 @@ final class MenuModel {
         if let loadFailed { return loadFailed }
         if nav.branch == .snippets, nav.query.isEmpty { return "No snippets yet. Add one on the Snippets page." }
         if nav.branch == .activity { return activityRead ? "Nothing running matches." : "Reading what runs on this Mac…" }
+        if nav.branch == .bookmarks, let line = BrowserBookmarks.emptyLine(from: bookmarksFrom, on: BrowserSettings.shared.bookmarks,
+                                                                           any: nav.count(home: .bookmarks) > 0) { return line }
         if nav.branch == .reminders, nav.query.isEmpty { return "No reminders pending. Type “20m stretch” at the root to set one." }
         if nav.branch?.browsed == .clean, nav.query.isEmpty { return CleanMenu.waiting(CleanModule.previewer.progress) }
         if nav.branch == .emoji {
@@ -2134,8 +2143,7 @@ extension MenuModel {
     /// no best match to head, and every window listed whole heads its workspace (frame B2).
     var headings: [Int: MenuGroups.Group] {
         if nav.branch == nil, !nav.isList, nav.query.isEmpty, nav.only == .window { return workspaceHeadings }
-        if nav.isList || nav.branch == .activity { return MenuGroups.sections(nav.rows) }
-        return MenuGroups.headings(nav.rows, searching: nav.branch == nil && !nav.isList && !nav.query.isEmpty, branch: nav.branch)
+        return MenuGroups.headings(of: nav)
     }
 
     /// "Workspace 2" over the first window of each workspace, as the provider lists them by workspace.

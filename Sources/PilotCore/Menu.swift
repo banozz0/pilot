@@ -426,6 +426,10 @@ public indirect enum MenuBranch: Hashable, Sendable {
     case qr
     /// Trigger → Define (Q596): a word's meanings, synonyms and Spanish, its picked row in full beside them (Define).
     case define
+    /// The browsers' bookmarks, by browser, and their history, newest first (spec launcher-best T9; Sven on build 3160):
+    /// extra rows only, listed at the root while Launcher › More rows' browser switches are on, never found by name, as a
+    /// search lists their pages itself.
+    case bookmarks, history
     /// A category by name inside Install (a catalogue category), Remove or Update (card agent-bo-95423022).
     case category(String, in: MenuBranch = .install)
 
@@ -435,10 +439,10 @@ public indirect enum MenuBranch: Hashable, Sendable {
     public static let allCases: [MenuBranch] = [.apps, .learn, .trigger, .install, .remove, .update, .clean, .extensions, .about, .system,
                                                 .keybindings, .capture,
                                                 .homebrew, .translate, .reminders, .snippets, .notes, .stickers, .emoji,
-                                                .activity, .qr, .define]
+                                                .activity, .qr, .define, .bookmarks, .history]
 
     /// The branches under the root, which a root search finds by name: `top` and Activity.
-    public static let searched = allCases.filter { $0.parent == nil }
+    public static let searched = allCases.filter { $0.parent == nil && ![.bookmarks, .history].contains($0) }
 
     /// The branches the root lists. Activity is an extra row, off until switched on (Sven 2026-10-21).
     public static let top = searched.filter { $0 != .activity }
@@ -1150,10 +1154,23 @@ public struct MenuNavigator: Sendable {
         }
         // The emoji grid lists its provider's rows as they came: EmojiGrid already matched and ordered them (P39).
         if branch == .emoji { rows = entries.filter { $0.home == .emoji }; return }
+        // Bookmarks without Full Disk Access (T9): its one row, whatever is typed, Return opening that setting.
+        if branch == .bookmarks, let access = entries.first(where: { $0.home == .bookmarks && $0.target == .allowFullDiskAccess }) {
+            rows = [access]
+            return
+        }
+        // History (T9): the pages its read found, newest first as read, each while it answers the words typed now (an
+        // older read's during the pause), or the row saying history is off; never ranked, so the newest stays first.
+        if branch == .history {
+            let words = query.split(separator: " ").map(String.init)
+            rows = entries.filter { $0.kind == .history && BrowserBookmarks.answers($0, words: words) }
+            return
+        }
         // A search in Install, Remove or Update also finds the rows of its categories (card agent-bo-95423022).
         let listed = entries.filter { $0.home == branch || (!query.isEmpty && $0.home.map(branch.browses) == true) }
-        // Activity's rows keep their Apps and Background together under a filter too, each busiest first as provided.
-        rows = branch == .activity ? MenuGroups.bySection(rank(listed)) : MenuGroups.sectioned(rank(listed), in: branch, searching: !query.isEmpty)
+        // Activity's rows keep their Apps and Background together under a filter too, each busiest first as provided;
+        // Bookmarks' their browsers (T9).
+        rows = branch == .activity || branch == .bookmarks ? MenuGroups.bySection(rank(listed)) : MenuGroups.sectioned(rank(listed), in: branch, searching: !query.isEmpty)
     }
 
     /// A kind Tab shows at the empty root (Sven 2026-10-12): every app by frecency then name, every window by workspace
@@ -1172,6 +1189,9 @@ public struct MenuNavigator: Sendable {
     /// counted; nothing typed, every app, window and action. Nil leaves it blank: files under All, which wait for Search
     /// files (a file-index query per key), files and packages before a search, and every kind in a branch or a picker.
     public func count(of kind: MenuEntry.Kind) -> Int? { kindCounts[kind] }
+
+    /// How many rows `home` holds, listed or not: Bookmarks' empty line tells none read from none matching (T9).
+    public func count(home: MenuBranch) -> Int { entries.count { $0.home == home } }
 
     /// What an empty list says before anything is typed in the Files view or Packages; nil elsewhere, where the panel
     /// says it.
