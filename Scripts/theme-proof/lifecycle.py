@@ -368,12 +368,17 @@ def run(seam_only=False, fixes_only=False):
 
         # Every transaction stage and effect failure reports its actual outcome. Baseline stays A on failed B.
         f.apply()
+        reloads = f.root / 'state/ghostty-reloads.log'
         for stage in ['journal', 'write:0', 'write:1', 'after-write:0', 'after-write:1', 'ledger']:
-            before = f.snapshot(); f.controls(fail=stage)
+            before = f.snapshot(); pressed = reloads.read_bytes() if reloads.exists() else b''; f.controls(fail=stage)
             result = f.call('theme', 'apply', f.plan('b'), ok=stage != 'journal')
             if stage != 'journal':
                 assert result['status'] == 'failed' and result['recovery']['status'] == 'rollback verified', result
                 assert result['refresh'] == 'not attempted'
+            if stage == 'ledger':
+                # Ghostty is nudged once its files are written, and again once the failure puts them back (theme-switch).
+                assert reloads.read_bytes() == pressed + 'Ghostty › Reload Configuration\n'.encode() * 2, stage
+                before[str(reloads.relative_to(f.root))] = digest(reloads)
             assert f.snapshot() == before, stage
             f.controls()
         f.controls(fail='effect'); result = f.apply('b'); assert result['files'] == 'verified' and 'failed:' in result['refresh']
