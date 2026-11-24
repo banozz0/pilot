@@ -55,7 +55,8 @@ final class BrowserSettings {
 ///   never a favourite and never cached. The bookmarks' rows live in this reader's memory, read again only when a file's
 ///   date or size changed.
 /// - Isolated test runs read only `PILOT_SANDBOX_BROWSERS=<folder>` as the home (no Full Disk Access asked of it), and
-///   nothing at all without it, so a sandbox never reads Sven's real profiles.
+///   nothing at all without it, so a sandbox never reads Sven's real profiles. There a `<folder>/Library` that does not
+///   read stands in for no Full Disk Access (`readableHome`), so the access rows can be proved.
 actor BrowserReader {
     static let shared = BrowserReader()
 
