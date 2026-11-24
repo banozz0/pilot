@@ -60,11 +60,14 @@ extension TilerTreeTests {
 
         /// Sven's report 2026-10-17 (a fast drag lagged the whole screen): each move of the held window still rebinds it,
         /// but asks for no complete refresh; the release's refresh lays it out once. Not held, a move refreshes as before.
-        @Test func aHeldWindowsMovesAskForNoRefresh() async throws {
+        /// Its resizes too (Sven on combined-14, float-resize): each ran a light session, writing every tiled window, and
+        /// a complete refresh.
+        @Test func aHeldWindowsMovesAndResizesAskForNoRefresh() async throws {
             defer { unitTestScreen.withLock { $0.leftMouseDown = false } }
             let (main, _, window) = try dragging()
+            let tiled = try TestWindow.new(id: 71, parent: main.rootTilingContainer, rect: Rect(topLeftX: 0, topLeftY: 0, width: 500, height: 500))
             window.nativeFocus()
-            let before = completeRefreshesScheduled
+            let before = completeRefreshesScheduled, writes = tiled.frameWrites
             for _ in 0..<100 {
                 windowMoved(70, kAXMovedNotification as String)
                 for _ in 0..<50 { await Task.yield() }
@@ -72,6 +75,15 @@ extension TilerTreeTests {
             print("[border-drag] tiler: 100 moves of a held floating window, \(completeRefreshesScheduled - before) complete refreshes asked for")
             #expect(completeRefreshesScheduled == before)
             #expect(window.nodeWorkspace == main, "the moves still rebind it")
+            isTilerEnabled = true // a resize asks for a session only while the tiler runs
+            for _ in 0..<100 {
+                windowResized(70, kAXResizedNotification as String)
+                for _ in 0..<50 { await Task.yield() }
+            }
+            isTilerEnabled = false
+            print("[float-resize] tiler: 100 resizes of a held floating window, \(completeRefreshesScheduled - before) complete refreshes asked for, \(tiled.frameWrites - writes) tiled frame writes")
+            #expect(completeRefreshesScheduled == before, "a resize asked for a complete refresh")
+            #expect(tiled.frameWrites == writes, "a resize laid the tiles out")
             unitTestScreen.withLock { $0.leftMouseDown = false }
             windowMoved(70, kAXMovedNotification as String)
             for _ in 0..<50 { await Task.yield() }

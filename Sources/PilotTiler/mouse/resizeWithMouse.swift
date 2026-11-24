@@ -16,7 +16,11 @@ func resizedObs(_: AXObserver, ax: AXUIElement, notif: CFString, _: UnsafeMutabl
 func windowResized(_ windowId: UInt32?, _ notif: String) {
     Task.startUnstructured { @MainActor in
         guard let token: RunSessionGuard = .isServerEnabled else { return }
-        guard let windowId, let window = Window.get(byId: windowId), try await isManipulatedWithMouse(window) else {
+        let window = windowId.flatMap { Window.get(byId: $0) }
+        // Pilot (float-resize, Sven on combined-14: it lagged): a floating window the mouse may hold gets no session per
+        // event, as resizeWithMouse does nothing for it; the release's refresh (GlobalObserver) lays it out once.
+        if let window, window.parent is FloatingWindowsContainer, mouseMayHold(window) { return }
+        guard let window, try await isManipulatedWithMouse(window) else {
             scheduleCancellableCompleteRefreshSession(.ax(notif))
             return
         }
