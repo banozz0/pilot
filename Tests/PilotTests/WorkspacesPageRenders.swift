@@ -7,9 +7,9 @@ import Testing
 @testable import Pilot
 
 /// The Workspaces page with Add and Delete (Sven 2026-10-17), opt-in like the other renders: nine workspaces in one row
-/// (Sven's Q37), its More with workspace 2 picked while 1 is on screen (simplify-pages T18),
-/// then five after 3 is deleted (4 and up moving down a number), then one with Delete off; workspace 2 named Chat, so it
-/// shows its name alone; the Monitors and Swipe blocks on More. In Instrument under Tokyo Night. Nothing
+/// (Sven's Q37), Stage's workspace 3 and Scrolling's workspace 4 picked while 1 is on screen, each with its layout's block
+/// under the editor (More gone, Sven 2026-11-23), then five after 3 is deleted (4 and up moving down a number), then one
+/// with Delete off; workspace 2 named Chat, so it shows its name alone; Monitors and Swipe under them. Nothing
 /// reaches an engine: the tiler is never started.
 /// `CFFIXED_USER_HOME=<fresh dir> PILOT_RENDER_DIR=<fresh dir> swift test --filter WorkspacesPageRenders`
 extension SharedLook {
@@ -40,12 +40,14 @@ struct WorkspacesPageRenders {
         let presets = WorkspacePresets(observers: observers, defaults: defaults)
         presets.save(WorkspacePreset(name: "Chat", apps: [.init(bundleId: "com.apple.finder", name: "Finder", percent: 60),
                                                          .init(bundleId: "com.apple.Notes", name: "Notes", percent: 40)], layout: nil), to: "2")
+        presets.save(WorkspacePreset(name: "Focus", apps: [.init(bundleId: "com.apple.finder", name: "Finder", percent: 100)], layout: .stage), to: "3")
+        presets.save(WorkspacePreset(name: "Strip", apps: [.init(bundleId: "com.apple.Notes", name: "Notes", percent: 100)], layout: .scrolling), to: "4")
         let settings = PilotSettings(defaults: defaults, loginItem: SwipeWorkspacesTests.item)
-        let page = { (more: Bool, focused: String, picked: String?) in
+        let page = { (focused: String, picked: String?) in
             WorkspacesBody(block: block, layouts: WorkspaceLayouts(observers: observers, defaults: defaults), presets: presets,
                            list: list, focused: focused,
                            start: .init(apps: []), settings: settings, monitors: monitors,
-                           displays: [ConnectedDisplay(name: "LG ULTRAFINE", id: "B")], more: more, picked: picked)
+                           displays: [ConnectedDisplay(name: "LG ULTRAFINE", id: "B")], picked: picked)
         }
         let write = { (body: WorkspacesBody, file: String) throws in
             let view = MonitorsGround { body }.styled(.page(.workspaces)).frame(width: 1100, height: 1500).pilotTheme(look: Look.shared)
@@ -63,9 +65,12 @@ struct WorkspacesPageRenders {
             for style in PilotStyle.allCases {
                 let name = style.rawValue
                 look.style = style
-                try write(page(false, "2", nil), "workspaces-\(count)-\(name).png")
-                // More edits the workspace picked on the front, Chat (2) while 1 is on screen (simplify-pages T18).
-                if count == 9 { try write(page(true, "1", "2"), "workspaces-9-more-picked-2-\(name).png") }
+                try write(page("2", nil), "workspaces-\(count)-\(name).png")
+                // A layout's own block shows only while it is picked (Sven, 2026-11-23): Stage's shelf, Scrolling's rules.
+                if count == 9 {
+                    try write(page("1", "3"), "workspaces-9-stage-picked-3-\(name).png")
+                    try write(page("1", "4"), "workspaces-9-scrolling-picked-4-\(name).png")
+                }
             }
         }
         #expect(list.names == ["1"])

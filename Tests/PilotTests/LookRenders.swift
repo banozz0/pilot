@@ -170,7 +170,8 @@ struct LookRenders {
         for id in ["tokyo-night", "folio"] {
             look.themeID = id
             let window = AppWindowController.size.width
-            try Self.shot(look, to: dir.appendingPathComponent("look-widths-\(id)-\(Int(window)).png"), width: Self.page(window), height: 1400)
+            // Tall enough for Font and Cursor under the themes (Font joined Look, 2026-11-23).
+            try Self.shot(look, to: dir.appendingPathComponent("look-widths-\(id)-\(Int(window)).png"), width: Self.page(window), height: 2800)
         }
         Self.resetShared()
     }

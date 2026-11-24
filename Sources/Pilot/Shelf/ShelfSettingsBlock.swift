@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Workspaces › More's Window shelf block (Tiling's until Sven, 2026-11-11, after 2276) (ADR 0015, ADR 0012's amendments): Window pictures Off, Stills (the default,
+/// Workspaces' Window shelf block, shown while the picked workspace is Stage (Tiling's until Sven, 2026-11-11, after 2276; on Workspaces' More until 2026-11-23) (ADR 0015, ADR 0012's amendments): Window pictures Off, Stills (the default,
 /// Q690) or Live. Live warns first and turns on only from the warning's own button (Q662); Stills or Live without Screen
 /// Recording says the shelf shows icons, and its Allow asks for it.
 struct ShelfSettingsBlock: View {

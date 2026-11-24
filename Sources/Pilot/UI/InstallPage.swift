@@ -29,8 +29,6 @@ struct CataloguePage: View {
 
     static let intro = "Search Homebrew, the App Store, GitHub and the package tools; Pilot installs each only after you confirm the command."
     static let introInfo = "Web apps lists sites to make into apps."
-    /// What Fonts' Get more fonts searches for.
-    static let fonts = "font"
 
     var body: some View {
         KitLanding { KitPage(intro: Self.intro, info: Self.introInfo) {

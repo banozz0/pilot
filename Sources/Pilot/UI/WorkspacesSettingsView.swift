@@ -9,20 +9,19 @@ import PilotTiler
 /// in their spots over its number, and under them the picked one in the editor itself: its name, the preview whose spots
 /// take an app, the layout pictures with the apps that always land there and a preset under them (back from More, Sven's
 /// round 3 notes on build 2300), and what opens there with its two rules (back from More, Sven
-/// 2026-11-11, after 2276), then each workspace's monitor (back from More, pages round 4). More edits the same pick:
-/// while it is Scrolling, that layout's centre mode and column rules, the window shelf's pictures (from Tiling, Sven
-/// 2026-11-11, after 2276) and the swipe between workspaces (Sven's Q207 page map, from Tiling). Every change saves at once
+/// 2026-11-11, after 2276), then each workspace's monitor (back from More, pages round 4). The More tab went (Sven,
+/// 2026-11-23: "remove the more page"): under what opens there, the Scrolling layout's centre mode and column rules while
+/// the picked workspace is Scrolling, and the window shelf's pictures (from Tiling, Sven 2026-11-11, after 2276) while it
+/// is Stage; the swipe between workspaces (Sven's Q207 page map, from Tiling) under Monitors. Every change saves at once
 /// (Sven 2026-10-17, no Save button). Gaps, the always-float lists and the Pilot block sit under Tiling. Every rule change
 /// saves the Pilot block's settings and reloads the tiler.
 struct WorkspacesSettingsView: View {
     @Environment(Engine.self) private var engine
-    /// The More tab (simplify-pages T18), editing the workspace picked on the front.
-    var more = false
 
     var body: some View {
         WorkspacesBody(block: engine.pilotBlock, layouts: engine.layouts, presets: engine.presets,
                        list: engine.workspaceList, focused: engine.observers.tiler.focused, settings: engine.settings,
-                       monitors: engine.workspaceMonitors, tiler: engine.observers.tiler, more: more)
+                       monitors: engine.workspaceMonitors, tiler: engine.observers.tiler)
     }
 }
 
@@ -46,10 +45,7 @@ struct WorkspacesBody: View {
     var displays: [ConnectedDisplay]? = nil
     /// Pilot's tiler, which a drop moves the windows through; nil drags nothing.
     var tiler: TilerService? = nil
-    /// The More tab (simplify-pages T18): the picked workspace's Scrolling rules, the window shelf, the monitors and the
-    /// swipe. One view with the front, so the pick carries over.
-    var more = false
-    /// The workspace picked; a render starts it on another to show More editing it.
+    /// The workspace picked; a render starts it on another to show the page editing it.
     @State var picked: String? = nil
     @State private var drafts = WorkspacePageDrafts()
     /// An app or a rule dragged to another workspace or onto another app (Sven, 2026-11-15); a render stages one.
@@ -63,17 +59,16 @@ struct WorkspacesBody: View {
     var body: some View {
         let names = list?.names ?? Workspaces.all
         let name = shown(names)
-        Group {
-            if more { moreTab(name) } else { front(name, names: names) }
-        }
-        .savesWhenResting(drafts) { drafts.edited.forEach(save) }
+        front(name, names: names)
+            .savesWhenResting(drafts) { drafts.edited.forEach(save) }
     }
 
     /// The workspace the editor shows: the one picked, else the one on screen, else the first.
     private func shown(_ names: [String]) -> String { [picked, focused].compactMap { $0 }.first(where: names.contains) ?? names[0] }
 
-    /// The front: Add and Delete, the workspaces in one compact row (Sven's Q37), and the picked one's name, layout, apps
-    /// in their spots, rules, preset and what opens there, then each workspace's monitor.
+    /// The page: Add and Delete, the workspaces in one compact row (Sven's Q37), and the picked one's name, layout, apps
+    /// in their spots, rules, preset and what opens there, its layout's own block (Scrolling's rules, Stage's window shelf),
+    /// then each workspace's monitor and the swipe.
     private func front(_ name: String, names: [String]) -> some View {
         KitLanding { FillScroll {
             VStack(alignment: .leading, spacing: 14) {
@@ -97,10 +92,21 @@ struct WorkspacesBody: View {
                 // Its row keeps its height; the editor under it takes what is left.
                 .fixedSize(horizontal: false, vertical: true)
                 editor(name).frame(maxHeight: .infinity)
+                // The picked layout's own block under what opens there, only while that layout is picked (Sven, 2026-11-23,
+                // More gone): Scrolling's rules (as the editor shows them, Sven 2026-10-30), Stage's window shelf.
+                switch draft(name).layout {
+                case .scrolling?:
+                    WorkspaceScrollingBlock(block: block, given: start.apps?.map { (name: $0.name, bundle: $0.bundle) })
+                        .id(AppSection.workspaceScrolling)
+                case .stage?: ShelfSettingsBlock().id(AppSection.windowShelf)
+                default: EmptyView()
+                }
                 // Back from More (pages round 4, Sven's Q97).
                 if let monitors {
                     WorkspaceMonitorsBlock(monitors: monitors, displays: displays, names: presets.contents).id(AppSection.workspaceMonitors)
                 }
+                // Under Monitors since More went (Sven, 2026-11-23).
+                if let settings { WorkspaceSwipeBlock(settings: settings).id(AppSection.workspaceSwipe) }
                 problems
             }
             .padding(.horizontal, ink.pageInset).padding(.top, ink.pageTop(6)).padding(.bottom, 28)
@@ -158,42 +164,6 @@ struct WorkspacesBody: View {
             } catch {
                 refused = String(describing: error)
             }
-        }
-    }
-
-    /// More's index. A row added to or moved off a block changes its count here; Scrolling's holds its 3 rules only while
-    /// the picked layout is Scrolling, and a render without the swipe's store leaves it out.
-    static let entries = [
-        MoreEntry(id: .workspaceScrolling, symbol: "rectangle.split.3x1.fill", controls: 3),
-        MoreEntry(id: .windowShelf, symbol: "rectangle.stack", controls: 4),
-        MoreEntry(id: .workspaceSwipe, symbol: "hand.draw", controls: 1),
-    ]
-
-    /// More (simplify-pages T18): the Scrolling place (the picked workspace's rules while its layout is Scrolling, else a
-    /// line saying so), the window shelf and the swipe.
-    private func moreTab(_ name: String) -> some View {
-        // Scrolling's rules only while the picked workspace's layout is Scrolling (Sven 2026-10-30), as the editor shows it.
-        let scrolling = draft(name).layout == .scrolling
-        let drawn = Self.entries
-            .filter { $0.id != .workspaceSwipe || settings != nil }
-            .map { $0.id == .workspaceScrolling && !scrolling ? MoreEntry(id: $0.id, symbol: $0.symbol, controls: 0) : $0 }
-        return KitMore(entries: drawn) {
-            // Scrolling's rules only while its layout is Scrolling; else one line says so, so its words and links land.
-            Group {
-                if scrolling {
-                    WorkspaceScrollingBlock(block: block, given: start.apps?.map { (name: $0.name, bundle: $0.bundle) })
-                } else {
-                    KitBlock(title: AppSection.workspaceScrolling.title, symbol: "rectangle.split.3x1.fill") {
-                        BlockRow(first: true) {
-                            FinePrint(text: "The Scrolling layout's rules show here once \(presets.contents.title(for: name))'s layout is Scrolling, picked on the Workspaces tab.")
-                        }
-                    }
-                }
-            }
-            .moreBlock(.workspaceScrolling)
-            ShelfSettingsBlock().moreBlock(.windowShelf)
-            if let settings { WorkspaceSwipeBlock(settings: settings).moreBlock(.workspaceSwipe) }
-            problems
         }
     }
 

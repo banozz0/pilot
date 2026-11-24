@@ -33,7 +33,7 @@ extension SettingsSchema {
                   page: "tiling", standard: false, read: { settings.focusFollowsMouse }, write: { settings.focusFollowsMouse = $0 }),
             .choice("windows.dragModifier", "Hold to move or resize with the mouse", page: "tiling", DragModifier.allCases,
                     standard: PilotSettings.dragModifierStart, read: { settings.dragModifier }, write: { settings.dragModifier = $0 }),
-            .choice("shelf.pictures", "The Window shelf's window pictures (Stills and Live ask Screen Recording)", page: "tiling",
+            .choice("shelf.pictures", "The Window shelf's window pictures (Stills and Live ask Screen Recording)", page: "workspaces",
                     ShelfPictureMode.allCases, standard: ShelfPictures.start, confirms: true, read: { pictures.mode }, write: { pictures.set($0) }),
             .bool("windows.swipeWorkspaces", "A three-finger swipe changes workspace", page: "workspaces", standard: false,
                   read: { settings.swipeWorkspaces }, write: { settings.swipeWorkspaces = $0 }),

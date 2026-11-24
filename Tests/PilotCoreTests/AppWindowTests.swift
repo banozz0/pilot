@@ -8,7 +8,7 @@ struct AppWindowTests {
     func pages() {
         #expect(AppPage.allCases.map(\.title) == ["Home", "Binds", "Launcher", "Workspaces", "Tiling", "Menu bar", "Dock", "Look", "System",
                                                    "Update & Clean", "Clipboard", "Captures", "Snippets", "Notes", "Files", "AI", "Voice", "Install", "Open with",
-                                                   "Fonts", "Pilot", "Extensions", "Widgets"])
+                                                   "Pilot", "Extensions", "Widgets"])
         #expect(AppArea.allCases.map(\.title) == ["Home", "Keys", "Windows", "Launcher", "Desktop", "Look", "Mac", "Tools", "Apps", "AI", "Extensions", "Pilot"])
         // Every page in exactly one area.
         #expect(AppArea.allCases.flatMap(\.pages).sorted { $0.rawValue < $1.rawValue } == AppPage.allCases.sorted { $0.rawValue < $1.rawValue })
@@ -17,9 +17,9 @@ struct AppWindowTests {
         // Windows (Workspaces and Tiling, listed in its sidebar, Q291) under Keys, and Extensions in Launcher (Sven on Q289).
         #expect(AppArea.windows.pages == [.workspaces, .tiling] && AppArea.windows.key == "3" && AppArea.launcher.key == "4")
         // Pilot menu beside Menu bar (Sven, 2026-11-12, Q182); Dock between them, its own page (dock round 4, 2026-11-13).
-        // The split (Sven, 2026-11-15): Look and Fonts are an area of their own.
+        // The split (Sven, 2026-11-15): Look is an area of its own; Fonts went (2026-11-23), a link to it lands on Look's Font.
         #expect(AppArea.desktop.pages == [.menuBar, .dock, .widgets])
-        #expect(AppArea.look.pages == [.look, .fonts])
+        #expect(AppArea.look.pages == [.look] && AppPlace.named("fonts") == AppPlace(.lookFont))
         // Majors first (simplify-pages T11): ⌘7 opens Update & Clean, ⌘9 Open with; Login & Background beside it (2026-11-16).
         #expect(AppArea.mac.pages == [.upkeep, .system] && AppArea.mac.key == "7")
         #expect(AppArea.tools.pages == [.clipboard, .notes, .files, .voice, .captures, .snippets])
@@ -32,7 +32,7 @@ struct AppWindowTests {
         #expect(AppArea.allCases.map(\.key) == ["1", "2", "3", "4", "5", "6", "7", "8", "9", "0", nil, ","])
         #expect(AppArea.main.count == 11 && !AppArea.main.contains(.pilot))
         // Ctrl+Tab steps through the area's pages, round to the first; a page alone stays.
-        #expect(AppArea.next(after: .dock) == .widgets && AppArea.next(after: .look) == .fonts && AppArea.next(after: .widgets) == .menuBar)
+        #expect(AppArea.next(after: .dock) == .widgets && AppArea.next(after: .look) == .look && AppArea.next(after: .widgets) == .menuBar)
         #expect(AppArea.next(after: .menu) == .menu && AppArea.next(after: .extensions) == .extensions && AppArea.next(after: .workspaces) == .tiling && AppArea.next(after: .tiling) == .workspaces)
         #expect(AppArea.next(after: .home) == .home && AppArea.next(after: .general) == .general)
         // The window layout went with the panel (pilot-ui-redesign T3); under the panel's More a page's own More reads once.
@@ -58,7 +58,7 @@ struct AppWindowTests {
         #expect(AppPage.menu.tabs.map(\.title) == ["Your menu", "Abilities", "Rings", "More"])
         #expect(AppPage.files.tabs.map(\.title) == ["Files", "Folders"])
         // Clipboard and the Dock: the simple settings in front, the rest on More (pilot-ui-redesign T17).
-        #expect(AppPage.clipboard.tabs.map(\.title) == ["Clipboard", "More"] && AppPage.dock.tabs.map(\.title) == ["Dock", "More"])
+        #expect(AppPage.clipboard.tabs.isEmpty && AppPage.dock.tabs.map(\.title) == ["Dock", "More"])
         #expect(AppPage.snippets.tabs.isEmpty)
         // Reports on Update & Clean's More since the feature trim (2026-11-19), Install's tools and hidden apps on its More (simplify-pages T16).
         #expect(AppPage.upkeep.tabs.map(\.title) == ["Update & Clean", "More"])
@@ -69,7 +69,8 @@ struct AppWindowTests {
         // The page map (Sven 2026-10-17): AI holds its setup, Captures its recording.
         #expect(AppPage.ai.tabs.map(\.title) == ["Chat", "Setup"])
         #expect(AppPage.captures.tabs.map(\.title) == ["Capture", "Recording", "History", "More"])
-        #expect(AppPage.workspaces.tabs.map(\.title) == ["Workspaces", "More"])
+        // Workspaces' More went (Sven, 2026-11-23): its blocks are on the page.
+        #expect(AppPage.workspaces.tabs.isEmpty)
         // System's parts are cards on its front, no More (Sven, 2026-11-11, after 2276).
         #expect(AppPage.system.tabs.isEmpty)
         // Open with's blocks back on its front, its More gone (pages round 4, Sven's Q103); Tiling's More back for the

@@ -53,7 +53,6 @@ final class ControlSocket {
         verbs.registerFiles(ControlFiles(), convert: ControlConvert())
         verbs.registerNotes(ControlNotes())
         verbs.registerSpeechCollections()
-        verbs.registerFonts(ControlFonts())
         verbs.registerInstall(ControlInstall())
         verbs.registerAI(ControlAI())
         verbs.registerModels(ControlModels())

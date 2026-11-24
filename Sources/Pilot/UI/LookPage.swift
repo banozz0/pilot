@@ -8,7 +8,7 @@ import SwiftUI
 /// setting has an ⓘ saying what it does (Sven, 2026-10-09). A column of cards under the page's title; nothing folds
 /// (card agent-bo-95423004). A pick restyles the window at once and Ghostty with it. The front holds the preview, Glass
 /// with its Transparency and Blur (pages round 5), the wallpaper's Previous and Next, and Theme, then the cursor and the
-/// wallpaper's folders (pages round 4, Sven's Q99). Look has no More: this window's layout went with the panel
+/// wallpaper's folders (pages round 4, Sven's Q99), with Pilot's Font above the cursor (Sven, 2026-11-23). Look has no More: this window's layout went with the panel
 /// (pilot-ui-redesign T3) and the style in the feature trim. The Hyper+Space menu's layout and how apps show went to Launcher's More (Sven's notes on build 19).
 struct LookPage: View {
     @Environment(\.ink) private var ink
@@ -142,6 +142,8 @@ struct LookPage: View {
                 .onGeometryChange(for: Int.self) { [instrument = ink.isInstrument] in
                     Self.calmColumns($0.size.width, instrument: instrument)
                 } action: { themeColumns = $0 }
+                // Pilot's own font, the one font setting (Sven, 2026-11-23; the Fonts page went).
+                LookFontBlock().id(AppSection.lookFont)
                 CursorBlock(look: look, cursors: cursors, effects: effects).id(AppSection.cursor)
                 WallpaperBlock(settings: wallpaper, screens: screens, focus: focus, part: .more).id(AppSection.wallpaperCycle)
                 errorLine.padding(.top, 12)

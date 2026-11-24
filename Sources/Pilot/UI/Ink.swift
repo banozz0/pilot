@@ -94,14 +94,14 @@ struct Ink {
 
     // MARK: Faces
 
-    /// The window's words: Geist under Instrument; the family picked in Use fonts in over it (PilotFonts).
+    /// The window's words: Geist under Instrument; the family picked in Look › Font over it (PilotFonts).
     func ui(_ size: CGFloat, _ weight: Font.Weight = .regular) -> Font {
         let size = size * style.scale
         if let picked = PilotFonts.shared.face(.ui, size, weight) { return picked }
         return Font(DisplayFaces.font(StyleTokens.geist(weight == .regular ? 400 : weight == .medium ? 500 : 600), size: size))
     }
 
-    /// Ids, paths and numbers: the style's mono, or the one picked in Use fonts in.
+    /// Ids, paths and numbers: the style's mono, or the one picked in Look › Font.
     func mono(_ size: CGFloat, weight: Font.Weight = .regular) -> Font {
         let size = size * style.scale
         if let picked = PilotFonts.shared.face(.mono, size, weight) { return picked }
