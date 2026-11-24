@@ -68,7 +68,11 @@ extension AxUiElementMock {
         // - Kap screen recorder https://github.com/wulkano/Kap
         // - flameshot? https://github.com/nikitabobko/AeroSpace/issues/112
         // - Drata Agent https://github.com/nikitabobko/AeroSpace/issues/134
-        if get(Ax.fullscreenButtonAttr)?.get(Ax.enabledAttr) != true &&
+        // Pilot (Sven, 2026-11-24, build 3188): also float windows that can neither close nor minimize, fullscreen button or
+        // not: Ghostex's ask card and page pop-up are resizable (so they have one) but read both disabled, and tiled.
+        if (get(Ax.fullscreenButtonAttr)?.get(Ax.enabledAttr) != true ||
+            get(Ax.closeButtonAttr)?.get(Ax.enabledAttr) != true &&
+            get(Ax.minimizeButtonAttr)?.get(Ax.enabledAttr) != true) &&
             id != .gimp && // Gimp doesn't show fullscreen button
 
             // "Drag out" a tab out of Chrome window. Technically, it shouldn't be necessary, but
