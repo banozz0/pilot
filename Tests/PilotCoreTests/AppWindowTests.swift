@@ -17,9 +17,9 @@ struct AppWindowTests {
         // Windows (Workspaces and Tiling, listed in its sidebar, Q291) under Keys, and Extensions in Launcher (Sven on Q289).
         #expect(AppArea.windows.pages == [.workspaces, .tiling] && AppArea.windows.key == "3" && AppArea.launcher.key == "4")
         // Pilot menu beside Menu bar (Sven, 2026-11-12, Q182); Dock between them, its own page (dock round 4, 2026-11-13).
-        // The split (Sven, 2026-11-15): Look is an area of its own; Fonts went (2026-11-23), a link to it lands on Look's Font.
+        // The split (Sven, 2026-11-15): Look is an area of its own; Fonts went (2026-11-23), then Look's Font (2026-11-24): a link to it lands on Install's search.
         #expect(AppArea.desktop.pages == [.menuBar, .dock, .widgets])
-        #expect(AppArea.look.pages == [.look] && AppPlace.named("fonts") == AppPlace(.lookFont))
+        #expect(AppArea.look.pages == [.look] && AppPlace.named("fonts") == AppPlace(.catalogue))
         // Majors first (simplify-pages T11): ⌘7 opens Update & Clean, ⌘9 Open with; Login & Background beside it (2026-11-16).
         #expect(AppArea.mac.pages == [.upkeep, .system] && AppArea.mac.key == "7")
         #expect(AppArea.tools.pages == [.clipboard, .notes, .files, .voice, .captures, .snippets])
@@ -152,7 +152,7 @@ struct AppWindowTests {
         "tiling": ["gaps", "inner", "outer", "rescue"],
         "topBar": ["menu bar", "status bar", "waybar", "hide", "autohide", "clock", "workspaces"],
         "webApps": ["web app", "url", "site", "sign out"],
-        "installCatalogue": ["install", "homebrew", "cask", "formula"],
+        "installCatalogue": ["install", "homebrew", "cask", "formula", "font"],
         "defaultApps": ["default app", "open with", "main editor", "editor", "vs code"],
         "clipboard": ["clipboard", "history", "paste", "keep", "never record", "images"],
         "pomodoro": ["focus", "break", "timer"],
@@ -160,7 +160,7 @@ struct AppWindowTests {
                   "headphones", "airpods", "connect", "wi-fi", "wifi", "network", "join", "display", "resolution", "monitor", "screen",
                   "refresh rate"],
         "general": ["hyper", "layer key", "caps lock", "escape", "overlay", "launch at login"],
-        "look": ["theme", "wallpaper", "accent", "colours", "ghostty", "omarchy", "font"],
+        "look": ["theme", "wallpaper", "accent", "colours", "ghostty", "omarchy"],
         "permissions": ["accessibility", "secure input", "health", "diagnostics", "log"],
         "exportImport": ["export", "import", "pack", "second mac"],
         // The apps Other apps named (Karabiner-Elements, Hammerspoon, yabai, skhd) left with it in C3; the switch's words find Home.

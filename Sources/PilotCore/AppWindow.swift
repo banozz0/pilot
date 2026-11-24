@@ -10,8 +10,8 @@ import Foundation
 /// Page map (Sven, 2026-10-17, Q207-Q211): Ask is AI. The menu's page is Launcher, in an
 /// area of its own (P37, Sven 2026-10-18, Q284, Q285); still `menu` in links. Update & Clean left the top of Activity ›
 /// Reports for a Mac page of its own (Sven 2026-10-20: "update and clean should be in the Pilot app under Mac"). Fonts left
-/// Install for a page of its own (Sven, 2026-11-01: "for fonts i think its better to have its own page") and went again: Pilot's
-/// own font is Look's Font place, and Pilot no longer sets other apps' fonts (Sven, 2026-11-23). The Developer
+/// Install for a page of its own (Sven, 2026-11-01: "for fonts i think its better to have its own page") and went again: Pilot no longer
+/// sets other apps' fonts (Sven, 2026-11-23) nor its own (Sven, 2026-11-24); Install's search installs them. The Developer
 /// pages, Configs and Repos, left Pilot (Sven, 2026-11-22, Q351).
 /// The pages split (Sven, 2026-11-15) made Workspaces and Tiling one page with tabs across its top; on build 19 he kept the
 /// split but not the top tabs ("instead of top rail keep the sidebar", Q291), so they are two pages again, listed in the
@@ -151,7 +151,7 @@ public enum AppPage: String, CaseIterable, Sendable {
                         "bar preset", "full strip", "full bar", "floating strip", "three islands", "pills", "attached", "floating", "adjust sizes", "bar height"]
         // The front's words; the style, the menu's and window's layouts, the glass's tuning, the cursor and the wallpaper
         // folders moved with their blocks to Look's More (simplify-pages T20).
-        case .look: ["theme", "wallpaper", "accent", "colours", "ghostty", "omarchy", "font", "material", "glass", "light or dark"]
+        case .look: ["theme", "wallpaper", "accent", "colours", "ghostty", "omarchy", "material", "glass", "light or dark"]
         // The front's words; the input, the keyboard layout and the mouse have their own places. Each part's keys are in its
         // card (pages round 5), so their words land here.
         case .system: ["setup", "sound", "volume", "mute", "output", "speakers", "keep awake", "caffeinate", "sleep",
@@ -209,7 +209,7 @@ public enum AppArea: String, CaseIterable, Sendable {
         // Dock beside Menu bar, its own page (round 4, Sven 2026-11-13: "maybe dock should have its own page in desktop").
         // The split (Sven, 2026-11-15: "the themes and all that go into one place and the rest into another"): Desktop keeps
         // what is on the desk and how it behaves; Look takes the theme, wallpaper, Material and cursor, and Fonts from Apps
-        // ("Fonts, I don't think it should be in Apps"), a place on Look's front since 2026-11-23. Windows left it for an
+        // ("Fonts, I don't think it should be in Apps"), a place on Look's front from 2026-11-23 until it went (2026-11-24). Windows left it for an
         // area of its own under Keys (Q289).
         case .desktop: [.menuBar, .dock, .widgets]
         case .look: [.look]
@@ -419,9 +419,6 @@ public enum AppSection: String, CaseIterable, Sendable {
     /// and how apps show are places on Launcher's More since Sven's notes on build 19 (Look's until then); the glass's transparency and blur (under Glass, pages round 5), the cursor,
     /// and the folders and order the wallpaper cycles through are places on the front (pages round 4, Sven's Q99).
     case appsShowAs, glassTuning, cursor, wallpaperCycle
-    /// Look's Font place on its front: Pilot's own words and mono (Sven, 2026-11-23: "one fonts setting for pilot ... in
-    /// the look page"; the Fonts page and its fonts for other apps went).
-    case lookFont
     /// Pilot's places on its front beside `permissions` and `about` (on its More from simplify-pages T7 until pages round 4,
     /// Sven's Q106, when the page lost its More): the Hyper keys and their options, what runs, and Pilot's folder, command
     /// and Uninstall.
@@ -502,7 +499,7 @@ public enum AppSection: String, CaseIterable, Sendable {
         case .extensionCatalogue: .extensions
         case .aiSetup, .aiFallback, .aiKeys, .aiCommands, .aiNewChat: .ai
         case .recording, .captureHistory: .captures
-        case .wallpaper, .themeCatalogue, .glassTuning, .cursor, .wallpaperCycle, .lookFont: .look
+        case .wallpaper, .themeCatalogue, .glassTuning, .cursor, .wallpaperCycle: .look
         }
     }
 
@@ -548,7 +545,7 @@ public enum AppSection: String, CaseIterable, Sendable {
                                                      .workspaceSwipe, .focusedWindow, .floatApps, .floatTitles, .motion, .appsForKeys,
                                                      .aiFallback, .aiKeys, .aiCommands, .aiNewChat,
                                                      .hyperKey, .permissions, .status, .data, .notifications, .about,
-                                                     .keySwaps, .overlay, .menuExtras, .glassTuning, .cursor, .lookFont, .wallpaperCycle,
+                                                     .keySwaps, .overlay, .menuExtras, .glassTuning, .cursor, .wallpaperCycle,
                                                      .soundInput, .keyboardLayout, .mouseSpeed, .voiceDictation, .voiceShows,
                                                      .voiceWords, .installLists, .fileSearch,
                                                      .clipNever, .clipExpire, .clipPanel, .clipTags]
@@ -660,7 +657,6 @@ public enum AppSection: String, CaseIterable, Sendable {
         case .appsShowAs: "Apps show as"
         case .glassTuning: "Transparency and blur"
         case .cursor: "Cursor"
-        case .lookFont: "Font"
         case .wallpaperCycle: "Wallpaper folders"
         }
     }
@@ -675,7 +671,7 @@ public enum AppSection: String, CaseIterable, Sendable {
         case .fileSearch: ["file search", "hidden files", "never index", "index", "find files"]
         case .folders: ["folder", "folder icon", "folder design", "folder colour", "custom icon", "dress folders", "reset folder icon"]
         case .reports: ["report", "run", "output", "exit code"]
-        case .catalogue: ["install search", "homebrew", "cask", "formula", "app store"]
+        case .catalogue: ["install search", "homebrew", "cask", "formula", "app store", "font", "fonts", "install fonts", "typeface"]
         case .webApps: ["web app", "url", "site", "sign out"]
         case .helpers: ["helper", "helpers", "homebrew", "brew", "mole", "mas", "npm", "cargo", "command-line tools"]
         case .hiddenApps: ["hide app", "hidden app", "unhide", "hide from finder", "declutter", "chess"]
@@ -756,7 +752,6 @@ public enum AppSection: String, CaseIterable, Sendable {
         case .glassTuning: ["transparency", "blur", "see through", "frosted"]
         case .cursor: ["cursor", "pointer", "trail", "ripple", "spotlight", "cursor colour", "cursor shape", "cursor size", "bigger cursor",
                        "pilot draws it", "restore cursor", "classic cursor"]
-        case .lookFont: ["font", "fonts", "typeface", "mono", "words font", "mono font", "pilot's font", "use fonts in"]
         case .wallpaperCycle: ["wallpaper folders", "own folders", "per workspace wallpaper", "per screen wallpaper", "cycle wallpaper", "shuffle",
                                "wallpaper order", "screens", "every screen", "browse as gallery", "next wallpaper key"]
         }
@@ -792,8 +787,9 @@ public struct AppPlace: Hashable, Sendable {
         "aiMore": AppPlace(.aiSetup), "pilotMore": AppPlace(.general),
         // Look's More, gone with its last two blocks: the window layout (pilot-ui-redesign T3) and the style (feature trim).
         "lookMore": AppPlace(.look),
-        // The Fonts page, gone with the fonts for other apps (Sven, 2026-11-23): Pilot's own font is Look's Font place.
-        "fonts": AppPlace(.lookFont),
+        // The Fonts page, gone with the fonts for other apps (Sven, 2026-11-23), then Look's Font with Pilot's own (2026-11-24):
+        // fonts install from Install's search.
+        "fonts": AppPlace(.catalogue),
         // Workspaces' More, gone (Sven, 2026-11-23): its blocks are on the page, Scrolling's and the shelf's under the
         // editor while their layout is picked, the swipe under Monitors.
         "workspacesMore": AppPlace(.workspaces),
