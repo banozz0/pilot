@@ -64,7 +64,9 @@ struct PageStack<Content: View>: View {
             if whole.yes {
                 VStack(alignment: .leading, spacing: spacing) { Staged { content } }
             } else {
-                LazyVStack(alignment: .leading, spacing: spacing) { content }
+                // A block a pass in a part built a piece at a time (Staged), so a first visit draws its top first
+                // (page-frames: Look's first visit was one 100 to 130 ms frame).
+                LazyVStack(alignment: .leading, spacing: spacing) { Staged { content } }
             }
         }
     }
