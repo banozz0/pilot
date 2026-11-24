@@ -541,15 +541,22 @@ final class CursorOverlays: NSObject {
     /// window has moved to since (T45). Only the mouse's own events are the pointer: one a process posted or built (a
     /// source pid) is where its poster said, an NSEvent built on another app's window carries that window's point as a
     /// screen point, and a NaN or off-screen place draws a whole-screen layer; those, and one with no CG event, take the
-    /// pointer's place now (cursor-jump). `screens` are the overlays' frames in global points.
+    /// pointer's place now (cursor-jump). `screens` are the overlays' frames in global points. A press more than 100 pt
+    /// off the pointer is logged, kept or not, so the next stray one names its event.
     static func location(_ event: NSEvent, on screens: [CGRect]) -> CGPoint {
         let cg = event.cgEvent, pid = cg?.getIntegerValueField(.eventSourceUnixProcessID) ?? -1
+        var own: CGPoint?
         if let cg, pid == 0, let zero = screens.first(where: { $0.origin == .zero }) {
             let p = CGPoint(x: cg.location.x, y: zero.maxY - cg.location.y)
-            if screens.contains(where: { NSPointInRect(p, $0.insetBy(dx: -1, dy: -1)) }) { return p }
+            if screens.contains(where: { NSPointInRect(p, $0.insetBy(dx: -1, dy: -1)) }) { own = p }
         }
-        cursorlog.debug("effects: event \(event.type.rawValue) from pid \(pid) at \(cg.map { "\($0.location)" } ?? "no CG event") drawn at the pointer")
-        return NSEvent.mouseLocation
+        guard [.leftMouseDown, .rightMouseDown, .otherMouseDown].contains(event.type) else { return own ?? NSEvent.mouseLocation }
+        let pointer = NSEvent.mouseLocation, at = own ?? pointer
+        if own == nil || hypot(at.x - pointer.x, at.y - pointer.y) > 100 {
+            let state = cg?.getIntegerValueField(.eventSourceStateID) ?? -1
+            cursorlog.notice("effects: press \(event.type.rawValue) at CG \(cg.map { "\($0.location)" } ?? "none"), pid \(pid), source \(state), window \(event.windowNumber), pointer \("\(pointer)"): \(own == nil ? "drawn at the pointer" : "kept")")
+        }
+        return at
     }
 
     /// One one-shot timer for the Ring's 3 s hide, re-armed only when it fires early: moves never reschedule it.
