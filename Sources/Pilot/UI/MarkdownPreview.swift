@@ -136,11 +136,9 @@ struct MarkdownWebView: NSViewRepresentable {
     /// where WebKit cannot draw none.
     static func css(_ ink: Ink, solid: Bool) -> String {
         let size = 13 * ink.style.scale
-        let face = PilotFonts.shared.family(.ui).map { "\"\($0)\", " } ?? ""
-        let mono = PilotFonts.shared.family(.mono).map { "\"\($0)\", " } ?? ""
         return """
         html, body { margin: 0; background: \(solid ? cssColor(ink.background) : "transparent"); }
-        body { color: \(cssColor(ink.text)); font: \(size)px/1.6 \(face)-apple-system, system-ui, sans-serif; -webkit-font-smoothing: antialiased; word-wrap: break-word; }
+        body { color: \(cssColor(ink.text)); font: \(size)px/1.6 -apple-system, system-ui, sans-serif; -webkit-font-smoothing: antialiased; word-wrap: break-word; }
         .markdown { padding: 16px 20px 28px; }
         .markdown > :first-child { margin-top: 0; }
         h1, h2, h3, h4, h5, h6 { font-weight: 600; line-height: 1.25; margin: 22px 0 12px; }
@@ -151,7 +149,7 @@ struct MarkdownWebView: NSViewRepresentable {
         ul, ol { padding-left: 2em; } li + li { margin-top: .25em; } li > ul, li > ol { margin: .25em 0 0; }
         li.task { list-style: none; } li.task input { margin: 0 .4em 0 -1.4em; vertical-align: middle; }
         a { color: \(cssColor(ink.link)); text-decoration: none; } a:hover { text-decoration: underline; }
-        code, kbd, pre, samp, tt { font-family: \(mono)ui-monospace, "SF Mono", Menlo, monospace; }
+        code, kbd, pre, samp, tt { font-family: ui-monospace, "SF Mono", Menlo, monospace; }
         code { font-size: .88em; padding: .15em .4em; border-radius: 5px; background: \(cssColor(ink.well)); }
         pre { padding: 12px 14px; border-radius: 8px; overflow: auto; background: \(cssColor(ink.well)); line-height: 1.45; }
         pre code { padding: 0; background: none; font-size: .9em; }

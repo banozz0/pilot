@@ -94,17 +94,15 @@ struct Ink {
 
     // MARK: Faces
 
-    /// The window's words: Geist under Instrument; the family picked in Look › Font over it (PilotFonts).
+    /// The window's words: Geist under Instrument.
     func ui(_ size: CGFloat, _ weight: Font.Weight = .regular) -> Font {
         let size = size * style.scale
-        if let picked = PilotFonts.shared.face(.ui, size, weight) { return picked }
         return Font(DisplayFaces.font(StyleTokens.geist(weight == .regular ? 400 : weight == .medium ? 500 : 600), size: size))
     }
 
-    /// Ids, paths and numbers: the style's mono, or the one picked in Look › Font.
+    /// Ids, paths and numbers: the style's mono.
     func mono(_ size: CGFloat, weight: Font.Weight = .regular) -> Font {
         let size = size * style.scale
-        if let picked = PilotFonts.shared.face(.mono, size, weight) { return picked }
         // Light weights for an extension's big figures (Q475, the Omarchy weather look): the variable face's 200 and 300.
         let wght = switch weight {
         case .ultraLight, .thin: 200

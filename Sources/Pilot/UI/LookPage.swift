@@ -144,8 +144,6 @@ struct LookPage: View {
                 .onGeometryChange(for: Int.self) { [instrument = ink.isInstrument] in
                     Self.calmColumns($0.size.width, instrument: instrument)
                 } action: { themeColumns = $0 }
-                // Pilot's own font, the one font setting (Sven, 2026-11-23; the Fonts page went).
-                LookFontBlock().id(AppSection.lookFont)
                 CursorBlock(look: look, cursors: cursors, effects: effects).id(AppSection.cursor)
                 WallpaperBlock(settings: wallpaper, screens: screens, focus: focus, part: .more).id(AppSection.wallpaperCycle)
                 errorLine.padding(.top, 12)
