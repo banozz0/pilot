@@ -287,7 +287,7 @@ class NewsTests(ExtensionTestCase):
         # 1.1.0's page picks and own feed: never read again, whatever they tick.
         (self.box.data / "sources.json").write_text(json.dumps({"picked": {"times-of-malta": True},
                                                                  "mine": [{"id": "my-x", "title": "Mine", "url": "https://example.org/feed"}]}))
-        self.tick(times_of_malta=False)  # on by default, its headlines kept in the cache
+        self.tick(times_of_malta=False)  # on in PREFS until now, its headlines kept in the cache
         malta = {"Parliament approves the budget", "Ferry service to Gozo resumes", "Old story from yesterday"}
         listed = {r["title"] for r in self.run_ext("news").items}
         self.assertFalse(malta & listed, listed)

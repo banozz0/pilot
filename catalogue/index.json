@@ -516,8 +516,8 @@
       "files": [
         {
           "path": "extension.json",
-          "sha256": "216696d6c01d504d4905f480cfeb1514fcbcaf9abff02ed558e1b9fdb8b5c15c",
-          "size": 8543,
+          "sha256": "05c9be0da02187b4951f203c4897070de00f5ebe03f54114b21edfcde95d7646",
+          "size": 8548,
           "executable": false
         },
         {
@@ -534,8 +534,8 @@
         },
         {
           "path": "paper.py",
-          "sha256": "df90e283d98819d97a330e37f87213f7daeab75273073315984e74ca076f48e5",
-          "size": 15301,
+          "sha256": "0e0b98e85484ad6b7331800dcdd3379167472f3e268a422dc9098c73930e4dce",
+          "size": 15318,
           "executable": false
         }
       ]

@@ -145,19 +145,19 @@
       "name": "source-times-of-malta",
       "type": "checkbox",
       "title": "Malta · Times of Malta",
-      "default": true
+      "default": false
     },
     {
       "name": "source-maltatoday",
       "type": "checkbox",
       "title": "Malta · MaltaToday",
-      "default": true
+      "default": false
     },
     {
       "name": "source-newsbook-en",
       "type": "checkbox",
       "title": "Malta · Newsbook (English)",
-      "default": true
+      "default": false
     },
     {
       "name": "source-newsbook",
@@ -169,13 +169,13 @@
       "name": "source-lovin-malta",
       "type": "checkbox",
       "title": "Malta · Lovin Malta",
-      "default": true
+      "default": false
     },
     {
       "name": "source-tvm-en",
       "type": "checkbox",
       "title": "Malta · TVM News (English)",
-      "default": true
+      "default": false
     },
     {
       "name": "source-tvm",
