@@ -481,11 +481,11 @@
       "id": "news",
       "title": "News",
       "icon": "📰",
-      "version": "1.3.1",
-      "description": "Headlines from the sources you tick in its Settings, Malta first (Times of Malta, MaltaToday, Newsbook, Lovin Malta, TVM and more), then world and tech, or any RSS or Atom feed you add there, newest first in Hyper+Space, on its page and in Pilot's dock. In the menu bar, 📰 counts what is new since you last looked; its popover counts the day's headlines per group (Malta 20 · World 8), each opening that group's, then the three newest. Press Summarise the last 24 hours for a newspaper front page made by Pilot's AI from the day's headlines, saved as an HTML file and opened in your browser; it never runs on its own.",
+      "version": "1.3.2",
+      "description": "Headlines from the sources you tick in its Settings: world and tech (BBC World, The Guardian, Al Jazeera, Hacker News, The Verge and more), papers from your own country, or any RSS or Atom feed you add there, newest first in Hyper+Space, on its page and in Pilot's dock. In the menu bar, 📰 counts what is new since you last looked; its popover counts the day's headlines per group (World 8 · Tech 12), each opening that group's, then the three newest. Press Summarise the last 24 hours for a newspaper front page made by Pilot's AI from the day's headlines, saved as an HTML file and opened in your browser; it never runs on its own.",
       "examples": [
         "Type news, Return on a headline: the article opens in your browser",
-        "In Extensions › News, tick MaltaToday, then click 📰 in the menu bar and press Summarise: a front page with the lead story, sections and every article opens in your browser"
+        "In Extensions › News, tick The Guardian World, then click 📰 in the menu bar and press Summarise: a front page with the lead story, sections and every article opens in your browser"
       ],
       "requires": [
         "python3",
@@ -505,7 +505,7 @@
       ],
       "permissions": {
         "network": [
-          "the feeds you pick (timesofmalta.com, maltatoday.com.mt, newsbook.com.mt, lovinmalta.com, tvmnews.mt, feeds.bbci.co.uk, news.ycombinator.com, news.google.com and others)"
+          "the feeds you pick (feeds.bbci.co.uk, theguardian.com, aljazeera.com, news.ycombinator.com, theverge.com, news.google.com, your own country's papers and others)"
         ],
         "clipboard": false,
         "files": [
@@ -516,26 +516,26 @@
       "files": [
         {
           "path": "extension.json",
-          "sha256": "dfda03fa8c8775d9d4df67ea807f306f8c354af6e7afcf065b2f6f536c6e4abf",
-          "size": 8528,
+          "sha256": "05c9be0da02187b4951f203c4897070de00f5ebe03f54114b21edfcde95d7646",
+          "size": 8548,
           "executable": false
         },
         {
           "path": "feeds.py",
-          "sha256": "f9f1c79ff389d5516899016a321c9791894489174041d6bee846e1c62a9506c6",
-          "size": 14164,
+          "sha256": "71d16c2a687c58a1c47ae9ea80dd0095092c936d3d3ad3b3d3318c1065992c21",
+          "size": 14193,
           "executable": false
         },
         {
           "path": "main.py",
-          "sha256": "e23b3f411050861ecb1b5cc99c41e797b1422d76083a00bc9e19acb8ea69ceae",
-          "size": 34568,
+          "sha256": "347b277897b809abd632d7c019619834459f82223b8b02f397dd6f351e80cfc4",
+          "size": 34576,
           "executable": true
         },
         {
           "path": "paper.py",
-          "sha256": "df90e283d98819d97a330e37f87213f7daeab75273073315984e74ca076f48e5",
-          "size": 15301,
+          "sha256": "0e0b98e85484ad6b7331800dcdd3379167472f3e268a422dc9098c73930e4dce",
+          "size": 15318,
           "executable": false
         }
       ]

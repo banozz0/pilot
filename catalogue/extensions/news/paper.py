@@ -21,8 +21,8 @@ TASK = (
     '{"lead": {"headline": "...", "summary": "two or three sentences", "items": [n, ...]}, '
     '"sections": [{"title": "...", "stories": [{"headline": "...", "summary": "one or two sentences", "items": [n, ...]}]}], '
     '"brief": [{"text": "one line", "items": [n]}]}. '
-    "The lead is the day's most important story. Make 3 to 6 sections by place or topic (Malta first when there is "
-    "Maltese news), 2 to 6 stories each; merge items about the same story into one story listing all their numbers. "
+    "The lead is the day's most important story. Make 3 to 6 sections by place or topic, the most important "
+    "stories of the reader's sources first, 2 to 6 stories each; merge items about the same story into one story listing all their numbers. "
     "Put 4 to 10 smaller items in brief. Use only what the items say: no facts from elsewhere. Headlines at most 12 "
     "words. Write everything in %s, translating headlines in other languages. Every number must be one of the items'.")
 LANGUAGES = {"english": "English", "maltese": "Maltese (Malti)"}

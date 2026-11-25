@@ -1,7 +1,7 @@
 """News's sources and feeds: the built-in list, reading RSS 2.0, RSS 1.0 (RDF) and Atom, and fetching every picked
 feed at once through curl, each with its own time and size limit, so one dead feed never holds the rest.
 
-Each built-in URL was asked on 2026-11-22 and answered with a feed; Malta comes first. The Malta
+Each built-in URL was asked on 2026-11-22 and answered with a feed; world and tech come first, then each country's. The Malta
 Independent has no feed today; TVM's news is its `ahbarijiet` posts, and its plain feed is a
 cached copy days old, so its links ask for them by date. Reddit answers readers without a sign-in with 429 or 404, so Reddit's are listed
 but off. Reuters and AP publish no public feed; theirs are Google News searches of their sites.
@@ -34,18 +34,6 @@ def google(words):
 # (group, id, title, url), in Settings' order. Each is a checkbox in Settings, source-<id>, whose default in
 # extension.json says whether it starts ticked (one list of defaults: test_news checks the two match).
 BUILT_IN = [
-    ("Malta", "times-of-malta", "Times of Malta", "https://timesofmalta.com/rss"),
-    ("Malta", "maltatoday", "MaltaToday", "https://www.maltatoday.com.mt/rss/news/"),
-    ("Malta", "newsbook-en", "Newsbook (English)", "https://newsbook.com.mt/en/feed/"),
-    ("Malta", "newsbook", "Newsbook (Malti)", "https://newsbook.com.mt/feed/"),
-    ("Malta", "lovin-malta", "Lovin Malta", "https://lovinmalta.com/feed/"),
-    ("Malta", "tvm-en", "TVM News (English)", "https://tvmnews.mt/en/feed/?post_type=ahbarijiet&orderby=date&order=DESC"),
-    ("Malta", "tvm", "TVM Aħbarijiet (Malti)", "https://tvmnews.mt/feed/?post_type=ahbarijiet&orderby=date&order=DESC"),
-    ("Malta", "the-shift", "The Shift", "https://theshiftnews.com/feed/"),
-    ("Malta", "one-news", "ONE News (Malti)", "https://one.com.mt/feed/"),
-    ("Malta", "gozo-news", "Gozo News", "https://gozo.news/feed/"),
-    ("Malta", "maltatoday-business", "MaltaToday Business", "https://www.maltatoday.com.mt/rss/business/"),
-    ("Malta", "google-malta", "Google News: Malta", google("Malta when:1d")),
     ("World", "bbc-world", "BBC World", "https://feeds.bbci.co.uk/news/world/rss.xml"),
     ("World", "bbc-top", "BBC Top stories", "https://feeds.bbci.co.uk/news/rss.xml"),
     ("World", "guardian-world", "The Guardian World", "https://www.theguardian.com/world/rss"),
@@ -64,6 +52,18 @@ BUILT_IN = [
      "https://news.google.com/rss/headlines/section/topic/TECHNOLOGY?hl=en-GB&gl=GB&ceid=GB:en"),
     ("Business", "google-business", "Google News: Business",
      "https://news.google.com/rss/headlines/section/topic/BUSINESS?hl=en-GB&gl=GB&ceid=GB:en"),
+    ("Malta", "times-of-malta", "Times of Malta", "https://timesofmalta.com/rss"),
+    ("Malta", "maltatoday", "MaltaToday", "https://www.maltatoday.com.mt/rss/news/"),
+    ("Malta", "newsbook-en", "Newsbook (English)", "https://newsbook.com.mt/en/feed/"),
+    ("Malta", "newsbook", "Newsbook (Malti)", "https://newsbook.com.mt/feed/"),
+    ("Malta", "lovin-malta", "Lovin Malta", "https://lovinmalta.com/feed/"),
+    ("Malta", "tvm-en", "TVM News (English)", "https://tvmnews.mt/en/feed/?post_type=ahbarijiet&orderby=date&order=DESC"),
+    ("Malta", "tvm", "TVM Aħbarijiet (Malti)", "https://tvmnews.mt/feed/?post_type=ahbarijiet&orderby=date&order=DESC"),
+    ("Malta", "the-shift", "The Shift", "https://theshiftnews.com/feed/"),
+    ("Malta", "one-news", "ONE News (Malti)", "https://one.com.mt/feed/"),
+    ("Malta", "gozo-news", "Gozo News", "https://gozo.news/feed/"),
+    ("Malta", "maltatoday-business", "MaltaToday Business", "https://www.maltatoday.com.mt/rss/business/"),
+    ("Malta", "google-malta", "Google News: Malta", google("Malta when:1d")),
     ("Reddit", "r-malta", "r/malta", "https://www.reddit.com/r/malta/.rss"),
     ("Reddit", "r-worldnews", "r/worldnews", "https://www.reddit.com/r/worldnews/.rss"),
     ("Reddit", "r-technology", "r/technology", "https://www.reddit.com/r/technology/.rss"),
