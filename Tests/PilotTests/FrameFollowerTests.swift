@@ -138,25 +138,28 @@ struct FrameFollowerTests {
     /// 50 ms (the pace a busy app may send AX moves at; the real pace is unmeasured): through AX the border moves at
     /// the app's pace; held by the mouse it moves every display frame, from the drag's own thread, led by the pointer
     /// and corrected by the window server's reads (drag-3), and never asks the app.
-    @Test("Held by the mouse, the border moves every display frame from the drag's thread, whatever pace AX reports moves at")
+    @Test("Held by the mouse, the border moves every display frame from the drag's thread, whatever pace AX reports moves at; a held resize hands it back to the main thread")
     func heldFollowsEveryFrame() {
-        func run(held: Bool) -> (costs: Costs, rig: Rig) {
+        /// `resize`: the edge is dragged instead, the window 4 points wider each millisecond. `whileHeld`: the main
+        /// thread's border moves before the release.
+        func run(held: Bool, resize: Bool = false) -> (costs: Costs, rig: Rig, whileHeld: Int) {
             let rig = Self.rig()
             rig.mouse.held = held
             rig.costs.fullReads = 0; rig.costs.mainAX = 0; rig.costs.shows = 0
             var nextFrame = 1.0 / 120
             for ms in 1...200 {
                 rig.clock.advance(to: Double(ms) / 1000)
-                rig.move(CGRect(x: 100 + 4 * ms, y: 50, width: 800, height: 600))
+                rig.move(resize ? CGRect(x: 100, y: 50, width: 800 + 4 * ms, height: 600) : CGRect(x: 100 + 4 * ms, y: 50, width: 800, height: 600))
                 if ms % 50 == 1 { rig.observers.windowMoved(Self.dragged) }
                 if rig.clock.now >= nextFrame { rig.mouse.tick?(); nextFrame += 1.0 / 120 }
             }
+            let whileHeld = rig.costs.shows
             rig.mouse.held = false
             rig.mouse.tick?() // the frame after the release ends the drag
             rig.clock.advance(to: 1)
-            return (rig.costs, rig)
+            return (rig.costs, rig, whileHeld)
         }
-        let ax = run(held: false), held = run(held: true)
+        let ax = run(held: false), held = run(held: true), resized = run(held: true, resize: true)
         print("[border-drag] AX moves every 50 ms, through AX: \(ax.costs.shows) border moves in 200 ms")
         print("[border-drag] held: \(held.costs.threadMoves) border moves on the drag's thread, \(held.costs.shows) on main, \(held.costs.boundsReads) window server reads, \(held.costs.frameReads) AX frame reads (the release's), \(held.costs.mainAX) AX calls on main")
         // Four AX moves, and the settle read after the last puts the border where the window went on to (tester bug 9)
@@ -170,6 +173,11 @@ struct FrameFollowerTests {
         #expect(held.rig.surface.shown == Self.border(held.rig.frame()))
         #expect(held.rig.mouse.tick == nil && held.rig.mouse.links == 1, "one display link per drag, stopped at the release")
         #expect(held.rig.observers.drag.lastDrag?.moves == 4)
+        // popup-drag (Sven on build 3216, a Ghostex page window's edge resize lost the border): lent to the drag, which
+        // stops moving it on a resize, the line stayed put until the release; handed back, each read places it
+        print("[border-drag] held resize: \(resized.whileHeld) border moves on main while held, \(resized.costs.threadMoves) on the drag's thread")
+        #expect(resized.whileHeld >= 20, "every read after the first size change places the line")
+        #expect(resized.rig.surface.shown == Self.border(resized.rig.frame()))
     }
 
     @Test("The border ends exactly on the window when the drag stops")

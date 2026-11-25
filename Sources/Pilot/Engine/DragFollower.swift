@@ -14,7 +14,7 @@ import CoreGraphics
 /// window is where the last read had it plus how far the pointer went since (a read of the pointer is a memory read,
 /// 0 us), and each read only corrects that. A read that does not agree with the pointer (a window held at a screen's
 /// edge, an app moving its own window) stops the lead until one agrees; a resize, or no border to move, hands each read
-/// to the main thread as before.
+/// to the main thread as before, and the line with it.
 @MainActor
 final class DragFollower {
     /// The window server's bounds for a window (window-server coordinates, top-left), `done` on the reading thread; tests run it in place.
@@ -25,7 +25,8 @@ final class DragFollower {
     typealias Mover = @Sendable (_ number: UInt32, _ corner: CGPoint) -> Void
     /// The border panel lent for a drag of window `id`, and how far its corner sits up and left of the window's: nil when
     /// no border is shown above that window, and the main thread lands each read instead. The revoke (focus moved on,
-    /// the border hid) stops the drag moving it; `giveBack` returns it at the drag's end.
+    /// the border hid) stops the drag moving it; `giveBack` returns it at the drag's end, or at its first read the main
+    /// thread lands (a resize).
     var border: (_ id: CGWindowID, _ revoke: @escaping () -> Void) -> DragBorder? = { _, _ in nil }
     var giveBack: () -> Void = {}
     typealias DragBorder = (number: UInt32, inset: CGFloat)
@@ -68,7 +69,13 @@ final class DragFollower {
             window = id
             let track = Track(id: id, start: now(), reader: reader, mover: mover, held: held, pointer: pointer, now: now)
             track.lend(border(id) { [weak track] in track?.revoke() })
-            track.landed = { [weak self] frame in self?.landed(id, frame) }
+            // A read the main thread lands makes the line the main thread's: a resize stops the drag moving it, and lent,
+            // those reads left it to the drag, so it stayed where the resize began until the release (be63ce36; Sven on
+            // build 3216, a Ghostex page window's and a Finder window's edge resize). A move lands none while lent.
+            track.landed = { [weak self] frame in
+                self?.giveBack()
+                self?.landed(id, frame)
+            }
             track.released = { [weak self] in self?.end(id) }
             self.track = track
             stop = ticker { track.frame() }

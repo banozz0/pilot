@@ -70,7 +70,7 @@ final class WindowBorderController {
         return (number, window.frame.minX - frame.minX)
     }
 
-    /// The drag's end: the line is the main thread's again, placed by the next update.
+    /// The drag's end, or its resize: the line is the main thread's again, placed by the next update.
     func giveBack() {
         guard lease != nil else { return }
         lease = nil
