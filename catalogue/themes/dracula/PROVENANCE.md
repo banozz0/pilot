@@ -10,21 +10,24 @@ and Omarchy-LICENSE.txt.
 
 ## Wallpapers
 
-Picked by Sven, 2026-11-12. Every landscape file is 3840×2160 and keeps its subject inside the centre 21:9 band (what a 3440×1440 screen shows); the tall one is 2160×3840. HEIC at quality 80. Licences were not audited for this round; each image's source and author are recorded as found.
+Picked by Sven, 2026-11-25, in round 2 of Pilot's themes, from 2 to 4 candidates for this theme; it replaces the pack's earlier wallpapers. The landscape file is 3840×2160 and keeps its subject inside the centre 21:9 band (what a 3440×1440 screen shows); the tall one is 2160×3840. HEIC at quality 80.
 
-### dracula-realistic-galaxy.heic
+### dracula-gothic-library.heic
 
-- Title: Realistic Galaxy
-- Author / credit: Ethan Butruille, “Realistic Galaxy” (Blender), artist's watermark bottom left; via wallhaven vpeq6l
-- Source URL: https://www.artstation.com/artwork/GvLzQ4
+- Title: Gothic Library
+- Author / credit: Original artwork made for Pilot, 2026-11-25, with OpenAI image generation (Codex image_gen), in the look of a 35 mm film photograph, its colours set to this theme's palette; a wallpaper of unknown origin from a personal collection served as a style reference only, nothing of it is reproduced.
+- Made: the made image (1672×941) upscaled to 3840×2160 with Real-ESRGAN general x4v3 (Pilot's former pilot-upscale, rebuilt from commit c351f17e^ for this round).
+- Source URL: none (made for Pilot)
+- Rights: original Pilot asset; supplied for unrestricted use, modification and redistribution with Pilot and exported Pilot theme packs.
 
 ### dracula-tall.heic
 
-- Title: Tall, for portrait screens
-- Author / credit: Original artwork made for Pilot, 2026-11-12, with OpenAI image generation (Codex image_gen), graded to this theme's palette; a photograph of unknown origin served as a style reference only, nothing of it is reproduced. Upscaled with Pilot's pilot-upscale (Real-ESRGAN general x4v3).
+- Title: Gothic Library, tall, for portrait screens
+- Author / credit: Original artwork made for Pilot, 2026-11-25, with OpenAI image generation (Codex image_gen), in the look of a 35 mm film photograph, its colours set to this theme's palette; a wallpaper of unknown origin from a personal collection served as a style reference only, nothing of it is reproduced.
+- Made: a 9:16 column of the made image around its subject (529×941), upscaled ×4 with Real-ESRGAN general x4v3 (Pilot's former pilot-upscale, rebuilt from commit c351f17e^ for this round), then resampled to 2160×3840.
 - Source URL: none (made for Pilot)
 - Rights: original Pilot asset; supplied for unrestricted use, modification and redistribution with Pilot and exported Pilot theme packs.
 
 Files (SHA-256):
-- dracula-realistic-galaxy.heic: 8a61d8ff0072a173b3d8a4f412a821d964b9249fdbcc797bdb03529fdf3f6c2c
-- dracula-tall.heic: fad6f00ffc931d9cd0b59d3cdda19da80269a6a4f865e9a103715e957ca0a7de
+- dracula-gothic-library.heic: c2077a2ac3bbb6c6fac2c8f672d878b7cd3ecb7470ae9606f6ebc58bc0e501ab
+- dracula-tall.heic: e0a3c4be2155abe185ba3cbe029e18108000cd4e6b2d3ddd6eb38c1ed961b41f

@@ -1005,12 +1005,12 @@
         "native_selection": "#E15A48"
       },
       "preview": null,
-      "digest": "c99f89f23ac83be01e0f04dd20eabd4871c09a434ac289630b504d281b3e55cd",
+      "digest": "893553b310204f89764a2d0cc66b47fcf370bb16a7e16b8a16917847aaf0b7e7",
       "files": [
         {
           "path": "PROVENANCE.md",
-          "sha256": "b807dd60d5172e8e51f0b08ee1c300bec32e6c69a35e9f2e87fbb34f1bf99aa3",
-          "size": 2737,
+          "sha256": "138797305635897bb04b4bc3cccfb617a59f86540fb4de1450d7d9bdf6fab49d",
+          "size": 2515,
           "executable": false
         },
         {
@@ -1020,21 +1020,15 @@
           "executable": false
         },
         {
-          "path": "wallpapers/akane-madder-sun.heic",
-          "sha256": "75103980f8f8ece474fa77748155b5f1b5b4acd8b0c03b5b99926302634cf05a",
-          "size": 315582,
+          "path": "wallpapers/akane-dye-lane.heic",
+          "sha256": "282af5f86767ff0481bae07e967998a235e3176155121a2adf2600bbcac845e3",
+          "size": 488224,
           "executable": false
         },
         {
           "path": "wallpapers/akane-tall.heic",
-          "sha256": "03473dfb4392c833e654c615260c302c2e7a59a3208ddf47ec85e032b46cd58a",
-          "size": 307821,
-          "executable": false
-        },
-        {
-          "path": "wallpapers/akane-torii-above-the-clouds.heic",
-          "sha256": "22f3ec8241a7dd835f73ba61b9fc1a1c20d9bc5fd647adbedc5e2cf79ffd9485",
-          "size": 240297,
+          "sha256": "afb872f49cae31de51a101970a692f551bbc8d2b6d263335b8b8cd3db88a0630",
+          "size": 311972,
           "executable": false
         }
       ]
@@ -1188,6 +1182,77 @@
       ]
     },
     {
+      "id": "canopy",
+      "title": "Canopy",
+      "dark": true,
+      "styles": [
+        "instrument",
+        "toybox"
+      ],
+      "palette": {
+        "background": "#152F14",
+        "dark_background": "#0F210E",
+        "darker_background": "#1E371C",
+        "lighter_background": "#284126",
+        "foreground": "#EAF2DC",
+        "dark_foreground": "#809078",
+        "light_foreground": "#C4CFB8",
+        "bright_foreground": "#F4F8EE",
+        "accent": "#3CA1EE",
+        "selection": "#1E4844",
+        "muted": "#667960",
+        "red": "#E57A5C",
+        "yellow": "#D8D25A",
+        "green": "#7CC46A",
+        "cyan": "#6FC7B8",
+        "blue": "#7FBEDF",
+        "magenta": "#C79AD0",
+        "bright_red": "#EC9F8A",
+        "bright_yellow": "#E3DF88",
+        "bright_green": "#A1D594",
+        "bright_cyan": "#97D7CC",
+        "bright_blue": "#A3D0E8",
+        "bright_magenta": "#D7B6DD",
+        "native_line": "#344C31",
+        "native_line2": "#475D43",
+        "native_text3": "#87967E",
+        "native_second": "#D8D25A",
+        "native_third": "#6FC7B8",
+        "native_graph1": "#3CA1EE",
+        "native_graph2": "#D8D25A",
+        "native_graph3": "#7CC46A",
+        "native_selection": "#3CA1EE"
+      },
+      "preview": null,
+      "digest": "bf509d38eb9e576e664719bedac7c261d36c2ca816902fefa729537f9f252ed6",
+      "files": [
+        {
+          "path": "PROVENANCE.md",
+          "sha256": "20a4a379613e3fac9fed0f8a8c181450dcd3aac7159a170ed130212252fec562",
+          "size": 2597,
+          "executable": false
+        },
+        {
+          "path": "manifest.json",
+          "sha256": "c1ad969593152ca39a224bfbf56fd4510b184718a91856ee408fc4ced56b984a",
+          "size": 1217,
+          "executable": false
+        },
+        {
+          "path": "wallpapers/canopy-forest-path.heic",
+          "sha256": "7eb356e87f2b01738fc5be034eeba7bce4920299440193e6b2745c292cc81e60",
+          "size": 1704692,
+          "executable": false
+        },
+        {
+          "path": "wallpapers/canopy-tall.heic",
+          "sha256": "53eeb26e903b265da7b4815679425da87549731a77fb49b4583b80341f0844c2",
+          "size": 1087788,
+          "executable": false
+        }
+      ]
+    },
+    {
       "id": "catppuccin",
       "title": "Catppuccin",
       "dark": true,
@@ -1230,12 +1295,12 @@
         "native_selection": "#89B4FA"
       },
       "preview": null,
-      "digest": "35499ce5e1e8589a0bb5b78631328b9cebd37eb25523e6adf0950bcdcdf38938",
+      "digest": "4544b8ecb45f6da83fa73450d3a87ec740570544e26a600d8de35996ecd3eb9e",
       "files": [
         {
           "path": "PROVENANCE.md",
-          "sha256": "84142586115f2a85bab29a047ce4663770c1fc8d74592c4ea70b4cc6956a14f0",
-          "size": 2410,
+          "sha256": "c3af605821febfbeabbe65dc140b6095d5c973893d74fabc5b06d7ad71ae9454",
+          "size": 2732,
           "executable": false
         },
         {
@@ -1246,20 +1311,14 @@
         },
         {
           "path": "wallpapers/catppuccin-tall.heic",
-          "sha256": "249b082b3bfd6eb4ecb531c696fc5b9546468a9e93ae3d5051b26eef33291f13",
-          "size": 336763,
+          "sha256": "a675ce37af3d15064c2afcd32e2c9320acf0eb0380d10238be69f70c3d614703",
+          "size": 413875,
           "executable": false
         },
         {
-          "path": "wallpapers/catppuccin-waves.heic",
-          "sha256": "36ab05d6a178d7e9935dd6fe4cc04d5766fa80b546d2c7dbe7d64ab013c45d0e",
-          "size": 669190,
-          "executable": false
-        },
-        {
-          "path": "wallpapers/catppuccin-yosemite.heic",
-          "sha256": "2dfc4a4d589dc99c007b28acfa674c201ac4e9e44a7a04903b813bcbf1d0e9ca",
-          "size": 910540,
+          "path": "wallpapers/catppuccin-window-seat.heic",
+          "sha256": "5d1ed14b3e81efa07867d7e99b2fc7053a199b14dc06c2f9a0589bf9978c7d1b",
+          "size": 458977,
           "executable": false
         }
       ]
@@ -1390,12 +1449,12 @@
         "native_selection": "#6FD8FF"
       },
       "preview": null,
-      "digest": "599670bf7ab16e72dec42c52eeca412d432962ecf8cee6c35f5548aafc416e55",
+      "digest": "46b011f9002a546084cf085501b96e4c00880db8266f18f74033ad87e062dcff",
       "files": [
         {
           "path": "PROVENANCE.md",
-          "sha256": "220411892d7bb82cf8e7febd613df54a6fe5229cf5b2f4171b5003b67d2d9b56",
-          "size": 2335,
+          "sha256": "0d2d393aa4462941a683541f673c9bea522846a754d2aacf60bdbf543c04e072",
+          "size": 2522,
           "executable": false
         },
         {
@@ -1405,15 +1464,15 @@
           "executable": false
         },
         {
-          "path": "wallpapers/comet-mirror-lake.heic",
-          "sha256": "cc8eddc72e0c99a12170831093e41becccfaf0c42948cd1a1576f6994ca95bdf",
-          "size": 489507,
+          "path": "wallpapers/comet-silver-grass.heic",
+          "sha256": "fd7070dcbaf82e059cce73f01914b0b1877a95c9429be62128ab5fa8c416d2a6",
+          "size": 795731,
           "executable": false
         },
         {
           "path": "wallpapers/comet-tall.heic",
-          "sha256": "e0c895480fd9b89330a1061fe5626e9b93486dc2eda686f1f88ef364c77f5584",
-          "size": 298819,
+          "sha256": "147063f316344328055bcc0a88a50457dd0120e9dbb6b2536cd97c6710dbe467",
+          "size": 571103,
           "executable": false
         }
       ]
@@ -1461,12 +1520,12 @@
         "native_selection": "#F7C843"
       },
       "preview": null,
-      "digest": "20b6413d693565ea23e175c2d4054f5e574b0595841602ad0ec87fdd98de6be7",
+      "digest": "6cdea6ac64dfafd42fe6e833b7c948830cb1f34d6006ec72d36370be9c02f2fe",
       "files": [
         {
           "path": "PROVENANCE.md",
-          "sha256": "9565ef2d7fefca56f88d1a2773f86b2e345abe27421f4fc2bdc40b90790dfbbc",
-          "size": 2354,
+          "sha256": "a033d361bf56ee6b09a387b1e4fd878642cc0cdd64ba9eeb98421983e66df221",
+          "size": 2534,
           "executable": false
         },
         {
@@ -1476,15 +1535,15 @@
           "executable": false
         },
         {
-          "path": "wallpapers/cumulus-tall.heic",
-          "sha256": "7138001bc90e1ff41cb3986aa0fadd64d875cb46dcb5d855e2f2c4b1a8194777",
-          "size": 457551,
+          "path": "wallpapers/cumulus-sponge-reef.heic",
+          "sha256": "10d3a6c1d5cddf08180a542b8cd638dd5b49df6400c87377627411f32ff29710",
+          "size": 686227,
           "executable": false
         },
         {
-          "path": "wallpapers/cumulus-thunderheads.heic",
-          "sha256": "f9adceb9719ee883ecf035cd9329b51a832bb9250777d9d6037d9065206d13e8",
-          "size": 644874,
+          "path": "wallpapers/cumulus-tall.heic",
+          "sha256": "8474416920e7e5f584e727e8a6c9cdde6ed7c7efb1b72f31565a2e60280e5d08",
+          "size": 544927,
           "executable": false
         }
       ]
@@ -1532,12 +1591,12 @@
         "native_selection": "#BD93F9"
       },
       "preview": null,
-      "digest": "afabb092e8885d2fe91401d40fed6736ae613d1b978ee41d46b67377eab32dc2",
+      "digest": "44f2d70b6e3ece516e838dfb69e20f88c3688a50175cd69149e53b4516285d70",
       "files": [
         {
           "path": "PROVENANCE.md",
-          "sha256": "563d0ff456226b8ddb7f6df230b667c047c8e27d94de9aec6bfee3414cb9781f",
-          "size": 1731,
+          "sha256": "3ebdf5d14374e09dc0a77eef8c797b54eafd9a75a982a7e051a474853d97f4d7",
+          "size": 2462,
           "executable": false
         },
         {
@@ -1547,15 +1606,15 @@
           "executable": false
         },
         {
-          "path": "wallpapers/dracula-realistic-galaxy.heic",
-          "sha256": "8a61d8ff0072a173b3d8a4f412a821d964b9249fdbcc797bdb03529fdf3f6c2c",
-          "size": 401465,
+          "path": "wallpapers/dracula-gothic-library.heic",
+          "sha256": "c2077a2ac3bbb6c6fac2c8f672d878b7cd3ecb7470ae9606f6ebc58bc0e501ab",
+          "size": 498039,
           "executable": false
         },
         {
           "path": "wallpapers/dracula-tall.heic",
-          "sha256": "fad6f00ffc931d9cd0b59d3cdda19da80269a6a4f865e9a103715e957ca0a7de",
-          "size": 403667,
+          "sha256": "e0a3c4be2155abe185ba3cbe029e18108000cd4e6b2d3ddd6eb38c1ed961b41f",
+          "size": 365106,
           "executable": false
         }
       ]
@@ -1680,12 +1739,12 @@
         "native_selection": "#FF4775"
       },
       "preview": null,
-      "digest": "66843e58c5621c6ed512bb0ee79df6b57eded87a2b7421fce72e0ba5fb2bc652",
+      "digest": "035200de638b55d33aded23bb94d1618cca73c79472122c2334b0eb77c5b1253",
       "files": [
         {
           "path": "PROVENANCE.md",
-          "sha256": "86e017bdb33dc57841fd94758f60aaae805b895edbac38faf2778ab1d9185588",
-          "size": 2596,
+          "sha256": "785b9b6814276170a2221e5d01edf3e13697517be4d5baed09438b673fcc58d0",
+          "size": 2102,
           "executable": false
         },
         {
@@ -1695,27 +1754,86 @@
           "executable": false
         },
         {
-          "path": "wallpapers/garnet-ember-clouds.heic",
-          "sha256": "4e4dd8d23f74800a1ae6f210180c733c31b92fac581d0094c798f970bb2b7006",
-          "size": 248541,
-          "executable": false
-        },
-        {
-          "path": "wallpapers/garnet-garnet-sunset.heic",
-          "sha256": "b4168dbf7efdfc11cab7bd16696fe2725c50ad9e7a565fec6fc763222c11d6b9",
-          "size": 245876,
-          "executable": false
-        },
-        {
-          "path": "wallpapers/garnet-pink-earth.heic",
-          "sha256": "bab5291a60e7b51ad8b9507acac5123031ee96a6097d13007a8eac8c2a8571c2",
-          "size": 419397,
+          "path": "wallpapers/garnet-poppies.heic",
+          "sha256": "3787b33ac78b63275d9c9b307db7783bd32efa7427fd556eaac4e6790d384b25",
+          "size": 228093,
           "executable": false
         },
         {
           "path": "wallpapers/garnet-tall.heic",
-          "sha256": "30ac69d1a630a94d2e5d83831627ce59ac860a969220e0d18c876c0fb380843c",
-          "size": 221985,
+          "sha256": "cd86178e923590a1fbc0bf64f12f2c40963fe32e6ceb73d71517af2a4bc5b62d",
+          "size": 207456,
+          "executable": false
+        }
+      ]
+    },
+    {
+      "id": "gelatin",
+      "title": "Gelatin",
+      "dark": false,
+      "styles": [
+        "instrument",
+        "toybox"
+      ],
+      "palette": {
+        "background": "#D4D3D1",
+        "dark_background": "#C9C8C7",
+        "darker_background": "#DDDCDA",
+        "lighter_background": "#E7E7E6",
+        "foreground": "#1B1B1B",
+        "dark_foreground": "#787776",
+        "light_foreground": "#3C3C3C",
+        "bright_foreground": "#0E0E0E",
+        "accent": "#B3261E",
+        "selection": "#CDADAA",
+        "muted": "#8E8D8C",
+        "red": "#9E2A22",
+        "yellow": "#8A6D1E",
+        "green": "#4D6B45",
+        "cyan": "#3F6E73",
+        "blue": "#3D5675",
+        "magenta": "#7A4466",
+        "bright_red": "#721E18",
+        "bright_yellow": "#634E16",
+        "bright_green": "#374D32",
+        "bright_cyan": "#2D4F53",
+        "bright_blue": "#2C3E54",
+        "bright_magenta": "#583149",
+        "native_line": "#DBDBDA",
+        "native_line2": "#C6C6C6",
+        "native_text3": "#5A5A59",
+        "native_second": "#3D5675",
+        "native_third": "#7A4466",
+        "native_graph1": "#B3261E",
+        "native_graph2": "#3D5675",
+        "native_graph3": "#4D6B45",
+        "native_selection": "#B3261E"
+      },
+      "preview": null,
+      "digest": "f87519257e96acd7ea59d9fb83e423b61dda2b0948e9a416480838cc5c2fb51a",
+      "files": [
+        {
+          "path": "PROVENANCE.md",
+          "sha256": "bc71ea9baaecae14946252c6f6a6617b075d43d3e3065d3c9e4d5fbf2dc8d2fb",
+          "size": 2621,
+          "executable": false
+        },
+        {
+          "path": "manifest.json",
+          "sha256": "4fbbbc67009860c414c48dda87fa6649dfa2b744799eea943ed62f840dcf1353",
+          "size": 1220,
+          "executable": false
+        },
+        {
+          "path": "wallpapers/gelatin-prairie-windmill.heic",
+          "sha256": "48d541ecff1f9abdf913fc6e66d99f3b3f578b7612c9af89ab00d805270516ff",
+          "size": 619956,
+          "executable": false
+        },
+        {
+          "path": "wallpapers/gelatin-tall.heic",
+          "sha256": "bcd81655177a4ce4cb79ad93acacd952071b6d68fae8e1be68baad031e59e3c8",
+          "size": 480692,
           "executable": false
         }
       ]
@@ -1763,12 +1881,12 @@
         "native_selection": "#7DAEA3"
       },
       "preview": null,
-      "digest": "a9497c654c2409215a4119bb677a3bb1b87b40866a897cf7b904923b46db93bd",
+      "digest": "95da2c708041d74e2411b33daf00f982c3da593032709b79fab93ebbc68bde46",
       "files": [
         {
           "path": "PROVENANCE.md",
-          "sha256": "0809a37fbd95dbb9516f2952edae0087be70a05f01ff030c85e0cdc8955abff0",
-          "size": 2702,
+          "sha256": "6e1054f221168e4ea9573cc66388c6586785bc470e154fd2e6478c2a822f024e",
+          "size": 2608,
           "executable": false
         },
         {
@@ -1778,27 +1896,86 @@
           "executable": false
         },
         {
-          "path": "wallpapers/gruvbox-above-the-clouds.heic",
-          "sha256": "7c4e347072653200ab31d11f11fed91fc54b4bcca7c627f6b7a7b6889659baf4",
-          "size": 344392,
-          "executable": false
-        },
-        {
-          "path": "wallpapers/gruvbox-dock-pixel-art.heic",
-          "sha256": "0d4e1e1c6c82a8c649da76b524bf4197ef5bc4a28ffd4a26caba68be7b502584",
-          "size": 715532,
+          "path": "wallpapers/gruvbox-great-wave.heic",
+          "sha256": "5287c6ffb079b6d93e324b0edcfc2baa0e87db2a4227f72f3dc81e52cbffd5f5",
+          "size": 1687521,
           "executable": false
         },
         {
           "path": "wallpapers/gruvbox-tall.heic",
-          "sha256": "afce84f2def39ae8cd3aa7c2b719764d2db910c2454bba2dfab2f12880ec725b",
-          "size": 419761,
+          "sha256": "c20305678dd4e25f23902e305915682612d014fb91d9e934893bb731b78ddb77",
+          "size": 1268857,
+          "executable": false
+        }
+      ]
+    },
+    {
+      "id": "halo",
+      "title": "Halo",
+      "dark": true,
+      "styles": [
+        "instrument",
+        "toybox"
+      ],
+      "palette": {
+        "background": "#182A49",
+        "dark_background": "#111D33",
+        "darker_background": "#213250",
+        "lighter_background": "#2B3C58",
+        "foreground": "#EAF4F4",
+        "dark_foreground": "#818F9E",
+        "light_foreground": "#C4D0D5",
+        "bright_foreground": "#F4FAFA",
+        "accent": "#93DADB",
+        "selection": "#335169",
+        "muted": "#68778A",
+        "red": "#FF8A7A",
+        "yellow": "#F2D27A",
+        "green": "#8FD9A8",
+        "cyan": "#4BB9D8",
+        "blue": "#5AA8E6",
+        "magenta": "#C9A2E8",
+        "bright_red": "#FFAB9F",
+        "bright_yellow": "#F6DF9F",
+        "bright_green": "#AEE4C0",
+        "bright_cyan": "#7DCDE3",
+        "bright_blue": "#88C0ED",
+        "bright_magenta": "#D8BCEE",
+        "native_line": "#364761",
+        "native_line2": "#4A5971",
+        "native_text3": "#8492A1",
+        "native_second": "#4BB9D8",
+        "native_third": "#5AA8E6",
+        "native_graph1": "#93DADB",
+        "native_graph2": "#4BB9D8",
+        "native_graph3": "#8FD9A8",
+        "native_selection": "#93DADB"
+      },
+      "preview": null,
+      "digest": "26cd2f51937f1a8ff70f7864269767af32cea451c7d7ff7bcdf4fc86243fbb2b",
+      "files": [
+        {
+          "path": "PROVENANCE.md",
+          "sha256": "9b90b82bfbd022a6e963d6afe36011988b3a03a7214471bb63e3b581f1925b1f",
+          "size": 2575,
           "executable": false
         },
         {
-          "path": "wallpapers/gruvbox-the-backwater.heic",
-          "sha256": "144774a392f21f50d20c96d675c2d4fb7b211d06c53021437031ba5693d2daa1",
-          "size": 3855240,
+          "path": "manifest.json",
+          "sha256": "085bc886be4bbbd64dc14e24f15cd7efbd53cd408e8bf4707ec06a45b4909212",
+          "size": 1213,
+          "executable": false
+        },
+        {
+          "path": "wallpapers/halo-tall.heic",
+          "sha256": "a5960bd6d1f41c6b65165d8eae42e863c10f33557ec2f8623a40d0941b135218",
+          "size": 459203,
+          "executable": false
+        },
+        {
+          "path": "wallpapers/halo-water-tower.heic",
+          "sha256": "2691d9587e409efc73128d76aeebaf2b638afc416a8270dda5181643744acf01",
+          "size": 629611,
           "executable": false
         }
       ]
@@ -2100,90 +2277,6 @@
       ]
     },
     {
-      "id": "matte-black",
-      "title": "Matte Black",
-      "dark": true,
-      "styles": [
-        "instrument",
-        "toybox"
-      ],
-      "palette": {
-        "background": "#121212",
-        "dark_background": "#0D0D0D",
-        "darker_background": "#171717",
-        "lighter_background": "#1E1E1E",
-        "foreground": "#BEBEBE",
-        "dark_foreground": "#555555",
-        "light_foreground": "#979799",
-        "bright_foreground": "#BEBEBE",
-        "accent": "#E68E0D",
-        "selection": "#2A2A2A",
-        "muted": "#333333",
-        "red": "#D35F5F",
-        "yellow": "#B91C1C",
-        "green": "#FFC107",
-        "cyan": "#BEBEBE",
-        "blue": "#E68E0D",
-        "magenta": "#D35F5F",
-        "bright_red": "#B91C1C",
-        "bright_yellow": "#B90A0A",
-        "bright_green": "#FFC107",
-        "bright_cyan": "#EAEAEA",
-        "bright_blue": "#F59E0B",
-        "bright_magenta": "#B91C1C",
-        "native_line": "#282828",
-        "native_line2": "#383838",
-        "native_text3": "#7D7D7F",
-        "native_second": "#EAEAEA",
-        "native_third": "#B91C1C",
-        "native_graph1": "#E68E0D",
-        "native_graph2": "#EAEAEA",
-        "native_graph3": "#FFC107",
-        "native_selection": "#E68E0D",
-        "native_amber": "#F59E0B"
-      },
-      "preview": null,
-      "digest": "6507dbec3bb62fb938cd820f3d76b2668f4c31d36c52208bf25bbd7c29705528",
-      "files": [
-        {
-          "path": "PROVENANCE.md",
-          "sha256": "a1de80decb0865e679dcc36a356025e5a5fb0238c13a33574ac148b2c5d7e8d3",
-          "size": 2680,
-          "executable": false
-        },
-        {
-          "path": "manifest.json",
-          "sha256": "d01215021f2792a32b62901b706838ea9de9aca8d1faa86d910596d42b169b20",
-          "size": 1258,
-          "executable": false
-        },
-        {
-          "path": "wallpapers/matte-black-dark-waters.heic",
-          "sha256": "f9957581a2f06dd27a97a006ec69b9bd45b0c3895e511e17a39a4bec16d6192f",
-          "size": 475447,
-          "executable": false
-        },
-        {
-          "path": "wallpapers/matte-black-dot-hands.heic",
-          "sha256": "763e003f905976be2a117c7826c356b07b9d7e0a5eac99455f86c7c74879a52e",
-          "size": 199870,
-          "executable": false
-        },
-        {
-          "path": "wallpapers/matte-black-ship-at-sea.heic",
-          "sha256": "0ef0680d157cc0d1cd0845cdbbdd04ea929033af23556533bb5f3cb96f077510",
-          "size": 1031929,
-          "executable": false
-        },
-        {
-          "path": "wallpapers/matte-black-tall.heic",
-          "sha256": "a332fe48d8dbcbc3cdf95703e2e5a76aee229888a2f2d844e31591db206e607a",
-          "size": 99377,
-          "executable": false
-        }
-      ]
-    },
-    {
       "id": "meadow",
       "title": "Meadow",
       "dark": false,
@@ -2226,12 +2319,12 @@
         "native_selection": "#2379AB"
       },
       "preview": null,
-      "digest": "f3126fd2f261d7df8fb6905989ba87e950dd7f4d88320c4c666361dd578c2e66",
+      "digest": "574a1c3feb3d84804749db7f807fb223bd1e8b601df5be1c033ee910ab25ea88",
       "files": [
         {
           "path": "PROVENANCE.md",
-          "sha256": "0f7e0369b4d564632dd65bb12fd11390adef5354d69c5cb55f80c0bc7e63d5a4",
-          "size": 2335,
+          "sha256": "c095aee795b5cafc5c120f70b4c5f727e4cb76bbde16d2dc1af95a86b196df98",
+          "size": 4177,
           "executable": false
         },
         {
@@ -2241,86 +2334,27 @@
           "executable": false
         },
         {
+          "path": "wallpapers/meadow-farmhouse-hill.heic",
+          "sha256": "4d5ed116a9af4a9bf586e2d74581c55cc96da77186a9a98258135727d1b8c3c0",
+          "size": 911147,
+          "executable": false
+        },
+        {
           "path": "wallpapers/meadow-sunflowers.heic",
           "sha256": "353e6dbb3be77eb5145808c4603c88c93ac26d3067e2d4b996d9f70522697f95",
           "size": 775203,
           "executable": false
         },
         {
-          "path": "wallpapers/meadow-tall.heic",
+          "path": "wallpapers/meadow-tall-farmhouse.heic",
+          "sha256": "d4cc5867df9d4620a958e2f0f1941494521396bdecd071271f7b7e03ac943318",
+          "size": 679994,
+          "executable": false
+        },
+        {
+          "path": "wallpapers/meadow-tall-sunflowers.heic",
           "sha256": "27a2087fc322b1b55e7c0a25cc9b662706156eeb7557e3553268d7e7f4872f41",
           "size": 503585,
-          "executable": false
-        }
-      ]
-    },
-    {
-      "id": "mesa",
-      "title": "Mesa",
-      "dark": true,
-      "styles": [
-        "instrument",
-        "toybox"
-      ],
-      "palette": {
-        "background": "#28272A",
-        "dark_background": "#1C1B1D",
-        "darker_background": "#302F31",
-        "lighter_background": "#3A3839",
-        "foreground": "#F2E3D3",
-        "dark_foreground": "#8D857E",
-        "light_foreground": "#CEC1B5",
-        "bright_foreground": "#F8F1E9",
-        "accent": "#EF5A31",
-        "selection": "#54322C",
-        "muted": "#756E6A",
-        "red": "#E56759",
-        "yellow": "#E7B483",
-        "green": "#B1AC7F",
-        "cyan": "#A6B6B7",
-        "blue": "#99A1C4",
-        "magenta": "#D296AE",
-        "bright_red": "#EC9287",
-        "bright_yellow": "#EEC9A6",
-        "bright_green": "#C7C3A3",
-        "bright_cyan": "#BFCACB",
-        "bright_blue": "#B6BBD5",
-        "bright_magenta": "#DFB3C5",
-        "native_line": "#454242",
-        "native_line2": "#575352",
-        "native_text3": "#978E86",
-        "native_second": "#99A1C4",
-        "native_third": "#E7B483",
-        "native_graph1": "#EF5A31",
-        "native_graph2": "#99A1C4",
-        "native_graph3": "#B1AC7F",
-        "native_selection": "#EF5A31"
-      },
-      "preview": null,
-      "digest": "6cb696db64a562d2fe3762795d810d7185fb69933ecbf73773889f1ceafbba06",
-      "files": [
-        {
-          "path": "PROVENANCE.md",
-          "sha256": "0dfda78a834b2d721e40b12a1ea8fe7e1f885fa82fd01c066b3f692388904c48",
-          "size": 2466,
-          "executable": false
-        },
-        {
-          "path": "manifest.json",
-          "sha256": "893c03add5a605b5dc34ef185b91f47ccfaad7e0979b2f963c4c8cde3690088b",
-          "size": 1213,
-          "executable": false
-        },
-        {
-          "path": "wallpapers/mesa-milky-way.heic",
-          "sha256": "a1714ca44974be3a2e281e77a8638be3c000ac5471f2776d2a3498cab0fbc6aa",
-          "size": 624491,
-          "executable": false
-        },
-        {
-          "path": "wallpapers/mesa-tall.heic",
-          "sha256": "f2d015b34b964f14c7756fefee254f6e01dbfe34a6a7d01bb914283b725816e2",
-          "size": 498525,
           "executable": false
         }
       ]
@@ -2368,12 +2402,12 @@
         "native_selection": "#FF4FA3"
       },
       "preview": null,
-      "digest": "b8058b3fdf4179f058fe62a0b39123415848d814493f342e38f9227acaca93d9",
+      "digest": "e310abbc930a4004de46296187ce44d88dfdb38c0442c483e9f92616c1789736",
       "files": [
         {
           "path": "PROVENANCE.md",
-          "sha256": "d06b9e33aa7eb3ba4bf168d8da571d3cbe13a6e47f3042dfb98ef40d45401349",
-          "size": 2328,
+          "sha256": "d1dea393723c6bc6cdf62c0b0f48c20307445c265a08f04e7f7ac0c0f8ec58a5",
+          "size": 2509,
           "executable": false
         },
         {
@@ -2384,14 +2418,14 @@
         },
         {
           "path": "wallpapers/neon-rain-tall.heic",
-          "sha256": "0b08b2ca017523cad353c8a80abf7253f1c36354ef52b0b6c779e813ef7f543c",
-          "size": 282798,
+          "sha256": "dbb5b2b47568af95a077b9c6bf770cc179362a987377a9a465535f649f416b70",
+          "size": 534999,
           "executable": false
         },
         {
-          "path": "wallpapers/neon-rain-wet-alley.heic",
-          "sha256": "f82199471b2a7c966192c93860cf7105f6388e81b0a4204bb83e4d13cb1b9d2f",
-          "size": 289621,
+          "path": "wallpapers/neon-rain-tram-stop.heic",
+          "sha256": "6d820c6a9629cf477caec09c45d6839e73a89c8313280c38699526dab9afa410",
+          "size": 620224,
           "executable": false
         }
       ]
@@ -2510,12 +2544,12 @@
         "native_selection": "#81A1C1"
       },
       "preview": null,
-      "digest": "df6d77d00aaba8d8fd1006276c8d83fa0941007cbb6f485487466497ddf1e566",
+      "digest": "897cb697e7405dc345f649b6ef3eee156decaafc9ef3703d2edb5fcb1133c5aa",
       "files": [
         {
           "path": "PROVENANCE.md",
-          "sha256": "e3bab68c6bc10e1cf0742f3c00d24b8ad45f49bed4afd85ed45107bd88cea2d5",
-          "size": 2162,
+          "sha256": "e7df9900f5296f9457285724ebd8c159d2e6af97610e2002392eeb8dfc786ed5",
+          "size": 2467,
           "executable": false
         },
         {
@@ -2525,21 +2559,15 @@
           "executable": false
         },
         {
-          "path": "wallpapers/nord-black-moon.heic",
-          "sha256": "f2e1125a7dcf909a006fc2d8333ded036ff69a36b8ed937c9b1aa6241b0ea095",
-          "size": 3131771,
-          "executable": false
-        },
-        {
-          "path": "wallpapers/nord-city-view.heic",
-          "sha256": "1f4bf552a8be1cf52f928bbaf18d4651bd542744510e3af15d19e972bfbf8d2e",
-          "size": 961905,
+          "path": "wallpapers/nord-fjord-aurora.heic",
+          "sha256": "10fc381cdf89160cd1c69e95595eb480ff3ddb9b2af0e5dc496936363733535c",
+          "size": 442623,
           "executable": false
         },
         {
           "path": "wallpapers/nord-tall.heic",
-          "sha256": "d517119367664bc6a6c86436b297cc283e23e14ef5c9e90f02062fe094fe2d65",
-          "size": 317092,
+          "sha256": "42557c7a1295adf1b2f0bb7eda3b40c1b42f0f17d2ddc5b4918af99ab24381bb",
+          "size": 312898,
           "executable": false
         }
       ]
@@ -2699,6 +2727,77 @@
       ]
     },
     {
+      "id": "prism",
+      "title": "Prism",
+      "dark": true,
+      "styles": [
+        "instrument",
+        "toybox"
+      ],
+      "palette": {
+        "background": "#130F0B",
+        "dark_background": "#0D0A08",
+        "darker_background": "#1C1814",
+        "lighter_background": "#272220",
+        "foreground": "#EDE6F2",
+        "dark_foreground": "#807A7E",
+        "light_foreground": "#C6BFC8",
+        "bright_foreground": "#F6F2F8",
+        "accent": "#9C86F0",
+        "selection": "#31293D",
+        "muted": "#666163",
+        "red": "#E8766A",
+        "yellow": "#E8B86A",
+        "green": "#8CCFA4",
+        "cyan": "#7FC8E8",
+        "blue": "#8870DE",
+        "magenta": "#D4A6E7",
+        "bright_red": "#EE9C94",
+        "bright_yellow": "#EECC94",
+        "bright_green": "#ACDCBD",
+        "bright_cyan": "#A3D7EE",
+        "bright_blue": "#A998E7",
+        "bright_magenta": "#E0BFEE",
+        "native_line": "#332E2D",
+        "native_line2": "#474142",
+        "native_text3": "#807A7E",
+        "native_second": "#D4A6E7",
+        "native_third": "#E8766A",
+        "native_graph1": "#9C86F0",
+        "native_graph2": "#D4A6E7",
+        "native_graph3": "#8CCFA4",
+        "native_selection": "#9C86F0"
+      },
+      "preview": null,
+      "digest": "467d66e7b5717054273fa4eeecf26a18be7dc0602ba3750fc174bd91a1b46069",
+      "files": [
+        {
+          "path": "PROVENANCE.md",
+          "sha256": "befb17062d494310063e2e559558226d56e2f0b8510e192966635acf6a293622",
+          "size": 2582,
+          "executable": false
+        },
+        {
+          "path": "manifest.json",
+          "sha256": "ab16ae4795b4551de7fcdb4f8c8ec756c57a644691f5a35cb772bd7b9e60e9c9",
+          "size": 1215,
+          "executable": false
+        },
+        {
+          "path": "wallpapers/prism-marbling.heic",
+          "sha256": "ba335dab2a815feb771e30fcc120dcd0e3b747df5a050d2a7cba0754e5a8669c",
+          "size": 312150,
+          "executable": false
+        },
+        {
+          "path": "wallpapers/prism-tall.heic",
+          "sha256": "2005b607d0f7f0248d0f5fb65a1895200f2dce79628fdc44519d04702bb90590",
+          "size": 240861,
+          "executable": false
+        }
+      ]
+    },
+    {
       "id": "retro-82",
       "title": "Retro 82",
       "dark": true,
@@ -2853,77 +2952,6 @@
       ]
     },
     {
-      "id": "sky-whale",
-      "title": "Sky Whale",
-      "dark": true,
-      "styles": [
-        "instrument",
-        "toybox"
-      ],
-      "palette": {
-        "background": "#231C42",
-        "dark_background": "#18142E",
-        "darker_background": "#2C2549",
-        "lighter_background": "#362F52",
-        "foreground": "#F3ECF7",
-        "dark_foreground": "#8B849C",
-        "light_foreground": "#CEC7D6",
-        "bright_foreground": "#F9F6FB",
-        "accent": "#FFB38A",
-        "selection": "#533D52",
-        "muted": "#726B87",
-        "red": "#F2788A",
-        "yellow": "#FFD49A",
-        "green": "#9FD8B4",
-        "cyan": "#8FD4F0",
-        "blue": "#8FA0F2",
-        "magenta": "#D9A0E8",
-        "bright_red": "#F69EAB",
-        "bright_yellow": "#FFE0B6",
-        "bright_green": "#BAE3C9",
-        "bright_cyan": "#AEE0F4",
-        "bright_blue": "#AEBBF6",
-        "bright_magenta": "#E4BBEE",
-        "native_line": "#413A5C",
-        "native_line2": "#544D6C",
-        "native_text3": "#8E879F",
-        "native_second": "#D9A0E8",
-        "native_third": "#8FD4F0",
-        "native_graph1": "#FFB38A",
-        "native_graph2": "#D9A0E8",
-        "native_graph3": "#9FD8B4",
-        "native_selection": "#FFB38A"
-      },
-      "preview": null,
-      "digest": "78cbeb2a73f95384a8954c50a8a191fabf1ba3a27bd05c72266f36bb4acdc0a8",
-      "files": [
-        {
-          "path": "PROVENANCE.md",
-          "sha256": "a1f9d6a4d52cf4c131fdb9b8ac2ecdf7cf29ef97ba7443ed476210178710cf86",
-          "size": 2372,
-          "executable": false
-        },
-        {
-          "path": "manifest.json",
-          "sha256": "e218e4bef2b7abf6419350246e6906003e7f065987f072756aae48030d54a482",
-          "size": 1223,
-          "executable": false
-        },
-        {
-          "path": "wallpapers/sky-whale-tall.heic",
-          "sha256": "9e235d15fb26c6614fe0300dd8def90d7bd3f4e448e5ef76e4537d9c733d88ee",
-          "size": 313494,
-          "executable": false
-        },
-        {
-          "path": "wallpapers/sky-whale-whale-at-sunset.heic",
-          "sha256": "affbc48e7db624be011e20012265decc738992995761b033516cf6f878f98589",
-          "size": 434567,
-          "executable": false
-        }
-      ]
-    },
-    {
       "id": "tokyo-night",
       "title": "Tokyo Night",
       "dark": true,
@@ -2966,12 +2994,12 @@
         "native_selection": "#7AA2F7"
       },
       "preview": null,
-      "digest": "6bbc9ed684658bc65c34d69771ee4586158b354a5957d10ccb6a2a5d326c4691",
+      "digest": "f831a1e137485fab21da54d0f1a9072f6d934d7b6e2ad1e0d059058145fade2d",
       "files": [
         {
           "path": "PROVENANCE.md",
-          "sha256": "02a5bd569529db8fc5240862fe16b0483dbefdabe0b3b072d0de1d4f7fc89b05",
-          "size": 2690,
+          "sha256": "f823b3061ef5743720bf43fae043231205cb7268d6b811a42937cce4fea363cc",
+          "size": 2713,
           "executable": false
         },
         {
@@ -2981,21 +3009,86 @@
           "executable": false
         },
         {
-          "path": "wallpapers/tokyo-night-city-under-the-clouds.heic",
-          "sha256": "36bf9a9bbba3011518d02ece5af7a787ffed3951353abe249287a90306a6dc66",
-          "size": 291405,
+          "path": "wallpapers/tokyo-night-elevated-line.heic",
+          "sha256": "f7b0995b87cb75e28b88704881972c3821197f73d2f7fb5d7573159971672944",
+          "size": 237372,
           "executable": false
         },
         {
           "path": "wallpapers/tokyo-night-tall.heic",
-          "sha256": "7fa232a1426d60676e01a1a54c4352a4aa12c1753ef11b3a74969e3514b139cc",
-          "size": 292333,
+          "sha256": "86294db660db483a0851ccd9711fa97eeb9be7dfa8b684d7989c879e5e746330",
+          "size": 188532,
+          "executable": false
+        }
+      ]
+    },
+    {
+      "id": "vermilion",
+      "title": "Vermilion",
+      "dark": true,
+      "styles": [
+        "instrument",
+        "toybox"
+      ],
+      "palette": {
+        "background": "#A42024",
+        "dark_background": "#731619",
+        "darker_background": "#A7282B",
+        "lighter_background": "#AB3234",
+        "foreground": "#F4E6DA",
+        "dark_foreground": "#CC837F",
+        "light_foreground": "#E9C9C0",
+        "bright_foreground": "#FAF2EC",
+        "accent": "#F6C453",
+        "selection": "#B6442E",
+        "muted": "#C26B69",
+        "red": "#FFB09E",
+        "yellow": "#FFE08A",
+        "green": "#B8E3A0",
+        "cyan": "#9EE0E0",
+        "blue": "#A9C4FF",
+        "magenta": "#F7A8D8",
+        "bright_red": "#FFC6B9",
+        "bright_yellow": "#FFE9AB",
+        "bright_green": "#CCEBBB",
+        "bright_cyan": "#B9E9E9",
+        "bright_blue": "#C1D5FF",
+        "bright_magenta": "#F9C0E3",
+        "native_line": "#AF3D3E",
+        "native_line2": "#B74F4F",
+        "native_text3": "#E6C2BA",
+        "native_second": "#9EE0E0",
+        "native_third": "#F7A8D8",
+        "native_graph1": "#F6C453",
+        "native_graph2": "#9EE0E0",
+        "native_graph3": "#B8E3A0",
+        "native_selection": "#F6C453"
+      },
+      "preview": null,
+      "digest": "878596189db3a070f93354558603c4d049a753d0aa04469f242cb769d1915a7f",
+      "files": [
+        {
+          "path": "PROVENANCE.md",
+          "sha256": "40893b61cca25ace3ce8ece7a44d8fb522f4eeeccb8f5016dd526167fab357a6",
+          "size": 2391,
           "executable": false
         },
         {
-          "path": "wallpapers/tokyo-night-winding-road.heic",
-          "sha256": "1378f7d81c703574aa3f037cb25ee40cc5f0957be598b8b792739bc27b79dfc4",
-          "size": 682841,
+          "path": "manifest.json",
+          "sha256": "29df4de85c5484fb3213f8cac0d8f78126d066f10c18b115295656a309878c6d",
+          "size": 1223,
+          "executable": false
+        },
+        {
+          "path": "wallpapers/vermilion-ink-stroke.heic",
+          "sha256": "08da20325d9600ba43a4e9c05ed669bf94926f728cf9afe7d15bdce726dce1dc",
+          "size": 462400,
+          "executable": false
+        },
+        {
+          "path": "wallpapers/vermilion-tall.heic",
+          "sha256": "9a602dac58268977d326253359ec0e776da4dbee76f29196f0755cd16a625ed7",
+          "size": 362776,
           "executable": false
         }
       ]
@@ -3043,12 +3136,12 @@
         "native_selection": "#E8E8E8"
       },
       "preview": null,
-      "digest": "a8f1b78dd58d58fe1b200741462d5f072ce151f6eaa21f44247735a73dc0cc43",
+      "digest": "d85dc485f11dbfcb3433fe1387624f51f08cc4f2db68885df365ceaf2ad7d770",
       "files": [
         {
           "path": "PROVENANCE.md",
-          "sha256": "58fa2ce5005b431befe5f7ea1688bf774951ad947dc518f37dacb6c26084b646",
-          "size": 1726,
+          "sha256": "2b917990794d89089d09dfa3f42a1745340438f066f4eaca5a120c6fecd0f55e",
+          "size": 2092,
           "executable": false
         },
         {
@@ -3058,21 +3151,15 @@
           "executable": false
         },
         {
-          "path": "wallpapers/void-swan.heic",
-          "sha256": "5fcc7da35fbcf113857b9cfdad22e230d4103a781968d8f0c4ac570607aa36a1",
-          "size": 74736,
+          "path": "wallpapers/void-feather.heic",
+          "sha256": "258cdcac469adf825634eb385ec20d6f36ee84258fa57f8ad645109023eda01f",
+          "size": 66029,
           "executable": false
         },
         {
           "path": "wallpapers/void-tall.heic",
-          "sha256": "f43e720bac0d1de34ecc3ec24ddab992429b0e0d1f93940091924db6aecc0d60",
-          "size": 179992,
-          "executable": false
-        },
-        {
-          "path": "wallpapers/void-twisted-stairs.heic",
-          "sha256": "3e93365109bc9fcf18f04c1b0a08e83a17bf70cf872d5b1bc02b0b2dd53356d9",
-          "size": 151148,
+          "sha256": "e7234de872c9812557ce5228a95016249231842b7c432009c650d6d306f6843b",
+          "size": 86535,
           "executable": false
         }
       ]
@@ -3120,12 +3207,12 @@
         "native_selection": "#6B2FA8"
       },
       "preview": null,
-      "digest": "acd7521473cd53faf30b08559ed3eb0f26666cb187696a049a5caf0a574730d1",
+      "digest": "9d2bd6d216cc1b1682e16e8ca084fff412ae9857f69f544db2eae913967f14b8",
       "files": [
         {
           "path": "PROVENANCE.md",
-          "sha256": "7168642aa11714140c7ad630b901439a2fdfff4e12fda4a423f8f830ee3bdf92",
-          "size": 2323,
+          "sha256": "7f69ae7095c773847963ec54b013f4aa00a987b6c0d0d5362550fe44a3899e12",
+          "size": 2126,
           "executable": false
         },
         {
@@ -3135,21 +3222,15 @@
           "executable": false
         },
         {
-          "path": "wallpapers/wisteria-plum-horizon.heic",
-          "sha256": "3ccbb54c92dc40dad4a5fb656207c0cd18d10e1daf5ea1818eaf4c7ff4a9d081",
-          "size": 207899,
-          "executable": false
-        },
-        {
           "path": "wallpapers/wisteria-tall.heic",
-          "sha256": "971211d511893d2c0bb8a922d8c35ce475042b79b6a75ca78c2412514b019c3a",
-          "size": 633288,
+          "sha256": "83454bc40d56e877ebd87fd28b77bb158c3179bffd782ac21e4ba0c3e9e830cc",
+          "size": 537711,
           "executable": false
         },
         {
-          "path": "wallpapers/wisteria-wisteria-dawn.heic",
-          "sha256": "7db59f2f222a0b6fa2ce62a95a3f8506b138ca86b6e61339ea6ff842d316287a",
-          "size": 247509,
+          "path": "wallpapers/wisteria-tunnel.heic",
+          "sha256": "e642df13e8a3510211d3d90bfd517863c79bc43772dcf562278593535af14870",
+          "size": 905275,
           "executable": false
         }
       ]
