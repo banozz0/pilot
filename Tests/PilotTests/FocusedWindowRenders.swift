@@ -65,20 +65,20 @@ struct FocusedWindowRenders {
                 #expect(BorderLook(on: look.windowBorder, width: look.windowBorderWidth, colour: look.windowBorderColour).preset == preset)
                 try shot("\(name)-\(preset.rawValue)", AppPlace(.focusedWindow))
             }
-            // Custom: rows no pick writes (shot 1b's Dim other windows · Custom), on the front and on More.
+            // Custom: rows no pick writes (shot 1b's Dim other windows · Custom), the presets and the exact rows under them.
             set(BorderLook(on: true, width: 3, colour: .custom(0xC62828)), DimLook(blur: 3, dim: 40))
             #expect(DimLook(blur: look.defocusStrength, dim: look.defocusDim).preset == .custom)
             try shot("\(name)-custom", AppPlace(.focusedWindow))
-            try shot("\(name)-custom-more", AppPlace(.tilingMore))
+            try shot("\(name)-custom-exact", AppPlace(.focusedDim))
         }
-        // Search results: T5's "Border around the focused window" rings its row on the front; a shake's swings, on More,
-        // open More with the row ringed.
+        // Search results: T5's "Border around the focused window" and a shake's swings (back from More, pages-fill) ring
+        // their rows on the one page.
         look.themeID = Self.looks[0].theme
         AppWindowController.applyLook(look, to: window)
         try shot("dark-ring-border", AppPlace(.tiling), ring: "look.windowBorder")
-        #expect(model.section(of: .tiling) != .tilingMore, "a ringed setting on the front stays on the front")
+        #expect(model.section(of: .tiling) == nil, "a ringed setting stays on the page")
         try shot("dark-ring-swings", AppPlace(.tiling), ring: "look.defocusShakeSwings")
-        #expect(model.section(of: .tiling) == .tilingMore, "a ringed setting on More opens More")
+        #expect(model.section(of: .tiling) == nil, "a ringed exact row stays on the page")
     }
 }
 }

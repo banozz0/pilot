@@ -2,8 +2,8 @@ import PilotCore
 import SwiftUI
 
 /// Mac › Update & Clean (Sven 2026-10-20, was the top of Activity › Reports): Update and Clean themselves, each with its
-/// last run and an Open report link to that run; their Reports (ReportsBlock) on the page's More since the feature trim
-/// (2026-11-19), where Open report goes. A run still in its terminal is read again every 2 s until it ends, so its last run
+/// last run and an Open report link to that run, then their Reports (ReportsBlock), where Open report goes (on the page's
+/// More from the feature trim, 2026-11-19, until pages-fill, Sven 2026-11-25). A run still in its terminal is read again every 2 s until it ends, so its last run
 /// and its report follow it.
 struct UpkeepPage: View {
     @Environment(\.ink) private var ink
@@ -14,14 +14,11 @@ struct UpkeepPage: View {
     var mole = CleanModule.mole != nil
     /// Homebrew is there for Update to read and Mole to install through; a render says which.
     var homebrew = Helper.homebrew.path() != nil
-    /// The More tab: Reports.
-    var more = false
     /// Opens a place in the window: Open report goes to `AppSection.reports`, which scrolls the page there.
     var go: (AppPlace) -> Void = { _ in }
     /// Nil until the first read, so the page never says "No run yet" while it reads.
     @State private var records: [RunRecord]?
-    /// The run Reports opens, from its row or Open report; nil opens the newest. The page's front and More are parts of
-    /// their own (PageView.key), so Open report on the front picks it for More through this.
+    /// The run Reports opens, from its row or Open report; nil opens the newest.
     @Bindable private var pick = ReportPick.shared
     /// What the opened run printed.
     @State private var output = ""
@@ -31,48 +28,36 @@ struct UpkeepPage: View {
     @State var cleanList: CleanList? = CleanModule.previewer.ready?.list
 
     static let intro = "Update previews upgrades and Clean what it would remove; each asks first."
-    static let introInfo = "Clean lists what Mole would remove and moves only what you tick to the Trash; Clean all runs Mole's whole clean. Each run is kept under More › Reports with what it printed; the last \(ReportStore.keep) are kept."
-
-    /// More's index: Reports alone.
-    static let entries = [MoreEntry(id: .reports, symbol: "list.bullet", controls: 1)]
+    static let introInfo = "Clean lists what Mole would remove and moves only what you tick to the Trash; Clean all runs Mole's whole clean. Each run is kept under Reports with what it printed; the last \(ReportStore.keep) are kept."
 
     var body: some View {
-        Group {
-            if more {
-                KitMore(entries: Self.entries) {
-                    ReportsBlock(store: store, records: records, picked: $pick.id, output: output).moreBlock(.reports)
-                }
-            } else {
-                // pages-fill: Reports on the front under Update and Clean, in a tall page or for good.
-                TallPage { tall in KitLanding {
-                    KitPage(intro: Self.intro, info: Self.introInfo) {
-                        start
-                        if PagesFill.more == .folded || (PagesFill.more == .whenTall && tall) {
-                            ReportsBlock(store: store, records: records, picked: $pick.id, output: output)
-                        }
-                        if let cleanList {
-                            CleanListBlock(list: cleanList) { ids in
-                                let outcome = await CleanModule.trash(ids, store: store)
-                                self.cleanList = CleanModule.previewer.ready?.list
-                                return outcome
-                            }
-                            .pageWide()
-                        }
+        // Reports under Update and Clean and Clean's list, a place Open report lands on (pages-fill, Sven 2026-11-25: back
+        // from More, as it is about the page).
+        KitLanding {
+            KitPage(intro: Self.intro, info: Self.introInfo) {
+                start
+                if let cleanList {
+                    CleanListBlock(list: cleanList) { ids in
+                        let outcome = await CleanModule.trash(ids, store: store)
+                        self.cleanList = CleanModule.previewer.ready?.list
+                        return outcome
                     }
-                } }
+                    .pageWide()
+                }
+                ReportsBlock(store: store, records: records, picked: $pick.id, output: output)
             }
         }
-            .onChange(of: pick.id) { readOutput() }
-            .task(id: shown ? wake : nil) {
-                guard shown else { return }
+        .onChange(of: pick.id) { readOutput() }
+        .task(id: shown ? wake : nil) {
+            guard shown else { return }
+            reload()
+            while records?.contains(where: { $0.end == .running }) == true {
+                try? await Task.sleep(for: .seconds(2))
+                guard !Task.isCancelled else { return }
                 reload()
-                while records?.contains(where: { $0.end == .running }) == true {
-                    try? await Task.sleep(for: .seconds(2))
-                    guard !Task.isCancelled else { return }
-                    reload()
-                }
             }
-            .onReceive(NotificationCenter.default.publisher(for: ReportStore.began)) { _ in wake += 1 }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: ReportStore.began)) { _ in wake += 1 }
     }
 
     /// The opened run's output is read again only when the runs changed or it is still running, so a quiet 2 s read lays

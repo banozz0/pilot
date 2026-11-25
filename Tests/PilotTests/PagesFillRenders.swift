@@ -6,12 +6,12 @@ import SwiftUI
 import Testing
 @testable import Pilot
 
-/// Design round pages-fill (Sven, 2026-11-25, combined-15 build 3216: "you know what we didnt fix, the half empty pages in
-/// pilot. also menubar page can it be better organised?"): each option `PagesFill` holds, drawn in the whole window as
-/// WidePagesRenders draws a page, at 1700 by 1290 and at the window's first size, in Tokyo Night and Porcelain, with
-/// made-up data in the moved home (Update & Clean's four runs, ReportsPageRenders' seed). The Menu bar's options also run
-/// the page's whole length (`tall-`). A new window per option: a page once built is kept, and the switches are read as it
-/// builds. Opt-in, in a moved home:
+/// Pages-fill (Sven, 2026-11-25: "make sure that on the page theres only relevant stuff"): every page and tab the round
+/// changed, drawn in the whole window as WidePagesRenders draws a page, at 1700 by 1290 and at the window's first size, in
+/// Tokyo Night and Porcelain, with made-up data in the moved home (Update & Clean's four runs, ReportsPageRenders' seed);
+/// then each once more in Tokyo Night at its whole length (`tall-`), and the Dock at the window's least size, where its
+/// look's column stands over the widgets. The page shows the placement it had: nothing here writes the defaults a render
+/// run shares. Opt-in, in a moved home:
 /// `CFFIXED_USER_HOME=<fresh dir> PILOT_RENDER_DIR=<fresh dir> swift test --filter PagesFillRenders`
 /// PILOT_RENDER_ONLY narrows the shots to file names holding one of its comma-separated words.
 extension SharedLook {
@@ -20,53 +20,15 @@ extension SharedLook {
 struct PagesFillRenders {
     nonisolated static let env = ProcessInfo.processInfo.environment
 
-    struct Option {
-        let name: String
-        let places: [(String, AppPlace)]
-        var tall = false
-        let set: () -> Void
-    }
-
-    static let captures = ("captures", AppPlace(.captures)), upkeep = ("upkeep", AppPlace(.upkeep))
-    static let rings = ("menu-rings", AppPlace(.rings)), folders = ("files-folders", AppPlace(.folders))
-    static let dock = ("dock", AppPlace(.dock)), menuBar = ("menuBar", AppPlace(.menuBar))
-    static let menuBarMore = ("menuBar-menuBarMore", AppPlace(.menuBarMore))
-
-    static let options: [Option] = [
-        // Update & Clean's More seeded too, for the ranking.
-        Option(name: "more-tab", places: [captures, upkeep, ("upkeep-upkeepMore", AppPlace(.upkeepMore))]) {},
-        Option(name: "more-whenTall", places: [captures, upkeep]) { PagesFill.more = .whenTall },
-        Option(name: "more-folded", places: [captures, upkeep]) {
-            PagesFill.more = .folded
-            PagesFillDesign.foldedMore = [.capturesMore, .upkeepMore]
-        },
-        Option(name: "preview-asIs", places: [rings, folders]) {},
-        Option(name: "preview-grows", places: [rings, folders]) { PagesFill.preview = .grows },
-        Option(name: "preview-detail", places: [rings, folders]) { PagesFill.preview = .detail },
-        Option(name: "dock-asIs", places: [dock]) {},
-        Option(name: "dock-twoColumns", places: [dock]) { PagesFill.dock = .twoColumns },
-        Option(name: "dock-lookBeside", places: [dock]) {
-            PagesFill.dock = .lookBeside
-            PagesFillDesign.foldedMore = [.dockMore]
-        },
-        Option(name: "menuBar-asIs", places: [menuBar], tall: true) {},
-        Option(name: "menuBar-columns", places: [menuBar], tall: true) { PagesFill.menuBar = .columns },
-        Option(name: "menuBar-more", places: [menuBar, menuBarMore], tall: true) {
-            PagesFill.menuBar = .more
-            PagesFillDesign.menuBarTab = "More"
-        },
-        Option(name: "menuBar-tabs", places: [menuBar, menuBarMore], tall: true) {
-            PagesFill.menuBar = .tabs
-            PagesFillDesign.menuBarTab = "Items"
-        },
+    /// The changed pages and tabs, by file name.
+    static let places: [(String, AppPlace)] = [
+        ("captures", AppPlace(.captures)), ("captures-recording", AppPlace(.recording)), ("upkeep", AppPlace(.upkeep)),
+        ("binds", AppPlace(.binds)), ("install", AppPlace(.catalogue)), ("install-installMore", AppPlace(.installMore)),
+        ("tiling", AppPlace(.tiling)), ("dock", AppPlace(.dock)), ("menu-rings", AppPlace(.rings)), ("files-folders", AppPlace(.folders)),
+        ("menuBar", AppPlace(.menuBar)), ("menuBar-menuBarItems", AppPlace(.menuBarItems)),
     ]
 
-    static func reset() {
-        PagesFill.more = .tab; PagesFill.preview = .asIs; PagesFill.dock = .asIs; PagesFill.menuBar = .asIs
-        PagesFillDesign.foldedMore = []; PagesFillDesign.menuBarTab = nil
-    }
-
-    @Test("Each pages-fill option renders at 1700 by 1290 and at the window's first size, dark and light",
+    @Test("Every page pages-fill changed renders at 1700 by 1290 and at the window's first size, dark and light, and whole",
           .enabled(if: env["PILOT_RENDER_DIR"] != nil && env["CFFIXED_USER_HOME"] != nil))
     func render() throws {
         let home = try #require(Self.env["CFFIXED_USER_HOME"])
@@ -81,58 +43,52 @@ struct PagesFillRenders {
         _ = try ReportsPageRenders.seed(ReportStore.standard.folder)
         let engine = try SharedLook.HomeRenders.engine()
         SharedLook.StatsRenders.seed(SystemSampler.shared)
-        // The page shows the top bar's strip, the bar Sven runs; the top bar itself stays off (no bar on this screen). A
-        // render run's defaults are the test runner's own, kept across runs: the placement goes back after.
-        let placement = BarItemsStore.shared.pagePlacement
-        let stored = UserDefaults.standard.object(forKey: BarItemsStore.pagePlacementKey)
-        defer {
-            BarItemsStore.shared.pagePlacement = placement
-            if stored == nil { UserDefaults.standard.removeObject(forKey: BarItemsStore.pagePlacementKey) }
-        }
-        BarItemsStore.shared.pagePlacement = .topBar
-        defer { Self.reset() }
         let look = Look.shared
         let saved = (look.themeID, look.style)
         defer { (look.themeID, look.style) = saved }
         look.style = .instrument
         defer { look.endTrial() }
         let only = Self.env["PILOT_RENDER_ONLY"]?.split(separator: ",").map(String.init)
-        let sizes: [(String, NSSize)] = [("1700", NSSize(width: 1700, height: 1290)), ("default", AppWindowController.size)]
+        let model = AppWindowModel(defaults: try #require(UserDefaults(suiteName: testSuite())))
+        let window = AppWindowController.makeWindow(content: NSHostingView(rootView: AppWindowView(model: model).environment(engine)))
+        defer { window.close() }
+        let frame = try #require(window.contentView?.superview)
 
-        for option in Self.options {
-            Self.reset()
-            option.set()
-            let model = AppWindowModel(defaults: try #require(UserDefaults(suiteName: testSuite())))
-            let window = AppWindowController.makeWindow(content: NSHostingView(rootView: AppWindowView(model: model).environment(engine)))
-            defer { window.close() }
-            let frame = try #require(window.contentView?.superview)
-            for (name, theme) in SharedLook.HomeRenders.looks {
+        func shot(_ file: String, _ place: AppPlace, theme: String) throws {
+            guard only.map({ $0.contains { file.contains($0) } }) ?? true else { return }
+            // Built whole, as WidePagesRenders builds a page (no display link offscreen).
+            model.go(place)
+            model.ringed = "pages-fill.render"
+            RunLoop.main.run(until: Date().addingTimeInterval(0.8))
+            model.ringed = nil
+            if look.trialID != theme {
                 look.tryOn(id: theme, pack: nil)
                 AppWindowController.applyLook(look, to: window)
-                // The Menu bar's options also at the page's whole length.
-                let shots = sizes + (option.tall ? [("tall1700", NSSize(width: 1700, height: 3600)), ("talldefault", NSSize(width: 1296, height: 3600))] : [])
-                for (suffix, size) in shots {
-                    window.setContentSize(size)
-                    for (page, place) in option.places {
-                        let file = "\(option.name)-\(name)-\(suffix)-\(page)"
-                        guard only.map({ $0.contains { file.contains($0) } }) ?? true else { continue }
-                        // Built whole, as WidePagesRenders builds a page (no display link offscreen).
-                        model.go(place)
-                        model.ringed = "pages-fill.render"
-                        RunLoop.main.run(until: Date().addingTimeInterval(0.8))
-                        model.ringed = nil
-                        if look.trialID != theme {
-                            look.tryOn(id: theme, pack: nil)
-                            AppWindowController.applyLook(look, to: window)
-                            RunLoop.main.run(until: Date().addingTimeInterval(0.3))
-                        }
-                        frame.layoutSubtreeIfNeeded()
-                        let rep = try #require(snapshot(frame, scale: 2))
-                        try #require(rep.representation(using: .png, properties: [:])).write(to: dir.appendingPathComponent("\(file).png"))
-                    }
-                }
+                RunLoop.main.run(until: Date().addingTimeInterval(0.3))
+            }
+            frame.layoutSubtreeIfNeeded()
+            let rep = try #require(snapshot(frame, scale: 2))
+            try #require(rep.representation(using: .png, properties: [:])).write(to: dir.appendingPathComponent("\(file).png"))
+        }
+
+        let sizes: [(String, NSSize)] = [("1700", NSSize(width: 1700, height: 1290)), ("default", AppWindowController.size)]
+        for (name, theme) in SharedLook.HomeRenders.looks {
+            look.tryOn(id: theme, pack: nil)
+            AppWindowController.applyLook(look, to: window)
+            for (suffix, size) in sizes {
+                window.setContentSize(size)
+                for (page, place) in Self.places { try shot("\(name)-\(suffix)-\(page)", place, theme: theme) }
             }
         }
+        // Whole pages, to read every block; and the Dock in the least window.
+        let dark = SharedLook.HomeRenders.looks[0].theme
+        look.tryOn(id: dark, pack: nil)
+        AppWindowController.applyLook(look, to: window)
+        window.setContentSize(NSSize(width: 1700, height: 3000))
+        for (page, place) in Self.places { try shot("tall-dark-1700-\(page)", place, theme: dark) }
+        window.setContentSize(AppWindowController.minSize)
+        try shot("dark-min-dock", AppPlace(.dock), theme: dark)
+        window.setContentSize(AppWindowController.size)
     }
 }
 }

@@ -62,12 +62,12 @@ struct AppWindowFrameTests {
         #expect(AppWindowModel(defaults: defaults).page == .menuBar)
         defaults.set("pilot", forKey: "appWindow.page")
         #expect(AppWindowModel(defaults: defaults).page == .general)
-        // Reports is a place on Update & Clean's More (the feature trim, 2026-11-19): a link or Open report opens More,
-        // scrolled to it; the old `page=install&tab=reports` too.
+        // Reports is a place on Update & Clean's front (pages-fill, Sven 2026-11-25; on its More from the feature trim): a
+        // link or Open report opens the page, scrolled to it; the old `page=install&tab=reports` too.
         let model = AppWindowModel(defaults: defaults)
         #expect(AppPlace.linked(URL(string: "pilot://open?page=install&tab=reports")!) == AppPlace(.reports))
         model.go(AppPlace(.reports))
-        #expect(model.page == .upkeep && model.section(of: .upkeep) == .upkeepMore && model.blockFocus == .reports)
+        #expect(model.page == .upkeep && model.section(of: .upkeep) == nil && model.blockFocus == .reports)
     }
 
     @Test("The window's own keys answer before the main menu's: Cmd+, opens Pilot (not the menu's Open Pilot…), Ctrl+Tab the area's next page, Cmd+2 Keys")

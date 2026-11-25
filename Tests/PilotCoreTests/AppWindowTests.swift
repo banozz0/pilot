@@ -37,7 +37,7 @@ struct AppWindowTests {
         #expect(AppArea.next(after: .home) == .home && AppArea.next(after: .general) == .general)
         // The window layout went with the panel (pilot-ui-redesign T3); under the panel's More a page's own More reads once.
         #expect(AppPlace(.reports).tabPath(count: 8) == "More › Mac › Update & Clean › Reports")
-        #expect(AppPlace(.reports).tabPath(count: 9) == "Mac › Update & Clean › More › Reports")
+        #expect(AppPlace(.reports).tabPath(count: 9) == "Mac › Update & Clean › Reports")
         // Direction 1: Home takes the width, any other page has its area's list, which folds under 900 pt; a search shows it.
         #expect(!RailLayout.showsList(.home, width: 1440, searching: false) && RailLayout.showsList(.home, width: 1440, searching: true))
         // AI takes the width as Home does, its tabs in the header; Windows lists its pages, Extensions its extensions.
@@ -57,25 +57,30 @@ struct AppWindowTests {
         // The parts as tabs in the page's header, the sidebar listing pages only (P36): Launcher's and Files' own content first.
         #expect(AppPage.menu.tabs.map(\.title) == ["Your menu", "Abilities", "Rings", "More"])
         #expect(AppPage.files.tabs.map(\.title) == ["Files", "Folders"])
-        // Clipboard and the Dock: the simple settings in front, the rest on More (pilot-ui-redesign T17).
-        #expect(AppPage.clipboard.tabs.isEmpty && AppPage.dock.tabs.map(\.title) == ["Dock", "More"])
+        // Clipboard and the Dock, one page each: the Dock's More went with pages-fill (Sven, 2026-11-25).
+        #expect(AppPage.clipboard.tabs.isEmpty && AppPage.dock.tabs.isEmpty && AppSection.dockLook.onFront)
         #expect(AppPage.snippets.tabs.isEmpty)
-        // Reports on Update & Clean's More since the feature trim (2026-11-19), Install's tools and hidden apps on its More (simplify-pages T16).
-        #expect(AppPage.upkeep.tabs.map(\.title) == ["Update & Clean", "More"])
-        #expect(AppSection.reports.onMore == .upkeepMore && AppSection.reports.page == .upkeep)
+        // Reports on Update & Clean's front and Install's tools on Search (pages-fill, Sven 2026-11-25: about the page); the
+        // hidden apps stay on Install's More (simplify-pages T16).
+        #expect(AppPage.upkeep.tabs.isEmpty && AppSection.reports.onMore == nil && AppSection.reports.onFront && AppSection.reports.page == .upkeep)
         #expect(AppPage.install.tabs.map(\.title) == ["Search", "Web apps", "More"])
-        // Overlay, Swap keys and Export and import are places on More (simplify-pages T14, Sven's Q1; Overlay was a tab, story 56).
-        #expect(AppPage.binds.tabs.map(\.title) == ["Keyboard", "Mouse", "More"])
+        #expect(AppSection.helpers.frontTab == .catalogue && AppSection.hiddenApps.onMore == .installMore)
+        // Overlay, Swap keys, Export and import and Cleaning are places under the board (pages round 4; pages-fill, Sven 2026-11-25).
+        #expect(AppPage.binds.tabs.map(\.title) == ["Keyboard", "Mouse"] && AppSection.cleaning.onFront && AppSection.exportImport.onFront)
         // The page map (Sven 2026-10-17): AI holds its setup, Captures its recording.
         #expect(AppPage.ai.tabs.map(\.title) == ["Chat", "Setup"])
-        #expect(AppPage.captures.tabs.map(\.title) == ["Capture", "Recording", "History", "More"])
+        // Captures' More went (pages-fill): its capture blocks on Capture, a recording's quality on Recording.
+        #expect(AppPage.captures.tabs.map(\.title) == ["Capture", "Recording", "History"])
+        #expect(AppSection.captureOptions.onFront && AppSection.captureOptions.frontTab == nil && AppSection.recordingQuality.frontTab == .recording)
+        // Menu bar in two tabs (pages-fill M3), the bell's cards on Items.
+        #expect(AppPage.menuBar.tabs.map(\.title) == ["Menu bar", "Items"] && AppSection.notifications.frontTab == .menuBarItems)
         // Workspaces' More went (Sven, 2026-11-23): its blocks are on the page.
         #expect(AppPage.workspaces.tabs.isEmpty)
         // System's parts are cards on its front, no More (Sven, 2026-11-11, after 2276).
         #expect(AppPage.system.tabs.isEmpty)
-        // Open with's blocks back on its front, its More gone (pages round 4, Sven's Q103); Tiling's More back for the
-        // Focused window's exact rows (pilot-ui-redesign T16).
-        #expect(AppPage.openWith.tabs.isEmpty && AppPage.tiling.tabs.map(\.title) == ["Tiling", "More"])
+        // Open with's blocks back on its front, its More gone (pages round 4, Sven's Q103); Tiling's More, back for the
+        // Focused window's exact rows (pilot-ui-redesign T16), gone again with pages-fill: they are on its front.
+        #expect(AppPage.openWith.tabs.isEmpty && AppPage.tiling.tabs.isEmpty && AppSection.focusedDim.onFront)
         // Pilot's blocks back on its front, its More gone (pages round 4, Sven's Q106).
         #expect(AppPage.general.tabs.isEmpty)
     }
@@ -188,7 +193,9 @@ struct AppWindowTests {
                                                     // Workspaces' rules and snapshot (simplify-pages T18); float lives on Tiling.
                                                     "app rule": .workspaceRules, "always opens on": .workspaceRules, "float": .floatApps,
                                                     "snapshot": .workspaceRules, "save": .workspaceRules, "restore": .workspaceRules,
-                                                    "reopen": .workspaceRules]
+                                                    "reopen": .workspaceRules,
+                                                    // The clock and the workspaces item, on Menu bar's Items (pages-fill, M3).
+                                                    "clock": .menuBarItems, "workspaces": .menuBarItems]
 
     @Test("Every word that found a page before the cut finds where that page went, and its old title does too")
     func oldKeywordsFindTheirPlace() {

@@ -29,7 +29,7 @@ struct TilingBody: View {
 
     var body: some View {
         // The focused window whole and the apps that float, back from More (Sven, 2026-11-11, after 2276); the window
-        // titles and the mouse and motion too, and Tiling's More with them (pages round 4, Sven's Q98).
+        // titles and the mouse and motion too (pages round 4, Sven's Q98); the focused window's exact rows (pages-fill).
         KitLanding {
             KitPage(intro: Self.intro) {
                 tilingSwitch
@@ -38,6 +38,12 @@ struct TilingBody: View {
                     InstrumentPair { gaps } right: { FocusedWindowBlock(look: look).id(AppSection.focusedWindow) }
                 } else {
                     gaps; FocusedWindowBlock(look: look).id(AppSection.focusedWindow)
+                }
+                // The focused window's exact rows, back from More (pages-fill, Sven 2026-11-25: about the page).
+                if ink.isInstrument {
+                    InstrumentPair { FocusedWindowExact(look: look, place: .focusedBorder) } right: { FocusedWindowExact(look: look, place: .focusedDim) }
+                } else {
+                    FocusedWindowExact(look: look, place: .focusedBorder); FocusedWindowExact(look: look, place: .focusedDim)
                 }
                 FloatAppsBlock(block: block, apps: apps).id(AppSection.floatApps)
                 if ink.isInstrument {

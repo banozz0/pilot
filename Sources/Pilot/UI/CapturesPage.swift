@@ -2,14 +2,13 @@ import AppKit
 import PilotCore
 import SwiftUI
 
-/// Tools › Captures (spec `capture.html`, Q157), in tabs (page map, Sven 2026-10-17; simplify-pages T13). Since
-/// pilot-ui-redesign T18 (S1 B, shot 1b) each tab's front holds one row per simple feature and the rest is on More.
-/// Capture: how a capture ends, the three daily keys and the Captures folder. Recording: what a recording hears, its count
-/// down, its two keys and the Recordings folder. More: the capture options, the other capture keys and a recording's
-/// quality. The newest captures are on History. Every row has an ⓘ; a key's is the line Binds shows for it. Each setting's
-/// row is tagged with its `pilot` key, so a search result lands on it and rings it (T6); the search opens the page's first
-/// tab, so a ringed row on More turns the window to More (AppShell's `ringsOnMore`, from `moreKeys`) and one on Recording
-/// turns the page to Recording (`recordingKeys`).
+/// Tools › Captures (spec `capture.html`, Q157), in tabs (page map, Sven 2026-10-17; simplify-pages T13). Each tab holds
+/// only what is about it (pages-fill, Sven 2026-11-25: "recording blocks shouldnt be next to screen capture settings"; on
+/// More from pilot-ui-redesign T18 until then). Capture: how a capture ends, the daily keys, the folder, the capture
+/// options and the other capture keys. Recording: what a recording hears, its count down, its two keys, the Recordings
+/// folder and its quality. The newest captures are on History. Every row has an ⓘ; a key's is the line Binds shows for
+/// it. Each setting's row is tagged with its `pilot` key, so a search result lands on it and rings it (T6); the search
+/// opens the page's first tab, so a ringed row on Recording turns the page to Recording (`recordingKeys`).
 struct CapturesPage: View {
     @Bindable var store: CaptureSettingsStore
     var bar: BarItemsStore = .shared
@@ -18,11 +17,9 @@ struct CapturesPage: View {
 
     /// The Recording tab rather than Capture.
     var recording = false
-    /// The More tab.
-    var more = false
 
-    init(store: CaptureSettingsStore = .shared, recording: Bool = false, more: Bool = false) {
-        self.store = store; self.recording = recording; self.more = more
+    init(store: CaptureSettingsStore = .shared, recording: Bool = false) {
+        self.store = store; self.recording = recording
     }
 
     static let note = "The capture keys freeze the screen and capture with Pilot."
@@ -49,45 +46,24 @@ struct CapturesPage: View {
     /// under More capture keys.
     static let frontKeys = 4
 
-    /// More's index (simplify-pages T7): a block's rows, a heading not counted. A row added or moved changes its count.
-    static let entries = [
-        MoreEntry(id: .captureOptions, symbol: "slider.horizontal.3", controls: 5),
-        MoreEntry(id: .captureKeys, symbol: "keyboard", controls: keys.count - frontKeys),
-        MoreEntry(id: .recordingQuality, symbol: "dial.medium", controls: 4),
-    ]
-
-    /// The settings whose rows are on More and on Recording; every other tagged row is on Capture. A row moved to another
-    /// tab moves here too, so the landing ring still finds it.
-    static let moreKeys: Set<String> = ["capture.hideDesktopIcons", "capture.thumbnailPlace", "capture.autoScroll", "capture.delay",
-                                        "capture.recordQuality", "capture.recordResolution", "capture.recordFPS", "capture.showClicks"]
-    static let recordingKeys: Set<String> = ["capture.audio", "capture.countdown", "capture.recordingsFolder"]
+    /// The settings whose rows are on Recording; every other tagged row is on Capture. A row moved to another tab moves
+    /// here too, so the landing ring still finds it.
+    static let recordingKeys: Set<String> = ["capture.audio", "capture.countdown", "capture.recordingsFolder",
+                                             "capture.recordQuality", "capture.recordResolution", "capture.recordFPS", "capture.showClicks"]
 
     var body: some View {
-        Group {
-            if more {
-                KitMore(entries: Self.entries) { moreTab }
-            } else if !recording && PagesFill.more != .tab {
-                // pages-fill: More's blocks on the front, in a tall page or for good.
-                TallPage { tall in
-                    KitLanding { KitPage {
-                        captureTab
-                        if tall || PagesFill.more == .folded { moreTab }
-                    } }
-                }
-            } else {
-                KitLanding { KitPage { if recording { recordingTab } else { captureTab } } }
-            }
-        }
+        KitLanding { KitPage { if recording { recordingTab } else { captureTab } } }
         .onChange(of: ring, initial: true) { follow(ring) }
     }
 
     /// A ringed setting on Recording while Capture shows: the window turns to Recording, whose landing scrolls to the row.
     private func follow(_ key: String?) {
-        guard let key, Self.recordingKeys.contains(key), !recording, !more, let window else { return }
+        guard let key, Self.recordingKeys.contains(key), !recording, let window else { return }
         window.sections[.captures] = .recording
     }
 
-    /// Capture's front: After capture, Capture tool and the three daily keys, then the folder.
+    /// Capture's front: After capture, Capture tool and the three daily keys, the folder, then the capture options and the
+    /// other capture keys, each a place a link or the search lands on.
     @ViewBuilder private var captureTab: some View {
         CapturePreview(after: store.settings.afterCapture, place: store.settings.thumbnailPlace)
         KitBlock(title: "Capture", symbol: "camera.viewfinder", note: Self.note) {
@@ -100,14 +76,9 @@ struct CapturesPage: View {
             keyRows(Array(Self.keys.prefix(Self.frontKeys)))
         }
         KitBlock(title: "Folder", symbol: "folder") { folderRow("Captures", kind: .capture, info: Info.capturesFolder).landingRing("capture.folder") }
-    }
-
-    /// More: the capture options, the other capture keys and the recording quality, each a block the index lists.
-    @ViewBuilder private var moreTab: some View {
-        KitBlock(title: AppSection.captureOptions.title, symbol: "slider.horizontal.3") { options }.moreBlock(.captureOptions, on: more)
+        KitBlock(title: AppSection.captureOptions.title, symbol: "slider.horizontal.3") { options }.id(AppSection.captureOptions)
         KitBlock(title: AppSection.captureKeys.title, symbol: "keyboard") { keyRows(Array(Self.keys.dropFirst(Self.frontKeys)), first: true) }
-            .moreBlock(.captureKeys, on: more)
-        KitBlock(title: AppSection.recordingQuality.title, symbol: "dial.medium") { quality }.moreBlock(.recordingQuality, on: more)
+            .id(AppSection.captureKeys)
     }
 
     /// The capture options: the Capture menu, hidden icons, the thumbnail's place, scrolling and the delay.
@@ -137,7 +108,7 @@ struct CapturesPage: View {
         .landingRing("capture.delay")
     }
 
-    /// Recording's front: what it hears, its count down and its two keys, then the folder.
+    /// Recording's front: what it hears, its count down and its two keys, the folder, then its quality (a place).
     @ViewBuilder private var recordingTab: some View {
         KitBlock(title: "Recording", symbol: "record.circle", note: Self.recordNote) {
             BlockRow(first: true) {
@@ -156,6 +127,7 @@ struct CapturesPage: View {
         KitBlock(title: "Folder", symbol: "folder") {
             folderRow("Recordings", kind: .recording, info: Info.recordingsFolder).landingRing("capture.recordingsFolder")
         }
+        KitBlock(title: AppSection.recordingQuality.title, symbol: "dial.medium") { quality }.id(AppSection.recordingQuality)
     }
 
     /// The recording quality: quality, resolution, frame rate and clicks.
@@ -252,7 +224,7 @@ struct CapturesPage: View {
 }
 
 /// Capture's preview (simplify-pages T27, the prototype's): a screen in small (MiniDesktop) and what After capture does
-/// on it: the thumbnail at its place (More's Thumbnail place), the capture's editor over the windows, or Copied.
+/// on it: the thumbnail at its place (Capture options' Thumbnail place), the capture's editor over the windows, or Copied.
 struct CapturePreview: View {
     @Environment(\.ink) private var ink
     let after: CaptureSettings.AfterCapture

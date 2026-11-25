@@ -4,16 +4,16 @@ import SwiftUI
 /// Tiling › Focused window (page map, Sven 2026-10-17; presets since pilot-ui-redesign T16, S1 B, round 1 shot 1b): Border
 /// and Dim other windows each as Off, Soft, Strong or Custom, and the shake's switch. The presets are a view over the rows
 /// (T15's `BorderLook` and `DimLook`, Open question 10): a pick writes them, and Custom, which no pick can write, opens
-/// Tiling's More on that feature's exact rows (FocusedWindowMore). Its keys stay `look.*`.
+/// that feature's exact rows below it (FocusedWindowExact). Its keys stay `look.*`.
 struct FocusedWindowBlock: View {
     @Environment(\.ink) private var ink
     let look: Look
 
     /// What each row does, the ⓘ's words.
     enum Info {
-        static let border = "A line around the window in front. Soft is 2 pt and Strong 4 pt, both in the theme's accent. Custom is any other width or colour, set on More."
-        static let dim = "The other windows blur and darken so the one in front stands out. Soft blurs lightly and darkens 18%, Strong blurs most and darkens 40%. Custom is any other mix, set on More."
-        static let shake = "Shaking the mouse turns Dim other windows on or off. How hard and how fast are on More."
+        static let border = "A line around the window in front. Soft is 2 pt and Strong 4 pt, both in the theme's accent. Custom is any other width or colour, set under Border."
+        static let dim = "The other windows blur and darken so the one in front stands out. Soft blurs lightly and darkens 18%, Strong blurs most and darkens 40%. Custom is any other mix, set under Dim other windows."
+        static let shake = "Shaking the mouse turns Dim other windows on or off. How hard and how fast are under Dim other windows."
     }
 
     static let presets = FocusPreset.allCases.map { (value: $0, title: $0.title) }
@@ -59,34 +59,31 @@ struct FocusedWindowBlock: View {
         Binding(get: { look.defocusShake }, set: { look.defocusShake = $0 })
     }
 
-    /// Off, Soft or Strong writes the border's rows; Custom opens them on More.
+    /// Off, Soft or Strong writes the border's rows; Custom lands on them under Border.
     private func pickBorder(_ preset: FocusPreset) {
         let now = BorderLook(on: look.windowBorder, width: look.windowBorderWidth, colour: look.windowBorderColour)
         guard let picked = BorderLook.picked(preset, from: now) else { return AppWindowController.shared.open(AppPlace(.focusedBorder)) }
         look.windowBorder = picked.on; look.windowBorderWidth = picked.width; look.windowBorderColour = picked.colour
     }
 
-    /// Off, Soft or Strong writes Defocus's blur and dim; Custom opens them on More.
+    /// Off, Soft or Strong writes Defocus's blur and dim; Custom lands on them under Dim other windows.
     private func pickDim(_ preset: FocusPreset) {
         guard let picked = DimLook.picked(preset) else { return AppWindowController.shared.open(AppPlace(.focusedDim)) }
         look.defocusStrength = picked.blur; look.defocusDim = picked.dim
     }
 }
 
-/// Tiling's More (pilot-ui-redesign T16): the rows the front's presets set, exact, each block headed by the preset they
-/// read now; then Defocus's shake tuning, what sets it off, and the contrast badge, as the block had them before.
-struct FocusedWindowMore: View {
+/// The focused window's exact rows on Tiling's front, under the Focused window block (Tiling's More from
+/// pilot-ui-redesign T16 until pages-fill, Sven 2026-11-25: they are about the page): Border or Dim other windows, the
+/// rows the presets set, exact, each block headed by the preset they read now; Dim adds Defocus's shake tuning, what
+/// sets it off, and the contrast badge. Each block is a place a link or the search lands on.
+struct FocusedWindowExact: View {
     @Environment(\.ink) private var ink
     /// Defocus's bind as bound now; none offscreen, where a page is drawn without an engine.
     @Environment(Engine.self) private var engine: Engine?
     var look: Look = .shared
-
-    /// The settings on More, by their `pilot` keys: a search result for one opens More (AppShell's `ringsOnMore`).
-    static let moreKeys: Set<String> = ["look.windowBorderWidth", "look.windowBorderColour", "look.defocusStrength", "look.defocusDim",
-                                        "look.defocusShakeSwings", "look.defocusShakeWithin"]
-
-    static let entries = [MoreEntry(id: .focusedBorder, symbol: "square.dashed", controls: 2),
-                          MoreEntry(id: .focusedDim, symbol: "circle.lefthalf.filled", controls: 4)]
+    /// Which block: Border (`.focusedBorder`) or Dim other windows (`.focusedDim`).
+    let place: AppSection
 
     /// What each row does, the ⓘ's words.
     enum Info {
@@ -100,13 +97,10 @@ struct FocusedWindowMore: View {
     }
 
     /// Under each block: how the front's presets and these rows meet.
-    static let footnote = "Off, Soft and Strong on Tiling's front set these rows; any other mix reads Custom."
+    static let footnote = "Focused window's Off, Soft and Strong set these rows; any other mix reads Custom."
 
     var body: some View {
-        KitMore(entries: Self.entries) {
-            borderBlock.moreBlock(.focusedBorder)
-            dimBlock.moreBlock(.focusedDim)
-        }
+        if place == .focusedBorder { borderBlock.id(AppSection.focusedBorder) } else { dimBlock.id(AppSection.focusedDim) }
     }
 
     private var borderBlock: some View {

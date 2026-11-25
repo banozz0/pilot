@@ -90,7 +90,7 @@ struct WindowPagesRenders {
                           .install].map { ($0.rawValue, AppPlace($0)) }
                 + [("captures-recording", AppPlace(.recording)), ("ai-setup", AppPlace(.aiSetup)),
                    ("voice-more", AppPlace(.voiceMore)),
-                   ("binds-more", AppPlace(.bindsMore)), ("binds-mouse", AppPlace(.mouse)), ("menu-more", AppPlace(.menuMore)),
+                   ("binds-mouse", AppPlace(.mouse)), ("menu-more", AppPlace(.menuMore)),
                    ("install-more", AppPlace(.installMore))]
             for (page, place) in fronts { try front(place, "\(name)-660-\(page)") }
             if wanted("\(name)-660-workspaces-4") {

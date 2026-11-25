@@ -43,9 +43,6 @@ struct RingsPage: View {
     /// The menu read as the Pilot ring and menu groups fill, while the page shows.
     @State private var menu: RingMenuSource?
     @FocusState private var searching: Bool
-    /// pages-fill: the ring's panel's width and the page's height, read as they change.
-    @State private var previewWidth: CGFloat = 300
-    @State private var pageHeight: CGFloat = 700
 
     private var store: RingStore { engine.rings.store }
     private var current: Pick { shown ?? pick }
@@ -77,7 +74,6 @@ struct RingsPage: View {
             }
             .padding(.top, 4)
         }
-        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { pageHeight = $0 }
         .onPageArrive {
             states = engine.rings.states()
             roles = engine.rings.roleApps()
@@ -159,9 +155,10 @@ struct RingsPage: View {
     // MARK: the ring
 
     private func preview(_ ring: Ring) -> some View {
-        // pages-fill's Grows: the ring as big as the panel's width and the page's height give it, 0.86 to twice its size.
-        let scale = PagesFill.preview == .grows ? max(0.86, min(2, (previewWidth - 48) / RingGeometry.side, (pageHeight - 330) / RingGeometry.side)) : 0.86
+        let scale = 0.86
         let side = RingGeometry.side * scale
+        // One model for the ring and the wedges listed under it.
+        let model = model(ring)
         return VStack(spacing: 0) {
             HStack(spacing: 10) {
                 Image(systemName: "circle.dashed").foregroundStyle(ink.text2)
@@ -175,7 +172,7 @@ struct RingsPage: View {
             }
             .padding(.horizontal, 14).frame(height: 46)
             Rectangle().fill(ink.line).frame(height: 1)
-            RingView(model: model(ring))
+            RingView(model: model)
                 .scaleEffect(scale)
                 .frame(width: side, height: side)
                 .contentShape(.rect)
@@ -184,20 +181,18 @@ struct RingsPage: View {
                 })
                 .padding(.vertical, 16)
                 .frame(maxWidth: .infinity)
-            if PagesFill.preview == .detail { wedges(ring) }
+            wedges(ring, faces: model.faces)
             Rectangle().fill(ink.line).frame(height: 1)
             opens(ring).padding(.horizontal, 14).frame(height: 46)
         }
-        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { previewWidth = $0 }
         .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(ink.raised.opacity(0.5)))
         .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(ink.line2, lineWidth: 1))
     }
 
-    /// pages-fill's Detail: the level's eight wedges under the ring, two columns of four, each its place, glyph, name and
-    /// key, the picked one lit; a click picks it as a click on its wedge does.
-    private func wedges(_ ring: Ring) -> some View {
-        let faces = model(ring).faces
-        return VStack(spacing: 0) {
+    /// The level's eight wedges under the ring (pages-fill, Sven 2026-11-25), two columns of four, each its place, glyph,
+    /// name and key, the picked one lit; a click picks it as a click on its wedge does.
+    private func wedges(_ ring: Ring, faces: [RingFace?]) -> some View {
+        VStack(spacing: 0) {
             Rectangle().fill(ink.line).frame(height: 1)
             Grid(horizontalSpacing: 18, verticalSpacing: 0) {
                 ForEach(0..<4, id: \.self) { row in
@@ -226,6 +221,8 @@ struct RingsPage: View {
             .contentShape(.rect)
         }
         .buttonStyle(.plain)
+        .accessibilityLabel([Self.compass[p].lowercased(), face?.label ?? "Empty", face?.keys].compactMap(\.self).joined(separator: ", "))
+        .accessibilityAddTraits(picked ? .isSelected : [])
     }
 
     /// The ring as the menu draws it, on the level entered, the picked wedge lit.

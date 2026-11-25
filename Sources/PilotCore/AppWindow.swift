@@ -147,7 +147,7 @@ public enum AppPage: String, CaseIterable, Sendable {
         case .tiling: ["gaps", "inner", "outer", "between windows", "screen edges", "tiler", "rescue", "border", "defocus", "dim", "blur",
                        "dim other windows"]
         case .workspaces: ["windows", "workspace", "layout", "name", "delete workspace", "add workspace", "your widths", "own sizes", "spot", "preview"]
-        case .menuBar: ["top bar", "status bar", "waybar", "hide", "autohide", "clock", "date and time", "two zones", "workspaces", "menu bar items", "in the menu bar", "item",
+        case .menuBar: ["top bar", "status bar", "waybar", "hide", "autohide", "in the menu bar",
                         "bar preset", "full strip", "full bar", "floating strip", "three islands", "pills", "attached", "floating", "adjust sizes", "bar height"]
         // The front's words; the style, the menu's and window's layouts, the glass's tuning, the cursor and the wallpaper
         // folders moved with their blocks to Look's More (simplify-pages T20).
@@ -426,14 +426,16 @@ public enum AppSection: String, CaseIterable, Sendable {
     /// Menu bar's place: other apps' notifications as Pilot's cards, and hiding macOS's own banner (spec notifications),
     /// beside the bell's item (on Pilot's front until the settings tidy, Sven 2026-11-14).
     case notifications
-    /// Menu bar's second tab in design round pages-fill (2026-11-25): shown only while `PagesFillDesign.menuBarTab` names it.
-    case menuBarMore
+    /// Menu bar's Items tab (pages-fill, 2026-11-25, M3): every group's switches and styles, the clock and the bell; the
+    /// page's own tab keeps the switch, the strip and tray, the bar's layout, background and screens.
+    case menuBarItems
     /// Tiling's places on its front: the always-float apps and the focused window (Sven, 2026-11-11, after 2276), and the
     /// always-float window titles and the mouse and motion, back from More (pages round 4, Sven's Q98); Tiling has no More.
     case floatApps, floatTitles, motion, focusedWindow
-    /// Tiling's More (pilot-ui-redesign T16, S1 B) and its places: the focused window's exact border, and Dim other
-    /// windows' exact blur and darkening with the shake's tuning; the front keeps their presets and the shake's switch.
-    case tilingMore, focusedBorder, focusedDim
+    /// Tiling's places on its front, back from its More (pages-fill, Sven 2026-11-25: only what is about the page, and
+    /// they are the focused window's): the focused window's exact border, and Dim other windows' exact blur and darkening
+    /// with the shake's tuning (on More from pilot-ui-redesign T16 until then).
+    case focusedBorder, focusedDim
     /// Workspaces' window shelf, shown while the picked workspace is Stage (on Tiling's More until Sven, 2026-11-11, after
     /// 2276; on Workspaces' More until Sven, 2026-11-23).
     case windowShelf
@@ -441,9 +443,9 @@ public enum AppSection: String, CaseIterable, Sendable {
     /// should be just in the normal clipboard page"): the apps never recorded, card numbers and keys that expire, the
     /// panel's Return and sort, and the tags.
     case clipNever, clipExpire, clipPanel, clipTags
-    /// The Dock's More (pilot-ui-redesign T17, S1 B) and its place: magnification, placement, icon colours and the
-    /// visualizer, with the Dock's apps taken out under it.
-    case dockMore, dockLook
+    /// The Dock's place on its front, in the look's column beside the widgets (pages-fill, Sven 2026-11-25; on the Dock's
+    /// More from pilot-ui-redesign T17 until then): magnification, placement, icon colours and the visualizer.
+    case dockLook
     /// Open with's place on its front, back from More with its More (pages round 4, Sven's Q103): the app or site each
     /// role key opens.
     case appsForKeys
@@ -452,18 +454,16 @@ public enum AppSection: String, CaseIterable, Sendable {
     /// Sven's Q101) and what shows while you speak (on More from T18 until Sven, 2026-11-23) are places on the front.
     /// Every speech model is on More since T18.
     case voiceMore, voiceDictation, voiceTakes, voiceWords, voiceReplacements, voiceReadAloud, voiceModels, voiceShows
-    /// Captures' More (pilot-ui-redesign T18, S1 B: one row per simple feature on each tab, the rest behind More) and its
-    /// places: the capture options, the other capture keys, and a recording's quality, resolution, frame rate and clicks
-    /// (on their tabs' fronts from pages round 4, Sven's Q102, until T18).
-    case capturesMore, captureOptions, captureKeys, recordingQuality
+    /// Captures' places, each on the tab it is about (pages-fill, Sven 2026-11-25: "recording blocks shouldnt be next to
+    /// screen capture settings"; on Captures' More from pilot-ui-redesign T18 until then): the capture options and the
+    /// other capture keys on Capture, a recording's quality, resolution, frame rate and clicks on Recording.
+    case captureOptions, captureKeys, recordingQuality
     /// Launcher's More (simplify-pages T15) and its place beside `aliases` and `quicklinks`: Translate's pair; and the rows
     /// the root can list too, a place on Your menu again (pages round 4, Sven's Q96).
     case menuMore, menuExtras, translate
     /// What Update lists, the self-updating casks: a place on Install's front (on its More, beside `helpers` and
     /// `hiddenApps`, from simplify-pages T16 until pages round 4, Sven's Q104).
     case installMore, installLists
-    /// Update & Clean's More (the feature trim, 2026-11-19): Reports, every run kept, hidden off the front.
-    case upkeepMore
     /// System's places on its front: the sound input, the keyboard layout and the mouse's speeds (on a More tab from
     /// simplify-pages T17 until Sven, 2026-11-11, after 2276). Each part's keys sit in its own card (pages round 5).
     case soundInput, keyboardLayout, mouseSpeed
@@ -472,9 +472,9 @@ public enum AppSection: String, CaseIterable, Sendable {
     case aiFallback, aiKeys, aiNewChat
     /// Your own AI commands on a selection (launcher-best T10).
     case aiCommands
-    /// Keys' More (simplify-pages T14) and its place beside `overlay`, `keySwaps` and `exportImport`, Binds' tabs until
-    /// then: the keyboard's lock for cleaning.
-    case bindsMore, cleaning
+    /// The keyboard's lock for cleaning: a place under the board beside `overlay`, `keySwaps` and `exportImport` (pages-fill,
+    /// Sven 2026-11-25; on Keys' More from simplify-pages T14 until then).
+    case cleaning
     /// Workspaces' places, each for the workspace picked: what opens there (Sven, 2026-11-11, after 2276), the rules, a
     /// preset and the window snapshot (Sven's round 3 notes on build 2300), each workspace's monitor (pages round 4, Sven's
     /// Q97), and since its More went (Sven, 2026-11-23) the Scrolling layout's rules, shown while it is Scrolling, and the
@@ -483,21 +483,21 @@ public enum AppSection: String, CaseIterable, Sendable {
 
     public var page: AppPage {
         switch self {
-        case .plainCombos, .conflicts, .overlay, .mouse, .keySwaps, .exportImport, .bindsMore, .cleaning: .binds
+        case .plainCombos, .conflicts, .overlay, .mouse, .keySwaps, .exportImport, .cleaning: .binds
         case .abilities, .aliases, .quicklinks, .rings, .menuMore, .menuExtras, .translate, .appsShowAs: .menu
         case .fileSearch, .folders: .files
-        case .reports, .upkeepMore: .upkeep
+        case .reports: .upkeep
         case .catalogue, .webApps, .helpers, .hiddenApps, .installMore, .installLists: .install
         case .soundInput, .keyboardLayout, .mouseSpeed: .system
         case .workspaceOpens, .workspaceRules, .workspaceScrolling, .workspaceMonitors, .workspaceSwipe, .windowShelf: .workspaces
         case .permissions, .about, .hyperKey, .status, .data: .general
-        case .notifications, .menuBarMore: .menuBar
-        case .floatApps, .floatTitles, .motion, .focusedWindow, .tilingMore, .focusedBorder, .focusedDim: .tiling
+        case .notifications, .menuBarItems: .menuBar
+        case .floatApps, .floatTitles, .motion, .focusedWindow, .focusedBorder, .focusedDim: .tiling
         case .clipNever, .clipExpire, .clipPanel, .clipTags: .clipboard
-        case .dockMore, .dockLook: .dock
+        case .dockLook: .dock
         case .appsForKeys: .openWith
         case .voiceMore, .voiceDictation, .voiceTakes, .voiceWords, .voiceReplacements, .voiceReadAloud, .voiceModels, .voiceShows: .voice
-        case .capturesMore, .captureOptions, .captureKeys, .recordingQuality: .captures
+        case .captureOptions, .captureKeys, .recordingQuality: .captures
         case .extensionCatalogue: .extensions
         case .aiSetup, .aiFallback, .aiKeys, .aiCommands, .aiNewChat: .ai
         case .recording, .captureHistory: .captures
@@ -519,13 +519,8 @@ public enum AppSection: String, CaseIterable, Sendable {
     public static func more(of page: AppPage) -> AppSection? {
         switch page {
         case .voice: .voiceMore
-        case .captures: .capturesMore
         case .menu: .menuMore
         case .install: .installMore
-        case .upkeep: .upkeepMore
-        case .binds: .bindsMore
-        case .dock: .dockMore
-        case .tiling: .tilingMore
         default: nil
         }
     }
@@ -533,13 +528,9 @@ public enum AppSection: String, CaseIterable, Sendable {
     /// The places that are blocks on their page's More tab.
     private static let onMoreTab: Set<AppSection> = [
                                                      .voiceTakes, .voiceReplacements, .voiceReadAloud, .voiceModels,
-                                                     .captureOptions, .captureKeys, .recordingQuality,
                                                      .translate, .aliases, .quicklinks,
-                                                     .helpers, .hiddenApps, .reports,
-                                                     .exportImport, .cleaning,
-                                                     .appsShowAs,
-                                                     .dockLook,
-                                                     .focusedBorder, .focusedDim]
+                                                     .hiddenApps,
+                                                     .appsShowAs]
 
     /// The places that are blocks on their page's front (Sven, 2026-11-11, after 2276: back from More): a link or the search
     /// opens the front and scrolls to the block (the window's `blockFocus`, as for a block on More).
@@ -550,7 +541,10 @@ public enum AppSection: String, CaseIterable, Sendable {
                                                      .keySwaps, .overlay, .menuExtras, .glassTuning, .cursor, .wallpaperCycle,
                                                      .soundInput, .keyboardLayout, .mouseSpeed, .voiceDictation, .voiceShows,
                                                      .voiceWords, .installLists, .fileSearch,
-                                                     .clipNever, .clipExpire, .clipPanel, .clipTags]
+                                                     .clipNever, .clipExpire, .clipPanel, .clipTags,
+                                                     // pages-fill (Sven, 2026-11-25): blocks about their tab, back from More.
+                                                     .captureOptions, .captureKeys, .recordingQuality, .reports, .exportImport,
+                                                     .cleaning, .helpers, .dockLook, .focusedBorder, .focusedDim]
 
     /// A block on its page's front that a link or the search scrolls to.
     public var onFront: Bool { Self.onFrontOf.contains(self) }
@@ -560,7 +554,10 @@ public enum AppSection: String, CaseIterable, Sendable {
     public var frontTab: AppSection? {
         switch self {
         case .aiFallback, .aiKeys, .aiCommands, .aiNewChat: .aiSetup
-        case .installLists: .catalogue
+        case .installLists, .helpers: .catalogue
+        // A recording's quality is Recording's (pages-fill); the bell's cards are among Menu bar's Items.
+        case .recordingQuality: .recording
+        case .notifications: .menuBarItems
         default: nil
         }
     }
@@ -570,19 +567,16 @@ public enum AppSection: String, CaseIterable, Sendable {
     /// The More tab a place sits on: a link or a search to it opens that tab and marks the place's block there.
     public var onMore: AppSection? { Self.onMoreTab.contains(self) ? Self.more(of: page) : nil }
 
-    /// Binds' tabs drawn as a plain page under the frame's bar, not on the keyboard: Mouse and More (Overlay, Swap keys,
-    /// Export and import and Cleaning, simplify-pages T14).
-    public var isPlainBindsPage: Bool { [.mouse, .bindsMore].contains(self) }
+    /// Binds' tab drawn as a plain page under the frame's bar, not on the keyboard: Mouse (Keys' More went under the board,
+    /// pages-fill).
+    public var isPlainBindsPage: Bool { self == .mouse }
 
     /// Conflicts open as a sheet over Binds rather than as a tab.
     public var opensAsSheet: Bool { self == .conflicts }
     /// Shown as a tab across the page's top; Plain combos is Binds' last sublayer tab instead (card agent-bo-95422894),
     /// conflicts a sheet.
-    /// Whether the section is there at all: Menu bar's second tab only while a pages-fill switch names it.
-    public var shown: Bool { self != .menuBarMore || PagesFillDesign.menuBarTab != nil }
-
     public var isTab: Bool {
-        !opensAsSheet && !isMerged && !PagesFillDesign.foldedMore.contains(self) && shown
+        !opensAsSheet && !isMerged
     }
 
     /// Parts drawn on their page's own body: Plain combos as a sublayer, the places on a More tab or a front, the extension
@@ -608,9 +602,8 @@ public enum AppSection: String, CaseIterable, Sendable {
         case .status: "Status"
         case .data: "Data"
         case .notifications: "Notifications"
-        case .voiceMore, .capturesMore, .menuMore, .installMore, .upkeepMore, .bindsMore, .dockMore,
-             .tilingMore: "More"
-        case .menuBarMore: PagesFillDesign.menuBarTab ?? "More"
+        case .voiceMore, .menuMore, .installMore: "More"
+        case .menuBarItems: "Items"
         case .dockLook: "Placement and effects"
         case .focusedBorder: "Border"
         case .focusedDim: "Dim other windows"
@@ -691,8 +684,10 @@ public enum AppSection: String, CaseIterable, Sendable {
         case .data: ["folder", "application support", "pilot command", "cli", "link", "more pages", "uninstall", "terminal",
                      "ghostty"]
         case .notifications: ["notification", "notifications", "banner", "bell", "cards", "notification center", "hide banner"]
-        case .voiceMore, .capturesMore, .menuMore, .installMore, .upkeepMore, .bindsMore, .dockMore,
-             .tilingMore, .menuBarMore: []
+        // Menu bar's Items (pages-fill): each group's items and styles, the clock.
+        case .menuBarItems: ["clock", "date and time", "two zones", "workspaces", "menu bar items", "item", "items", "styles", "readings",
+                             "cpu", "memory", "battery", "volume", "wi-fi", "timer", "spacer", "divider", "group"]
+        case .voiceMore, .menuMore, .installMore: []
         // The Dock front's finer words, moved with their rows to its More (pilot-ui-redesign T17).
         case .dockLook: ["magnification", "magnify", "placement", "attached", "floating", "icon colours", "icon colors", "tint",
                          "theme icons", "visualizer", "visualiser", "bars", "taken out", "keep in dock", "removed from dock"]
@@ -803,6 +798,9 @@ public struct AppPlace: Hashable, Sendable {
         "workspacesMore": AppPlace(.workspaces),
         // Clipboard's More, gone again (Sven, 2026-11-23): its blocks are on the page.
         "clipMore": AppPlace(.clipboard),
+        // The More tabs that went with pages-fill (Sven, 2026-11-25): their blocks are on their pages.
+        "capturesMore": AppPlace(.captures), "upkeepMore": AppPlace(.upkeep), "bindsMore": AppPlace(.binds),
+        "dockMore": AppPlace(.dock), "tilingMore": AppPlace(.tiling),
     ]
 
     /// The place a page name stands for: a page, a part, an old name, or nil.
@@ -849,7 +847,7 @@ public struct AppPlace: Hashable, Sendable {
         let filter = FuzzyRanker.Filter(query)
         guard !filter.typed.isEmpty else { return [] }
         // A More tab is found by its blocks, each a place of its own, never by its title.
-        let all = AppPage.allCases.map { AppPlace($0) } + AppSection.allCases.filter { !$0.isMore && $0.shown }.map { AppPlace($0) }
+        let all = AppPage.allCases.map { AppPlace($0) } + AppSection.allCases.filter { !$0.isMore }.map { AppPlace($0) }
         let byTitle = all.filter { filter.holds([$0.title]) }
         let held = byTitle + all.filter { place in !byTitle.contains(place) && filter.holds(place.keywords) }
         guard held.isEmpty else { return held }
@@ -1047,12 +1045,3 @@ public struct LockedOpen: Sendable {
     }
 }
 
-/// Design round pages-fill (Sven, 2026-11-25: "the half empty pages in pilot ... menubar page can it be better
-/// organised?"): the tabs its options take away or add, all off by default. Only `PagesFillRenders` sets them, to draw the
-/// options; the pick replaces this.
-public enum PagesFillDesign {
-    /// More tabs whose blocks stand on their page's front, the tab gone.
-    nonisolated(unsafe) public static var foldedMore: Set<AppSection> = []
-    /// The Menu bar page's second tab's title ("More" or "Items"); nil, no second tab.
-    nonisolated(unsafe) public static var menuBarTab: String?
-}

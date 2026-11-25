@@ -116,14 +116,17 @@ struct BindsKeyboardPage: View {
 
     /// Instrument (card agent-bo-95423181): its own page on this page's state, dialogs and keys.
     private func instrument(_ binds: HomeBinds, key: Int64?) -> some View {
-        InstrumentBindsPage(binds: binds, key: key, layer: $layer, boards: board, refusal: refusal, acts: acts, below: Self.below)
+        InstrumentBindsPage(binds: binds, key: key, layer: $layer, boards: board, refusal: refusal, acts: acts, below: below)
     }
 
-    /// Under the board and its inspector, back from More (pages round 4, Sven's Q95): Swap keys, then what the overlay
-    /// shows, longest last; each a place a link or the search lands on.
-    static var below: AnyView {
+    /// Under the board and its inspector: Swap keys (back from More, pages round 4, Sven's Q95), Export and import and the
+    /// keyboard's lock for cleaning (back from Keys' More, pages-fill, Sven 2026-11-25: about the keys), then what the
+    /// overlay shows, longest last; each a place a link or the search lands on. Cleaning's Set key opens the bind editor here.
+    private var below: AnyView {
         AnyView(VStack(alignment: .leading, spacing: 0) {
             KeySwapsBlock().id(AppSection.keySwaps)
+            ExportImportRows().id(AppSection.exportImport)
+            KeyboardLockCard { editing = $0 }.id(AppSection.cleaning)
             OverlayPicksBlocks()
         })
     }
@@ -193,24 +196,3 @@ private struct PicksKeys: ViewModifier {
     }
 }
 
-/// Keys' More (simplify-pages T14; Overlay, Swap keys and Export and import were Binds' tabs): Export and import and
-/// Cleaning, each a place a link or the search lands on; Swap keys and the overlay went back under the board (pages
-/// round 4). Cleaning's Set key opens the bind editor on the keyboard, as Launcher's Set key does, More having no editor
-/// of its own.
-struct BindsMorePage: View {
-    /// Binds' editor on that action, on the keyboard.
-    var editBind: (String) -> Void = { _ in }
-
-    /// More's index. A row added to or moved off a block changes its count here.
-    static let entries = [
-        MoreEntry(id: .exportImport, symbol: "arrow.up.arrow.down", controls: 3),
-        MoreEntry(id: .cleaning, symbol: "lock", controls: 2),
-    ]
-
-    var body: some View {
-        KitMore(entries: Self.entries) {
-            ExportImportRows().moreBlock(.exportImport)
-            KeyboardLockCard { editing in editing.action.map(editBind) }.moreBlock(.cleaning)
-        }
-    }
-}

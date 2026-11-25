@@ -40,6 +40,9 @@ struct CataloguePage: View {
                 EmptyState(title: "Search for anything to install", line: "Homebrew, the App Store, GitHub and the package tools.")
                     .padding(.vertical, 24)
             }
+            // The command-line tools Pilot installs and runs, back from More (pages-fill, Sven 2026-11-25: about installing),
+            // under the results, so a search's rows come straight under the box.
+            HelpersBlock().id(AppSection.helpers)
         } }
         .task(id: query) { await ask() }
     }
@@ -136,19 +139,14 @@ struct InstallListsBlock: View {
     }
 }
 
-/// Install's More (simplify-pages T16): the command-line tools and the hidden apps, each a place a link or the search lands
-/// on; What Pilot lists went to the Catalogue (pages round 4).
+/// Install's More (simplify-pages T16): the hidden apps, a place a link or the search lands on, as they are not about
+/// installing; What Pilot lists (pages round 4) and the command-line tools (pages-fill, Sven 2026-11-25) went to Search.
 struct InstallMorePage: View {
-    /// More's index. A row added to or moved off a block changes its count here; the tools and the hidden apps are a list
-    /// each.
-    static let entries = [
-        MoreEntry(id: .helpers, symbol: "terminal", controls: 1),
-        MoreEntry(id: .hiddenApps, symbol: "eye.slash", controls: 1),
-    ]
+    /// More's index: one block, so none shows.
+    static let entries = [MoreEntry(id: .hiddenApps, symbol: "eye.slash", controls: 1)]
 
     var body: some View {
         KitMore(entries: Self.entries) {
-            HelpersBlock().moreBlock(.helpers)
             HiddenAppsBlock().moreBlock(.hiddenApps)
         }
     }

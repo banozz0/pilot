@@ -130,8 +130,7 @@ private struct PagePart: View {
     }
 
     /// The settings each page keeps on its More tab, by their `pilot` keys (pilot-ui-redesign T16, T17, T18; S1 B).
-    static let ringsOnMore: [AppPage: Set<String>] = [.dock: DockPage.moreKeys, .tiling: FocusedWindowMore.moreKeys, .captures: CapturesPage.moreKeys,
-                                                      .voice: VoicePage.moreKeys]
+    static let ringsOnMore: [AppPage: Set<String>] = [.voice: VoicePage.moreKeys]
 
     /// A page that reads on a repeat takes `model.live`; one that reads once as it shows takes `model.onScreen`. Each is
     /// false while the part is hidden (WhileShown), and Binds and Launcher keep the search they last showed (HeldSearch):
@@ -142,9 +141,7 @@ private struct PagePart: View {
         case .home:
             HomePage { model.go($0) }
         case .binds:
-            if section == .bindsMore {
-                BindsMorePage { model.editBind = $0; model.go(AppPlace(.binds)) }
-            } else if section == .mouse {
+            if section == .mouse {
                 // Back from System (Sven's round 3 notes on build 2300): the blocks carry the page's intro.
                 KitPage { MouseButtonsBlocks() }
             } else {
@@ -165,20 +162,20 @@ private struct PagePart: View {
             }
         case .workspaces: WorkspacesSettingsView()
         // Tiling's More: the focused window's exact rows (pilot-ui-redesign T16).
-        case .tiling: if section == .tilingMore { FocusedWindowMore() } else { TilingSettingsView() }
+        case .tiling: TilingSettingsView()
         // The menu bar lane's page (card agent-bo-95422913).
-        case .menuBar: MenuBarPage(tab: section == .menuBarMore ? section : nil)
+        case .menuBar: MenuBarPage(items: section == .menuBarItems)
         // Pilot's dock's own page (round 4).
-        case .dock: DockPage(more: section == .dockMore)
+        case .dock: DockPage()
         case .look where section == .themeCatalogue: ThemeCataloguePage()
         case .look: LookPage(section: section == .wallpaper ? section : nil, focus: model.wallpaperFocus) { model.sections[.look] = nil }
         case .widgets: WidgetsPage()
         case .system: WhileShown { SetupPage(onScreen: $0 && model.onScreen, section: model.setupSection, tookSection: { model.setupSection = nil }).equatable() }
         // Reports is on Update & Clean's More since the feature trim (2026-11-19): Open report goes there.
-        case .upkeep: UpkeepPage(more: section == .upkeepMore) { model.go($0) }
+        case .upkeep: UpkeepPage { model.go($0) }
         case .clipboard: ClipboardSettingsView()
         case .captures:
-            if section == .captureHistory { CaptureHistoryPage() } else { CapturesPage(recording: section == .recording, more: section == .capturesMore) }
+            if section == .captureHistory { CaptureHistoryPage() } else { CapturesPage(recording: section == .recording) }
         case .snippets: SnippetsSettingsView(editSnippet: model.editSnippet, tookSnippet: { model.editSnippet = nil }).equatable()
         case .notes: WhileShown { NotesPage(onScreen: $0 && model.onScreen) }
         case .files:

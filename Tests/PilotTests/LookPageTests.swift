@@ -129,9 +129,9 @@ struct LookPageTests {
         FocusedWindowBlock(look: look).padding(20).frame(width: 1000, height: 760, alignment: .top).pilotTheme(look: look)
     }
 
-    /// Tiling's More, the Focused window's exact rows (pilot-ui-redesign T16), drawn on its own for `look`.
+    /// The Focused window's exact rows (pilot-ui-redesign T16; on Tiling's front since pages-fill), drawn on their own for `look`.
     func focusedWindowMore(_ look: Look) -> some View {
-        FocusedWindowMore(look: look).padding(20).frame(width: 1000, height: 760, alignment: .top).pilotTheme(look: look)
+        VStack(alignment: .leading, spacing: 16) { FocusedWindowExact(look: look, place: .focusedBorder); FocusedWindowExact(look: look, place: .focusedDim) }.padding(20).frame(width: 1000, height: 760, alignment: .top).pilotTheme(look: look)
     }
 
     /// Card agent-bo-95422950's row, on Tiling's Focused window block: the border as a preset on the front, Off its switch

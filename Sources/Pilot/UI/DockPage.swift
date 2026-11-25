@@ -33,20 +33,22 @@ final class DockPageFocus {
     }
 }
 
-/// Settings › Desktop › Dock (round 4, Sven 2026-11-13: "maybe dock should have its own page in desktop"). The front
-/// (pilot-ui-redesign T17, S1 B: one switch per simple feature, the rest on More): the dock's switch, its style (the top
-/// bar's Solid, Glass and Clear) and size, then its widgets: the ones on in the dock's order with Move up and Move down,
-/// the rest, and From extensions (each installed extension with a top bar item no widget reads). A widget with settings
-/// opens them under its row: System stats' readings, an extension's own preferences (Markets' symbols and how they show,
-/// shared with its top bar item). More: magnification, placement, icon colours and the visualizer, then the Dock's apps
-/// taken out.
+/// Settings › Desktop › Dock (round 4, Sven 2026-11-13: "maybe dock should have its own page in desktop"), one page
+/// (pages-fill, Sven 2026-11-25, F; a More tab from pilot-ui-redesign T17 until then): the dock's switch, then a column of
+/// its look and behaviour, its style (the top bar's Solid, Glass and Clear), size, magnification, placement, icon colours
+/// and the visualizer, beside its widgets: the ones on in the dock's order with Move up and Move down, the rest, and From
+/// extensions (each installed extension with a top bar item no widget reads), then the Dock's apps taken out. A widget
+/// with settings opens them under its row: System stats' readings, an extension's own preferences (Markets' symbols and
+/// how they show, shared with its top bar item). In a narrow page the column stands over the widgets.
 struct DockPage: View {
     @Environment(\.ink) private var ink
     @Environment(Engine.self) private var engine
     var focus: DockPageFocus = .shared
     var extensionBar: ExtensionBar = .shared
-    /// The page's More tab, not its front.
-    var more = false
+    /// Room for the look's column beside the widgets (`column` and the widgets' least width).
+    @State private var wide = true
+    /// The look's column, and the least the widgets take beside it.
+    static let column: CGFloat = 460, widgets: CGFloat = 560
     /// The extensions folder it reads: the app's, or a render's.
     let folder: URL
     /// The extensions and their preferences, read as the page opens and saved as they change (the Extensions page's own
@@ -54,27 +56,19 @@ struct DockPage: View {
     @State private var prefs: ExtensionsSettings
 
     /// A render passes `prefs` loaded, as nothing loads before it draws.
-    init(folder: URL = Extension.folder, focus: DockPageFocus = .shared, extensionBar: ExtensionBar = .shared, prefs: ExtensionsSettings? = nil,
-         more: Bool = false) {
-        self.folder = folder; self.focus = focus; self.extensionBar = extensionBar; self.more = more
+    init(folder: URL = Extension.folder, focus: DockPageFocus = .shared, extensionBar: ExtensionBar = .shared, prefs: ExtensionsSettings? = nil) {
+        self.folder = folder; self.focus = focus; self.extensionBar = extensionBar
         _prefs = State(initialValue: prefs ?? ExtensionsSettings(folder: folder))
     }
 
     /// The installed extensions with a top bar item no widget reads (DockWidgetSources.barExtensions), from what was read.
     private var offered: [Extension] { prefs.rows.map(\.ext).filter { $0.bar != nil && !DockWidget.extensionIDs.contains($0.id) } }
 
-    /// The settings on More, by their `pilot` keys: a search result for one opens More (AppShell's `ringsOnMore`).
-    static let moreKeys: Set<String> = ["dock.magnify", "dock.placement", "dock.tint", "dock.visualizer"]
-
-    /// More's index: its one block, so no index shows; Taken out follows it while the Dock has apps taken out.
-    static let entries = [MoreEntry(id: .dockLook, symbol: "sparkles", controls: 4)]
-
     var body: some View {
         let dock = engine.dock
-        Group {
-            if more { moreTab(dock) } else { front(dock) }
-        }
-        .task { if !prefs.loaded { await prefs.load() } }
+        // A link or the search to the look's rows lands on its block (`dockLook`) and rings the row.
+        KitLanding { front(dock) }
+            .task { if !prefs.loaded { await prefs.load() } }
     }
 
     private func front(_ dock: DockController) -> some View {
@@ -85,29 +79,28 @@ struct DockPage: View {
             }
             .landingRing("dock.on")
             if let problem = dock.problem { FinePrint(text: problem, color: ink.red) }
-            if PagesFill.dock == .lookBeside {
-                // pages-fill's Look beside: the look and More's rows in one column, the widgets beside it; More's tab gone.
-                HStack(alignment: .top, spacing: 16) {
-                    VStack(alignment: .leading, spacing: 16) {
-                        TitledPanel(title: "Look") { VStack(alignment: .leading, spacing: 0) { look(dock); effects(dock) } }
-                        taken(dock)
-                    }
-                    .frame(width: 460)
-                    TitledPanel(title: "Widgets") { DockWidgetList(dock: dock, offered: offered, prefs: prefs, focus: focus, extensionBar: extensionBar) }
-                }
-            } else {
-                TitledPanel(title: "Look") { look(dock) }
-                TitledPanel(title: "Widgets") { DockWidgetList(dock: dock, offered: offered, prefs: prefs, focus: focus, extensionBar: extensionBar) }
+            // The look's column beside the widgets once the page has room for both (pages-fill F), else one over the other;
+            // one layout either way, so the rows keep their state as the page crosses the width.
+            let layout = wide ? AnyLayout(HStackLayout(alignment: .top, spacing: 16)) : AnyLayout(VStackLayout(alignment: .leading, spacing: 16))
+            layout {
+                lookPanel(dock).frame(width: wide ? Self.column : nil)
+                widgetsAndTaken(dock)
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .onGeometryChange(for: Bool.self) { $0.size.width >= Self.column + 16 + Self.widgets } action: { wide = $0 }
         }
     }
 
-    private func moreTab(_ dock: DockController) -> some View {
-        KitMore(entries: Self.entries) {
-            VStack(alignment: .leading, spacing: 20) {
-                TitledPanel(title: AppSection.dockLook.title) { effects(dock) }.moreBlock(.dockLook)
-                taken(dock)
-            }
+    /// The dock's look and behaviour: Style and Size, then magnification, placement, icon colours and the visualizer.
+    private func lookPanel(_ dock: DockController) -> some View {
+        TitledPanel(title: "Look") { VStack(alignment: .leading, spacing: 0) { look(dock); effects(dock) } }.id(AppSection.dockLook)
+    }
+
+    /// The widgets, then the Dock's apps taken out while there are any.
+    private func widgetsAndTaken(_ dock: DockController) -> some View {
+        VStack(alignment: .leading, spacing: 16) {
+            TitledPanel(title: "Widgets") { DockWidgetList(dock: dock, offered: offered, prefs: prefs, focus: focus, extensionBar: extensionBar) }
+            taken(dock)
         }
     }
 
@@ -151,10 +144,10 @@ struct DockPage: View {
         .font(ink.ui(13))
     }
 
-    /// More's block: how the icons grow, where the dock sits, the icons' colours and the visualizer.
+    /// The look's rows after Style and Size: how the icons grow, where the dock sits, the icons' colours and the visualizer.
     @ViewBuilder private func effects(_ dock: DockController) -> some View {
         VStack(alignment: .leading, spacing: 0) {
-            BlockRow(first: PagesFill.dock != .lookBeside) {
+            BlockRow {
                 Text("Magnification").foregroundStyle(ink.text)
                 InfoMark(text: "How much the icon under the pointer grows, as the macOS Dock's.")
                 Spacer()
@@ -209,45 +202,6 @@ struct DockWidgetList: View {
         let fromExtensions = offered.map { DockSlot.extensionItem($0.id) }.filter { !on.contains($0) }
         // A row a turn ahead and a frame's worth at a time in view (Staged; page-frames-5: the list whole held Dock's first
         // visit 50 to 90 ms after it drew).
-        if PagesFill.dock == .twoColumns {
-            // pages-fill's Two columns: the widgets in the dock, in its order, beside the ones that are not.
-            HStack(alignment: .top, spacing: 28) {
-                VStack(alignment: .leading, spacing: 0) {
-                    heading("In the dock", count: on.count)
-                    ForEach(Array(on.enumerated()), id: \.element) { i, slot in row(slot, at: i, count: on.count, first: i == 0) }
-                }
-                .frame(maxWidth: .infinity, alignment: .topLeading)
-                VStack(alignment: .leading, spacing: 0) {
-                    heading("Not in the dock", count: builtIn.count)
-                    ForEach(Array(builtIn.enumerated()), id: \.element) { i, slot in row(slot, at: nil, count: on.count, first: i == 0) }
-                    fromExtensionsList(fromExtensions, count: on.count)
-                }
-                .frame(maxWidth: .infinity, alignment: .topLeading)
-            }
-            .font(ink.ui(13))
-        } else {
-            list(on: on, builtIn: builtIn, fromExtensions: fromExtensions)
-        }
-    }
-
-    private func heading(_ title: String, count: Int) -> some View {
-        HStack(spacing: 8) {
-            Text(title).font(ink.ui(13, .semibold)).foregroundStyle(ink.text)
-            Text("\(count)").font(ink.mono(11)).foregroundStyle(ink.muted)
-        }
-        .padding(.bottom, 6)
-    }
-
-    @ViewBuilder private func fromExtensionsList(_ fromExtensions: [DockSlot], count: Int) -> some View {
-        Text("From extensions").font(ink.ui(13, .semibold)).foregroundStyle(ink.text).padding(.top, 14).padding(.bottom, 4)
-        if fromExtensions.isEmpty {
-            FinePrint(text: offered.isEmpty ? "No installed extension has a top bar item the widgets above do not read. Any that has one can go in the dock: the catalogue's Git, Tailscale or Ghostex, or your own."
-                      : "Every installed extension with a top bar item is in the dock.")
-        }
-        ForEach(Array(fromExtensions.enumerated()), id: \.element) { i, slot in row(slot, at: nil, count: count, first: i == 0) }
-    }
-
-    private func list(on: [DockSlot], builtIn: [DockSlot], fromExtensions: [DockSlot]) -> some View {
         VStack(alignment: .leading, spacing: 0) { Staged {
             ForEach(Array((on + builtIn).enumerated()), id: \.element) { i, slot in row(slot, at: on.firstIndex(of: slot), count: on.count, first: i == 0) }
             Text("From extensions").font(ink.ui(13, .semibold)).foregroundStyle(ink.text).padding(.top, 14).padding(.bottom, 4)

@@ -33,8 +33,9 @@ struct CapturesPageRenders {
         let width = AppWindowController.size.width - InstrumentFrame.listWidth
         for theme in ["tokyo-night", "porcelain"] {
             look.themeID = theme
-            for (tab, recording, more) in [("capture", false, false), ("recording", true, false), ("more", false, true)] {
-                let page = MonitorsGround { CapturesPage(store: store, recording: recording, more: more) }
+            // Each tab holds its own blocks (pages-fill, Sven 2026-11-25): Captures' More went.
+            for (tab, recording) in [("capture", false), ("recording", true)] {
+                let page = MonitorsGround { CapturesPage(store: store, recording: recording) }
                     .styled(.page(.captures)).frame(width: width, height: 1400).pilotTheme(look: look)
                 try RestyledRenders.writeTrimmed(rendered(page), from: 0, to: dir.appendingPathComponent("captures-\(tab)-\(theme).png"))
             }
