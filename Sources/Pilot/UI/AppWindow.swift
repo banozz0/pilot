@@ -222,19 +222,26 @@ struct PageVisits {
 
     /// The likeliest pages before any are counted (page-instant; Sven on build 3142: with no counts yet nothing was built
     /// ahead, so every switch was a first visit): those of `ahead` Sven went to most on combined-16 (load-lag, his 43
-    /// switches of 2026-11-25), most first, with Launcher added after Look (slow-pages), which makes the warm set seven.
-    static let seed: [AppPage] = [.menuBar, .workspaces, .look, .menu, .home, .binds, .widgets]
+    /// switches of 2026-11-25), most first, with Launcher added after Look (slow-pages) and System last (`always`), which
+    /// makes the warm set eight.
+    static let seed: [AppPage] = [.menuBar, .workspaces, .look, .menu, .home, .binds, .widgets, .system]
 
-    /// The `count` pages of `ahead` switched to most, most first (ties by name), then `seed`'s not counted yet; never
-    /// `shown`, which is built already.
+    /// The pages warmed whatever the counts say (Sven, 2026-11-26, Q390 A: "warm System too"): his counts rank System
+    /// ninth, and built in view its first visit assembles over about a second.
+    static let always: [AppPage] = [.system]
+
+    /// The `count` pages of `ahead` switched to most, most first (ties by name), then `seed`'s not counted yet, with
+    /// `always` in the last places; never `shown`, which is built already.
     func likeliest(_ count: Int, besides shown: AppPage? = nil) -> [AppPage] {
         let counts = counts
-        let pages: [AppPage] = counts.keys.compactMap(AppPage.init(rawValue:)).filter { Self.ahead.contains($0) && $0 != shown }
+        let always = Self.always.filter { $0 != shown }
+        let pages: [AppPage] = counts.keys.compactMap(AppPage.init(rawValue:)).filter { Self.ahead.contains($0) && $0 != shown && !always.contains($0) }
         let sorted = pages.sorted { a, b in
             let na = counts[a.rawValue, default: 0], nb = counts[b.rawValue, default: 0]
             return na != nb ? na > nb : a.rawValue < b.rawValue
         }
-        return Array((sorted + Self.seed.filter { !sorted.contains($0) && $0 != shown }).prefix(count))
+        let counted = sorted + Self.seed.filter { !sorted.contains($0) && $0 != shown && !always.contains($0) }
+        return Array(counted.prefix(max(0, count - always.count))) + always.prefix(count)
     }
 }
 
