@@ -124,14 +124,15 @@ struct LookPageTests {
         }
     }
 
-    /// Tiling's Focused window block (page map, Sven 2026-10-17), drawn on its own for `look`.
+    /// Tiling's focused window, Border and Dim other windows each with its preset (page map, Sven 2026-10-17; the Tiling
+    /// pass), drawn on their own for `look`.
     func focusedWindow(_ look: Look) -> some View {
-        FocusedWindowBlock(look: look).padding(20).frame(width: 1000, height: 760, alignment: .top).pilotTheme(look: look)
+        VStack(alignment: .leading, spacing: 16) { FocusedWindowBlock(look: look, place: .focusedBorder); FocusedWindowBlock(look: look, place: .focusedDim) }.padding(20).frame(width: 1000, height: 760, alignment: .top).pilotTheme(look: look)
     }
 
     /// The Focused window's exact rows (pilot-ui-redesign T16; on Tiling's front since pages-fill), drawn on their own for `look`.
     func focusedWindowMore(_ look: Look) -> some View {
-        VStack(alignment: .leading, spacing: 16) { FocusedWindowExact(look: look, place: .focusedBorder); FocusedWindowExact(look: look, place: .focusedDim) }.padding(20).frame(width: 1000, height: 760, alignment: .top).pilotTheme(look: look)
+        VStack(alignment: .leading, spacing: 16) { FocusedWindowBlock(look: look, place: .focusedBorder); FocusedWindowBlock(look: look, place: .focusedDim) }.padding(20).frame(width: 1000, height: 760, alignment: .top).pilotTheme(look: look)
     }
 
     /// Card agent-bo-95422950's row, on Tiling's Focused window block: the border as a preset on the front, Off its switch
