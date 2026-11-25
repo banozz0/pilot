@@ -85,8 +85,20 @@ struct DockPage: View {
             }
             .landingRing("dock.on")
             if let problem = dock.problem { FinePrint(text: problem, color: ink.red) }
-            TitledPanel(title: "Look") { look(dock) }
-            TitledPanel(title: "Widgets") { DockWidgetList(dock: dock, offered: offered, prefs: prefs, focus: focus, extensionBar: extensionBar) }
+            if PagesFill.dock == .lookBeside {
+                // pages-fill's Look beside: the look and More's rows in one column, the widgets beside it; More's tab gone.
+                HStack(alignment: .top, spacing: 16) {
+                    VStack(alignment: .leading, spacing: 16) {
+                        TitledPanel(title: "Look") { VStack(alignment: .leading, spacing: 0) { look(dock); effects(dock) } }
+                        taken(dock)
+                    }
+                    .frame(width: 460)
+                    TitledPanel(title: "Widgets") { DockWidgetList(dock: dock, offered: offered, prefs: prefs, focus: focus, extensionBar: extensionBar) }
+                }
+            } else {
+                TitledPanel(title: "Look") { look(dock) }
+                TitledPanel(title: "Widgets") { DockWidgetList(dock: dock, offered: offered, prefs: prefs, focus: focus, extensionBar: extensionBar) }
+            }
         }
     }
 
@@ -142,7 +154,7 @@ struct DockPage: View {
     /// More's block: how the icons grow, where the dock sits, the icons' colours and the visualizer.
     @ViewBuilder private func effects(_ dock: DockController) -> some View {
         VStack(alignment: .leading, spacing: 0) {
-            BlockRow(first: true) {
+            BlockRow(first: PagesFill.dock != .lookBeside) {
                 Text("Magnification").foregroundStyle(ink.text)
                 InfoMark(text: "How much the icon under the pointer grows, as the macOS Dock's.")
                 Spacer()
@@ -197,6 +209,45 @@ struct DockWidgetList: View {
         let fromExtensions = offered.map { DockSlot.extensionItem($0.id) }.filter { !on.contains($0) }
         // A row a turn ahead and a frame's worth at a time in view (Staged; page-frames-5: the list whole held Dock's first
         // visit 50 to 90 ms after it drew).
+        if PagesFill.dock == .twoColumns {
+            // pages-fill's Two columns: the widgets in the dock, in its order, beside the ones that are not.
+            HStack(alignment: .top, spacing: 28) {
+                VStack(alignment: .leading, spacing: 0) {
+                    heading("In the dock", count: on.count)
+                    ForEach(Array(on.enumerated()), id: \.element) { i, slot in row(slot, at: i, count: on.count, first: i == 0) }
+                }
+                .frame(maxWidth: .infinity, alignment: .topLeading)
+                VStack(alignment: .leading, spacing: 0) {
+                    heading("Not in the dock", count: builtIn.count)
+                    ForEach(Array(builtIn.enumerated()), id: \.element) { i, slot in row(slot, at: nil, count: on.count, first: i == 0) }
+                    fromExtensionsList(fromExtensions, count: on.count)
+                }
+                .frame(maxWidth: .infinity, alignment: .topLeading)
+            }
+            .font(ink.ui(13))
+        } else {
+            list(on: on, builtIn: builtIn, fromExtensions: fromExtensions)
+        }
+    }
+
+    private func heading(_ title: String, count: Int) -> some View {
+        HStack(spacing: 8) {
+            Text(title).font(ink.ui(13, .semibold)).foregroundStyle(ink.text)
+            Text("\(count)").font(ink.mono(11)).foregroundStyle(ink.muted)
+        }
+        .padding(.bottom, 6)
+    }
+
+    @ViewBuilder private func fromExtensionsList(_ fromExtensions: [DockSlot], count: Int) -> some View {
+        Text("From extensions").font(ink.ui(13, .semibold)).foregroundStyle(ink.text).padding(.top, 14).padding(.bottom, 4)
+        if fromExtensions.isEmpty {
+            FinePrint(text: offered.isEmpty ? "No installed extension has a top bar item the widgets above do not read. Any that has one can go in the dock: the catalogue's Git, Tailscale or Ghostex, or your own."
+                      : "Every installed extension with a top bar item is in the dock.")
+        }
+        ForEach(Array(fromExtensions.enumerated()), id: \.element) { i, slot in row(slot, at: nil, count: count, first: i == 0) }
+    }
+
+    private func list(on: [DockSlot], builtIn: [DockSlot], fromExtensions: [DockSlot]) -> some View {
         VStack(alignment: .leading, spacing: 0) { Staged {
             ForEach(Array((on + builtIn).enumerated()), id: \.element) { i, slot in row(slot, at: on.firstIndex(of: slot), count: on.count, first: i == 0) }
             Text("From extensions").font(ink.ui(13, .semibold)).foregroundStyle(ink.text).padding(.top, 14).padding(.bottom, 4)

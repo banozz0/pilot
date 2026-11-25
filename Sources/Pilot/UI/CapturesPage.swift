@@ -66,6 +66,14 @@ struct CapturesPage: View {
         Group {
             if more {
                 KitMore(entries: Self.entries) { moreTab }
+            } else if !recording && PagesFill.more != .tab {
+                // pages-fill: More's blocks on the front, in a tall page or for good.
+                TallPage { tall in
+                    KitLanding { KitPage {
+                        captureTab
+                        if tall || PagesFill.more == .folded { moreTab }
+                    } }
+                }
             } else {
                 KitLanding { KitPage { if recording { recordingTab } else { captureTab } } }
             }
@@ -96,10 +104,10 @@ struct CapturesPage: View {
 
     /// More: the capture options, the other capture keys and the recording quality, each a block the index lists.
     @ViewBuilder private var moreTab: some View {
-        KitBlock(title: AppSection.captureOptions.title, symbol: "slider.horizontal.3") { options }.moreBlock(.captureOptions)
+        KitBlock(title: AppSection.captureOptions.title, symbol: "slider.horizontal.3") { options }.moreBlock(.captureOptions, on: more)
         KitBlock(title: AppSection.captureKeys.title, symbol: "keyboard") { keyRows(Array(Self.keys.dropFirst(Self.frontKeys)), first: true) }
-            .moreBlock(.captureKeys)
-        KitBlock(title: AppSection.recordingQuality.title, symbol: "dial.medium") { quality }.moreBlock(.recordingQuality)
+            .moreBlock(.captureKeys, on: more)
+        KitBlock(title: AppSection.recordingQuality.title, symbol: "dial.medium") { quality }.moreBlock(.recordingQuality, on: more)
     }
 
     /// The capture options: the Capture menu, hidden icons, the thumbnail's place, scrolling and the delay.

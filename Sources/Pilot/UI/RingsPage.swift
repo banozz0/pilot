@@ -43,6 +43,9 @@ struct RingsPage: View {
     /// The menu read as the Pilot ring and menu groups fill, while the page shows.
     @State private var menu: RingMenuSource?
     @FocusState private var searching: Bool
+    /// pages-fill: the ring's panel's width and the page's height, read as they change.
+    @State private var previewWidth: CGFloat = 300
+    @State private var pageHeight: CGFloat = 700
 
     private var store: RingStore { engine.rings.store }
     private var current: Pick { shown ?? pick }
@@ -74,6 +77,7 @@ struct RingsPage: View {
             }
             .padding(.top, 4)
         }
+        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { pageHeight = $0 }
         .onPageArrive {
             states = engine.rings.states()
             roles = engine.rings.roleApps()
@@ -155,7 +159,8 @@ struct RingsPage: View {
     // MARK: the ring
 
     private func preview(_ ring: Ring) -> some View {
-        let scale = 0.86
+        // pages-fill's Grows: the ring as big as the panel's width and the page's height give it, 0.86 to twice its size.
+        let scale = PagesFill.preview == .grows ? max(0.86, min(2, (previewWidth - 48) / RingGeometry.side, (pageHeight - 330) / RingGeometry.side)) : 0.86
         let side = RingGeometry.side * scale
         return VStack(spacing: 0) {
             HStack(spacing: 10) {
@@ -179,11 +184,48 @@ struct RingsPage: View {
                 })
                 .padding(.vertical, 16)
                 .frame(maxWidth: .infinity)
+            if PagesFill.preview == .detail { wedges(ring) }
             Rectangle().fill(ink.line).frame(height: 1)
             opens(ring).padding(.horizontal, 14).frame(height: 46)
         }
+        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { previewWidth = $0 }
         .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(ink.raised.opacity(0.5)))
         .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(ink.line2, lineWidth: 1))
+    }
+
+    /// pages-fill's Detail: the level's eight wedges under the ring, two columns of four, each its place, glyph, name and
+    /// key, the picked one lit; a click picks it as a click on its wedge does.
+    private func wedges(_ ring: Ring) -> some View {
+        let faces = model(ring).faces
+        return VStack(spacing: 0) {
+            Rectangle().fill(ink.line).frame(height: 1)
+            Grid(horizontalSpacing: 18, verticalSpacing: 0) {
+                ForEach(0..<4, id: \.self) { row in
+                    GridRow {
+                        ForEach([row, row + 4], id: \.self) { p in wedgeRow(ring, p, faces.indices.contains(p) ? faces[p] : nil) }
+                    }
+                }
+            }
+            .padding(.horizontal, 14).padding(.vertical, 8)
+        }
+    }
+
+    private func wedgeRow(_ ring: Ring, _ p: Int, _ face: RingFace?) -> some View {
+        let picked = current.place == p
+        return Button { pick = Pick(ring: ring.id, path: current.path, place: p) } label: {
+            HStack(spacing: 10) {
+                Text(Self.arrows[p]).font(ink.mono(12)).foregroundStyle(picked ? ink.accentText : ink.muted).frame(width: 14)
+                Image(systemName: face?.symbol ?? "circle.dotted").frame(width: 18).foregroundStyle(face == nil ? ink.line2 : ink.text2)
+                Text(face?.label ?? "Empty").foregroundStyle(face == nil ? ink.muted : ink.text).lineLimit(1)
+                if face?.isGroup == true { Image(systemName: "chevron.right").font(ink.ui(10)).foregroundStyle(ink.muted) }
+                Spacer(minLength: 8)
+                if let keys = face?.keys { Text(keys).font(ink.mono(11.5)).foregroundStyle(ink.text2) }
+            }
+            .font(ink.ui(13)).padding(.horizontal, 8).frame(height: 34)
+            .background(picked ? ink.selected : .clear, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+            .contentShape(.rect)
+        }
+        .buttonStyle(.plain)
     }
 
     /// The ring as the menu draws it, on the level entered, the picked wedge lit.

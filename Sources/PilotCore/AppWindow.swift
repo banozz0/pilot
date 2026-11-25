@@ -426,6 +426,8 @@ public enum AppSection: String, CaseIterable, Sendable {
     /// Menu bar's place: other apps' notifications as Pilot's cards, and hiding macOS's own banner (spec notifications),
     /// beside the bell's item (on Pilot's front until the settings tidy, Sven 2026-11-14).
     case notifications
+    /// Menu bar's second tab in design round pages-fill (2026-11-25): shown only while `PagesFillDesign.menuBarTab` names it.
+    case menuBarMore
     /// Tiling's places on its front: the always-float apps and the focused window (Sven, 2026-11-11, after 2276), and the
     /// always-float window titles and the mouse and motion, back from More (pages round 4, Sven's Q98); Tiling has no More.
     case floatApps, floatTitles, motion, focusedWindow
@@ -489,7 +491,7 @@ public enum AppSection: String, CaseIterable, Sendable {
         case .soundInput, .keyboardLayout, .mouseSpeed: .system
         case .workspaceOpens, .workspaceRules, .workspaceScrolling, .workspaceMonitors, .workspaceSwipe, .windowShelf: .workspaces
         case .permissions, .about, .hyperKey, .status, .data: .general
-        case .notifications: .menuBar
+        case .notifications, .menuBarMore: .menuBar
         case .floatApps, .floatTitles, .motion, .focusedWindow, .tilingMore, .focusedBorder, .focusedDim: .tiling
         case .clipNever, .clipExpire, .clipPanel, .clipTags: .clipboard
         case .dockMore, .dockLook: .dock
@@ -576,7 +578,9 @@ public enum AppSection: String, CaseIterable, Sendable {
     public var opensAsSheet: Bool { self == .conflicts }
     /// Shown as a tab across the page's top; Plain combos is Binds' last sublayer tab instead (card agent-bo-95422894),
     /// conflicts a sheet.
-    public var isTab: Bool { !opensAsSheet && !isMerged }
+    public var isTab: Bool {
+        !opensAsSheet && !isMerged && !PagesFillDesign.foldedMore.contains(self) && (self != .menuBarMore || PagesFillDesign.menuBarTab != nil)
+    }
 
     /// Parts drawn on their page's own body: Plain combos as a sublayer, the places on a More tab or a front, the extension
     /// catalogue (Q601) and Look's Wallpaper, which a link scrolls to. The search still lands on them.
@@ -603,6 +607,7 @@ public enum AppSection: String, CaseIterable, Sendable {
         case .notifications: "Notifications"
         case .voiceMore, .capturesMore, .menuMore, .installMore, .upkeepMore, .bindsMore, .dockMore,
              .tilingMore: "More"
+        case .menuBarMore: PagesFillDesign.menuBarTab ?? "More"
         case .dockLook: "Placement and effects"
         case .focusedBorder: "Border"
         case .focusedDim: "Dim other windows"
@@ -684,7 +689,7 @@ public enum AppSection: String, CaseIterable, Sendable {
                      "ghostty"]
         case .notifications: ["notification", "notifications", "banner", "bell", "cards", "notification center", "hide banner"]
         case .voiceMore, .capturesMore, .menuMore, .installMore, .upkeepMore, .bindsMore, .dockMore,
-             .tilingMore: []
+             .tilingMore, .menuBarMore: []
         // The Dock front's finer words, moved with their rows to its More (pilot-ui-redesign T17).
         case .dockLook: ["magnification", "magnify", "placement", "attached", "floating", "icon colours", "icon colors", "tint",
                          "theme icons", "visualizer", "visualiser", "bars", "taken out", "keep in dock", "removed from dock"]
@@ -1037,4 +1042,14 @@ public struct LockedOpen: Sendable {
         defer { waiting = false; page = nil }
         return .show(page)
     }
+}
+
+/// Design round pages-fill (Sven, 2026-11-25: "the half empty pages in pilot ... menubar page can it be better
+/// organised?"): the tabs its options take away or add, all off by default. Only `PagesFillRenders` sets them, to draw the
+/// options; the pick replaces this.
+public enum PagesFillDesign {
+    /// More tabs whose blocks stand on their page's front, the tab gone.
+    nonisolated(unsafe) public static var foldedMore: Set<AppSection> = []
+    /// The Menu bar page's second tab's title ("More" or "Items"); nil, no second tab.
+    nonisolated(unsafe) public static var menuBarTab: String?
 }

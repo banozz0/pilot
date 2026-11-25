@@ -43,9 +43,13 @@ struct UpkeepPage: View {
                     ReportsBlock(store: store, records: records, picked: $pick.id, output: output).moreBlock(.reports)
                 }
             } else {
-                KitLanding {
+                // pages-fill: Reports on the front under Update and Clean, in a tall page or for good.
+                TallPage { tall in KitLanding {
                     KitPage(intro: Self.intro, info: Self.introInfo) {
                         start
+                        if PagesFill.more == .folded || (PagesFill.more == .whenTall && tall) {
+                            ReportsBlock(store: store, records: records, picked: $pick.id, output: output)
+                        }
                         if let cleanList {
                             CleanListBlock(list: cleanList) { ids in
                                 let outcome = await CleanModule.trash(ids, store: store)
@@ -55,7 +59,7 @@ struct UpkeepPage: View {
                             .pageWide()
                         }
                     }
-                }
+                } }
             }
         }
             .onChange(of: pick.id) { readOutput() }

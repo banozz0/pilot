@@ -334,7 +334,9 @@ struct FolderDesignsView: View {
     /// The search is the one the other pages run (FuzzyRanker.Filter): a design's name or its kind's, else a typo of one.
     private func shown(_ shelves: [Shelf]) -> [Shelf] {
         let filter = FuzzyRanker.Filter(search)
-        guard !filter.typed.isEmpty else { return shelves.filter { $0.tab == shownTab } }
+        // pages-fill's Detail: Pilot's twelve with every kind's designs under them, one scroll.
+        let tabs: Set<Tab> = PagesFill.preview == .detail && shownTab == .pilot ? [.pilot, .kinds] : [shownTab]
+        guard !filter.typed.isEmpty else { return shelves.filter { tabs.contains($0.tab) } }
         return filter.search { holds in
             shelves.compactMap { shelf in
                 var found = shelf
@@ -357,7 +359,8 @@ struct FolderDesignsView: View {
                 ForEach(shelves) { shelf in
                     HStack(alignment: .top, spacing: 8) {
                         Text(shelf.title).font(ink.ui(12, .semibold)).lineLimit(2).frame(width: 96, alignment: .leading).padding(.top, 10)
-                        LazyVGrid(columns: [GridItem(.adaptive(minimum: 80), spacing: 4)], spacing: 4) {
+                        // pages-fill's Grows: each design drawn near twice as big.
+                        LazyVGrid(columns: [GridItem(.adaptive(minimum: PagesFill.preview == .grows ? 132 : 80), spacing: 4)], spacing: 4) {
                             ForEach(shelf.items) { cell($0) }
                         }
                     }
@@ -389,8 +392,8 @@ struct FolderDesignsView: View {
         let shape = RoundedRectangle(cornerRadius: ink.radius(9), style: .continuous)
         return Button(action: pick) {
             VStack(spacing: 3) {
-                art(item, on: on).frame(width: 46, height: 46)
-                Text(title).font(ink.ui(11)).foregroundStyle(on ? ink.text : ink.muted).lineLimit(1)
+                art(item, on: on).frame(width: PagesFill.preview == .grows ? 88 : 46, height: PagesFill.preview == .grows ? 88 : 46)
+                Text(title).font(ink.ui(PagesFill.preview == .grows ? 12 : 11)).foregroundStyle(on ? ink.text : ink.muted).lineLimit(1)
             }
             .frame(maxWidth: .infinity).padding(.vertical, 5)
             .background(on ? ink.accent.opacity(0.12) : .clear, in: shape)

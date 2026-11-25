@@ -34,9 +34,13 @@ struct MenuBarPage: View {
     var nicknames: DisplayNicknames = .shared
     /// The extensions' bar items the page lists and places: the app's, or a render's.
     var extensionBar: ExtensionBar = .shared
+    /// The tab shown: nil the page, `.menuBarMore` its second tab (pages-fill's More and Tabs).
+    var tab: AppSection?
 
-    init(onScreen: Bool? = nil, placement: BarPlacement? = nil, nicknames: DisplayNicknames = .shared, extensionBar: ExtensionBar = .shared) {
+    init(onScreen: Bool? = nil, placement: BarPlacement? = nil, nicknames: DisplayNicknames = .shared, extensionBar: ExtensionBar = .shared,
+         tab: AppSection? = nil) {
         self.onScreen = onScreen
+        self.tab = tab
         self.nicknames = nicknames
         self.extensionBar = extensionBar
         _placement = State(initialValue: placement ?? BarItemsStore.shared.pagePlacement)
@@ -44,69 +48,158 @@ struct MenuBarPage: View {
 
     var body: some View {
         let store = BarItemsStore.shared, topBar = engine.topBar
-        // A link or the search to Notifications scrolls to its block.
-        KitLanding { PageBody {
-            if let problem = store.loadError { FinePrint(text: problem, color: ink.red) }
-            // The switch, its problem and the hidden items' notice are one group, closer together than the blocks.
-            VStack(alignment: .leading, spacing: 8) {
-                SwitchCard(symbol: "menubar.rectangle", name: "Top bar", isOn: topBar.isOn, busy: topBar.busy,
-                           detail: "Pilot's own bar in place of the macOS menu bar. On hides the menu bar (it still slides down when you point at the top edge); items in both bars move to it. Off gives the menu bar back as it was.") {
-                    topBar.set(!topBar.isOn)
+        Group {
+            // pages-fill's More: the set-once blocks on Menu bar's More tab.
+            if tab == .menuBarMore && PagesFill.menuBar == .more {
+                KitMore(entries: []) { barLook(store, three: true, screens: topBar) }
+            } else {
+                // A link or the search to Notifications scrolls to its block.
+                KitLanding { PageBody { content(store, topBar) } }
+            }
+        }
+        .disabled(store.loadError != nil)
+        .background { PreviewHold(kinds: previewed(store), onScreen: onScreen) }
+        .onChange(of: placement) { store.pagePlacement = placement }
+        // The top bar switched on or off moved it (BarItemsStore.topBarSwitched).
+        .onChange(of: store.pagePlacement) { placement = store.pagePlacement }
+    }
+
+    /// The page's blocks in the order PagesFill.menuBar says; today's (Q182) by default.
+    @ViewBuilder private func content(_ store: BarItemsStore, _ topBar: TopBarController) -> some View {
+        if let problem = store.loadError { FinePrint(text: problem, color: ink.red) }
+        switch PagesFill.menuBar {
+        case .asIs:
+            barSwitch(store, topBar)
+            instructions(store)
+            stripTile(store)
+            barLook(store, three: false)
+            // The blocks under the fold, built as they scroll in (page-perf: the group grid held the switch ~90 ms).
+            PageStack(spacing: ink.style.density.gap * 2) {
+                groupGrid(store)
+                clockAndBell(store)
+                // The pill's block once it ships (PillFeature, Sven on build 2425).
+                if PillFeature.released { PillEditor(extensionBar: extensionBar) }
+                screenChoices(topBar)
+            }
+        case .columns:
+            // pages-fill's Columns: the bar, then how it looks and where in one row, then every group, the clock and the
+            // bell flowing into the page's columns.
+            barSwitch(store, topBar)
+            instructions(store)
+            stripTile(store)
+            PageStack(spacing: ink.style.density.gap * 2) {
+                barLook(store, three: true, screens: topBar)
+                PageFlow(column: KitPage<EmptyView>.column(ink.style.kind), gap: 12, spacing: 12) {
+                    ForEach(BarGroup.allCases, id: \.self) { groupTile($0, store: store).pageFlows() }
+                    clock(store).pageFlows()
+                    notifications.id(AppSection.notifications).pageFlows()
                 }
-                if let problem = topBar.problem { FinePrint(text: problem, color: ink.red) }
-                onlyInTopBar(store, topBarOn: topBar.isOn)
+                if PillFeature.released { PillEditor(extensionBar: extensionBar) }
             }
-            // A block row's layout: in a narrow page the buttons and the picker go under the words, never past the edge.
-            BlockRowLayout(spacing: 12) {
-                Text("Drag from the tray onto the bar to add, along it to reorder, back to the tray to take off. Drop an item on the Group's dotted outline to group it; drag it out, or right-click Ungroup, to take it out.")
-                    .font(ink.ui(13)).foregroundStyle(ink.text2).fixedSize(horizontal: false, vertical: true)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                resets(store)
-                placements
+        case .more:
+            // pages-fill's More: what you set once (the bar's layout, background and screens) on More.
+            barSwitch(store, topBar)
+            instructions(store)
+            stripTile(store)
+            PageStack(spacing: ink.style.density.gap * 2) {
+                groupGrid(store)
+                clockAndBell(store)
+                if PillFeature.released { PillEditor(extensionBar: extensionBar) }
             }
-            Tile {
-                VStack(alignment: .leading, spacing: 14) {
-                    preview(store)
-                    BarTray(store: store, placement: placement, extensions: extensionBar.items, dragged: $dragged)
+        case .tabs:
+            // pages-fill's Tabs: Bar (the switch, the strip and tray, how the bar looks, the screens) and Items (every
+            // group's switches and styles, the clock and the bell).
+            if tab == .menuBarMore {
+                PageFlow(column: KitPage<EmptyView>.column(ink.style.kind), gap: 12, spacing: 12) {
+                    ForEach(BarGroup.allCases, id: \.self) { groupTile($0, store: store).pageFlows() }
+                    clock(store).pageFlows()
+                    notifications.id(AppSection.notifications).pageFlows()
                 }
+            } else {
+                barSwitch(store, topBar)
+                instructions(store)
+                stripTile(store)
+                barLook(store, three: true, screens: topBar)
+                if PillFeature.released { PillEditor(extensionBar: extensionBar) }
             }
-            // The page reads top to bottom as the bar does (Sven, 2026-11-12, Q182: "too crowded and im getting confused"):
-            // the switch, the bar's items, how the bar looks, each item's style, the clock and the pill, then the screens.
-            // Pilot's own menu is fixed (2026-11-20): nothing of it is set here.
+        }
+    }
+
+    /// The switch, its problem and the hidden items' notice: one group, closer together than the blocks.
+    private func barSwitch(_ store: BarItemsStore, _ topBar: TopBarController) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            SwitchCard(symbol: "menubar.rectangle", name: "Top bar", isOn: topBar.isOn, busy: topBar.busy,
+                       detail: "Pilot's own bar in place of the macOS menu bar. On hides the menu bar (it still slides down when you point at the top edge); items in both bars move to it. Off gives the menu bar back as it was.") {
+                topBar.set(!topBar.isOn)
+            }
+            if let problem = topBar.problem { FinePrint(text: problem, color: ink.red) }
+            onlyInTopBar(store, topBarOn: topBar.isOn)
+        }
+    }
+
+    /// How to drag, the resets and which bar the strip shows. A block row's layout: in a narrow page the buttons and the
+    /// picker go under the words, never past the edge.
+    private func instructions(_ store: BarItemsStore) -> some View {
+        BlockRowLayout(spacing: 12) {
+            Text("Drag from the tray onto the bar to add, along it to reorder, back to the tray to take off. Drop an item on the Group's dotted outline to group it; drag it out, or right-click Ungroup, to take it out.")
+                .font(ink.ui(13)).foregroundStyle(ink.text2).fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            resets(store)
+            placements
+        }
+    }
+
+    /// The strip of the bar and the tray under it.
+    private func stripTile(_ store: BarItemsStore) -> some View {
+        Tile {
+            VStack(alignment: .leading, spacing: 14) {
+                preview(store)
+                BarTray(store: store, placement: placement, extensions: extensionBar.items, dragged: $dragged)
+            }
+        }
+    }
+
+    /// Bar layout beside Bar background; `three` adds the screens as a third, in the page's columns. The page reads top
+    /// to bottom as the bar does (Sven, 2026-11-12, Q182: "too crowded and im getting confused"): the switch, the bar's
+    /// items, how the bar looks, each item's style, the clock and the pill, then the screens. Pilot's own menu is fixed
+    /// (2026-11-20): nothing of it is set here.
+    @ViewBuilder private func barLook(_ store: BarItemsStore, three: Bool, screens topBar: TopBarController? = nil) -> some View {
+        if three, let topBar {
+            PageFlow(column: KitPage<EmptyView>.column(ink.style.kind), gap: 12, spacing: 12) {
+                BarPresetControls(store: store).pageFlows()
+                barColour(store).pageFlows()
+                screenChoices(topBar).pageFlows()
+            }
+        } else {
             Grid(horizontalSpacing: 12, verticalSpacing: 12) {
                 GridRow(alignment: .top) {
                     BarPresetControls(store: store)
                     barColour(store)
                 }
             }
-            // The blocks under the fold, built as they scroll in (page-perf: the group grid held the switch ~90 ms).
-            PageStack(spacing: ink.style.density.gap * 2) {
-                // Rows of two cards, each row's blocks one height; the readings are a group like any other (Sven, 2026-10-16).
-                let columns = 2, groups = BarGroup.allCases
-                Grid(horizontalSpacing: 12, verticalSpacing: 12) {
-                    ForEach(Array(stride(from: 0, to: groups.count, by: columns)), id: \.self) { start in
-                        GridRow(alignment: .top) {
-                            Staged(inView: false) { ForEach(groups[start..<min(start + columns, groups.count)], id: \.self) { group in groupTile(group, store: store) } }
-                        }
-                    }
+        }
+    }
+
+    /// Rows of two cards, each row's blocks one height; the readings are a group like any other (Sven, 2026-10-16).
+    private func groupGrid(_ store: BarItemsStore) -> some View {
+        let columns = 2, groups = BarGroup.allCases
+        return Grid(horizontalSpacing: 12, verticalSpacing: 12) {
+            ForEach(Array(stride(from: 0, to: groups.count, by: columns)), id: \.self) { start in
+                GridRow(alignment: .top) {
+                    Staged(inView: false) { ForEach(groups[start..<min(start + columns, groups.count)], id: \.self) { group in groupTile(group, store: store) } }
                 }
-                // The clock and the bell's notifications, both Time and focus items, side by side.
-                Grid(horizontalSpacing: 12, verticalSpacing: 12) {
-                    GridRow(alignment: .top) {
-                        clock(store)
-                        notifications.id(AppSection.notifications)
-                    }
-                }
-                // The pill's block once it ships (PillFeature, Sven on build 2425).
-                if PillFeature.released { PillEditor(extensionBar: extensionBar) }
-                screenChoices(topBar)
             }
-        } }
-        .disabled(store.loadError != nil)
-        .background { PreviewHold(kinds: previewed(store), onScreen: onScreen) }
-        .onChange(of: placement) { store.pagePlacement = placement }
-        // The top bar switched on or off moved it (BarItemsStore.topBarSwitched).
-        .onChange(of: store.pagePlacement) { placement = store.pagePlacement }
+        }
+    }
+
+    /// The clock and the bell's notifications, both Time and focus items, side by side.
+    private func clockAndBell(_ store: BarItemsStore) -> some View {
+        Grid(horizontalSpacing: 12, verticalSpacing: 12) {
+            GridRow(alignment: .top) {
+                clock(store)
+                notifications.id(AppSection.notifications)
+            }
+        }
     }
 
     /// Same system-name bindings, with row identity kept separate from the visible nickname.

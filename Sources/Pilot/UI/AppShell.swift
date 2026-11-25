@@ -167,7 +167,7 @@ private struct PagePart: View {
         // Tiling's More: the focused window's exact rows (pilot-ui-redesign T16).
         case .tiling: if section == .tilingMore { FocusedWindowMore() } else { TilingSettingsView() }
         // The menu bar lane's page (card agent-bo-95422913).
-        case .menuBar: MenuBarPage()
+        case .menuBar: MenuBarPage(tab: section == .menuBarMore ? section : nil)
         // Pilot's dock's own page (round 4).
         case .dock: DockPage(more: section == .dockMore)
         case .look where section == .themeCatalogue: ThemeCataloguePage()
