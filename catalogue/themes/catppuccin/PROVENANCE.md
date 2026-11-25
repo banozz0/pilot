@@ -11,9 +11,9 @@ and Omarchy-LICENSE.txt.
 
 ## Wallpapers
 
-Picked by Sven, 2026-11-25, in round 2 of Pilot's themes, from 2 to 4 candidates for this theme; it replaces the pack's earlier wallpapers. The landscape file is 3840×2160 and keeps its subject inside the centre 21:9 band (what a 3440×1440 screen shows); the tall one is 2160×3840. HEIC at quality 80.
+Picked by Sven, 2026-11-25, in round 2 of Pilot's themes, from 2 to 4 candidates for this theme; it replaces the pack's earlier wallpapers. The landscape file is 3840×2160 and keeps its subject inside the centre 21:9 band (what a 3440×1440 screen shows); the tall one is 2160×3840. HEIC at quality 80. Extras picked by Sven, 2026-11-25, from the same round: Rainy Mug. The files are numbered so the main one comes first.
 
-### catppuccin-window-seat.heic
+### catppuccin-1-window-seat.heic
 
 - Title: Window Seat
 - Author / credit: Original artwork made for Pilot, 2026-11-25, with OpenAI image generation (Codex image_gen), in the look of a hand-painted anime background, its colours set to this theme's palette; a wallpaper of unknown origin from a personal collection served as a style reference only, nothing of it is reproduced.
@@ -21,7 +21,7 @@ Picked by Sven, 2026-11-25, in round 2 of Pilot's themes, from 2 to 4 candidates
 - Source URL: none (made for Pilot)
 - Rights: original Pilot asset; supplied for unrestricted use, modification and redistribution with Pilot and exported Pilot theme packs.
 
-### catppuccin-tall.heic
+### catppuccin-tall-1-window-seat.heic
 
 - Title: Window Seat, tall, for portrait screens
 - Author / credit: Original artwork made for Pilot, 2026-11-25, with OpenAI image generation (Codex image_gen), in the look of a hand-painted anime background, its colours set to this theme's palette; a wallpaper of unknown origin from a personal collection served as a style reference only, nothing of it is reproduced.
@@ -29,6 +29,24 @@ Picked by Sven, 2026-11-25, in round 2 of Pilot's themes, from 2 to 4 candidates
 - Source URL: none (made for Pilot)
 - Rights: original Pilot asset; supplied for unrestricted use, modification and redistribution with Pilot and exported Pilot theme packs.
 
+### catppuccin-2-rainy-mug.heic
+
+- Title: Rainy Mug
+- Author / credit: Original artwork made for Pilot, 2026-11-25, with OpenAI image generation (Codex image_gen), in the look of a hand-painted anime background, its colours set to this theme's palette; a wallpaper of unknown origin from a personal collection served as a style reference only, nothing of it is reproduced.
+- Made: the made image (1672×941) upscaled to 3840×2160 with Real-ESRGAN general x4v3 (Pilot's former pilot-upscale, rebuilt from commit c351f17e^ for this round).
+- Source URL: none (made for Pilot)
+- Rights: original Pilot asset; supplied for unrestricted use, modification and redistribution with Pilot and exported Pilot theme packs.
+
+### catppuccin-tall-2-rainy-mug.heic
+
+- Title: Rainy Mug, tall, for portrait screens
+- Author / credit: Original artwork made for Pilot, 2026-11-25, with OpenAI image generation (Codex image_gen), in the look of a hand-painted anime background, its colours set to this theme's palette; a wallpaper of unknown origin from a personal collection served as a style reference only, nothing of it is reproduced.
+- Made: a 9:16 column of the made image around its subject (529×941), upscaled ×4 with Real-ESRGAN general x4v3 (Pilot's former pilot-upscale, rebuilt from commit c351f17e^ for this round), then resampled to 2160×3840.
+- Source URL: none (made for Pilot)
+- Rights: original Pilot asset; supplied for unrestricted use, modification and redistribution with Pilot and exported Pilot theme packs.
+
 Files (SHA-256):
-- catppuccin-tall.heic: a675ce37af3d15064c2afcd32e2c9320acf0eb0380d10238be69f70c3d614703
-- catppuccin-window-seat.heic: 5d1ed14b3e81efa07867d7e99b2fc7053a199b14dc06c2f9a0589bf9978c7d1b
+- catppuccin-1-window-seat.heic: 5d1ed14b3e81efa07867d7e99b2fc7053a199b14dc06c2f9a0589bf9978c7d1b
+- catppuccin-2-rainy-mug.heic: f36e3702a9a13d3eda1505ff56336a5571a0873e38bc33439095c54e8174ff7e
+- catppuccin-tall-1-window-seat.heic: a675ce37af3d15064c2afcd32e2c9320acf0eb0380d10238be69f70c3d614703
+- catppuccin-tall-2-rainy-mug.heic: d6916e8668f6656c8a27ea256c51a65bc6fca0e405f69c266fef375f26c27b89

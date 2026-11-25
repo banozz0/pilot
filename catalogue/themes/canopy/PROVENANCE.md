@@ -8,9 +8,9 @@ Modes: dark only. The terminal colours are picked from that picture; Pilot's own
 
 ## Wallpapers
 
-Picked by Sven, 2026-11-25, in round 2 of Pilot's themes, from 2 to 4 candidates for this theme. The landscape file is 3840×2160 and keeps its subject inside the centre 21:9 band (what a 3440×1440 screen shows); the tall one is 2160×3840. HEIC at quality 80.
+Picked by Sven, 2026-11-25, in round 2 of Pilot's themes, from 2 to 4 candidates for this theme. The landscape file is 3840×2160 and keeps its subject inside the centre 21:9 band (what a 3440×1440 screen shows); the tall one is 2160×3840. HEIC at quality 80. Extras picked by Sven, 2026-11-25, from the same round: Looking Up. The files are numbered so the main one comes first.
 
-### canopy-forest-path.heic
+### canopy-1-forest-path.heic
 
 - Title: Forest Path
 - Author / credit: Original artwork made for Pilot, 2026-11-25, with OpenAI image generation (Codex image_gen), in the look of this theme's anchor picture (look and colour only), its colours set to this theme's palette; a wallpaper of unknown origin from a personal collection served as a style reference only, nothing of it is reproduced.
@@ -18,7 +18,7 @@ Picked by Sven, 2026-11-25, in round 2 of Pilot's themes, from 2 to 4 candidates
 - Source URL: none (made for Pilot)
 - Rights: original Pilot asset; supplied for unrestricted use, modification and redistribution with Pilot and exported Pilot theme packs.
 
-### canopy-tall.heic
+### canopy-tall-1-forest-path.heic
 
 - Title: Forest Path, tall, for portrait screens
 - Author / credit: Original artwork made for Pilot, 2026-11-25, with OpenAI image generation (Codex image_gen), in the look of this theme's anchor picture (look and colour only), its colours set to this theme's palette; a wallpaper of unknown origin from a personal collection served as a style reference only, nothing of it is reproduced.
@@ -26,6 +26,24 @@ Picked by Sven, 2026-11-25, in round 2 of Pilot's themes, from 2 to 4 candidates
 - Source URL: none (made for Pilot)
 - Rights: original Pilot asset; supplied for unrestricted use, modification and redistribution with Pilot and exported Pilot theme packs.
 
+### canopy-2-looking-up.heic
+
+- Title: Looking Up
+- Author / credit: Original artwork made for Pilot, 2026-11-25, with OpenAI image generation (Codex image_gen), in the look of this theme's anchor picture (look and colour only), its colours set to this theme's palette; a wallpaper of unknown origin from a personal collection served as a style reference only, nothing of it is reproduced.
+- Made: the made image (1672×941) upscaled to 3840×2160 with Real-ESRGAN general x4v3 (Pilot's former pilot-upscale, rebuilt from commit c351f17e^ for this round).
+- Source URL: none (made for Pilot)
+- Rights: original Pilot asset; supplied for unrestricted use, modification and redistribution with Pilot and exported Pilot theme packs.
+
+### canopy-tall-2-looking-up.heic
+
+- Title: Looking Up, tall, for portrait screens
+- Author / credit: Original artwork made for Pilot, 2026-11-25, with OpenAI image generation (Codex image_gen), in the look of this theme's anchor picture (look and colour only), its colours set to this theme's palette; a wallpaper of unknown origin from a personal collection served as a style reference only, nothing of it is reproduced.
+- Made: a 9:16 column of the made image around its subject (529×941), upscaled ×4 with Real-ESRGAN general x4v3 (Pilot's former pilot-upscale, rebuilt from commit c351f17e^ for this round), then resampled to 2160×3840.
+- Source URL: none (made for Pilot)
+- Rights: original Pilot asset; supplied for unrestricted use, modification and redistribution with Pilot and exported Pilot theme packs.
+
 Files (SHA-256):
-- canopy-forest-path.heic: 7eb356e87f2b01738fc5be034eeba7bce4920299440193e6b2745c292cc81e60
-- canopy-tall.heic: 53eeb26e903b265da7b4815679425da87549731a77fb49b4583b80341f0844c2
+- canopy-1-forest-path.heic: 7eb356e87f2b01738fc5be034eeba7bce4920299440193e6b2745c292cc81e60
+- canopy-2-looking-up.heic: 46d6a8c87f993f3d870cee6576cf4911986ede18888fae2d15c13f2c552fdebc
+- canopy-tall-1-forest-path.heic: 53eeb26e903b265da7b4815679425da87549731a77fb49b4583b80341f0844c2
+- canopy-tall-2-looking-up.heic: e83e8b4915cc13daab4ca42b325819fdc05babc4b611fad37c20a9b7ea96cfe6

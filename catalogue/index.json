@@ -1224,12 +1224,12 @@
         "native_selection": "#3CA1EE"
       },
       "preview": null,
-      "digest": "bf509d38eb9e576e664719bedac7c261d36c2ca816902fefa729537f9f252ed6",
+      "digest": "3d288cb7f0e69a6f53ba385e91ed5d9c95e3bf96c6e3384893ba90510e2a36fb",
       "files": [
         {
           "path": "PROVENANCE.md",
-          "sha256": "20a4a379613e3fac9fed0f8a8c181450dcd3aac7159a170ed130212252fec562",
-          "size": 2597,
+          "sha256": "aa808a8bef17db241bd98a7d4b38f358809f0dce1d87fe97462ddda7ea36da9f",
+          "size": 4491,
           "executable": false
         },
         {
@@ -1239,15 +1239,27 @@
           "executable": false
         },
         {
-          "path": "wallpapers/canopy-forest-path.heic",
+          "path": "wallpapers/canopy-1-forest-path.heic",
           "sha256": "7eb356e87f2b01738fc5be034eeba7bce4920299440193e6b2745c292cc81e60",
           "size": 1704692,
           "executable": false
         },
         {
-          "path": "wallpapers/canopy-tall.heic",
+          "path": "wallpapers/canopy-2-looking-up.heic",
+          "sha256": "46d6a8c87f993f3d870cee6576cf4911986ede18888fae2d15c13f2c552fdebc",
+          "size": 2216987,
+          "executable": false
+        },
+        {
+          "path": "wallpapers/canopy-tall-1-forest-path.heic",
           "sha256": "53eeb26e903b265da7b4815679425da87549731a77fb49b4583b80341f0844c2",
           "size": 1087788,
+          "executable": false
+        },
+        {
+          "path": "wallpapers/canopy-tall-2-looking-up.heic",
+          "sha256": "e83e8b4915cc13daab4ca42b325819fdc05babc4b611fad37c20a9b7ea96cfe6",
+          "size": 1156225,
           "executable": false
         }
       ]
@@ -1295,12 +1307,12 @@
         "native_selection": "#89B4FA"
       },
       "preview": null,
-      "digest": "4544b8ecb45f6da83fa73450d3a87ec740570544e26a600d8de35996ecd3eb9e",
+      "digest": "b76c3cb7b2349d67a7681bffbf534b3cde3358c0a3a27f4660df69791066fbe4",
       "files": [
         {
           "path": "PROVENANCE.md",
-          "sha256": "c3af605821febfbeabbe65dc140b6095d5c973893d74fabc5b06d7ad71ae9454",
-          "size": 2732,
+          "sha256": "7931003267ed64774f51fadefce555bb70d3d3c6566bfc1b6b4626070207e38d",
+          "size": 4597,
           "executable": false
         },
         {
@@ -1310,15 +1322,27 @@
           "executable": false
         },
         {
-          "path": "wallpapers/catppuccin-tall.heic",
+          "path": "wallpapers/catppuccin-1-window-seat.heic",
+          "sha256": "5d1ed14b3e81efa07867d7e99b2fc7053a199b14dc06c2f9a0589bf9978c7d1b",
+          "size": 458977,
+          "executable": false
+        },
+        {
+          "path": "wallpapers/catppuccin-2-rainy-mug.heic",
+          "sha256": "f36e3702a9a13d3eda1505ff56336a5571a0873e38bc33439095c54e8174ff7e",
+          "size": 652612,
+          "executable": false
+        },
+        {
+          "path": "wallpapers/catppuccin-tall-1-window-seat.heic",
           "sha256": "a675ce37af3d15064c2afcd32e2c9320acf0eb0380d10238be69f70c3d614703",
           "size": 413875,
           "executable": false
         },
         {
-          "path": "wallpapers/catppuccin-window-seat.heic",
-          "sha256": "5d1ed14b3e81efa07867d7e99b2fc7053a199b14dc06c2f9a0589bf9978c7d1b",
-          "size": 458977,
+          "path": "wallpapers/catppuccin-tall-2-rainy-mug.heic",
+          "sha256": "d6916e8668f6656c8a27ea256c51a65bc6fca0e405f69c266fef375f26c27b89",
+          "size": 397726,
           "executable": false
         }
       ]
@@ -1449,12 +1473,12 @@
         "native_selection": "#6FD8FF"
       },
       "preview": null,
-      "digest": "46b011f9002a546084cf085501b96e4c00880db8266f18f74033ad87e062dcff",
+      "digest": "72ef8c53b631be1b98d19c6b030421605e68b26a384e3e357b247ee6026e7700",
       "files": [
         {
           "path": "PROVENANCE.md",
-          "sha256": "0d2d393aa4462941a683541f673c9bea522846a754d2aacf60bdbf543c04e072",
-          "size": 2522,
+          "sha256": "49d9bd7c9d3e609f53aeddb68faaf5609134a81c0675208219167f52df8dec3c",
+          "size": 4369,
           "executable": false
         },
         {
@@ -1464,15 +1488,27 @@
           "executable": false
         },
         {
-          "path": "wallpapers/comet-silver-grass.heic",
+          "path": "wallpapers/comet-1-silver-grass.heic",
           "sha256": "fd7070dcbaf82e059cce73f01914b0b1877a95c9429be62128ab5fa8c416d2a6",
           "size": 795731,
           "executable": false
         },
         {
-          "path": "wallpapers/comet-tall.heic",
+          "path": "wallpapers/comet-2-salt-flat.heic",
+          "sha256": "b90aece6322ef57eda2c7b9d6853c44be4025efcf809220135d1cc60c1f4efe1",
+          "size": 403630,
+          "executable": false
+        },
+        {
+          "path": "wallpapers/comet-tall-1-silver-grass.heic",
           "sha256": "147063f316344328055bcc0a88a50457dd0120e9dbb6b2536cd97c6710dbe467",
           "size": 571103,
+          "executable": false
+        },
+        {
+          "path": "wallpapers/comet-tall-2-salt-flat.heic",
+          "sha256": "6c9308ee36d13a212c7344f7154493de79244eb6e4bd0fca55d027bebf523696",
+          "size": 320115,
           "executable": false
         }
       ]
@@ -1520,12 +1556,12 @@
         "native_selection": "#F7C843"
       },
       "preview": null,
-      "digest": "6cdea6ac64dfafd42fe6e833b7c948830cb1f34d6006ec72d36370be9c02f2fe",
+      "digest": "142a618eba5339c29c47e5babe5eea1233e95d5797b2774630d8df3b64f27a86",
       "files": [
         {
           "path": "PROVENANCE.md",
-          "sha256": "a033d361bf56ee6b09a387b1e4fd878642cc0cdd64ba9eeb98421983e66df221",
-          "size": 2534,
+          "sha256": "9b0ba314aa621698cca621d9ec20251360d6b0460b065490722b5ba6a4f9b348",
+          "size": 4392,
           "executable": false
         },
         {
@@ -1535,15 +1571,27 @@
           "executable": false
         },
         {
-          "path": "wallpapers/cumulus-sponge-reef.heic",
+          "path": "wallpapers/cumulus-1-sponge-reef.heic",
           "sha256": "10d3a6c1d5cddf08180a542b8cd638dd5b49df6400c87377627411f32ff29710",
           "size": 686227,
           "executable": false
         },
         {
-          "path": "wallpapers/cumulus-tall.heic",
+          "path": "wallpapers/cumulus-2-reef-on-film.heic",
+          "sha256": "3fb359faa67e1e4cc03918b70e88bc26a54c8fbe0edbb744ede903176ab0778d",
+          "size": 522891,
+          "executable": false
+        },
+        {
+          "path": "wallpapers/cumulus-tall-1-sponge-reef.heic",
           "sha256": "8474416920e7e5f584e727e8a6c9cdde6ed7c7efb1b72f31565a2e60280e5d08",
           "size": 544927,
+          "executable": false
+        },
+        {
+          "path": "wallpapers/cumulus-tall-2-reef-on-film.heic",
+          "sha256": "9d158859a62441141ca949cb9c824b91949d239de25cfec177da971d72d432b6",
+          "size": 392044,
           "executable": false
         }
       ]
@@ -1591,12 +1639,12 @@
         "native_selection": "#BD93F9"
       },
       "preview": null,
-      "digest": "44f2d70b6e3ece516e838dfb69e20f88c3688a50175cd69149e53b4516285d70",
+      "digest": "d1f785e3ab8548322847ef1e236d359a6b799e833f32fdcd439f62f307ae5416",
       "files": [
         {
           "path": "PROVENANCE.md",
-          "sha256": "3ebdf5d14374e09dc0a77eef8c797b54eafd9a75a982a7e051a474853d97f4d7",
-          "size": 2462,
+          "sha256": "c02df4be9c3d545af8f28de6fcff283ce58fb498877c179ad0a6596786e347ee",
+          "size": 4312,
           "executable": false
         },
         {
@@ -1606,15 +1654,27 @@
           "executable": false
         },
         {
-          "path": "wallpapers/dracula-gothic-library.heic",
+          "path": "wallpapers/dracula-1-gothic-library.heic",
           "sha256": "c2077a2ac3bbb6c6fac2c8f672d878b7cd3ecb7470ae9606f6ebc58bc0e501ab",
           "size": 498039,
           "executable": false
         },
         {
-          "path": "wallpapers/dracula-tall.heic",
+          "path": "wallpapers/dracula-2-glasshouse.heic",
+          "sha256": "965a7b1209a844446dc6157b7fedc4253da98e7cd9202e00060908dde661ea13",
+          "size": 522802,
+          "executable": false
+        },
+        {
+          "path": "wallpapers/dracula-tall-1-gothic-library.heic",
           "sha256": "e0a3c4be2155abe185ba3cbe029e18108000cd4e6b2d3ddd6eb38c1ed961b41f",
           "size": 365106,
+          "executable": false
+        },
+        {
+          "path": "wallpapers/dracula-tall-2-glasshouse.heic",
+          "sha256": "a657a15f40cf8bdb6463f294934e86fafcb549ca8c79a9854b9a8fc968f48c88",
+          "size": 429632,
           "executable": false
         }
       ]
@@ -1739,12 +1799,12 @@
         "native_selection": "#FF4775"
       },
       "preview": null,
-      "digest": "035200de638b55d33aded23bb94d1618cca73c79472122c2334b0eb77c5b1253",
+      "digest": "8979b6d0e4d4ed25ae291de62d44344eabc3752fc8463dfe9de806e2f4685974",
       "files": [
         {
           "path": "PROVENANCE.md",
-          "sha256": "785b9b6814276170a2221e5d01edf3e13697517be4d5baed09438b673fcc58d0",
-          "size": 2102,
+          "sha256": "37d6e49d832e2a4e83b0d2031dfa322ef16325aa33d1dbef92479cc53dab4389",
+          "size": 3913,
           "executable": false
         },
         {
@@ -1754,15 +1814,27 @@
           "executable": false
         },
         {
-          "path": "wallpapers/garnet-poppies.heic",
+          "path": "wallpapers/garnet-1-poppies.heic",
           "sha256": "3787b33ac78b63275d9c9b307db7783bd32efa7427fd556eaac4e6790d384b25",
           "size": 228093,
           "executable": false
         },
         {
-          "path": "wallpapers/garnet-tall.heic",
+          "path": "wallpapers/garnet-2-theatre.heic",
+          "sha256": "78bcc92ada23305a42ee22e8816a019d441411259f26143436d4185bd5a9f67b",
+          "size": 228618,
+          "executable": false
+        },
+        {
+          "path": "wallpapers/garnet-tall-1-poppies.heic",
           "sha256": "cd86178e923590a1fbc0bf64f12f2c40963fe32e6ceb73d71517af2a4bc5b62d",
           "size": 207456,
+          "executable": false
+        },
+        {
+          "path": "wallpapers/garnet-tall-2-theatre.heic",
+          "sha256": "3e4d2fda634c14caa43f3879b2d0d37079f1273ceb51900bb1ca92545a264911",
+          "size": 213881,
           "executable": false
         }
       ]
@@ -1810,12 +1882,12 @@
         "native_selection": "#B3261E"
       },
       "preview": null,
-      "digest": "f87519257e96acd7ea59d9fb83e423b61dda2b0948e9a416480838cc5c2fb51a",
+      "digest": "107f56af9fc8cf115a0a03d20e5299035a4618119e5c10cf86706451b741b7e5",
       "files": [
         {
           "path": "PROVENANCE.md",
-          "sha256": "bc71ea9baaecae14946252c6f6a6617b075d43d3e3065d3c9e4d5fbf2dc8d2fb",
-          "size": 2621,
+          "sha256": "74fc884851a302206ec41628be3640ef21a733473c5a5ec732c976d776c8023f",
+          "size": 4536,
           "executable": false
         },
         {
@@ -1825,15 +1897,27 @@
           "executable": false
         },
         {
-          "path": "wallpapers/gelatin-prairie-windmill.heic",
+          "path": "wallpapers/gelatin-1-prairie-windmill.heic",
           "sha256": "48d541ecff1f9abdf913fc6e66d99f3b3f578b7612c9af89ab00d805270516ff",
           "size": 619956,
           "executable": false
         },
         {
-          "path": "wallpapers/gelatin-tall.heic",
+          "path": "wallpapers/gelatin-2-desert-road.heic",
+          "sha256": "07acc2fb030150d7515c28e708f729f9efe5ec7a7669e6281f56945088209e6f",
+          "size": 612822,
+          "executable": false
+        },
+        {
+          "path": "wallpapers/gelatin-tall-1-prairie-windmill.heic",
           "sha256": "bcd81655177a4ce4cb79ad93acacd952071b6d68fae8e1be68baad031e59e3c8",
           "size": 480692,
+          "executable": false
+        },
+        {
+          "path": "wallpapers/gelatin-tall-2-desert-road.heic",
+          "sha256": "0567c94ea5433418c43c45084f0698bac617e1e89635602a725b25a6650c3d1e",
+          "size": 414295,
           "executable": false
         }
       ]
@@ -1952,12 +2036,12 @@
         "native_selection": "#93DADB"
       },
       "preview": null,
-      "digest": "26cd2f51937f1a8ff70f7864269767af32cea451c7d7ff7bcdf4fc86243fbb2b",
+      "digest": "a54c1ebee39f621ddcf80d48c0692fb4fbba6fe6cadd76e235bf17adc0c17c46",
       "files": [
         {
           "path": "PROVENANCE.md",
-          "sha256": "9b90b82bfbd022a6e963d6afe36011988b3a03a7214471bb63e3b581f1925b1f",
-          "size": 2575,
+          "sha256": "3026b966d0f967406bbbaf434e9d38b2e4695e14cc16adb8d39a81f968e4ab0b",
+          "size": 4496,
           "executable": false
         },
         {
@@ -1967,15 +2051,27 @@
           "executable": false
         },
         {
-          "path": "wallpapers/halo-tall.heic",
+          "path": "wallpapers/halo-1-water-tower.heic",
+          "sha256": "2691d9587e409efc73128d76aeebaf2b638afc416a8270dda5181643744acf01",
+          "size": 629611,
+          "executable": false
+        },
+        {
+          "path": "wallpapers/halo-2-lifeguard-tower.heic",
+          "sha256": "2abb78916c4cbcf599191874f33d0288c3c6be953d5dc16869e9b99dd714ca13",
+          "size": 666959,
+          "executable": false
+        },
+        {
+          "path": "wallpapers/halo-tall-1-water-tower.heic",
           "sha256": "a5960bd6d1f41c6b65165d8eae42e863c10f33557ec2f8623a40d0941b135218",
           "size": 459203,
           "executable": false
         },
         {
-          "path": "wallpapers/halo-water-tower.heic",
-          "sha256": "2691d9587e409efc73128d76aeebaf2b638afc416a8270dda5181643744acf01",
-          "size": 629611,
+          "path": "wallpapers/halo-tall-2-lifeguard-tower.heic",
+          "sha256": "e30a24ad058582cd9f14e8b53799aa5b13be54870192c1250f8dcf96ce5e7586",
+          "size": 465443,
           "executable": false
         }
       ]
@@ -2319,12 +2415,12 @@
         "native_selection": "#2379AB"
       },
       "preview": null,
-      "digest": "574a1c3feb3d84804749db7f807fb223bd1e8b601df5be1c033ee910ab25ea88",
+      "digest": "0e9fe97a7fdb4778472ebae356297a81c8da823b3460cd46e592fb44de90ca63",
       "files": [
         {
           "path": "PROVENANCE.md",
-          "sha256": "c095aee795b5cafc5c120f70b4c5f727e4cb76bbde16d2dc1af95a86b196df98",
-          "size": 4177,
+          "sha256": "1b674cd99bdd2861977042b9aece757589b05aabcf82a640b8ea7f8bf382e0fd",
+          "size": 6055,
           "executable": false
         },
         {
@@ -2334,27 +2430,39 @@
           "executable": false
         },
         {
-          "path": "wallpapers/meadow-farmhouse-hill.heic",
+          "path": "wallpapers/meadow-1-farmhouse-hill.heic",
           "sha256": "4d5ed116a9af4a9bf586e2d74581c55cc96da77186a9a98258135727d1b8c3c0",
           "size": 911147,
           "executable": false
         },
         {
-          "path": "wallpapers/meadow-sunflowers.heic",
+          "path": "wallpapers/meadow-2-sunflowers.heic",
           "sha256": "353e6dbb3be77eb5145808c4603c88c93ac26d3067e2d4b996d9f70522697f95",
           "size": 775203,
           "executable": false
         },
         {
-          "path": "wallpapers/meadow-tall-farmhouse.heic",
+          "path": "wallpapers/meadow-3-wheat-and-kite.heic",
+          "sha256": "5d5ce89dd368e86bd997753791e5ebdeb9800c3d04c439294bb57498a7836e97",
+          "size": 732363,
+          "executable": false
+        },
+        {
+          "path": "wallpapers/meadow-tall-1-farmhouse-hill.heic",
           "sha256": "d4cc5867df9d4620a958e2f0f1941494521396bdecd071271f7b7e03ac943318",
           "size": 679994,
           "executable": false
         },
         {
-          "path": "wallpapers/meadow-tall-sunflowers.heic",
+          "path": "wallpapers/meadow-tall-2-sunflowers.heic",
           "sha256": "27a2087fc322b1b55e7c0a25cc9b662706156eeb7557e3553268d7e7f4872f41",
           "size": 503585,
+          "executable": false
+        },
+        {
+          "path": "wallpapers/meadow-tall-3-wheat-and-kite.heic",
+          "sha256": "bb83c7677531280ece062db43d9e03fb66ed1f2ba93c6186db3b1257e8f9c877",
+          "size": 409000,
           "executable": false
         }
       ]
@@ -2402,12 +2510,12 @@
         "native_selection": "#FF4FA3"
       },
       "preview": null,
-      "digest": "e310abbc930a4004de46296187ce44d88dfdb38c0442c483e9f92616c1789736",
+      "digest": "550f1d01e2fa4f9ce684b8da44cb8b8a513493e81a9f5b2968def203422997dc",
       "files": [
         {
           "path": "PROVENANCE.md",
-          "sha256": "d1dea393723c6bc6cdf62c0b0f48c20307445c265a08f04e7f7ac0c0f8ec58a5",
-          "size": 2509,
+          "sha256": "ceeb42f91b344d7e4815e96f48018777bf277fb8e9f0baad898a432b7b66cb09",
+          "size": 4336,
           "executable": false
         },
         {
@@ -2417,15 +2525,27 @@
           "executable": false
         },
         {
-          "path": "wallpapers/neon-rain-tall.heic",
+          "path": "wallpapers/neon-rain-1-tram-stop.heic",
+          "sha256": "6d820c6a9629cf477caec09c45d6839e73a89c8313280c38699526dab9afa410",
+          "size": 620224,
+          "executable": false
+        },
+        {
+          "path": "wallpapers/neon-rain-2-rooftop.heic",
+          "sha256": "cccf32212fe3a08d9303b9e4e1b258ea9011071ba7f927a8211e93ce6179fb97",
+          "size": 503657,
+          "executable": false
+        },
+        {
+          "path": "wallpapers/neon-rain-tall-1-tram-stop.heic",
           "sha256": "dbb5b2b47568af95a077b9c6bf770cc179362a987377a9a465535f649f416b70",
           "size": 534999,
           "executable": false
         },
         {
-          "path": "wallpapers/neon-rain-tram-stop.heic",
-          "sha256": "6d820c6a9629cf477caec09c45d6839e73a89c8313280c38699526dab9afa410",
-          "size": 620224,
+          "path": "wallpapers/neon-rain-tall-2-rooftop.heic",
+          "sha256": "d67b19ea7b360870b6b15641a35a55465e2107f76f6e24bc3eaa17569d67507f",
+          "size": 378816,
           "executable": false
         }
       ]
@@ -2544,12 +2664,12 @@
         "native_selection": "#81A1C1"
       },
       "preview": null,
-      "digest": "897cb697e7405dc345f649b6ef3eee156decaafc9ef3703d2edb5fcb1133c5aa",
+      "digest": "4ca1e92bf11a1ff3163c4351d599a939e87877b2235c4aafdfa94db73441f33f",
       "files": [
         {
           "path": "PROVENANCE.md",
-          "sha256": "e7df9900f5296f9457285724ebd8c159d2e6af97610e2002392eeb8dfc786ed5",
-          "size": 2467,
+          "sha256": "3622aa926455b258394e4edb5e8574a1e1882f5c7016301821049098ea4e8e51",
+          "size": 4308,
           "executable": false
         },
         {
@@ -2559,15 +2679,27 @@
           "executable": false
         },
         {
-          "path": "wallpapers/nord-fjord-aurora.heic",
+          "path": "wallpapers/nord-1-fjord-aurora.heic",
           "sha256": "10fc381cdf89160cd1c69e95595eb480ff3ddb9b2af0e5dc496936363733535c",
           "size": 442623,
           "executable": false
         },
         {
-          "path": "wallpapers/nord-tall.heic",
+          "path": "wallpapers/nord-2-snow-forest.heic",
+          "sha256": "1522a8a020d2b2c3f030907a422b691a930c0c2479613798a8d250d4e87bec73",
+          "size": 691717,
+          "executable": false
+        },
+        {
+          "path": "wallpapers/nord-tall-1-fjord-aurora.heic",
           "sha256": "42557c7a1295adf1b2f0bb7eda3b40c1b42f0f17d2ddc5b4918af99ab24381bb",
           "size": 312898,
+          "executable": false
+        },
+        {
+          "path": "wallpapers/nord-tall-2-snow-forest.heic",
+          "sha256": "0f3bbe87f0c47af3a804c07c8126ef87be9e6c684d261eb6bc7936b1ce97ea73",
+          "size": 317541,
           "executable": false
         }
       ]
@@ -3207,12 +3339,12 @@
         "native_selection": "#6B2FA8"
       },
       "preview": null,
-      "digest": "9d2bd6d216cc1b1682e16e8ca084fff412ae9857f69f544db2eae913967f14b8",
+      "digest": "6baaedcf2728439b95a0cbe2229cd620f3e83bb1de71bce4e87d977ed1da960b",
       "files": [
         {
           "path": "PROVENANCE.md",
-          "sha256": "7f69ae7095c773847963ec54b013f4aa00a987b6c0d0d5362550fe44a3899e12",
-          "size": 2126,
+          "sha256": "3b3f5a47a9e4ce5a94f38eddc6df7d16659629c541d2c3bfb9ed4e4cc606837e",
+          "size": 3985,
           "executable": false
         },
         {
@@ -3222,15 +3354,27 @@
           "executable": false
         },
         {
-          "path": "wallpapers/wisteria-tall.heic",
+          "path": "wallpapers/wisteria-1-tunnel.heic",
+          "sha256": "e642df13e8a3510211d3d90bfd517863c79bc43772dcf562278593535af14870",
+          "size": 905275,
+          "executable": false
+        },
+        {
+          "path": "wallpapers/wisteria-2-lavender-hill.heic",
+          "sha256": "a54810de8afac9a118404f555d497d305445f570fc662b8cbcb0e2f4ba5cc4c7",
+          "size": 430970,
+          "executable": false
+        },
+        {
+          "path": "wallpapers/wisteria-tall-1-tunnel.heic",
           "sha256": "83454bc40d56e877ebd87fd28b77bb158c3179bffd782ac21e4ba0c3e9e830cc",
           "size": 537711,
           "executable": false
         },
         {
-          "path": "wallpapers/wisteria-tunnel.heic",
-          "sha256": "e642df13e8a3510211d3d90bfd517863c79bc43772dcf562278593535af14870",
-          "size": 905275,
+          "path": "wallpapers/wisteria-tall-2-lavender-hill.heic",
+          "sha256": "2ae7a8569c6ef91949ddd86181a49dcff665433a8973aa63c1dc7697bd7699f6",
+          "size": 391571,
           "executable": false
         }
       ]
