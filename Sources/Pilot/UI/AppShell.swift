@@ -83,8 +83,8 @@ struct PageView: View {
 
     var body: some View {
         let key = Self.key(model)
-        // The pages switched to most, built ahead while the window idles (PageDeck.buildAhead), each on its part picked last.
-        let ahead = model.visits.likeliest(PageDeck.cap - 1, besides: model.page).map { page in
+        // The pages switched to most, warmed as the window opens (PageDeck.buildAhead), each on its part picked last.
+        let ahead = model.visits.likeliest(PageDeck.warm, besides: model.page).map { page in
             let section = model.section(of: page)
             return PageDeck.Ahead(key: Self.key(page, section: section, extensionPage: nil), page: page, section: section)
         }
@@ -309,9 +309,13 @@ struct KeptPages<Content: View>: NSViewRepresentable {
 
 /// KeptPages' view: the shown part's host, and the other parts kept, hidden.
 final class PageDeck: NSView {
-    /// How many parts stay built: 27 to 49 MB each while the window is open (page-switch-3, release), all of them gone with
-    /// the window's tree when it closes.
-    static let cap = 4
+    /// How many parts stay built: the warm set and the four shown last, 27 to 49 MB each while the window is open
+    /// (page-switch-3, release), all but the one shown gone 300 s after it leaves the screen (`trimAfter`) and all of them
+    /// with the window's tree when it closes.
+    static let cap = warm + 4
+    /// How many of the pages switched to most are built as the window opens (load-lag; Sven, 2026-11-25, Q375 B: "warm-up
+    /// on window open"), so their first visit is a return visit: as many as the pages counted first (PageVisits.seed).
+    static let warm = PageVisits.seed.count
     private var hosts: [String: PageHost] = [:]
     /// The parts by when they showed, the one showing last.
     private(set) var order: [String] = []
@@ -387,9 +391,13 @@ final class PageDeck: NSView {
         trimTimer = nil
     }
 
-    /// The `count` parts shown last stay; the rest go, the one shown longest ago first.
+    /// The `count` parts shown last stay; the rest go, the one shown longest ago first, a warm one (`ahead`) only once
+    /// no other is left, so the window's pages opened in passing never push the warm set out.
     private func keep(_ count: Int) {
-        while order.count > count { drop(order[0]) }
+        let warm = Set(ahead.map(\.key))
+        while order.count > count {
+            drop(order.dropLast().first { !warm.contains($0) } ?? order[0])
+        }
     }
 
     private func drop(_ key: String) {
@@ -519,17 +527,20 @@ final class PageDeck: NSView {
     /// Whether the window shows and is key: nothing is built ahead behind a closed, covered or left window.
     var showing: () -> Bool = { false }
     private var aheadTimer: Timer?
+    /// The screen's refreshes that bring the next slice while the window stays quiet (`armAhead`).
+    private var aheadLink: CADisplayLink?
     private var aheadInput: Any?
     /// How long the window stays quiet (no switch, key, click or scroll) before the next part is built ahead.
     static let quiet: TimeInterval = 0.3
     /// What a press is: any of these waiting or arriving puts the next part off until the window is quiet again.
     private static let input: NSEvent.EventTypeMask = [.keyDown, .leftMouseDown, .rightMouseDown, .otherMouseDown, .scrollWheel]
 
-    /// The window's likeliest next parts (Sven, 2026-11-22, Q341 A): once the window has drawn its page and stays quiet,
-    /// each is built hidden and never past `cap`, so its first visit is a return visit. A part is built a piece a run loop
-    /// turn (BuildStage, Q344 B), so a press waits at most one piece; a key, click, scroll or switch puts the next piece
-    /// off until the window is quiet again. A part left half built in view goes on the same way. A half-built part shown
-    /// goes on in view. They go with the window's tree as it closes, as every kept part does.
+    /// The window's likeliest next parts, its warm set (Sven, 2026-11-22, Q341 A; 2026-11-25, Q375 B): once the window
+    /// has drawn its page and stays quiet, each is built hidden and never past `cap`, so its first visit is a return
+    /// visit. A part is built a piece a refresh of the screen (BuildStage, Q344 B), so a press waits at most one piece; a
+    /// key, click, scroll or switch, or a first visit still built in view, puts the next piece off until the window is
+    /// quiet again. A part left half built goes on the same way, hidden; one clicked before it is whole goes on in view at
+    /// once. They go with the window's tree as it closes, as every kept part does.
     func buildAhead(_ parts: [Ahead], root: @escaping (Ahead) -> AnyView) {
         ahead = parts
         aheadRoot = root
@@ -570,8 +581,15 @@ final class PageDeck: NSView {
                 return event
             }
         }
-        // A part half built goes on at the next turn the run loop has free; a new one after the window was quiet.
-        let timer = Timer(timeInterval: quiet == nil || quietAgain ? Self.quiet : 0.001, repeats: false) { [weak self] _ in
+        // While the window stays quiet, a slice at each refresh of the screen, so the frames and presses between slices
+        // are served (load-lag: slices back to back on the run loop held the taps that share it); after a press, the next
+        // slice once the window is quiet again.
+        if !quietAgain {
+            if aheadLink == nil { aheadLink = refreshLink(#selector(aheadPass(_:))) }
+            if aheadLink != nil { return }
+        }
+        stopAheadLink()
+        let timer = Timer(timeInterval: Self.quiet, repeats: false) { [weak self] _ in
             MainActor.assumeIsolated { self?.buildNextAhead() }
         }
         quietAgain = false
@@ -579,9 +597,17 @@ final class PageDeck: NSView {
         aheadTimer = timer
     }
 
+    @objc private func aheadPass(_ link: CADisplayLink) { buildNextAhead() }
+
+    private func stopAheadLink() {
+        aheadLink?.invalidate()
+        aheadLink = nil
+    }
+
     private func stopAhead() {
         aheadTimer?.invalidate()
         aheadTimer = nil
+        stopAheadLink()
         if let aheadInput { NSEvent.removeMonitor(aheadInput) }
         aheadInput = nil
     }
@@ -592,8 +618,8 @@ final class PageDeck: NSView {
         guard let window, quiet != nil || nextAhead != nil else { return stopAhead() }
         // The page shown, cut at the fold, goes on behind another window too: it scrolls there.
         guard showing() || quiet != nil && quiet == shown else { stopAhead(); return waitToShow() }
-        // A press already waiting goes first.
-        if NSApp.nextEvent(matching: Self.input, until: .distantPast, inMode: .default, dequeue: false) != nil {
+        // A press already waiting goes first, and the page shown, still built in view.
+        if buildingInView || NSApp.nextEvent(matching: Self.input, until: .distantPast, inMode: .default, dequeue: false) != nil {
             quietAgain = true
             return armAhead()
         }
@@ -611,7 +637,7 @@ final class PageDeck: NSView {
             host.frame = bounds
             host.isHidden = true
             hosts[next.key] = host
-            // Shown longest ago: the first to go past `cap`, before any part the user opened.
+            // Shown longest ago, yet warm: it goes past `cap` only after every part opened in passing (`keep`).
             order.insert(next.key, at: 0)
             addSubview(host, positioned: .below, relativeTo: nil)
             building[next.key] = Building(stage: stage)
@@ -774,10 +800,11 @@ final class PageDeck: NSView {
         leftLink = nil
     }
 
-    /// A display link on the window's screen (the main one while the window is on none) calling `selector` each refresh.
+    /// A display link on the window's screen (the main one while the deck is in no window or the window on no screen)
+    /// calling `selector` each refresh. The window's first part is shown before the deck is in the window (load-lag:
+    /// without a link then, Home stayed half built, and the warm-up waiting on it never began).
     private func refreshLink(_ selector: Selector) -> CADisplayLink? {
-        guard let window else { return nil }
-        let link = window.screen != nil ? displayLink(target: self, selector: selector)
+        let link = window?.screen != nil ? displayLink(target: self, selector: selector)
             : (NSScreen.main ?? NSScreen.screens.first)?.displayLink(target: self, selector: selector)
         link?.add(to: .main, forMode: .common)
         return link

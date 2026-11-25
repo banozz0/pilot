@@ -220,8 +220,9 @@ struct PageVisits {
     }
 
     /// The likeliest pages before any are counted (page-instant; Sven on build 3142: with no counts yet nothing was built
-    /// ahead, so every switch was a first visit).
-    static let seed: [AppPage] = [.home, .binds, .menuBar, .look]
+    /// ahead, so every switch was a first visit): those of `ahead` Sven went to most on combined-16 (load-lag, his 43
+    /// switches of 2026-11-25), most first.
+    static let seed: [AppPage] = [.menuBar, .workspaces, .look, .home, .binds, .widgets]
 
     /// The `count` pages of `ahead` switched to most, most first (ties by name), then `seed`'s not counted yet; never
     /// `shown`, which is built already.
