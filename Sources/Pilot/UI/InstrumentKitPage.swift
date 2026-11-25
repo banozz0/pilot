@@ -114,7 +114,7 @@ struct InstrumentBlock<Trailing: View, Content: View>: View {
             }
             // A row a turn while the part is built ahead (Staged); in view the block comes whole, so it never grows under
             // what is drawn beside and below it. Rows stand in columns once the block is wide (wide-pages).
-            BlockRowColumns { Staged(inView: false) { content } }
+            BlockRowColumns { content }
         }
         .padding(.horizontal, style.density.padding).padding(.vertical, InstrumentKitPage.blockPadding)
         .frame(maxHeight: fill ? .infinity : nil, alignment: .top)
@@ -123,25 +123,30 @@ struct InstrumentBlock<Trailing: View, Content: View>: View {
 
 /// A block's children: a block of rows (every child a BlockRow, two or more) stands them in columns once it is wide
 /// enough for two rows side by side, each as wide as a page column's row (wide-pages: Update beside Clean, Open with's
-/// ten Apps for keys in three columns in a big window); the columns draw the rules, none over a column's top row. The
-/// rows are read twice: once to see what they are, then built again told to draw no rule of their own, as a row keeps the
-/// environment it was first read in. Any other block's children stay as they are.
+/// ten Apps for keys in three columns in a big window); the columns draw the rules, none over a column's top row. Only on
+/// a page's own flowing block (`blockRowColumns`); any other block's children stay as they were, a row a turn while the
+/// part is built ahead (Staged) and whole in view. The rows are read as they are, to see what they are, then built (and
+/// staged) once, told to draw no rule of their own: a row keeps the environment it was first read in.
 struct BlockRowColumns<Content: View>: View {
     @Environment(\.style) private var style
     @Environment(\.blockRowColumns) private var on
     @ViewBuilder var content: Content
 
     var body: some View {
-        Group(subviews: content) { children in
-            if on == true, let count = Self.rows(children) {
-                let firsts = children.map { $0.containerValues.blockRow == .first }
-                RowColumns(least: KitPage<EmptyView>.column(.instrument) - style.density.padding * 2, gap: style.density.padding * 2, firsts: firsts) {
-                    content.environment(\.blockRowRule, false)
-                    ForEach(0..<count, id: \.self) { _ in InstrumentRule() }
+        if on == true {
+            Group(subviews: content) { children in
+                if let count = Self.rows(children) {
+                    let firsts = children.map { $0.containerValues.blockRow == .first }
+                    RowColumns(least: KitPage<EmptyView>.column(.instrument) - style.density.padding * 2, gap: style.density.padding * 2, firsts: firsts) {
+                        Staged(inView: false) { content.environment(\.blockRowRule, false) }
+                        ForEach(0..<count, id: \.self) { _ in InstrumentRule() }
+                    }
+                } else {
+                    Staged(inView: false) { content }
                 }
-            } else {
-                ForEach(children) { $0 }
             }
+        } else {
+            Staged(inView: false) { content }
         }
     }
 
@@ -153,7 +158,8 @@ struct BlockRowColumns<Content: View>: View {
 
 /// BlockRowColumns' rows in as many columns as fit at `least` wide and they fill, top to bottom then the next column,
 /// split so the tallest column is as short as it can be; then a rule over each row but a column's top one (and the
-/// first row, as BlockRow's `first`). Its subviews are the rows, then one rule each.
+/// first row, as BlockRow's `first`). Its subviews are the rows built so far (all but while staged), then one rule for
+/// each of the block's rows.
 struct RowColumns: Layout {
     var least: CGFloat
     var gap: CGFloat
@@ -177,25 +183,27 @@ struct RowColumns: Layout {
         return CGSize(width: width, height: frames.map(\.maxY).max() ?? 0)
     }
 
+    /// The rows built so far: the subviews before the rules.
+    private func built(_ subviews: Subviews) -> Int { max(0, min(firsts.count, subviews.count - firsts.count)) }
+
     func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout Cache) {
-        let rows = firsts.count
+        let rows = built(subviews), rules = subviews.count - firsts.count
         let frames = frames(bounds.width, subviews, &cache)
         for (i, frame) in frames.enumerated() {
             subviews[i].place(at: CGPoint(x: bounds.minX + frame.minX, y: bounds.minY + frame.minY), proposal: ProposedViewSize(frame.size))
         }
-        // The rules: over a row unless it is first or tops a column.
-        for i in 0..<rows where rows + i < subviews.count {
-            let frame = frames[i]
-            let tops = frame.minY == 0
-            let shown = !firsts[i] && !(tops && frame.minX > 0)
-            subviews[rows + i].place(at: CGPoint(x: bounds.minX + frame.minX, y: bounds.minY + frame.minY),
-                                     proposal: ProposedViewSize(width: shown ? frame.width : 0, height: 1))
+        // The rules: over a row unless it is first or tops a column; none for a row not built yet.
+        for i in 0..<firsts.count where rules + i < subviews.count {
+            let frame = i < rows ? frames[i] : .zero
+            let shown = i < rows && !firsts[i] && !(frame.minY == 0 && frame.minX > 0)
+            subviews[rules + i].place(at: CGPoint(x: bounds.minX + frame.minX, y: bounds.minY + frame.minY),
+                                      proposal: ProposedViewSize(width: shown ? frame.width : 0, height: 1))
         }
     }
 
     /// The rows' frames: their columns' count from the width, then the split.
     private func arrange(_ width: CGFloat, _ subviews: Subviews) -> [CGRect] {
-        let rows = min(firsts.count, subviews.count)
+        let rows = built(subviews)
         guard rows > 0 else { return [] }
         let columns = max(1, min(rows, Int((width + gap) / (least + gap))))
         let side = columns == 1 ? width : (width - gap * CGFloat(columns - 1)) / CGFloat(columns)

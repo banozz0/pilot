@@ -13,7 +13,8 @@ import Testing
 /// drawn alone as HomeRenders.firstVisit builds Home, into `wide-pages/first-visit.txt`. Opt-in, in a moved home:
 /// `CFFIXED_USER_HOME=<fresh dir> PILOT_RENDER_DIR=<fresh dir> swift test --filter WidePagesRenders`
 /// PILOT_RENDER_ONLY narrows the shots to file names holding one of its comma-separated words; PILOT_RENDER_TIMING=0
-/// leaves the timing out.
+/// leaves the timing out; PILOT_RENDER_WIDE=1 adds a 3000 pt window; PILOT_RENDER_STAGED=1 shoots pages built a piece
+/// at a time (`staged`).
 extension SharedLook {
 @MainActor
 @Suite("Wide pages renders")
@@ -25,6 +26,8 @@ struct WidePagesRenders {
         + AppSection.allCases.filter(\.isTab).map { ("\($0.page.rawValue)-\($0.rawValue)", AppPlace($0)) }
 
     static let sizes: [(name: String, size: NSSize)] = [("1700", NSSize(width: 1700, height: 1290)), ("default", AppWindowController.size)]
+        // PILOT_RENDER_WIDE=1 adds a window across an ultrawide screen, past the pages' 1440 pt measure.
+        + (env["PILOT_RENDER_WIDE"] == "1" ? [("3000", NSSize(width: 3000, height: 1290))] : [])
 
     @Test("Every page renders at 1700 by 1290 and at the window's first size, dark and light",
           .enabled(if: env["PILOT_RENDER_DIR"] != nil && env["CFFIXED_USER_HOME"] != nil))
@@ -80,7 +83,58 @@ struct WidePagesRenders {
             }
         }
         window.setContentSize(AppWindowController.size)
+        if Self.env["PILOT_RENDER_STAGED"] == "1" { try Self.staged(engine: engine, look: look, to: dir) }
         if Self.env["PILOT_RENDER_TIMING"] != "0" { try Self.firstVisit(engine: engine, look: look, to: dir) }
+    }
+
+    /// Pages whose short runs and blocks of rows the wide rule lays out, built a piece at a time as a first visit builds
+    /// them (PageDeck.buildInView) at 1700 by 1290: shot after the first frame and once whole (`staged-<page>-first`,
+    /// `-whole`), so a block drawn in the first frame can be seen to keep its place and width; and built hidden, a
+    /// piece a pass (PageDeck.buildAhead), the passes counted, into `staged.txt`.
+    static func staged(engine: Engine, look: Look, to dir: URL) throws {
+        look.tryOn(id: "tokyo-night", pack: nil)
+        defer { look.endTrial() }
+        let size = CGSize(width: 1700, height: 1290)
+        let pages: [(String, AppPage, () -> AnyView)] = [
+            ("captures", .captures, { AnyView(CapturesPage()) }),
+            ("captures-recording", .captures, { AnyView(CapturesPage(recording: true)) }),
+            ("openWith", .openWith, { AnyView(OpenWithPage()) }),
+            ("upkeep", .upkeep, { AnyView(UpkeepPage(mole: true, homebrew: true)) }),
+            ("general", .general, { AnyView(GeneralPage()) }),
+        ]
+        var lines: [String] = []
+        for (name, page, view) in pages {
+            for inView in [true, false] {
+                let stage = BuildStage()
+                stage.inView = inView
+                let host = NSHostingView(rootView: view().environment(engine).environment(\.buildStage, stage)
+                    .styled(.page(page)).frame(width: size.width, height: size.height).pilotTheme(look: look))
+                host.frame = CGRect(origin: .zero, size: size)
+                let window = NSWindow(contentRect: host.frame, styleMask: [.borderless], backing: .buffered, defer: false)
+                window.isReleasedWhenClosed = false
+                window.contentView = host
+                var passes = 0, frames = 0
+                repeat {
+                    // In view: passes until a frame's budget is spent, then drawn (PageDeck.buildInView); hidden: a pass a turn.
+                    let start = ContinuousClock.now
+                    repeat {
+                        stage.step += 1; stage.held = false; stage.tickets = 1
+                        host.layoutSubtreeIfNeeded()
+                        if stage.held, stage.tickets == 1, !stage.holders.isEmpty { stage.holders.removeLast() }
+                        passes += 1
+                    } while inView && stage.held && ContinuousClock.now - start < PageDeck.frameBudget
+                    frames += 1
+                    if inView && frames == 1 {
+                        try #require(snapshot(host, scale: 1)?.representation(using: .png, properties: [:])).write(to: dir.appendingPathComponent("staged-\(name)-first.png"))
+                    }
+                } while stage.held && passes < 400
+                if inView { try #require(snapshot(host, scale: 1)?.representation(using: .png, properties: [:])).write(to: dir.appendingPathComponent("staged-\(name)-whole.png")) }
+                lines.append("\(name) \(inView ? "in view" : "hidden"): \(passes) passes, \(frames) frames, whole: \(!stage.held)")
+                window.close()
+                PanelTestSupport.pump(0.05)
+            }
+        }
+        try lines.joined(separator: "\n").appending("\n").write(to: dir.appending(path: "staged.txt"), atomically: true, encoding: .utf8)
     }
 
     /// How long Captures, Update & Clean, Open with and Pilot take to build, lay out and draw as a first visit does, alone in a

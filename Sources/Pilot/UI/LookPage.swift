@@ -149,7 +149,8 @@ struct LookPage: View {
                 errorLine.padding(.top, 12)
             }
             .padding(.horizontal, ink.pageInset).padding(.top, ink.pageTop(6)).padding(.bottom, 30)
-            .frame(maxWidth: .infinity, alignment: .leading)
+            // The pages' measure in a big window, centred under the bar (wide-pages).
+            .pageMeasure(side: ink.pageInset)
         }
     }
 
