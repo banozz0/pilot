@@ -205,9 +205,10 @@ struct PageVisits {
     static let key = "appWindow.visits"
     static let most = 200
     /// The pages built ahead, those whose build reads only Pilot's own data or what a visit reads while hidden and paused
-    /// (page-first's audit). Not the rest: Extensions runs extension programs, General
-    /// reads the update count and Full Disk Access as it is built; nothing a page opened unasked should start.
-    static let ahead: Set<AppPage> = [.binds, .menuBar, .look, .system, .dock, .widgets, .tiling, .workspaces, .home]
+    /// (page-first's audit; Launcher's four parts audited in slow-pages). Not the rest: Extensions runs extension
+    /// programs, General reads the update count and Full Disk Access as it is built, AI runs the claude and codex tools;
+    /// nothing a page opened unasked should start.
+    static let ahead: Set<AppPage> = [.binds, .menuBar, .look, .system, .dock, .widgets, .tiling, .workspaces, .home, .menu]
     let defaults: UserDefaults
 
     var counts: [String: Int] { defaults.dictionary(forKey: Self.key) as? [String: Int] ?? [:] }
@@ -221,8 +222,8 @@ struct PageVisits {
 
     /// The likeliest pages before any are counted (page-instant; Sven on build 3142: with no counts yet nothing was built
     /// ahead, so every switch was a first visit): those of `ahead` Sven went to most on combined-16 (load-lag, his 43
-    /// switches of 2026-11-25), most first.
-    static let seed: [AppPage] = [.menuBar, .workspaces, .look, .home, .binds, .widgets]
+    /// switches of 2026-11-25), most first, with Launcher added after Look (slow-pages), which makes the warm set seven.
+    static let seed: [AppPage] = [.menuBar, .workspaces, .look, .menu, .home, .binds, .widgets]
 
     /// The `count` pages of `ahead` switched to most, most first (ties by name), then `seed`'s not counted yet; never
     /// `shown`, which is built already.
