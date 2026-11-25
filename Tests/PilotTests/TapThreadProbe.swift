@@ -136,6 +136,34 @@ struct TapThreadProbe {
         #expect(idle < 5, "the tap thread sleeps between events")
     }
 
+    @Test("Drag path: the border's frame ticker leaves no thread and no tick behind once a drag ends",
+          .enabled(if: ProcessInfo.processInfo.environment["PILOT_TAP_PROBE"] == "1"))
+    func tickerEnds() async throws {
+        func threads() -> Int {
+            var list: thread_act_array_t?, count: mach_msg_type_number_t = 0
+            guard task_threads(mach_task_self_, &list, &count) == KERN_SUCCESS, let list else { return -1 }
+            for i in 0..<Int(count) { mach_port_deallocate(mach_task_self_, list[i]) }
+            vm_deallocate(mach_task_self_, vm_address_t(UInt(bitPattern: list)), vm_size_t(Int(count) * MemoryLayout<thread_act_t>.stride))
+            return Int(count)
+        }
+        final class Ticks: @unchecked Sendable { let lock = NSLock(); var n = 0 }
+        let ticks = Ticks()
+        try await Task.sleep(for: .milliseconds(200))
+        let before = threads()
+        for _ in 0..<50 {   // fifty drags, 40 ms each
+            let stop = DragFollower.threadTicker { ticks.lock.withLock { ticks.n += 1 } }
+            try await Task.sleep(for: .milliseconds(40))
+            stop()
+        }
+        try await Task.sleep(for: .milliseconds(500))
+        let after = threads(), ticked = ticks.lock.withLock { ticks.n }
+        try await Task.sleep(for: .milliseconds(500))
+        let later = ticks.lock.withLock { ticks.n }
+        print("TAPPROBE drag ticker: threads \(before) before, \(after) after 50 drags; \(ticked) ticks during, \(later - ticked) in the 500 ms after")
+        #expect(after - before <= 2, "no drag-frames thread outlives its drag")
+        #expect(later == ticked, "no tick after the drags ended")
+    }
+
     @Test("The bind table the tap reads off the main thread follows every change to the store, and Key binds' switch",
           .enabled(if: ProcessInfo.processInfo.environment["PILOT_TAP_PROBE"] == "1"))
     func tableFollowsStore() throws {
