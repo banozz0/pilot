@@ -10,6 +10,8 @@ import SwiftUI
 /// the toolbar's title.
 struct InstrumentPage<Content: View>: View {
     @Environment(\.style) private var style
+    /// False on a More tab: its blocks keep their rows one under the other.
+    @Environment(\.blockRowColumns) private var rowColumns
     var intro: String?
     /// The intro's ⓘ: what its one line leaves out.
     var info: String?
@@ -31,7 +33,12 @@ struct InstrumentPage<Content: View>: View {
                 if flow {
                     Group(subviews: content) { blocks in
                         PageFlow(column: KitPage<EmptyView>.column(.instrument), gap: style.density.padding, spacing: spacing, total: blocks.count) {
-                            Staged { ForEach(blocks) { $0 } }
+                            // Only the page's own flowing blocks may stand their rows in columns (BlockRowColumns).
+                            Staged {
+                                ForEach(blocks) { block in
+                                    block.environment(\.blockRowColumns, rowColumns != false && block.containerValues.pageFlows && !block.containerValues.pageWide)
+                                }
+                            }
                         }
                     }
                 } else {
@@ -116,8 +123,9 @@ struct InstrumentBlock<Trailing: View, Content: View>: View {
 
 /// A block's children: a block of rows (every child a BlockRow, two or more) stands them in columns once it is wide
 /// enough for two rows side by side, each as wide as a page column's row (wide-pages: Update beside Clean, Open with's
-/// ten Apps for keys in three columns in a big window); the columns draw the rules, none over a column's top row. Any
-/// other block's children stay as they are.
+/// ten Apps for keys in three columns in a big window); the columns draw the rules, none over a column's top row. The
+/// rows are read twice: once to see what they are, then built again told to draw no rule of their own, as a row keeps the
+/// environment it was first read in. Any other block's children stay as they are.
 struct BlockRowColumns<Content: View>: View {
     @Environment(\.style) private var style
     @Environment(\.blockRowColumns) private var on
@@ -125,10 +133,10 @@ struct BlockRowColumns<Content: View>: View {
 
     var body: some View {
         Group(subviews: content) { children in
-            if on, let count = Self.rows(children) {
+            if on == true, let count = Self.rows(children) {
                 let firsts = children.map { $0.containerValues.blockRow == .first }
                 RowColumns(least: KitPage<EmptyView>.column(.instrument) - style.density.padding * 2, gap: style.density.padding * 2, firsts: firsts) {
-                    ForEach(children) { $0.environment(\.blockRowRule, false) }
+                    content.environment(\.blockRowRule, false)
                     ForEach(0..<count, id: \.self) { _ in InstrumentRule() }
                 }
             } else {

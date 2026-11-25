@@ -49,8 +49,10 @@ struct WidePagesRenders {
         defer { (look.themeID, look.style) = saved }
         look.style = .instrument
         let only = Self.env["PILOT_RENDER_ONLY"]?.split(separator: ",").map(String.init)
+        // Tried on, as Look's cards do: a theme pack the moved home holds would otherwise outrank `themeID`.
+        defer { look.endTrial() }
         for (name, theme) in SharedLook.HomeRenders.looks {
-            look.themeID = theme
+            look.tryOn(id: theme, pack: nil)
             AppWindowController.applyLook(look, to: window)
             for (suffix, size) in Self.sizes {
                 window.setContentSize(size)
@@ -81,7 +83,8 @@ struct WidePagesRenders {
     /// whole. The first run warms up and is left out; the median of the next nine is written. A debug build's
     /// before-and-after measure, not the app's own milliseconds.
     static func firstVisit(engine: Engine, look: Look, to dir: URL) throws {
-        look.themeID = "tokyo-night"
+        look.tryOn(id: "tokyo-night", pack: nil)
+        defer { look.endTrial() }
         let pages: [(String, AppPage, () -> AnyView)] = [
             ("captures", .captures, { AnyView(CapturesPage()) }),
             ("upkeep", .upkeep, { AnyView(UpkeepPage(mole: true, homebrew: true)) }),

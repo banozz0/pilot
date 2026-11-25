@@ -194,10 +194,11 @@ struct KitBlock<Trailing: View, Content: View>: View {
     var body: some View {
         // A block flows into the page's columns (PageFlow) unless it is marked `.pageWide()`. A block of rows says how
         // many it holds, so a wide page gives it the columns its rows can stand in (wide-pages).
-        Group(subviews: content) { rows in
-            InstrumentBlock(title: title, symbol: symbol, note: note, fill: fill, trailing: { trailing }, content: { ForEach(rows) { $0 } })
+        Group(subviews: content) { children in
+            let rows = BlockRowColumns<EmptyView>.rows(children)
+            InstrumentBlock(title: title, symbol: symbol, note: note, fill: fill, trailing: { trailing }, content: { content })
                 .padding(.top, style.density.padding)
-                .layoutValue(key: PageSpan.self, value: BlockRowColumns<EmptyView>.rows(rows) ?? 1)
+                .layoutValue(key: PageSpan.self, value: rows ?? 1)
                 .pageFlows()
         }
     }
@@ -344,9 +345,9 @@ extension View {
 
 extension View {
     /// The child flows into the page's columns (PageFlow) rather than taking its full width.
-    func pageFlows() -> some View { layoutValue(key: PageFlowItem.self, value: true) }
+    func pageFlows() -> some View { layoutValue(key: PageFlowItem.self, value: true).containerValue(\.pageFlows, true) }
     /// A block that keeps the page's full width in PageFlow: a keyboard, a grid, two columns of its own.
-    func pageWide() -> some View { layoutValue(key: PageWideItem.self, value: true) }
+    func pageWide() -> some View { layoutValue(key: PageWideItem.self, value: true).containerValue(\.pageWide, true) }
 }
 
 /// A row in a block under a rule (none over the first). In a block whose rows stand in columns (BlockRowColumns) the
@@ -371,14 +372,19 @@ enum BlockRowKind { case first, row }
 extension ContainerValues {
     /// Set by BlockRow: a block whose children are all rows may stand them in columns (wide-pages).
     @Entry var blockRow: BlockRowKind? = nil
+    /// Set with `pageFlows()` and `pageWide()`: InstrumentPage lets only a page's own flowing blocks stand rows in columns.
+    @Entry var pageFlows = false
+    @Entry var pageWide = false
 }
 
 extension EnvironmentValues {
     /// Whether a BlockRow draws its own rule; off where BlockRowColumns draws them.
     @Entry var blockRowRule = true
-    /// Whether a wide block of rows stands them in columns (BlockRowColumns): off on a More tab, whose blocks stack
+    /// Whether a wide block of rows stands them in columns (BlockRowColumns): true only on a block that flows into its
+    /// page's columns (InstrumentPage sets it), never on a block a page holds in a stack of its own or at its full width
+    /// (Binds' Mouse tables, whose header row speaks for the rows under it); false on a More tab, whose blocks stack
     /// beside its index by design (Q60 B) and keep a note row under the rows it speaks of (Tiling's More).
-    @Entry var blockRowColumns = true
+    @Entry var blockRowColumns: Bool? = nil
 }
 
 /// A block row's parts side by side, as an HStack, while every label that wraps keeps `least` points or its one-line width;
