@@ -626,8 +626,7 @@ enum PageSwitchTiming {
         arm()
     }
 
-    /// The deck in the window: its screen's frames a switch counts, and whether it still builds the shown part in view
-    /// (SwitchFrames).
+    /// The deck in the window: its screen's frames a switch counts (SwitchFrames).
     static weak var deck: PageDeck?
 
     /// PageDeck put part `to` in the window, built now (`first`) or kept from before; `from` is the part it replaced, nil
@@ -645,13 +644,6 @@ enum PageSwitchTiming {
         let ms = turns.map { $0 / .milliseconds(1) }
         let pieces = ms.map { String(format: "%.1f", $0) }.joined(separator: " ")
         log.notice("page built ahead: \(key, privacy: .public), \(ms.count) turns, longest \(String(format: "%.1f", ms.max() ?? 0), privacy: .public) ms (\(pieces, privacy: .public))")
-    }
-
-    /// PageDeck built part `key` in view on its first visit, a few pieces a frame (page-instant): each frame's main-thread
-    /// time, and how long after its first frame it was whole.
-    static func builtInView(_ key: String, turns: [Duration], whole: Duration) {
-        let ms = turns.map { $0 / .milliseconds(1) }
-        log.notice("page built in view: \(key, privacy: .public), \(ms.count) frames, longest \(String(format: "%.1f", ms.max() ?? 0), privacy: .public) ms, whole \(Int(whole / .milliseconds(1))) ms after its first")
     }
 
     private static func arm() {
@@ -680,10 +672,10 @@ enum PageSwitchTiming {
 
 /// The frames the window's screen showed around a page switch (page-frames; Sven on combined-13, build 3160: "the pages
 /// load faster now but are still kind of laggy … It's like a frame drop happens"): a display link from the pick until the
-/// page has settled (drawn, built as far as the window shows it, and a tenth of a second without a miss) or half a
-/// second, cut short by the next pick. Each tick is a refresh the main thread was free for; a gap over one and a half
-/// refreshes is a frame missed, the work SwiftUI and AppKit did in it holding the window's next frame. A frame the
-/// window server drops late (glass, compositing) is not seen here. One line a switch, after its "page switch" line:
+/// page has settled (drawn, and a tenth of a second without a miss) or half a second, cut short by the next pick. Each
+/// tick is a refresh the main thread was free for; a gap over one and a half refreshes is a frame missed, the work SwiftUI
+/// and AppKit did in it holding the window's next frame. A frame the window server drops late (glass, compositing) is not
+/// seen here. One line a switch, after its "page switch" line:
 /// `page frames: home → look, 240 Hz, 96 frames in 412 ms, 14 missed (3 after drawn), longest gap 37.5 ms at 0 ms; gaps 37.5@0 8.3@51`
 /// (each gap's length and when it began, in ms after the pick). Nothing runs between switches.
 @MainActor
@@ -750,7 +742,7 @@ final class SwitchFrames: NSObject {
             if drawn.map({ now - gap >= $0.at }) == true { missedAfter += lost }
             gaps.append((gap, max(now - gap - start, 0)))
             calmSince = nil
-        } else if drawn != nil, PageSwitchTiming.deck?.buildingInView != true {
+        } else if drawn != nil {
             calmSince = calmSince ?? now
         } else {
             calmSince = nil

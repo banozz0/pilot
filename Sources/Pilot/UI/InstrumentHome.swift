@@ -37,9 +37,9 @@ struct InstrumentHome: View {
                     // The switches in a row of tiles, then the cards in pairs: Jump back in beside the workspaces, today's
                     // presses beside the binds pressed most; one column and two tiles a row in a small window (home-layout).
                     let now = sources.now(.now)
-                    // Built a piece at a time on a first visit, as every page is (Staged, PageDeck.buildInView): the
-                    // switches, then each card, so no frame waits on all of them. Today is as tall as a full Most pressed,
-                    // so neither resizes the other as it lands.
+                    // Built a piece at a time ahead, as every page is (Staged, PageDeck.buildAhead): the switches, then
+                    // each card, so no turn waits on all of them. Today is as tall as a full Most pressed, so neither
+                    // resizes the other as it lands.
                     VStack(spacing: HomeGrid.spacing) { Staged {
                         HomeSwitches()
                         HomeCardGrid { Staged {

@@ -188,7 +188,7 @@ struct HomeRenders {
     }
 
     /// How long Home takes to build, lay out and draw as a first visit does, alone in a host at the window's first size and
-    /// at 1700 by 1290, in Tokyo Night: whole, and a piece at a time as PageDeck.buildInView builds it (passes until its
+    /// at 1700 by 1290, in Tokyo Night: whole, and a piece at a time as the in-view build before load-lag builds it (passes until its
     /// 8 ms frame budget is spent, drawn, then the next frame), its first frame and the time until it is whole. The first
     /// run warms up and is left out, the median of the next nine is written to `home/first-visit.txt` (home-layout). A
     /// debug build's before-and-after measure, not the app's own milliseconds.
@@ -214,7 +214,7 @@ struct HomeRenders {
                     if let stage { stage.step += 1; stage.held = false; stage.tickets = 1 }
                     host.layoutSubtreeIfNeeded()
                     if let stage, stage.held, stage.tickets == 1, !stage.holders.isEmpty { stage.holders.removeLast() }
-                } while stage?.held == true && ContinuousClock.now - frameStart < PageDeck.frameBudget
+                } while stage?.held == true && ContinuousClock.now - frameStart < .milliseconds(8)
                 host.display()
                 CATransaction.flush()
                 frames.append((ContinuousClock.now - frameStart) / .milliseconds(1))
