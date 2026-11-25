@@ -1470,16 +1470,10 @@ final class ThemeCoordinator {
         if !plan.wallpapers.isEmpty { short.append("wallpaper") }
         var roots: [String] = []
         for change in plan.mutations where !roots.contains(change.target.root) { roots.append(change.target.root) }
-        let vaults = Set(plan.obsidian.map(\.root))
         for root in roots {
             let files = plan.mutations.filter { $0.target.root == root }
-            let name: String
-            if root == binding.root { name = "Ghostty" }  // Apply and Restore reload it themselves; the result says if they couldn't.
-            else if root == plan.zed?.root { name = "Zed" }
-            else if vaults.contains(root) { name = "Obsidian vault " + vaultLabel(root, among: plan.obsidian.map(\.root)); if !next.contains("Reload Obsidian to see it.") { next.append("Reload Obsidian to see it.") } }
-            else if let app = plan.apps.first(where: { $0.root == root }) { name = app.kind.name; if let line = app.kind.followUp { next.append(line) } }
-            else if let id = files.first?.bindingID { name = "Custom app " + id }
-            else { name = "Ghostex terminal" }
+            let (name, followUp) = app(root, in: plan)
+            if let followUp, !next.contains(followUp) { next.append(followUp) }
             var seen: [String] = []
             for file in files where !seen.contains(file.target.resolved) { seen.append(file.target.resolved) }
             entries.append(.init(name: name, paths: seen, linked: files.contains { $0.target.linkedOut }))
@@ -1496,6 +1490,16 @@ final class ThemeCoordinator {
         let skipped = plan.warnings.filter { $0.contains(" skipped") }
         return .init(entries: entries, skipped: skipped, details: plan.warnings.filter { !skipped.contains($0) }, short: short, next: next,
                      kept: keptWords(plan, done: false, appearance: appearance))
+    }
+    /// The app a plan's written folder belongs to, as Allow, the result and the `theme switch:` line name it, and what a
+    /// person does to see the theme there.
+    private func app(_ root: String, in plan: ThemePlan) -> (name: String, followUp: String?) {
+        if root == binding.root { return ("Ghostty", nil) }  // Apply and Restore reload it themselves; the result says if they couldn't.
+        if root == plan.zed?.root { return ("Zed", nil) }
+        if plan.obsidian.contains(where: { $0.root == root }) { return ("Obsidian vault " + vaultLabel(root, among: plan.obsidian.map(\.root)), "Reload Obsidian to see it.") }
+        if let app = plan.apps.first(where: { $0.root == root }) { return (app.kind.name, app.kind.followUp) }
+        if let id = plan.mutations.first(where: { $0.target.root == root })?.bindingID { return ("Custom app " + id, nil) }
+        return ("Ghostex terminal", nil)
     }
     /// What a person reads when a file Pilot owns is not among the plan's destinations (its app's binding changed). The
     /// only file a plan refuses: one that moved or was changed outside Pilot is written like any other.
@@ -1619,18 +1623,37 @@ final class ThemeCoordinator {
         }
     }
 
-    func plan(_ id: String?) async throws -> ThemePlan {
-        // Ghostex answers through a child process, awaited before anything else is read, so the rest plans in one main-actor turn.
-        let ghostex = try await ghostexColours?.read()
+    /// `catalogue` false (a press): a shipped pack that has its pictures plans from that copy at once, and press() reads
+    /// the catalogue for it after the switch (`shippedDue`); only a pack with no copy yet waits for the download.
+    func plan(_ id: String?, catalogue: Bool = true) async throws -> ThemePlan {
+        // Ghostex answers through a child process, awaited with the pictures below, so the rest plans in one main-actor turn.
+        let ghostexRead = Task { try await ghostexColours?.read() }
+        let copied = await loadedOffMain(id)
         // Use my wallpaper folder for every theme: the folder's pictures, read off the main thread (it runs the tap), in
         // place of the pack's, so a shipped pack's are never fetched.
         if id != nil, try following().wallpapers, let folder = wallpaperFolder() {
             let pictures = try await Task.detached { try ThemePackStore.folderPictures(folder) }.value
-            return try plan(id, ghostex: ghostex, folder: (folder, pictures.images, pictures.portraits))
+            return try await plan(id, ghostex: ghostexRead.value, folder: (folder, pictures.images, pictures.portraits))
         }
         var note: String?
-        if let id { note = await fetchShipped(id) }
-        return try plan(id, ghostex: ghostex, shippedNote: note)
+        if let id, catalogue || copied == false { note = await fetchShipped(id) } else if copied == true { shippedDue = id }
+        return try await plan(id, ghostex: ghostexRead.value, shippedNote: note)
+    }
+
+    /// A shipped pack a press planned from its fetched copy, its catalogue read once the switch is done.
+    private var shippedDue: String?
+
+    /// The pack and a shipped pack's fetched pictures loaded off the main thread (theme-switch, Sven on combined-14: a pick
+    /// waited 130 ms on a pack's first load there, decoding every picture whole). A picture decodes once by its bytes
+    /// (ThemePackStore's proved), so the plan's loads after this read it from there. Whether a shipped pack already has
+    /// its pictures; nil for any other pack, or one that does not load.
+    private func loadedOffMain(_ id: String?) async -> Bool? {
+        guard let id else { return nil }
+        let store = store, wallpapers = shipped?.wallpapers
+        return await Task.detached(priority: .userInitiated) { () -> Bool? in
+            guard let loaded = try? store.load(id), let wallpapers, ShippedWallpapers.wants(loaded) else { return nil }
+            return !wallpapers.picturing(loaded).images.isEmpty
+        }.value
     }
 
     /// A shipped pack's pictures fetched from the catalogue before its plan reads them; why there are none to use, else nil.
@@ -1837,15 +1860,16 @@ final class ThemeCoordinator {
         return plan
     }
 
-    private func fresh(_ plan: ThemePlan, contextRevision: String, appearance: ThemeAppearanceMutation?) async throws {
+    /// `justPlanned`: press() made the plan a moment before, so Ghostex is not asked again. The review panel's plan is from
+    /// its Preview, and is checked against Ghostex as the CLI's is.
+    private func fresh(_ plan: ThemePlan, contextRevision: String, appearance: ThemeAppearanceMutation?, justPlanned: Bool = false) async throws {
         // The one wait, first: every other check below then runs in the same main-actor turn as the commit after it.
-        let ghostex = try await ghostexColours?.read()
+        if !justPlanned { guard try await ghostexColours?.read() == plan.ghostexState else { throw ThemeFailure("Ghostex's colours changed since Preview; preview again") } }
         if let appearance { guard try native?.read() == appearance.before else { throw ThemeFailure("stale native appearance/personal override") } }
         let local = try effective(for: plan.selection).local
         guard plan.obsidian == (local.obsidian ?? []), plan.obsidianOptOut == (local.obsidianOptOut ?? false), plan.binding == binding, plan.zed == local.zed, plan.zedOptOut == local.zedOptOut, plan.apps == (local.apps ?? []), plan.style == style(), try context() == contextRevision,
               try state("pending").bytes == nil, try ledger().0 == plan.ledger else { throw ThemeFailure("stale plan context/ledger") }
         guard try wallpaper?.read() == plan.wallpaperState else { throw ThemeFailure("stale wallpaper state/bindings/overrides") }
-        guard ghostex == plan.ghostexState else { throw ThemeFailure("Ghostex's colours changed since Preview; preview again") }
         if let id = plan.packID { guard try store.load(id).revision == plan.revision else { throw ThemeFailure("stale pack/assets") } }
         guard try protectedLegacy(ghostty: plan.observations.contains { $0.root == binding.root }, files: !plan.mutations.isEmpty) == plan.protectedLegacy else { throw ThemeFailure("stale protected legacy resource") }
         for target in plan.observations + plan.reloads.map(\.executable) {
@@ -1857,18 +1881,25 @@ final class ThemeCoordinator {
     /// one pressing; the result names what changed, and Restore undoes it. The pilot CLI, a link and an agent go through
     /// plan, then apply, which always asks.
     func press(_ id: String?) async throws(ControlError) -> JSONValue {
+        let clock = ThemeSwitchClock()
         // Pilot's own window first, from the pack's manifest alone, before the plan reads anything.
         let shown = id.flatMap { try? store.pack($0) }
         if let shown {
             showPressed(shown)
+            clock.mark("Pilot tried on", .step)
             try? await Task.sleep(for: Self.pressedFrame)
         }
         let planned: ThemePlan
-        do { planned = try await plan(id) } catch {
+        // The catalogue is read for a shipped pack after the switch, never before it (theme-switch: GitHub's index every
+        // ten minutes held a pick); a newer copy of its pictures is there for the next pick.
+        defer { if let due = shippedDue { shippedDue = nil; Task { _ = await fetchShipped(due) } } }
+        do { planned = try await plan(id, catalogue: false) } catch {
             if shown != nil { showPressed(nil) }
+            looklog.notice("\(clock.line(shown?.title ?? id ?? "Restore", status: "not planned: \(error)"), privacy: .public)")
             throw ControlError(.badValue, String(describing: error))
         }
-        return try await apply(planned.id, peer: nil, pressed: true, shown: shown != nil)
+        clock.mark("planned", .step)
+        return try await apply(planned.id, peer: nil, pressed: true, shown: shown != nil, justPlanned: true, clock: clock)
     }
     /// The sandbox's stand-in for Look's button: the same press, only on a fixture host.
     func fixturePress(_ id: String?) async throws(ControlError) -> JSONValue {
@@ -1876,8 +1907,10 @@ final class ThemeCoordinator {
         return try await press(id)
     }
 
-    /// `shown`: a press already shows the pack in Pilot's own window.
-    func apply(_ planID: String, peer: ControlPeer?, pressed: Bool = false, shown: Bool = false) async throws(ControlError) -> JSONValue {
+    /// `shown`: a press already shows the pack in Pilot's own window. `justPlanned` and `clock`: press() planned it a
+    /// moment before, and timed it from the pick.
+    func apply(_ planID: String, peer: ControlPeer?, pressed: Bool = false, shown: Bool = false, justPlanned: Bool = false,
+               clock: ThemeSwitchClock = ThemeSwitchClock()) async throws(ControlError) -> JSONValue {
         // The theme a press shows in Pilot's own window comes off as the apply ends, however it ends: an applied pack
         // looks the same, a refused or failed one goes.
         var tried = shown
@@ -1891,6 +1924,8 @@ final class ThemeCoordinator {
             throw ControlError(.badValue, "unknown or spent plan (a plan applies once): plan again with pilot theme plan apply <theme> --summary, or plan restore --summary")
         }
         busy = true; defer { busy = false; removeMadeFolders() }  // Also after a throw: an empty folder from a failed Apply goes.
+        var outcome = "not applied"
+        defer { looklog.notice("\(clock.line(plan.selection?.title ?? "Restore", status: outcome), privacy: .public)") }
         // Pilot's own window takes the theme at the press, before any check or write: one frame for it to draw, then the
         // rest follows.
         if pressed, !tried, let pack = plan.selection {
@@ -1898,35 +1933,27 @@ final class ThemeCoordinator {
             tried = true
             try? await Task.sleep(for: Self.pressedFrame)
         }
-        do { try await fresh(plan, contextRevision: revision, appearance: appearance) }
-        catch { throw ControlError(.badValue, String(describing: error)) }
+        // A stale plan is refused before its Allow is asked; a press asks none, so its one check is the one below.
+        if !pressed {
+            do { try await fresh(plan, contextRevision: revision, appearance: appearance) }
+            catch { throw ControlError(.badValue, String(describing: error)) }
+        }
         // The plan's identity is the spent key above, not anything shown here.
         let words = review(plan, appearance: appearance)
         let ask = ControlGate.Ask(plan.packID == nil ? "Restore default appearance" : "Apply theme",
                                   ThemeAllowText.fit(lead: plan.selection?.title ?? "Your previous look", entries: words.entries, skipped: words.skipped.filter { $0 != Self.cursorSkipped && $0 != Self.modeSkipped } + words.kept, limit: ControlGate.Ask.longest - 150, home: NSHomeDirectory()))
         let committed = try await gate.allow(pressed ? nil : ask, peer: peer) { () throws(ControlError) in
             do {
-                try await fresh(plan, contextRevision: revision, appearance: appearance)
+                try await fresh(plan, contextRevision: revision, appearance: appearance, justPlanned: justPlanned)
+                clock.mark("checked", .step)
                 let ready = try self.makingFolders(plan)
                 try self.adoptDetected(ready)
-                return try await self.commit(ready, ownership: ownership, appearance: appearance)
+                return try await self.commit(ready, ownership: ownership, appearance: appearance, clock: clock)
             } catch { throw ControlError(.badValue, String(describing: error)) }
         }
-        guard case .object(var result) = committed, ["applied", "restored"].contains(result["status"]?.string ?? "") else { return committed }
-        if plan.mutations.contains(where: { $0.target.root == binding.root }) {
-            // Its menu item, never its key (ADR 0001). Colours reload in open windows (Ghostty's config docs).
-            switch await effects.ghostty() {
-            case true?: result["ghostty"] = .string("reloaded")
-            case nil: result["ghostty"] = .string("not running; it reads the theme when it opens")
-            case false?:
-                result["ghostty"] = .string("no Reload Configuration menu item")
-                result["next"] = .array([.string("Reload Ghostty's configuration (Cmd+Shift+,) to see it: Pilot couldn't find its menu item.")] + (result["next"].flatMap { if case .array(let rows) = $0 { rows } else { nil } } ?? []))
-            }
-        }
-        if plan.apps.contains(where: { app in app.kind == .btop && plan.mutations.contains { $0.target.root == app.root } }) {
-            let count = await effects.btop()
-            result["btop"] = .string(count > 0 ? "reloaded \(count) running" : "not running; it reads the theme when it starts")
-        }
+        guard case .object(var result) = committed else { return committed }
+        outcome = result["status"]?.string ?? outcome
+        guard ["applied", "restored"].contains(outcome) else { return committed }
         // Turning the theme on or off is a settings change an open Vesktop never reads; a new colour in its theme file it
         // takes live. Said in the result, first, because Sven missed it in Preview (test-5, build 2454).
         if let app = plan.apps.first(where: { $0.kind == .vesktop }),
@@ -1965,6 +1992,7 @@ final class ThemeCoordinator {
                     } catch { throw ControlError(.badValue, String(describing: error)) }
                 }
                 outcomes.append(.object(["binding": .string(intent.binding.id), "outcome": .string(outcome)]))
+                clock.mark(intent.binding.id + " reload", .reload)
             } catch {
                 outcomes.append(.object(["binding": .string(intent.binding.id), "outcome": .string((error as? ControlError)?.code == .denied ? "declined, so it did not run. Reload the app yourself to see it" : "failed: \(error). The theme is in place; reload the app yourself")]))
             }
@@ -1974,15 +2002,42 @@ final class ThemeCoordinator {
     }
 
     /// A commit's file write off the main thread, which runs the key tap (perf-round, Sven on combined-5: applying a theme
-    /// stalled): each is staged, synced and renamed there, in the commit's order, and checks its target again just before
-    /// the rename as it always has. `busy` keeps every other mutation out meanwhile.
+    /// stalled): staged, synced and renamed there, its target checked again just before the rename as it always has. The
+    /// journal and the ledger go one at a time; the apps' files together. `busy` keeps every other mutation out meanwhile.
     private nonisolated static func offMain<T: Sendable>(_ write: @Sendable @escaping () throws -> T) async throws -> T {
         try await Task.detached(priority: .userInitiated) { try write() }.value
     }
 
+    /// Starts what `start` adds, then awaits every one, even after one fails or `start` throws, and throws the first
+    /// failure: nothing a commit started is still running when recovery reads what it touched.
+    private static func together(_ start: (inout [Task<Void, Error>]) async throws -> Void) async throws {
+        var started: [Task<Void, Error>] = [], first: Error?
+        do { try await start(&started) } catch { first = error }
+        for task in started { do { try await task.value } catch { first = first ?? error } }
+        if let first { throw first }
+    }
+
+    /// Ghostty's and btop's reloads, sent as soon as their files are written (theme-switch, Sven on combined-14: the apps
+    /// changed at different moments); the result reads how each went. Ghostty's menu item, never its key (ADR 0001); colours
+    /// reload in open windows (Ghostty's config docs).
+    private struct Nudges {
+        var ghostty: Task<Bool?, Never>?
+        var btop: Task<Int, Never>?
+    }
+    private func nudge(_ plan: ThemePlan, clock: ThemeSwitchClock) -> Nudges {
+        var nudges = Nudges()
+        if plan.mutations.contains(where: { $0.target.root == binding.root }) {
+            nudges.ghostty = Task { let reloaded = await effects.ghostty(); if reloaded != nil { clock.mark("Ghostty reload", .reload) }; return reloaded }
+        }
+        if plan.apps.contains(where: { app in app.kind == .btop && plan.mutations.contains { $0.target.root == app.root } }) {
+            nudges.btop = Task { let count = await effects.btop(); if count > 0 { clock.mark("btop reload", .reload) }; return count }
+        }
+        return nudges
+    }
+
     /// The effects that wait on another app (macOS's mode, Ghostex) and the file writes are awaited off the main thread;
     /// every check, the wallpaper and Pilot's own look run on it.
-    private func commit(_ plan: ThemePlan, ownership: ThemeAppearanceOwnership?, appearance: ThemeAppearanceMutation?) async throws -> JSONValue {
+    private func commit(_ plan: ThemePlan, ownership: ThemeAppearanceOwnership?, appearance: ThemeAppearanceMutation?, clock: ThemeSwitchClock) async throws -> JSONValue {
         var (oldFile, old) = try ledger()
         if plan.mutations.isEmpty && plan.wallpapers.isEmpty && plan.keptWallpapers.isEmpty && plan.heldWallpapers.isEmpty && appearance == nil && old.claims.isEmpty && plan.ghostex.isEmpty && plan.ghostexClaims == (old.ghostexSettings ?? []) { return .object(["status": .string("unchanged"), "files": .string("unchanged"), "refresh": .string("not needed"), "warning": .string(plan.warnings.joined(separator: "; "))]) }
         // Files that moved or were changed outside Pilot, and wallpaper claims on a screen with a new UUID: their claims as the
@@ -2022,41 +2077,62 @@ final class ThemeCoordinator {
         let pending = try state("pending"), journalBytes = try ThemeDigest.encoded(journal)
         try fault("journal")
         _ = try await Self.offMain { try ThemeFiles.write(journalBytes, over: pending) }
+        clock.mark("journal", .step)
         var recovered: JSONValue?
         var warning: String?
+        var nudges = Nudges()
         do {
-            for (i, change) in uniqueResources(plan.mutations).enumerated() {
-                try fault("write:\(i)")
-                let (bytes, target, leaf) = (change.replacement, change.target, linked(change.target.root, change.target.path))
-                _ = try await Self.offMain { try ThemeFiles.write(bytes, over: target, linkedLeaf: leaf) }
-                try fault("after-write:\(i)")
-            }
-            for (index, change) in plan.wallpapers.enumerated() {
-                try fault("wallpaper:\(index)")
-                try writeWallpaper(change)
-                try fault("after-wallpaper:\(index)")
-            }
+            // Pilot's own parts first (its window took the colours at the pick), with nothing awaited since this read; macOS's
+            // mode later. A stop between leaves the theme's parts with the old mode, the one in-between state recovery accepts
+            // (review 3, blocker 1).
             if let appearance {
                 try fault("native")
-                // Look's parts first, with nothing awaited since this read; macOS's mode last. A stop between leaves the theme's
-                // parts with the old mode, the one in-between state recovery accepts (review 3, blocker 1).
                 guard try native?.read() == appearance.before else { throw ThemeFailure("later personal appearance edit") }
                 try native!.write(appearance.after)
+                clock.mark("Pilot look")
                 var parts = appearance.after; parts.dark = appearance.before.dark
                 guard try native?.read() == parts else { throw ThemeFailure("native appearance not verified") }
                 try fault("after-native")
-                if appearance.mode == true, let dark = appearance.after.dark, appearance.before.dark != dark, native!.mode != nil {
-                    try await switchMode(dark)
-                    try fault("after-mode")
+            }
+            // Every app's files in one batch off the main thread, each checked again just before its rename; then Ghostty and
+            // btop are nudged, while macOS's mode and Ghostex still change, so every app changes together.
+            let files = uniqueResources(plan.mutations)
+            try await Self.together { started in
+                for (i, change) in files.enumerated() {
+                    try fault("write:\(i)")
+                    let (bytes, target, leaf, name) = (change.replacement, change.target, linked(change.target.root, change.target.path), app(change.target.root, in: plan).name)
+                    started.append(Task {
+                        _ = try await Self.offMain { try ThemeFiles.write(bytes, over: target, linkedLeaf: leaf) }
+                        clock.mark(name)
+                    })
                 }
+            }
+            for i in files.indices { try fault("after-write:\(i)") }
+            if !files.isEmpty { nudges = nudge(plan, clock: clock) }
+            // macOS's mode and Ghostex's settings each wait on another app: all go out at once, off the main thread, and are
+            // awaited together after the wallpapers. Ghostex merges each onto its saved settings, so they never undo each
+            // other (Ghostex's updateSettingsPatch: "what makes concurrent saves safe").
+            let dark = appearance.flatMap { change in change.mode == true && change.before.dark != change.after.dark && native!.mode != nil ? change.after.dark : nil }
+            try await Self.together { started in
+                if let dark { started.append(Task { try await self.switchMode(dark); clock.mark("macOS mode") }) }
+                for (index, change) in plan.ghostex.enumerated() {
+                    try fault("ghostex:\(index)")
+                    started.append(Task { try await self.ghostexColours!.write(change.key, change.after); clock.mark("Ghostex") })
+                }
+                await Task.yield()  // Each is on its way before the wallpapers hold the main thread.
+                for (index, change) in plan.wallpapers.enumerated() {
+                    try fault("wallpaper:\(index)")
+                    try writeWallpaper(change)
+                    clock.mark("wallpaper")
+                    try fault("after-wallpaper:\(index)")
+                }
+            }
+            if let appearance {
+                if dark != nil { try fault("after-mode") }
                 // After the mode wait only the owned parts count: an edit to a part the theme leaves alone is the person's.
                 guard try appearance.matches(native!.read(), appearance.after) else { throw ThemeFailure("native appearance not verified") }
             }
-            for (index, change) in plan.ghostex.enumerated() {
-                try fault("ghostex:\(index)")
-                try await ghostexColours!.write(change.key, change.after)
-                try fault("after-ghostex:\(index)")
-            }
+            for index in plan.ghostex.indices { try fault("after-ghostex:\(index)") }
             if !plan.ghostex.isEmpty {
                 let state = try await ghostexColours!.read()
                 guard plan.ghostex.allSatisfy({ state?[$0.key] == $0.after }) else { throw ThemeFailure("Ghostex colours not verified") }
@@ -2064,6 +2140,7 @@ final class ThemeCoordinator {
             try fault("ledger")
             let ledgerFile = oldFile
             _ = try await Self.offMain { try ThemeFiles.write(nextBytes, over: ledgerFile) }
+            clock.mark("ledger", .step)
             try fault("after-ledger")
             try fault("cleanup")
             let written = try state("pending")
@@ -2088,6 +2165,9 @@ final class ThemeCoordinator {
                 } catch { failure += "; commit verification: \(error)" }
             }
             guard verified else {
+                // Nudged before the failure put the files back: nudged again, so they show what the files hold.
+                if let ghostty = nudges.ghostty { _ = await ghostty.value; _ = await effects.ghostty() }
+                if let btop = nudges.btop { _ = await btop.value; _ = await effects.btop() }
                 return .object(["status": .string("failed"), "files": .string("see recovery"), "error": .string(failure), "recovery": recovery, "refresh": .string("not attempted"), "wallpaper": .string("see recovery")])
             }
             recovered = recovery; warning = reason
@@ -2105,6 +2185,19 @@ final class ThemeCoordinator {
         if let warning { result["warning"] = .string(warning + "; " + plan.warnings.joined(separator: "; ")) }
         do { try fault("effect"); result["refresh"] = .string(try effects.refresh()) }
         catch { result["refresh"] = .string("failed: \(error); reload needed"); result["rollback"] = .string("not attempted; files committed") }
+        if let ghostty = nudges.ghostty {
+            switch await ghostty.value {
+            case true?: result["ghostty"] = .string("reloaded")
+            case nil: result["ghostty"] = .string("not running; it reads the theme when it opens")
+            case false?:
+                result["ghostty"] = .string("no Reload Configuration menu item")
+                result["next"] = .array([.string("Reload Ghostty's configuration (Cmd+Shift+,) to see it: Pilot couldn't find its menu item.")] + (result["next"].flatMap { if case .array(let rows) = $0 { rows } else { nil } } ?? []))
+            }
+        }
+        if let btop = nudges.btop {
+            let count = await btop.value
+            result["btop"] = .string(count > 0 ? "reloaded \(count) running" : "not running; it reads the theme when it starts")
+        }
         return .object(result)
     }
 
@@ -2631,5 +2724,31 @@ struct ThemeFixture: Decodable {
         defer { try? FileManager.default.removeItem(at: hold) }
         let start = Date()
         while FileManager.default.fileExists(atPath: hold.path), Date().timeIntervalSince(start) < 600 { try await Task.sleep(for: .milliseconds(100)) }
+    }
+}
+
+/// One theme switch timed from the pick (Sven on combined-14, build 3188: a switch wasn't instant and the apps changed at
+/// different moments), for the one `theme switch:` line each logs: every target written and every reload sent.
+@MainActor final class ThemeSwitchClock {
+    enum Kind { case step, write, reload }
+    private let start = ContinuousClock.now
+    private var marks: [(name: String, at: Duration, kind: Kind)] = []
+    /// Past this the line names each part's time from the pick.
+    static let slow = Duration.milliseconds(250)
+
+    func mark(_ name: String, _ kind: Kind = .write) { marks.append((name, .now - start, kind)) }
+
+    /// "theme switch: <name>, written N targets in X ms, reloads sent in Y ms", and each part's time when it was slow.
+    func line(_ name: String, status: String) -> String {
+        func ms(_ time: Duration) -> Int { Int((time.inSeconds * 1000).rounded()) }
+        let writes = marks.filter { $0.kind == .write }, reloads = marks.filter { $0.kind == .reload }
+        var line = "theme switch: \(name), " + (["applied", "restored"].contains(status) ? "" : status + ", ")
+            + "written \(writes.count) targets in \(ms(writes.map(\.at).max() ?? .zero)) ms, "
+            + (reloads.isEmpty ? "no reloads to send" : "reloads sent in \(ms(reloads.map(\.at).max()!)) ms")
+        guard (marks.map(\.at).max() ?? .zero) > Self.slow else { return line }
+        // Each part once, at its last mark, with how many it covers (Ghostex's settings, an app's files).
+        let parts = Dictionary(grouping: marks, by: \.name).map { (name: $0.key, at: $0.value.last!.at, count: $0.value.count) }
+        line += "; " + parts.sorted { $0.at < $1.at }.map { "\($0.name) \(ms($0.at))" + ($0.count > 1 ? " (\($0.count))" : "") }.joined(separator: ", ")
+        return line
     }
 }

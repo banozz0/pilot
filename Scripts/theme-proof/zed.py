@@ -148,7 +148,11 @@ def resource_rollback(fixture, passed):
             exact(f, original, 'partial-rollback')
             f.stop(); f.controls(); f.start()
             value = exact(f, original, 'retry')
-            expect(value['snapshot'] == before and not value['journal'] and value['status']['selected']['id'] == 'a', str(f.root) + ' partial rollback retry')
+            # Ghostty is nudged once its files are written, and again once the failure put back what it could (theme-switch).
+            reloads = 'state/ghostty-reloads.log'
+            expect((f.root / reloads).read_text().endswith('Ghostty › Reload Configuration\n' * 2), str(f.root) + ' Ghostty nudged, then nudged back')
+            unpressed = lambda snapshot: {k: v for k, v in snapshot.items() if k != reloads}
+            expect(unpressed(value['snapshot']) == unpressed(before) and not value['journal'] and value['status']['selected']['id'] == 'a', str(f.root) + ' partial rollback retry')
             f.stop(); outcome(f, 'rollback verified')
 
         # Later unrelated bytes on BOTH roots must survive; exact snapshot replacement would lose them.
@@ -415,10 +419,16 @@ def run(seam_only=False, fixes_only=False):
 
         f = fixture('fail'); f.start(); f.apply()
         for stage in ['journal', 'write:0', 'after-write:0', 'write:1', 'after-write:1', 'write:2', 'after-write:2', 'write:3', 'after-write:3', 'ledger']:
-            before = f.snapshot(); f.controls(fail=stage)
+            reloads = f.root / 'state/ghostty-reloads.log'
+            before = f.snapshot(); pressed = reloads.read_bytes() if reloads.exists() else b''; f.controls(fail=stage)
             result = f.call('theme', 'apply', f.plan('b'), ok=stage != 'journal')
             if stage != 'journal': assert result['status'] == 'failed' and result['recovery']['status'] == 'rollback verified', result
-            assert f.snapshot() == before, stage
+            after = f.snapshot()
+            if stage == 'ledger':
+                # Ghostty is nudged once its files are written, and again once the failure puts them back (theme-switch).
+                assert reloads.read_bytes() == pressed + 'Ghostty › Reload Configuration\n'.encode() * 2, stage
+                key = str(reloads.relative_to(f.root)); after.pop(key); before.pop(key, None)
+            assert after == before, stage
         f.controls(fail='effect'); result = f.apply('b')
         assert result['files'] == 'verified' and 'failed:' in result['refresh']
         f.controls(); f.restore(); f.stop()
