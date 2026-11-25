@@ -181,7 +181,7 @@ struct TapThreadProbe {
             ("right up", .rightMouseUp, try click(.rightMouseUp, .right)),
         ]
         nonisolated(unsafe) let info = Unmanaged.passUnretained(drag).toOpaque()
-        nonisolated(unsafe) let loop = MouseDragTap.pressRunLoop
+        nonisolated(unsafe) let loop = EventTapThread.shared.runLoop
         nonisolated(unsafe) let proxy = OpaquePointer(bitPattern: 1)!
         DispatchQueue.global(qos: .userInteractive).async {
             usleep(30_000)

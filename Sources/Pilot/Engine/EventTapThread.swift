@@ -1,9 +1,11 @@
 import CoreFoundation
 import Foundation
+import Synchronization
 
-/// The run loop the keyboard tap and the mouse-button tap are on: a thread of their own, so a main-thread turn (a page
-/// built, a window's warm-up) never holds a key or a click anywhere on the Mac (load-lag: a page build held every key up
-/// to 250 ms). Their callbacks touch only HyperTap's locked state and hand every action to the main queue.
+/// The run loop the keyboard tap, the mouse-button tap and the drag tap's press tap are on: a thread of their own, so a
+/// main-thread turn (a page built, a window's warm-up) never holds a key or a click anywhere on the Mac (load-lag: a page
+/// build held every key up to 250 ms). Their callbacks read only locked state and hand actions to the main queue; a press
+/// the drag tap may take waits for the main thread's answer (waitOnMain).
 final class EventTapThread: Sendable {
     static let shared = EventTapThread()
 
@@ -46,10 +48,9 @@ final class EventTapThread: Sendable {
 /// by then, and it never runs. A block on the main run loop in its common modes, as a tap's source there was, so it runs
 /// inside a nested run loop too (a menu's tracking), where the main queue may be held by the block that opened it.
 func waitOnMain(timeout: TimeInterval, _ body: @escaping @MainActor () -> Void) -> Bool {
-    final class Handoff: @unchecked Sendable {
-        let lock = NSLock(), done = DispatchSemaphore(value: 0)
-        var claimed = false
-        func claim() -> Bool { lock.withLock { defer { claimed = true }; return !claimed } }
+    final class Handoff: Sendable {
+        let done = DispatchSemaphore(value: 0), claimed = Atomic(false)
+        func claim() -> Bool { claimed.compareExchange(expected: false, desired: true, ordering: .acquiringAndReleasing).exchanged }
     }
     let handoff = Handoff()
     CFRunLoopPerformBlock(CFRunLoopGetMain(), CFRunLoopMode.commonModes.rawValue) {

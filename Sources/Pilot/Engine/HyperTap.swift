@@ -635,6 +635,10 @@ final class HyperTap: @unchecked Sendable {
         return true
     }
 
+    /// Whether a mouse press is under Hyper, held or as its flags' chord (isHyperHeld, isHeldAlone), under one lock: the
+    /// drag tap's press gate asks it of every press.
+    func holdsHyper(flags: UInt64) -> Bool { lock.withLock { isHyperHeld() || layer.isHeldAlone(flags: flags) } }
+
     /// Hyper held alone at a mouse press's flags (HyperLayer.isHeldAlone).
     func isHeldAlone(flags: UInt64) -> Bool { lock.withLock { layer.isHeldAlone(flags: flags) } }
 

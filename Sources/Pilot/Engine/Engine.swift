@@ -433,7 +433,6 @@ final class Engine {
             overlay.layer(down: down, held: tap.layer.sublayer(flags: CGEventSource.flagsState(.hidSystemState).rawValue))
             hyperHeld = down
             hyperScroll.hyper(down)
-            mouseTap.hyper(down)
             SelectionTools.shared.hyper(down)
             log.debug("Hyper \(down ? "on" : "off", privacy: .public)")
         }
