@@ -54,12 +54,12 @@ struct PilotThemeTests {
                           wallpaper: WallpaperSpot(glow: hex(glow), amount: amount, base: hex(base)))
     }
 
-    @Test("The line-up of 17 in Sven's order, Tokyo Night the default, the added ten first, then Void, Garnet, the four light ones and Jungle; thirteen dark, four light")
+    @Test("The line-up of 16 in Sven's order, Tokyo Night the default, the added nine first, then Void, Garnet, the four light ones and Jungle; twelve dark, four light")
     func designed() {
-        #expect(PilotTheme.designed.map(\.id) == ["tokyo-night", "jade", "catppuccin", "gruvbox", "matte-black", "retro-82", "nord", "akane", "ayu-dark", "dracula",
+        #expect(PilotTheme.designed.map(\.id) == ["tokyo-night", "jade", "catppuccin", "gruvbox", "retro-82", "nord", "akane", "ayu-dark", "dracula",
                                                   "void", "garnet", "porcelain", "folio", "celadon", "wisteria", "jungle"])
         #expect(PilotTheme.defaultID == "tokyo-night" && PilotTheme.standard.id == "tokyo-night")
-        #expect(PilotTheme.designed.filter(\.dark).count == 13)
+        #expect(PilotTheme.designed.filter(\.dark).count == 12)
         #expect(PilotTheme.named("void")?.name == "Void" && PilotTheme.named("nope") == nil)
         for retired in PilotTheme.retired.keys { #expect(PilotTheme.named(retired) == nil, "\(retired) is gone") }
     }
@@ -99,14 +99,14 @@ struct PilotThemeTests {
 
     @Test("A saved theme id from round 4 or round 15 becomes the kept theme closest to it; an unknown one the default")
     func migration() {
-        // Sven's maps: round 4's (2026-10-08) carried to their final theme, the line-up of 18's (2026-11-11), and the two
-        // Toybox palettes that went with their style (2026-11-19).
+        // Sven's maps: round 4's (2026-10-08) carried to their final theme, the line-up of 18's (2026-11-11), the two
+        // Toybox palettes that went with their style (2026-11-19), and Matte Black with Cinder (2026-11-25).
         #expect(PilotTheme.retired == ["nightwatch": "ayu-dark", "ukiyo": "ayu-dark", "fjord": "ayu-dark", "teahouse": "ayu-dark",
                                        "understory": "ayu-dark", "crema": "garnet", "hearth": "void", "nocturne": "void",
                                        "boardwalk": "dracula", "graphite": "void", "paper": "folio", "petal": "porcelain",
                                        "lagoon": "ayu-dark", "orchid": "dracula", "phosphor": "ayu-dark", "cyanotype": "retro-82",
-                                       "verdigris": "ayu-dark", "workshop": "folio", "cinder": "matte-black", "dusk": "void",
-                                       "toybox": "porcelain", "toybox-night": "dracula"])
+                                       "verdigris": "ayu-dark", "workshop": "folio", "cinder": "void", "dusk": "void",
+                                       "toybox": "porcelain", "toybox-night": "dracula", "matte-black": "void"])
         for (old, new) in PilotTheme.retired { #expect(PilotTheme.current(old) == new && PilotTheme.named(new) != nil, "\(old)") }
         for t in PilotTheme.designed { #expect(PilotTheme.current(t.id) == t.id) }
         #expect(PilotTheme.current(nil) == "tokyo-night" && PilotTheme.current("") == "tokyo-night" && PilotTheme.current("nope") == "tokyo-night")

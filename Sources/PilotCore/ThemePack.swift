@@ -75,7 +75,7 @@ public struct ThemePack: Codable, Equatable, Sendable {
     /// Resolve colours without changing the style's geometry or typography.
     public func appearance(keeping base: PilotTheme) -> PilotTheme {
         // Decoded packs are validated; direct Codable construction must never trap either. A `native_` role overrides the
-        // terminal slot where a source's ANSI colours do not carry that meaning (Matte Black's yellow slot is a red).
+        // terminal slot where a source's ANSI colours do not carry that meaning (a source whose yellow slot is a red).
         func c(_ role: String, _ native: String? = nil) -> UInt32 { (native.flatMap { palette["native_" + $0] } ?? palette[role]).flatMap(Self.colorValue) ?? 0 }
         return PilotTheme(id: id, name: title, tagline: "Theme pack", source: id, dark: dark,
                           ground: c("background"), sidebar: c("dark_background"), surface: c("darker_background"),
