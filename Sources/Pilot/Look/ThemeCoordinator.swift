@@ -34,7 +34,7 @@ final class ThemeCoordinator {
         if let live { return live }
         let packs = support.appending(path: "packs"), state = support.appending(path: "state")
         for directory in [packs, state] { try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true) }
-        let owner = ThemeCoordinator(store: ThemePackStore(root: packs.path, writableRoot: packs.path, factoryRoot: sandbox?.factory ?? Bundle.main.resourceURL.map { bundledPacks($0.appending(path: "ThemePacks").path) }),
+        let owner = ThemeCoordinator(store: packStore,
             binding: ThemeBinding(root: isTestRun ? support.appending(path: "test-ghostty").path : NSHomeDirectory() + "/.config/ghostty", config: "config", generated: "pilot-theme.conf"),
             stateRoot: state.path, effects: .init(kind: "files and wallpaper", refresh: { "open a new window or reload the app to see it" },
                                                 appearance: { Look.shared.packChanged($0) }, ghostty: { isTestRun ? nil : await GhosttyBridge.reloadNow() },
@@ -82,6 +82,19 @@ final class ThemeCoordinator {
         _ = try owner.recoverAtLaunch()
         live = owner
         return owner
+    }
+
+    /// The installed and bundled packs, as production's coordinator reads them.
+    private static var packStore: ThemePackStore {
+        let packs = support.appending(path: "packs").path
+        return ThemePackStore(root: packs, writableRoot: packs, factoryRoot: sandbox?.factory ?? Bundle.main.resourceURL.map { bundledPacks($0.appending(path: "ThemePacks").path) })
+    }
+
+    /// A saved palette as Look wears it now: an applied pack of a retired theme that no longer ships or is installed is its
+    /// successor's stock palette (ThemePackStore.retiredSuccessor); anything else as it is.
+    static func successor(_ palette: ThemeNativePalette) -> ThemeNativePalette {
+        guard case .pack(let pack) = palette, let next = packStore.retiredSuccessor(pack.id) else { return palette }
+        return .stock(next)
     }
 
     static func persistedPack() throws -> ThemePack? {
@@ -1510,7 +1523,7 @@ final class ThemeCoordinator {
     /// Whether a theme is on the apps now, which is when Restore has something to do.
     func appliedTheme() throws -> (id: String?, any: Bool) {
         let record = try ledger().1
-        return (record.selected.map { PilotTheme.retired[$0.id] ?? $0.id }, !record.claims.isEmpty || !(record.wallpapers ?? []).isEmpty || record.appearance != nil || !(record.ghostexSettings ?? []).isEmpty)
+        return (record.selected.map { store.retiredSuccessor($0.id) ?? $0.id }, !record.claims.isEmpty || !(record.wallpapers ?? []).isEmpty || record.appearance != nil || !(record.ghostexSettings ?? []).isEmpty)
     }
 
     /// A vault's folder name, or with its parent when another vault has the same folder name.

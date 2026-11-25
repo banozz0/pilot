@@ -207,6 +207,12 @@ public struct ThemePackStore: Sendable {
 
     /// Whether a pack ships with Pilot (its factory library).
     public func isFactory(_ id: String) -> Bool { factoryRoot.map { FileManager.default.fileExists(atPath: $0 + "/" + id) } ?? false }
+    /// The stock theme an applied pack of a retired theme means now, when no pack by that id ships or is installed (Matte
+    /// Black's factory pack, Sven 2026-11-25, Q387); nil for any pack that loads, so a catalogue copy stays as it is.
+    public func retiredSuccessor(_ id: String) -> String? {
+        guard let next = PilotTheme.retired[id], (try? pack(id)) == nil else { return nil }
+        return next
+    }
     /// Pilot's own: a stock theme or a factory pack, which can't be deleted.
     public func isPilots(_ id: String) -> Bool { PilotTheme.named(id) != nil || isFactory(id) }
     public static func pilotsOwn(_ name: String) -> ThemeFailure {

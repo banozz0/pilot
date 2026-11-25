@@ -246,11 +246,15 @@ final class Look {
             ?? ShakeDetector.defaultWithin
         appsShowAs = defaults.string(forKey: Key.appsShowAs).flatMap(AppsShowAs.init(rawValue:)) ?? .standard
         if themes == nil {
-            if let data = defaults.data(forKey: "look.appliedPalette"),
-               let palette = (try? JSONDecoder().decode(ThemeNativePalette.self, from: data))?.current,
-               (try? palette.validate()) != nil, palette.compatible(with: style.rawValue) {
-                switch palette { case .stock(let id): themeID = id; case .pack(let value): pack = value }
-            } else { pack = try? ThemeCoordinator.persistedPack() }
+            let applied = defaults.data(forKey: "look.appliedPalette")
+                .flatMap { try? JSONDecoder().decode(ThemeNativePalette.self, from: $0).current }
+                .flatMap { (try? $0.validate()) != nil && $0.compatible(with: style.rawValue) ? $0 : nil }
+            // A pack Pilot no longer ships, as Matte Black's (Q387), is worn as its successor.
+            switch (applied ?? (try? ThemeCoordinator.persistedPack())?.map(ThemeNativePalette.pack)).map(ThemeCoordinator.successor) {
+            case .stock(let id)?: themeID = id
+            case .pack(let value)?: pack = value
+            case nil: break
+            }
         }
         resolve()
         colors = ThemeColors(theme)
