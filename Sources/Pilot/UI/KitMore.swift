@@ -33,6 +33,8 @@ struct KitMore<Content: View>: View {
                     }
                 }
                 KitPage { content }
+                    // Each block's rows one under the other, as the index lists them (wide-pages).
+                    .environment(\.blockRowColumns, false)
                     .coordinateSpace(.named(MoreSpy.space))
                     .environment(\.moreSpy, spy)
             }

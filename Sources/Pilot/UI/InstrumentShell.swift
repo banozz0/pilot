@@ -559,6 +559,18 @@ struct InstrumentToolbar: View {
             if !tabs.isEmpty { self.tabs(page).padding(.leading, 8) }
             Spacer(minLength: 0)
         }
+        // The pages' measure, so the title starts over the page's blocks in a big window (wide-pages); a page that is
+        // panes of its own across the window keeps its title at the window's edge.
+        .frame(maxWidth: Self.fullPane(page, extensionPage: extensionPage, section: section) ? .infinity : PageMeasure.most + style.density.page * 2,
+               alignment: .leading)
+        .frame(maxWidth: .infinity)
+    }
+
+    /// Pages drawn as panes across the whole window rather than a column of blocks: Extensions (its list beside the one
+    /// picked), an extension's own page, Notes (its notes beside the one open) and Look's Catalogue (a grid that fills
+    /// the width). Binds draws its own bar.
+    static func fullPane(_ page: AppPage, extensionPage: String?, section: AppSection?) -> Bool {
+        page == .extensions || extensionPage != nil || page == .notes || (page == .look && section == .themeCatalogue)
     }
 
     /// A merged page's parts as a segmented control on a sunk track, the picked one raised, with ⌘⇧]'s hint beside it

@@ -93,27 +93,26 @@ struct UpkeepPage: View {
     /// without Mole installs it through Install's confirm step, as the menu's Install Mole row does, with Homebrew in the
     /// same run when that is missing too (Q557).
     private var start: some View {
+        // Its two rows as the block's own, so in a wide window Update and Clean stand side by side (wide-pages).
         KitBlock(title: "Update and Clean", symbol: "arrow.triangle.2.circlepath") {
-            VStack(spacing: 0) {
-                BlockRow(first: true) {
-                    starter(.update, line: "Previews every upgrade, version to version, then asks before it runs.") {
-                        Button("Update…") { PilotMenu.shared.toggle(branch: .update) }.buttonStyle(.pilotPrimary)
-                    }
+            BlockRow(first: true) {
+                starter(.update, line: "Previews every upgrade, version to version, then asks before it runs.") {
+                    Button("Update…") { PilotMenu.shared.toggle(branch: .update) }.buttonStyle(.pilotPrimary)
                 }
-                BlockRow {
-                    if mole {
-                        let scanning = CleanModule.previewer.progress != nil
-                        starter(.clean, line: scanning ? CleanMenu.waiting(CleanModule.previewer.progress)
-                                    : "Lists what Mole would remove, part by part; moves only what you tick to the Trash.") {
-                            HStack(spacing: 6) {
-                                Button("Clean all…") { PilotMenu.shared.toggle(branch: .clean) }.buttonStyle(.pilot)
-                                Button(cleanList == nil ? "Show list" : "Scan again") { scan() }.buttonStyle(.pilotPrimary).disabled(scanning)
-                            }
+            }
+            BlockRow {
+                if mole {
+                    let scanning = CleanModule.previewer.progress != nil
+                    starter(.clean, line: scanning ? CleanMenu.waiting(CleanModule.previewer.progress)
+                                : "Lists what Mole would remove, part by part; moves only what you tick to the Trash.") {
+                        HStack(spacing: 6) {
+                            Button("Clean all…") { PilotMenu.shared.toggle(branch: .clean) }.buttonStyle(.pilot)
+                            Button(cleanList == nil ? "Show list" : "Scan again") { scan() }.buttonStyle(.pilotPrimary).disabled(scanning)
                         }
-                    } else {
-                        starter(.clean, line: homebrew ? "Clean runs through Mole, which is not installed." : "Clean runs through Mole, which installs through Homebrew; neither is installed.") {
-                            Button(homebrew ? "Install Mole…" : "Install Homebrew and Mole…") { CleanModule.pick(.install) }.buttonStyle(.pilot)
-                        }
+                    }
+                } else {
+                    starter(.clean, line: homebrew ? "Clean runs through Mole, which is not installed." : "Clean runs through Mole, which installs through Homebrew; neither is installed.") {
+                        Button(homebrew ? "Install Mole…" : "Install Homebrew and Mole…") { CleanModule.pick(.install) }.buttonStyle(.pilot)
                     }
                 }
             }

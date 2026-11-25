@@ -252,11 +252,15 @@ struct CapturePreview: View {
 
     /// Short enough that Capture's front still fits the window's first size (660 tall) in both styles.
     static let height: CGFloat = 104
+    /// In a big window it grows with the page, a tenth of its width up to `most` (wide-pages: at 104 pt across a
+    /// 1500 pt page its two windows were thin bars).
+    static let most: CGFloat = 160
 
     var body: some View {
-        MiniDesktop(windows: ["Zen", "Notes"], inner: 16, outer: 20, focused: nil)
-            .overlay(alignment: alignment) { result.padding(10) }
-            .frame(height: Self.height)
+        HeightOfWidth(least: Self.height, most: Self.most) {
+            MiniDesktop(windows: ["Zen", "Notes"], inner: 16, outer: 20, focused: nil)
+                .overlay(alignment: alignment) { result.padding(10) }
+        }
             .animation(Kit.change, value: after)
             .animation(Kit.change, value: place)
     }
@@ -297,5 +301,23 @@ struct CapturePreview: View {
     private func lines(_ shares: [Double]) -> some View {
         VStack(alignment: .leading, spacing: 5) { ForEach(shares, id: \.self) { Capsule().fill(ink.line2).frame(width: 46 * $0, height: 3) } }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading).padding(8)
+    }
+}
+
+/// Its one child as wide as offered and a tenth of that tall, `least` to `most` (wide-pages): CapturePreview's height
+/// in a big window, 104 pt wherever the page is narrower than 1040.
+private struct HeightOfWidth: Layout {
+    let least: CGFloat
+    let most: CGFloat
+
+    private func height(_ width: CGFloat) -> CGFloat { min(max(width / 10, least), most) }
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let width = proposal.width.flatMap { $0.isFinite ? $0 : nil } ?? least * 10
+        return CGSize(width: width, height: height(width))
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        for subview in subviews { subview.place(at: bounds.origin, proposal: ProposedViewSize(bounds.size)) }
     }
 }

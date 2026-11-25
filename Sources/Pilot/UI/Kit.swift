@@ -192,10 +192,18 @@ struct KitBlock<Trailing: View, Content: View>: View {
     @ViewBuilder var content: Content
 
     var body: some View {
-        // A block flows into the page's columns (PageFlow) unless it is marked `.pageWide()`.
-        InstrumentBlock(title: title, symbol: symbol, note: note, fill: fill, trailing: { trailing }, content: { content })
+        // A block flows into the page's columns (PageFlow) unless it is marked `.pageWide()`. A block of rows says how
+        // many it holds, so a wide page gives it the columns its rows can stand in (wide-pages).
+        // The rows are read once here; a block that does not stand them in columns draws what was read (BlockRowColumns).
+        Group(subviews: content) { children in
+            let kinds = children.map { $0.containerValues.blockRow }
+            InstrumentBlock(title: title, symbol: symbol, note: note, fill: fill, staged: false, trailing: { trailing }, content: {
+                BlockRowColumns(children: children, kinds: kinds) { content }
+            })
             .padding(.top, style.density.padding)
+            .layoutValue(key: PageSpan.self, value: BlockRowColumns<Content>.rows(kinds) ?? 1)
             .pageFlows()
+        }
     }
 }
 
@@ -214,12 +222,19 @@ extension KitBlock where Trailing == EmptyView {
 /// (a header tile, a pair, a grid, a heading) takes the full width under all the columns above it. Columns are at least
 /// `column` wide, so a label and its control stay close; under two columns' width the page is one column, as a VStack.
 /// A Layout reads the width it is given, so it never measures itself into staying wide (GeneralPage's old trap).
+/// A run of fewer blocks than columns stands in one row, and a block of rows takes as many columns as its rows can stand
+/// in (PageSpan; Sven on build 3188, a 1500 pt window: "they are a little bit empty"): Captures' Capture block two of
+/// three beside Folder, Open with's Apps for keys all three. Columns no block can use stay empty on the page's last run,
+/// so a lone short block keeps a column's width; mid page the run shares the width, as before.
 struct PageFlow: Layout {
     /// The least width of a column, and the gap between columns.
     var column: CGFloat
     var gap: CGFloat
     /// Between one child and the next, as the VStack's spacing it replaces.
     var spacing: CGFloat = 0
+    /// How many children the page holds once whole: a part built a piece at a time (Staged) lays the blocks drawn so far
+    /// as they will stand once the rest arrive, the ones still to come taken as one-column blocks of the last run.
+    var total: Int?
 
     /// How many columns `width` holds.
     static func columns(_ width: CGFloat, column: CGFloat, gap: CGFloat) -> Int {
@@ -254,11 +269,27 @@ struct PageFlow: Layout {
                 i += 1
                 continue
             }
-            // A run of flowing blocks. Above a full-width child, a run shorter than the columns shares the width, so no
-            // hole opens beside it mid-page (one block alone takes it all); the page's last run keeps the page's columns.
             var end = i
             while end < subviews.count && flows[end] { end += 1 }
-            let columns = end < subviews.count ? min(count, end - i) : count
+            let last = end == subviews.count
+            let coming = last ? max(0, (total ?? subviews.count) - subviews.count) : 0
+            let spans = (i..<end).map { max(1, subviews[$0][PageSpan.self]) } + Array(repeating: 1, count: coming)
+            if spans.count < count {
+                // Fewer blocks than columns: one row of them, each as wide as the columns it is given.
+                let widths = Self.row(spans, count: count, width: width, gap: gap, last: last)
+                var x: CGFloat = 0, foot = top + lead
+                for (k, j) in (i..<end).enumerated() {
+                    let height = subviews[j].sizeThatFits(ProposedViewSize(width: widths[k], height: nil)).height
+                    frames.append(CGRect(x: x, y: top + lead, width: widths[k], height: height))
+                    x += widths[k] + gap
+                    foot = max(foot, top + lead + height)
+                }
+                top = foot
+                i = end
+                continue
+            }
+            // As many blocks as columns or more: each under the shortest column.
+            let columns = count
             let side = (width - gap * CGFloat(columns - 1)) / CGFloat(columns)
             var feet = Array(repeating: top + lead, count: columns)
             for j in i..<end {
@@ -274,30 +305,89 @@ struct PageFlow: Layout {
         }
         return (frames, top)
     }
+
+    /// The widths of a row of blocks fewer than the `count` columns, each `spans` columns at most: every block one
+    /// column, then each column left to the block with the most rows to a column it holds. Columns no block can use:
+    /// on the page's last run they stay empty; mid page the blocks share the width evenly, as before (wide-pages).
+    static func row(_ spans: [Int], count: Int, width: CGFloat, gap: CGFloat, last: Bool) -> [CGFloat] {
+        var given = Array(repeating: 1, count: spans.count)
+        var left = count - spans.count
+        while left > 0, let k = given.indices.filter({ given[$0] < spans[$0] })
+            .max(by: { Double(spans[$0]) / Double(given[$0]) < Double(spans[$1]) / Double(given[$1]) }) {
+            given[k] += 1
+            left -= 1
+        }
+        if left > 0 && !last {
+            let side = (width - gap * CGFloat(spans.count - 1)) / CGFloat(spans.count)
+            return Array(repeating: side, count: spans.count)
+        }
+        let side = (width - gap * CGFloat(count - 1)) / CGFloat(count)
+        return given.map { CGFloat($0) * side + CGFloat($0 - 1) * gap }
+    }
 }
 
 /// Whether a page child flows into PageFlow's columns (KitBlock's), and whether it is held at the page's width anyway.
 private struct PageFlowItem: LayoutValueKey { static let defaultValue = false }
 private struct PageWideItem: LayoutValueKey { static let defaultValue = false }
+/// How many of PageFlow's columns a block can use: its rows, for a block of rows (BlockRowColumns), else one.
+struct PageSpan: LayoutValueKey { static let defaultValue = 1 }
+
+/// The widest a page's column of blocks goes, centred in a wider window: Home's (wide-pages; home-layout), so every page
+/// in a window across an ultrawide screen keeps one measure.
+enum PageMeasure {
+    static let most: CGFloat = HomeGrid.most
+}
+
+extension View {
+    /// The page's column at most PageMeasure.most wide plus its `side` margins, centred past that: the page's blocks and
+    /// the bar naming it, so both keep one left edge.
+    func pageMeasure(side: CGFloat) -> some View {
+        frame(maxWidth: PageMeasure.most + side * 2, alignment: .leading).frame(maxWidth: .infinity)
+    }
+}
 
 extension View {
     /// The child flows into the page's columns (PageFlow) rather than taking its full width.
-    func pageFlows() -> some View { layoutValue(key: PageFlowItem.self, value: true) }
+    func pageFlows() -> some View { layoutValue(key: PageFlowItem.self, value: true).containerValue(\.pageFlows, true) }
     /// A block that keeps the page's full width in PageFlow: a keyboard, a grid, two columns of its own.
-    func pageWide() -> some View { layoutValue(key: PageWideItem.self, value: true) }
+    func pageWide() -> some View { layoutValue(key: PageWideItem.self, value: true).containerValue(\.pageWide, true) }
 }
 
-/// A row in a block under a rule (none over the first).
+/// A row in a block under a rule (none over the first). In a block whose rows stand in columns (BlockRowColumns) the
+/// columns draw the rules, so a column's top row has none.
 struct BlockRow<Content: View>: View {
     @Environment(\.style) private var style
+    @Environment(\.blockRowRule) private var rule
     var first = false
     @ViewBuilder var content: Content
 
     var body: some View {
         BlockRowLayout { content }
             .frame(maxWidth: .infinity, minHeight: style.points(40), alignment: .leading)
-            .overlay(alignment: .top) { if !first { InstrumentRule() } }
+            .overlay(alignment: .top) { if !first && rule { InstrumentRule() } }
+            .containerValue(\.blockRow, first ? .first : .row)
     }
+}
+
+/// What a block's child is to BlockRowColumns: a row (the first, without its rule) or nothing it may put in columns.
+enum BlockRowKind { case first, row }
+
+extension ContainerValues {
+    /// Set by BlockRow: a block whose children are all rows may stand them in columns (wide-pages).
+    @Entry var blockRow: BlockRowKind? = nil
+    /// Set with `pageFlows()` and `pageWide()`: InstrumentPage lets only a page's own flowing blocks stand rows in columns.
+    @Entry var pageFlows = false
+    @Entry var pageWide = false
+}
+
+extension EnvironmentValues {
+    /// Whether a BlockRow draws its own rule; off where BlockRowColumns draws them.
+    @Entry var blockRowRule = true
+    /// Whether a wide block of rows stands them in columns (BlockRowColumns): true only on a block that flows into its
+    /// page's columns (InstrumentPage sets it), never on a block a page holds in a stack of its own or at its full width
+    /// (Binds' Mouse tables, whose header row speaks for the rows under it); false on a More tab, whose blocks stack
+    /// beside its index by design (Q60 B) and keep a note row under the rows it speaks of (Tiling's More).
+    @Entry var blockRowColumns: Bool? = nil
 }
 
 /// A block row's parts side by side, as an HStack, while every label that wraps keeps `least` points or its one-line width;
