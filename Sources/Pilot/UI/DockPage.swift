@@ -195,7 +195,9 @@ struct DockWidgetList: View {
         let on = dock.settings.widgets
         let builtIn = DockWidget.allCases.map(DockSlot.widget).filter { !on.contains($0) }
         let fromExtensions = offered.map { DockSlot.extensionItem($0.id) }.filter { !on.contains($0) }
-        VStack(alignment: .leading, spacing: 0) {
+        // A row a turn ahead and a frame's worth at a time in view (Staged; page-frames-5: the list whole held Dock's first
+        // visit 50 to 90 ms after it drew).
+        VStack(alignment: .leading, spacing: 0) { Staged {
             ForEach(Array((on + builtIn).enumerated()), id: \.element) { i, slot in row(slot, at: on.firstIndex(of: slot), count: on.count, first: i == 0) }
             Text("From extensions").font(ink.ui(13, .semibold)).foregroundStyle(ink.text).padding(.top, 14).padding(.bottom, 4)
             if fromExtensions.isEmpty {
@@ -203,7 +205,7 @@ struct DockWidgetList: View {
                           : "Every installed extension with a top bar item is in the dock.")
             }
             ForEach(Array(fromExtensions.enumerated()), id: \.element) { i, slot in row(slot, at: nil, count: on.count, first: i == 0) }
-        }
+        } }
         .font(ink.ui(13))
     }
 

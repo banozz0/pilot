@@ -12,14 +12,13 @@ struct MenuBarPage: View {
     @Environment(\.ink) private var ink
     @Environment(Engine.self) private var engine
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    /// The window shows: the preview reads live only then (a closed window is kept, and keeps its pages).
-    let onScreen: Bool
+    /// The window shows: the preview reads live only then (a closed window is kept, and keeps its pages). Nil follows the
+    /// part it is on (PreviewHold), which a render cannot.
+    let onScreen: Bool?
     /// Which placement the page shows and + edits: the one picked last (BarItemsStore.pagePlacement) unless given.
     @State private var placement: BarPlacement
     /// The clock pattern being typed, applied on Return so the bars never draw a half-typed one.
     @State private var pattern: String?
-    /// The readers the preview holds while the page shows.
-    @State private var held: Set<BarKind> = []
     /// The item being dragged from the strip or the tray, set as its drag starts.
     @State private var dragged: BarTrayItem?
     /// Where the top bar strip drew each slot (BarFrames.space), its size, and the pointer over it mid-drag.
@@ -36,7 +35,7 @@ struct MenuBarPage: View {
     /// The extensions' bar items the page lists and places: the app's, or a render's.
     var extensionBar: ExtensionBar = .shared
 
-    init(onScreen: Bool, placement: BarPlacement? = nil, nicknames: DisplayNicknames = .shared, extensionBar: ExtensionBar = .shared) {
+    init(onScreen: Bool? = nil, placement: BarPlacement? = nil, nicknames: DisplayNicknames = .shared, extensionBar: ExtensionBar = .shared) {
         self.onScreen = onScreen
         self.nicknames = nicknames
         self.extensionBar = extensionBar
@@ -104,13 +103,10 @@ struct MenuBarPage: View {
             }
         } }
         .disabled(store.loadError != nil)
-        .onAppear { hold(previewed(store)) }
-        .onChange(of: previewed(store)) { hold(previewed(store)) }
-        .onChange(of: onScreen) { hold(previewed(store)) }
+        .background { PreviewHold(kinds: previewed(store), onScreen: onScreen) }
         .onChange(of: placement) { store.pagePlacement = placement }
         // The top bar switched on or off moved it (BarItemsStore.topBarSwitched).
         .onChange(of: store.pagePlacement) { placement = store.pagePlacement }
-        .onDisappear { hold([]) }
     }
 
     /// Same system-name bindings, with row identity kept separate from the visible nickname.
@@ -187,10 +183,6 @@ struct MenuBarPage: View {
         return Set(((preview.top?.values.joined()).map(Array.init) ?? []).flatMap(\.kinds) + (preview.menu ?? []).flatMap(\.kinds))
     }
 
-    /// The preview's items read live, as the bars do, only while the window shows.
-    private func hold(_ kinds: Set<BarKind>) {
-        engine.barSources.readings.hold(onScreen ? kinds : [], replacing: &held)
-    }
 
     // MARK: Top bar only
 
@@ -1024,5 +1016,30 @@ struct SidewaysWheel: NSViewRepresentable {
             copy.setDoubleValueField(.scrollWheelEventFixedPtDeltaAxis1, value: 0)
             return NSEvent(cgEvent: copy) ?? event
         }
+    }
+}
+
+/// The preview's items read live, as the bars do, only while the page shows in the window. Its own view, so the page
+/// shown or hidden redraws this alone, never the page (page-frames-5: Menu bar's whole page ran again as its part
+/// showed or hid, a 25 to 32 ms turn after a return visit drew).
+private struct PreviewHold: View {
+    @Environment(Engine.self) private var engine
+    @Environment(\.pageShown) private var shown
+    @Environment(AppWindowModel.self) private var window: AppWindowModel?
+    let kinds: Set<BarKind>
+    let onScreen: Bool?
+    @State private var held: Set<BarKind> = []
+
+    var body: some View {
+        let live = onScreen ?? (shown && window?.live == true)
+        Color.clear
+            .onAppear { hold(live) }
+            .onChange(of: kinds) { hold(live) }
+            .onChange(of: live) { hold(live) }
+            .onDisappear { engine.barSources.readings.hold([], replacing: &held) }
+    }
+
+    private func hold(_ live: Bool) {
+        engine.barSources.readings.hold(live ? kinds : [], replacing: &held)
     }
 }

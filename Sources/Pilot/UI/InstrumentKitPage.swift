@@ -76,6 +76,7 @@ struct PageStack<Content: View>: View {
 /// then its content inset as the header; without a title, the content alone on the panel.
 struct InstrumentBlock<Trailing: View, Content: View>: View {
     @Environment(\.style) private var style
+    @Environment(\.blockRowsWhole) private var rowsWhole
     var title: String?
     var symbol: String?
     var note: String?
@@ -99,9 +100,10 @@ struct InstrumentBlock<Trailing: View, Content: View>: View {
             if let note {
                 Text(note).styleText(\.caption).foregroundStyle(style.color(\.text3)).fixedSize(horizontal: false, vertical: true).padding(.bottom, 10)
             }
-            // A row a turn while the part is built ahead (Staged); in view the block comes whole, so it never grows under
-            // what is drawn beside and below it.
-            Staged(inView: false) { content }
+            // A row a turn while the part is built ahead (Staged), and in view a frame's worth at a time, top down, so a
+            // first visit never holds a frame on a whole block (page-frames-5: 30 to 60 ms frames after the page drew).
+            // A block whose height sizes what stands beside it comes whole (`blockRowsWhole`).
+            Staged(inView: !rowsWhole) { content }
         }
         .padding(.horizontal, style.density.padding).padding(.vertical, InstrumentKitPage.blockPadding)
         .frame(maxHeight: fill ? .infinity : nil, alignment: .top)
@@ -210,6 +212,13 @@ struct InstrumentPair<Left: View, Right: View>: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .onGeometryChange(for: Bool.self) { $0.size.width >= InstrumentKitPage.pairWidth } action: { wide = $0 }
     }
+}
+
+extension EnvironmentValues {
+    /// A first visit builds a block's rows in view a frame's worth at a time (InstrumentBlock), unless the block's height
+    /// sizes something beside it (Look's preview takes its row's height): there the block comes whole, as nothing drawn
+    /// may move.
+    @Entry var blockRowsWhole = false
 }
 
 extension View {

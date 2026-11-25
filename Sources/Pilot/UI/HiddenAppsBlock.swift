@@ -39,7 +39,8 @@ struct HiddenAppsBlock: View {
         .task {
             guard reads else { return }
             store.reflag()
-            choices = AppsModule.pickableApps(hidden: true)
+            // The disk read off the main actor: it held Install › More's first visit (page-frames-5, 145 ms after drawn).
+            choices = await AppsModule.pickableAppsOffMain(hidden: true)
         }
     }
 

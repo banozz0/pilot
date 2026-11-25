@@ -20,8 +20,9 @@ struct UpkeepPage: View {
     var go: (AppPlace) -> Void = { _ in }
     /// Nil until the first read, so the page never says "No run yet" while it reads.
     @State private var records: [RunRecord]?
-    /// The run Reports opens, from its row or Open report; nil opens the newest.
-    @State private var picked: String?
+    /// The run Reports opens, from its row or Open report; nil opens the newest. The page's front and More are parts of
+    /// their own (PageView.key), so Open report on the front picks it for More through this.
+    @Bindable private var pick = ReportPick.shared
     /// What the opened run printed.
     @State private var output = ""
     /// Bumped when a run begins, so the page follows it to its end.
@@ -39,7 +40,7 @@ struct UpkeepPage: View {
         Group {
             if more {
                 KitMore(entries: Self.entries) {
-                    ReportsBlock(store: store, records: records, picked: $picked, output: output).moreBlock(.reports)
+                    ReportsBlock(store: store, records: records, picked: $pick.id, output: output).moreBlock(.reports)
                 }
             } else {
                 KitLanding {
@@ -57,7 +58,7 @@ struct UpkeepPage: View {
                 }
             }
         }
-            .onChange(of: picked) { readOutput() }
+            .onChange(of: pick.id) { readOutput() }
             .task(id: shown ? wake : nil) {
                 guard shown else { return }
                 reload()
@@ -77,14 +78,14 @@ struct UpkeepPage: View {
         if read != records {
             records = read
             readOutput()
-        } else if ReportsBlock.shown(records, picked: picked)?.end == .running {
+        } else if ReportsBlock.shown(records, picked: pick.id)?.end == .running {
             readOutput()
         }
     }
 
     /// Assigned only when it changed.
     private func readOutput() {
-        let text = ReportsBlock.shown(records, picked: picked).map { store.output($0.id) } ?? ""
+        let text = ReportsBlock.shown(records, picked: pick.id).map { store.output($0.id) } ?? ""
         if text != output { output = text }
     }
 
@@ -137,7 +138,7 @@ struct UpkeepPage: View {
                     HStack(spacing: 6) {
                         Text("Last run \(ReportsBlock.when(last.report.started)) · \(last.summary)").font(ink.ui(11.5)).foregroundStyle(ink.text2)
                         ReportsBlock.chip(last.end, ink: ink)
-                        Button("Open report") { picked = last.id; go(AppPlace(.reports)) }.buttonStyle(.link).font(ink.ui(11.5))
+                        Button("Open report") { pick.id = last.id; go(AppPlace(.reports)) }.buttonStyle(.link).font(ink.ui(11.5))
                     }
                 } else if records != nil {
                     Text("No run yet").font(ink.ui(11.5)).foregroundStyle(ink.text2)
@@ -148,4 +149,10 @@ struct UpkeepPage: View {
         }
         .padding(.vertical, 8)
     }
+}
+
+/// The run Update & Clean's Reports opens, shared by the page's front and More (UpkeepPage.pick).
+@MainActor @Observable final class ReportPick {
+    static let shared = ReportPick()
+    var id: String?
 }

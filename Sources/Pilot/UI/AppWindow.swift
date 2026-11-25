@@ -55,7 +55,9 @@ final class AppWindowModel {
     /// The snippet Snippets picks and names first (the clipboard panel's Save as snippet); Snippets clears it.
     var editSnippet: UUID?
     /// Whether the window shows on screen now: open and not hidden, minimised or covered.
-    var onScreen = false
+    var onScreen = false { didSet { if onScreen != oldValue { screenChanged?(onScreen) } } }
+    /// Told as `onScreen` changes: the kept pages go once the window stays off it (PageDeck.screen).
+    @ObservationIgnored var screenChanged: ((Bool) -> Void)?
     /// Whether the window is key, the one typed into.
     var isKey = false
     /// On screen and key: the pages' repeating reads (This Mac, Activity, Stats, the bar preview, an extension's page)
