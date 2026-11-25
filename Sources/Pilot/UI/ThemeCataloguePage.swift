@@ -74,6 +74,12 @@ struct ThemeCatalogueGallery: View {
     @State private var query = ""
     /// The tile Remove asks about.
     @State private var removing: ThemeCatalogueTile?
+    /// A part built a piece at a time fills the grid a row a frame (`grid`); one built whole, and a render, has no stage.
+    @Environment(\.buildStage) private var stage
+    /// The rows shown while the grid first fills; nil once filled.
+    @State private var rows: Int? = 1
+    /// The grid's columns at its width while it fills.
+    @State private var columns = 4
 
     struct Actions {
         var get: (String) -> Void = { _ in }
@@ -164,14 +170,31 @@ struct ThemeCatalogueGallery: View {
         .padding(.horizontal, 18).padding(.vertical, 10)
     }
 
+    static let tileWidth: CGFloat = 270, spacing: CGFloat = 14, inset: CGFloat = 18
+
     private var grid: some View {
-        ScrollView {
-            LazyVGrid(columns: [GridItem(.adaptive(minimum: 270), spacing: 14, alignment: .top)], spacing: 14) {
-                ForEach(shown) { tile in
+        let shown = shown
+        return ScrollView {
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: Self.tileWidth), spacing: Self.spacing, alignment: .top)], spacing: Self.spacing) {
+                ForEach(shown.prefix(stage == nil ? .max : rows.map { $0 * columns } ?? .max)) { tile in
                     ThemeTile(tile: tile, actions: actions) { removing = tile }.onAppear { actions.appear(tile.id) }
                 }
             }
-            .padding(18)
+            .padding(Self.inset)
+        }
+        .onGeometryChange(for: Int.self) {
+            PageFlow.columns($0.size.width - Self.inset * 2, column: Self.tileWidth, gap: Self.spacing)
+        } action: { if rows != nil { columns = $0 } }
+        // The first fill, whether the index was read already or arrives now (the grid shows once there are tiles): the
+        // top row in the page's first frame, then a row each frame after its commit (slow-pages: all 29 desks in one frame
+        // held Sven's first visit 634 ms). Core Animation commits only as the run loop goes to sleep, so rows added back to
+        // back were all built before the first was drawn.
+        .task {
+            while stage != nil, let row = rows, row * columns < shown.count, !Task.isCancelled {
+                await withCheckedContinuation { (done: CheckedContinuation<Void, Never>) in AfterCommit.observe(repeats: false) { done.resume() } }
+                rows = row + 1
+            }
+            rows = nil
         }
     }
 
