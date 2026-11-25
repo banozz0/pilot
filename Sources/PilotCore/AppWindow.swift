@@ -578,8 +578,11 @@ public enum AppSection: String, CaseIterable, Sendable {
     public var opensAsSheet: Bool { self == .conflicts }
     /// Shown as a tab across the page's top; Plain combos is Binds' last sublayer tab instead (card agent-bo-95422894),
     /// conflicts a sheet.
+    /// Whether the section is there at all: Menu bar's second tab only while a pages-fill switch names it.
+    public var shown: Bool { self != .menuBarMore || PagesFillDesign.menuBarTab != nil }
+
     public var isTab: Bool {
-        !opensAsSheet && !isMerged && !PagesFillDesign.foldedMore.contains(self) && (self != .menuBarMore || PagesFillDesign.menuBarTab != nil)
+        !opensAsSheet && !isMerged && !PagesFillDesign.foldedMore.contains(self) && shown
     }
 
     /// Parts drawn on their page's own body: Plain combos as a sublayer, the places on a More tab or a front, the extension
@@ -846,7 +849,7 @@ public struct AppPlace: Hashable, Sendable {
         let filter = FuzzyRanker.Filter(query)
         guard !filter.typed.isEmpty else { return [] }
         // A More tab is found by its blocks, each a place of its own, never by its title.
-        let all = AppPage.allCases.map { AppPlace($0) } + AppSection.allCases.filter { !$0.isMore }.map { AppPlace($0) }
+        let all = AppPage.allCases.map { AppPlace($0) } + AppSection.allCases.filter { !$0.isMore && $0.shown }.map { AppPlace($0) }
         let byTitle = all.filter { filter.holds([$0.title]) }
         let held = byTitle + all.filter { place in !byTitle.contains(place) && filter.holds(place.keywords) }
         guard held.isEmpty else { return held }

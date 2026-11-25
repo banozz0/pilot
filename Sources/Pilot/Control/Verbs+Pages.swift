@@ -5,7 +5,7 @@ extension ControlVerbs {
     /// `pilot open`: Pilot's window on a page or a part of one, by the names pilot://open takes, old names included.
     func registerPages(_ app: ControlActions) {
         func pages() -> [String] { AppPage.allCases.map(\.rawValue) }
-        func parts() -> [JSONValue] { AppSection.allCases.map { .string($0.rawValue) } }
+        func parts() -> [JSONValue] { AppSection.allCases.filter(\.shown).map { .string($0.rawValue) } }
         let sections = SetupSection.allCases.map(\.rawValue)
         register(ControlVerb("open", help: "Opens Pilot's window on a page or a part of one; --where and --find only say where, opening nothing.",
                              usage: "pilot open <page|part|pilot://open link> [--section <\(sections.joined(separator: "|"))>] [--where] | pilot open --find <words>",
