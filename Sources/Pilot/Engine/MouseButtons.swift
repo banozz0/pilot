@@ -65,27 +65,32 @@ final class MouseButtons {
     @ObservationIgnored private var senders: [UInt64: MouseKeys.Device?] = [:]
     /// The HID services the mice send keys through, resolved off the tap's path, for the tap's `isKeyFromMouse`.
     @ObservationIgnored let keySenders = MouseSenders()
-    /// The mouse the last key `isKeyFromMouse` took came from, for the catch's "from …".
-    @ObservationIgnored private var lastKeyDevice: MouseKeys.Device?
+    /// What the tap's `isFromMouse` and `isKeyFromMouse` read on the tap thread: a copy of the catch, the bound devices
+    /// and the mice found, set on the main thread as they change (`publish`).
+    @ObservationIgnored private let filter = MouseFilter()
 
     init(tap: HyperTap) {
         self.tap = tap
         buttons = MouseButtonTap(layer: tap)
         // A catch hears any mouse; a bound media key only the device it was caught from, and one with none is never the mouse's.
-        tap.isFromMouse = { [unowned self] press, trigger in
-            guard let source = MouseKeys.Presses.Source.of(learning: learn == .listening, bound: devices[trigger]) else { return false }
+        tap.isFromMouse = { @Sendable [media, filter] press, trigger in
+            let (listening, bound) = filter.read { ($0.listening, $0.devices[trigger]) }
+            guard let source = MouseKeys.Presses.Source.of(learning: listening, bound: bound) else { return false }
             return media.claim(press, from: source)
         }
         // A key the mouse sends: while a catch waits, from any mouse found; bound, only from the device it was caught from.
-        tap.isKeyFromMouse = { [unowned self] trigger, sender in
-            guard let device = keySenders.devices[sender] else {
-                keySenders.missed(sender)
+        tap.isKeyFromMouse = { @Sendable [keySenders, filter] trigger, sender in
+            guard let device = keySenders.published.withLock({ $0[sender] }) else {
+                onMain { keySenders.missed(sender) }
                 return false
             }
-            let mine = learn == .listening ? found.mice.contains { $0.isSame(as: device) } : devices[trigger]?.isSame(as: device) == true
-            if mine { lastKeyDevice = device }
-            return mine
+            return filter.claim(trigger, device: device)
         }
+    }
+
+    /// The catch, the bound devices and the mice found, copied for the tap: after every change to one of them.
+    private func publish() {
+        filter.set(listening: learn == .listening, devices: devices, mice: found.mice)
     }
 
     /// The taps the binds need: `running` while the keyboard tap is, `binds` the mouse binds, a hold's (P74) needing its
@@ -100,6 +105,7 @@ final class MouseButtons {
 
     /// A catch keeps both on until its trigger is saved or dropped, so the caught press's release is taken too.
     private func apply() {
+        publish()
         let learning = switch learn { case .listening, .got: true; case .idle, .quiet: false }
         buttons.arm(running && (learning || triggers.contains(where: MouseKeys.isButton)))
         let keyDevices = devices.filter { MouseKeys.isKey($0.key.keyCode) }.map(\.value)
@@ -116,22 +122,23 @@ final class MouseButtons {
         access = IOHIDCheckAccess(kIOHIDRequestTypeListenEvent)
         stopListening()
         learn = .listening
+        publish()
         vendorReport = nil
         vendor.watch(found.mice)
         self.target = target
         self.hyper = hyper
         mouseLog.notice("learn: listening for \(target.map(String.init) ?? "another button", privacy: .public); Input Monitoring \(Self.describe(self.access), privacy: .public)")
-        tap.captureMouse = { [weak self] key in
+        tap.captureMouse = hopping { [weak self] key in
             guard let self else { return }
             stopListening()
-            let device = MouseKeys.isMedia(key.keyCode) ? media.lastClaimed : MouseKeys.isKey(key.keyCode) ? lastKeyDevice : nil
+            let device = MouseKeys.isMedia(key.keyCode) ? media.lastClaimed : MouseKeys.isKey(key.keyCode) ? filter.lastKeyDevice : nil
             mouseLog.notice("learn: got \(key.label, privacy: .public)\(device.map { " from \($0.name) (\($0.vendor):\($0.product))" } ?? "", privacy: .public)")
             learn = .got(key, device: device)
-            DispatchQueue.main.async { self.apply() }   // verbose off, after the tap callback
+            apply()   // verbose off
         }
         // A key is named after the tap callback, off its path: finding the device reads the I/O registry.
-        tap.learnKey = { [weak self] key, sender in DispatchQueue.main.async { self?.heard(key, sender: sender) } }
-        tap.learnMedia = { [weak self] keyType in DispatchQueue.main.async { self?.heardMedia(keyType) } }
+        tap.learnKey = hopping { [weak self] key, sender in self?.heard(key, sender: sender) }
+        tap.learnMedia = hopping { [weak self] keyType in self?.heardMedia(keyType) }
         wait()
         apply()
     }
@@ -303,6 +310,35 @@ final class MouseButtons {
     }
 }
 
+/// MouseButtons' catch and bound devices as the keyboard tap reads them inside its callback, on the tap thread.
+final class MouseFilter: Sendable {
+    struct State: Sendable {
+        var listening = false
+        var devices: [Key: MouseKeys.Device] = [:]
+        var mice: [MouseKeys.Device] = []
+        /// The mouse the last key `claim` took came from, for the catch's "from …".
+        var lastKeyDevice: MouseKeys.Device?
+    }
+    private let state = Mutex(State())
+
+    func set(listening: Bool, devices: [Key: MouseKeys.Device], mice: [MouseKeys.Device]) {
+        state.withLock { $0.listening = listening; $0.devices = devices; $0.mice = mice }
+    }
+
+    func read<T: Sendable>(_ body: (State) -> T) -> T { state.withLock { body($0) } }
+
+    var lastKeyDevice: MouseKeys.Device? { state.withLock { $0.lastKeyDevice } }
+
+    /// Whether a key from `device` is `trigger`'s: while a catch waits, any mouse found; bound, only the one it was caught from.
+    func claim(_ trigger: Key, device: MouseKeys.Device) -> Bool {
+        state.withLock { state in
+            let mine = state.listening ? state.mice.contains { $0.isSame(as: device) } : state.devices[trigger]?.isSame(as: device) == true
+            if mine { state.lastKeyDevice = device }
+            return mine
+        }
+    }
+}
+
 /// The HID services each watched mouse sends keys through (Build 62, NGenuity's Esc on a side button), by registry id:
 /// every service under the mouse's HID devices, its keyboard part's event service among them. Resolved from the I/O
 /// registry on the main thread, never inside the tap callback: whenever the watched mice change or a catch starts,
@@ -312,7 +348,9 @@ final class MouseButtons {
 @MainActor
 final class MouseSenders {
     /// The sending services' ids and the mouse each belongs to.
-    var devices: [UInt64: MouseKeys.Device] = [:]
+    var devices: [UInt64: MouseKeys.Device] = [:] { didSet { published.withLock { $0 = devices } } }
+    /// `devices` as the keyboard tap reads it, on its own thread.
+    nonisolated let published = Mutex<[UInt64: MouseKeys.Device]>([:])
     private var watched: [MouseKeys.Device] = []
     private var port: IONotificationPortRef?
     private var connected: io_iterator_t = 0
@@ -399,16 +437,22 @@ private let hidConnected: IOServiceMatchingCallback = { refcon, iterator in
 }
 
 /// Mouse buttons 3 and up (otherMouseDown/Up) on a session tap of their own, so the keyboard tap's mask never gains the
-/// mouse (typing-lag rule). Installed only while a button bind or Learn needs it; the keyboard tap decides each press.
-@MainActor
-final class MouseButtonTap {
+/// mouse (typing-lag rule). Installed only while a button bind or Learn needs it; the keyboard tap decides each press. On
+/// the keyboard tap's thread (EventTapThread), never the main run loop: its callback asks only the keyboard tap.
+final class MouseButtonTap: @unchecked Sendable {
     private let layer: HyperTap
+    /// The tap and its source, set on the main thread by `arm` and read by the callback's re-enable: under the keyboard
+    /// tap's lock.
     private var tap: CFMachPort?
     private var source: CFRunLoopSource?
 
     init(layer: HyperTap) { self.layer = layer }
 
+    /// The tap's C callback, for the probe.
+    static let callback: CGEventTapCallBack = buttonCallback
+
     func arm(_ on: Bool) {
+        layer.lock.lock(); defer { layer.lock.unlock() }
         if on, tap == nil {
             let mask = (CGEventMask(1) << CGEventType.otherMouseDown.rawValue) | (CGEventMask(1) << CGEventType.otherMouseUp.rawValue)
             let me = Unmanaged.passUnretained(self).toOpaque()
@@ -416,8 +460,8 @@ final class MouseButtonTap {
                                               eventsOfInterest: mask, callback: buttonCallback, userInfo: me) else {
                 return mouseLog.error("buttons: mouse button tap not created")
             }
-            let source = CFMachPortCreateRunLoopSource(nil, tap, 0)
-            CFRunLoopAddSource(CFRunLoopGetMain(), source, .commonModes)
+            let source = CFMachPortCreateRunLoopSource(nil, tap, 0)!
+            EventTapThread.shared.add(source)
             CGEvent.tapEnable(tap: tap, enable: true)
             self.tap = tap
             self.source = source
@@ -425,7 +469,7 @@ final class MouseButtonTap {
         } else if !on, let tap {
             CGEvent.tapEnable(tap: tap, enable: false)
             CFMachPortInvalidate(tap)
-            if let source { CFRunLoopRemoveSource(CFRunLoopGetMain(), source, .commonModes) }
+            if let source { EventTapThread.shared.remove(source) }
             self.tap = nil; source = nil
             mouseLog.notice("buttons: tap off")
         }
@@ -434,7 +478,7 @@ final class MouseButtonTap {
     fileprivate func handle(type: CGEventType, event: CGEvent) -> Unmanaged<CGEvent>? {
         let pass = Unmanaged.passUnretained(event)
         if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
-            if let tap { CGEvent.tapEnable(tap: tap, enable: true) }
+            layer.lock.withLock { if let tap { CGEvent.tapEnable(tap: tap, enable: true) } }
             return pass
         }
         guard type == .otherMouseDown || type == .otherMouseUp else { return pass }
@@ -445,9 +489,7 @@ final class MouseButtonTap {
 
 private let buttonCallback: CGEventTapCallBack = { _, type, event, userInfo in
     guard let userInfo else { return Unmanaged.passUnretained(event) }
-    let tap = Unmanaged<MouseButtonTap>.fromOpaque(userInfo).takeUnretainedValue()
-    nonisolated(unsafe) let event = event
-    return MainActor.assumeIsolated { tap.handle(type: type, event: event) }
+    return Unmanaged<MouseButtonTap>.fromOpaque(userInfo).takeUnretainedValue().handle(type: type, event: event)
 }
 
 /// Tells a media key the mouse sent from the keyboard's (Q184). A CGEvent names no device, so an IOHIDManager, never

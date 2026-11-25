@@ -1,6 +1,7 @@
 import Foundation
 import Observation
 import PilotCore
+import Synchronization
 
 /// The bind store on disk (PilotCore's BindStore): `~/Library/Application Support/Pilot/binds.json`, schema version
 /// `BindStore.version`. Read at launch and by pilot://reload-binds; written back whenever it differs from what the
@@ -19,7 +20,9 @@ final class Binds {
     /// Each base's default keys and every registered action, set by the first load.
     private var presets: [BindStore.Base: [String: Key]] = [:]
     private var actions: [String] = []
-    private(set) var store = BindStore(defaults: [:])
+    private(set) var store = BindStore(defaults: [:]) { didSet { table.set(store) } }
+    /// The store as the keyboard tap reads it, off the main thread: a copy after every change.
+    @ObservationIgnored let table = BindTable()
     /// Why the file was not read; nil after a clean load. While set, nothing is written, so a hand edit is never lost.
     private(set) var lastError: String?
     /// After every load and change: Engine arms the mouse taps a mouse bind needs.
@@ -216,5 +219,27 @@ final class Binds {
         } catch {
             log.error("binds: \(self.fileURL.path, privacy: .public) not written: \(error.localizedDescription, privacy: .public)")
         }
+    }
+}
+
+/// The binds as the keyboard tap asks them inside its callback, on the tap thread (EventTapThread): a copy of the store
+/// and Key binds' switch, each set on the main thread as it changes.
+final class BindTable: Sendable {
+    private struct State: Sendable {
+        var store = BindStore(defaults: [:])
+        var keyBinds = true
+    }
+    private let state = Mutex(State())
+    /// The launcher's action runs with Key binds off (Engine.runs).
+    private let launcher: String
+
+    init(launcher: String = Dropdown.launcherAction) { self.launcher = launcher }
+
+    func set(_ store: BindStore) { state.withLock { $0.store = store } }
+    func set(keyBinds on: Bool) { state.withLock { $0.keyBinds = on } }
+
+    /// Whether `key` runs a bind now: it has an action, and Key binds is on or the action is the launcher.
+    func runs(_ key: Key) -> Bool {
+        state.withLock { state in state.store.action(for: key).map { state.keyBinds || $0 == launcher } ?? false }
     }
 }

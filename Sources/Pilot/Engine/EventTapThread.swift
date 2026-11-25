@@ -1,0 +1,65 @@
+import CoreFoundation
+import Foundation
+
+/// The run loop the keyboard tap and the mouse-button tap are on: a thread of their own, so a main-thread turn (a page
+/// built, a window's warm-up) never holds a key or a click anywhere on the Mac (load-lag: a page build held every key up
+/// to 250 ms). Their callbacks touch only HyperTap's locked state and hand every action to the main queue.
+final class EventTapThread: Sendable {
+    static let shared = EventTapThread()
+
+    /// CFRunLoop is thread-safe for adding, removing and waking sources.
+    nonisolated(unsafe) let runLoop: CFRunLoop
+
+    private init() {
+        let ready = DispatchSemaphore(value: 0)
+        nonisolated(unsafe) var loop: CFRunLoop?
+        let thread = Thread {
+            loop = CFRunLoopGetCurrent()
+            // A source that never fires keeps the run loop running before any tap's source is on it.
+            var context = CFRunLoopSourceContext()
+            CFRunLoopAddSource(CFRunLoopGetCurrent(), CFRunLoopSourceCreate(nil, 0, &context), .defaultMode)
+            ready.signal()
+            while true { CFRunLoopRun() }
+        }
+        thread.name = "dev.banozz.pilot.event-taps"
+        thread.qualityOfService = .userInteractive
+        thread.start()
+        ready.wait()
+        runLoop = loop!
+    }
+
+    func add(_ source: CFRunLoopSource) {
+        CFRunLoopAddSource(runLoop, source, .commonModes)
+        CFRunLoopWakeUp(runLoop)
+    }
+
+    func remove(_ source: CFRunLoopSource) { CFRunLoopRemoveSource(runLoop, source, .commonModes) }
+}
+
+/// Runs `body` on the main queue, after the tap callback that calls it returned, in the order the tap handed them over.
+func onMain(_ body: @escaping @MainActor @Sendable () -> Void) {
+    DispatchQueue.main.async { MainActor.assumeIsolated(body) }
+}
+
+/// A main-thread hook as the tap calls it: each call goes to the main queue with its arguments, in order, and the tap
+/// goes on at once. One FIFO queue for every hook keeps a bind's run ahead of its release.
+func hopping(_ body: @escaping () -> Void) -> () -> Void {
+    nonisolated(unsafe) let body = body
+    return { DispatchQueue.main.async { body() } }
+}
+
+func hopping<A>(_ body: @escaping (A) -> Void) -> (A) -> Void {
+    nonisolated(unsafe) let body = body
+    return { a in
+        nonisolated(unsafe) let a = a
+        DispatchQueue.main.async { body(a) }
+    }
+}
+
+func hopping<A, B>(_ body: @escaping (A, B) -> Void) -> (A, B) -> Void {
+    nonisolated(unsafe) let body = body
+    return { a, b in
+        nonisolated(unsafe) let a = a, b = b
+        DispatchQueue.main.async { body(a, b) }
+    }
+}

@@ -3,102 +3,114 @@ import PilotCore
 
 /// The HID-level event tap (ADR 0001). Swallows the layer key, swallows every key while Hyper is held and
 /// runs the bound action in-process. Never re-posts or rewrites a key to trigger another app's hotkey.
-@MainActor
-final class HyperTap {
+///
+/// The tap runs on its own thread (EventTapThread), never the main run loop, so no main-thread turn holds a key or a
+/// click. Every piece of its state is behind `lock`: the callback holds it for the whole event, and every property and
+/// method the rest of Pilot reaches takes it too. Its hooks run inside the callback: one that reaches main-thread state
+/// hands its work to the main queue (`hopping`, `onMain`); one that answers (`isBound`, `onTyped`, `onBrightness`,
+/// `isFromMouse`, `isKeyFromMouse`) reads only state safe off the main thread and never waits on the main thread.
+final class HyperTap: @unchecked Sendable {
     /// Events Pilot posts itself (quick-tap Escape, later ctrl+N) carry this so the tap lets them through.
     static let ownEventMark: Int64 = 0x50494C54  // "PILT"
     /// Log every keyboard event the tap sees (debug level). Set PILOT_TRACE=1 in the environment.
     static let traceEvents = ProcessInfo.processInfo.environment["PILOT_TRACE"] == "1"
-    /// The event `handle` is on, nil outside it: a bind the press runs reads when its key went down (pressedAt).
-    private static var handling: CGEvent?
+    /// Every piece of the tap's state: held by the callback for the whole event and by every caller from outside.
+    /// Recursive, as a hook the callback runs may call back in.
+    let lock = NSRecursiveLock()
+    /// The event `handle` is on, nil outside it: a bind the press runs reads when its key went down (keyDownTime). Read
+    /// and written only under `lock`.
+    nonisolated(unsafe) private static var handling: CGEvent?
     /// When the key-down whose bind runs now went down, from the event's own timestamp in systemUptime's seconds
-    /// (NSEvent's conversion, not the handler's clock); nil outside the tap or for any other event. The menu times
-    /// Hyper+Space to its first frame from it (spec pilot-1.1 T74).
-    static var pressedAt: TimeInterval? {
+    /// (NSEvent's conversion, not the handler's clock); nil outside the tap or for any other event. Read inside the
+    /// callback (Engine's onRun), which hands it on to the main thread as `pressedAt`.
+    static var keyDownTime: TimeInterval? {
         handling.flatMap { $0.type == .keyDown ? NSEvent(cgEvent: $0)?.timestamp : nil }
     }
+    /// The key-down of the bind running now on the main thread, as Engine's onRun sets it around the action: the menu
+    /// times Hyper+Space to its first frame from it (spec pilot-1.1 T74). Nil outside a bind's run.
+    @MainActor static var pressedAt: TimeInterval?
 
-    private(set) var layer: HyperLayer
-    var isBound: (Key) -> Bool = { _ in false }
-    var onLayerChange: (Bool) -> Void = { _ in }
-    var onRun: (Key, _ autorepeat: Bool) -> Void = { _, _ in }
-    var onUnbound: (Key, _ autorepeat: Bool) -> Void = { _, _ in }
+    @TapLocked private(set) var layer: HyperLayer
+    @TapLocked var isBound: (Key) -> Bool = { _ in false }
+    @TapLocked var onLayerChange: (Bool) -> Void = { _ in }
+    @TapLocked var onRun: (Key, _ autorepeat: Bool) -> Void = { _, _ in }
+    @TapLocked var onUnbound: (Key, _ autorepeat: Bool) -> Void = { _, _ in }
     /// The key a bind ran came up, or the tap lost track of it: a held action ends (card agent-bo-95423008).
-    var onRelease: (Key) -> Void = { _ in }
-    var onToggleCapsLock: () -> Void = { }
+    @TapLocked var onRelease: (Key) -> Void = { _ in }
+    @TapLocked var onToggleCapsLock: () -> Void = { }
     /// Shift, Ctrl, Alt or Cmd pressed or released while the layer is held: the sublayer they name.
-    var onModifiers: (Modifiers) -> Void = { _ in }
+    @TapLocked var onModifiers: (Modifiers) -> Void = { _ in }
     /// Any key the layer takes, bound, unbound or recorded by the Binds editor: the hold-Hyper overlay closes on it.
-    var onKey: () -> Void = { }
+    @TapLocked var onKey: () -> Void = { }
     /// One-shot: the next Hyper key comes here instead of running its bind (the Binds editor's Record, which takes a
     /// plain combo too).
-    var captureNext: ((Key) -> Void)?
+    @TapLocked var captureNext: ((Key) -> Void)? = nil
     /// The capture takes Hyper keys alone: a Cmd, Ctrl or Alt combo and every plain key go on as if none waited, so typing
     /// in the front app goes on while it waits (story 122).
-    var captureOnlyHyper = false
+    @TapLocked var captureOnlyHyper = false
     /// While set, every Hyper key comes here too: the Binds board picks it (card agent-bo-95422993, G5). A bound one
     /// still runs, so every bind works with the board in front (T48, Sven 2026-11-04); a free one only picks. Plain
     /// combos run as ever, so the window's own Cmd keys keep working.
-    var picking: ((Key) -> Void)?
-    var onTapDisabled: (String) -> Void = { _ in }
+    @TapLocked var picking: ((Key) -> Void)? = nil
+    @TapLocked var onTapDisabled: (String) -> Void = { _ in }
     /// A Cmd+V going past, Sven's or one Pilot posted: a paste in sequence moves on (card agent-bo-95423071). Watched,
     /// never swallowed; it must return at once, as it runs inside the tap callback.
-    var onPaste: () -> Void = { }
+    @TapLocked var onPaste: () -> Void = { }
     /// Esc went down, whatever the layer does with it: a tiler drag under way is cancelled (card agent-bo-95423034).
-    var onEscape: () -> Void = { }
+    @TapLocked var onEscape: () -> Void = { }
     /// A take of Pilot's own dictation is starting or listening (Sven on Build 63: "esc doesn't stop dictation"): the
     /// keyboard's Esc, which the pill never gets as it is never key, is taken and `onDictationEscape` cancels the take as
     /// the pill's ✕ does. False outside a take, so every key pays this one check.
-    var cancelsDictationOnEscape = false
-    var onDictationEscape: () -> Void = { }
+    @TapLocked var cancelsDictationOnEscape = false
+    @TapLocked var onDictationEscape: () -> Void = { }
     /// A scrolling capture is running (Sven, 2026-10-18): the keyboard's Esc or Return ends it and keeps what it caught,
     /// whichever app is in front, Pilot's own control too, and the key is taken. Nil outside a capture.
-    var endScrollCapture: (() -> Void)?
+    @TapLocked var endScrollCapture: (() -> Void)? = nil
     /// A ring is open (P74): the keyboard's Esc goes back up a level inside a group, else closes it, running nothing, and
     /// is taken, under Hyper too (a ring a key holds open has Hyper down). Nil while no ring is open.
-    var endRing: (() -> Void)?
+    @TapLocked var endRing: (() -> Void)? = nil
     /// The open ring closed outright, running nothing, whatever level shows: every hold let go at once (releaseAll).
-    var closeRing: (() -> Void)?
+    @TapLocked var closeRing: (() -> Void)? = nil
     /// How long a mouse trigger whose hold is bound must stay down before the hold runs (P74, Settings › Rings' Hold after);
     /// a quicker press is its click.
-    var holdAfter: TimeInterval = 0.18
+    @TapLocked var holdAfter: TimeInterval = 0.18
     /// A hold-bound media key let go before Hold after with no Click bind: it goes on to macOS's own Now Playing as Pilot's
     /// own media key, after the callback returned (ADR 0001: posted keys only into macOS's own). A button's or a keystroke's
     /// quick press runs its Click bind or nothing (Sven, Q370).
-    var onReplay: (Key) -> Void = { _ in }
+    @TapLocked var onReplay: (Key) -> Void = { _ in }
     /// The hold's one timer, armed as a hold-bound press is taken: off the tap's callback, so a test replaces it and calls
     /// `holdFired(_:)` itself. It carries the hold generation it was armed in.
-    var armHold: (HyperTap, Key) -> Void = { tap, key in
+    @TapLocked var armHold: (HyperTap, Key) -> Void = { tap, key in
         let generation = tap.holdGeneration
         DispatchQueue.main.asyncAfter(deadline: .now() + tap.holdAfter) { [weak tap] in
-            MainActor.assumeIsolated { tap?.holdFired(key, generation: generation) }
+            tap?.holdFired(key, generation: generation)
         }
     }
     /// Bumped whenever every hold is let go (releaseAll): a timer armed before then finds a press whose release was lost
     /// and runs nothing, so no ring opens that nothing will close.
-    private(set) var holdGeneration = 0
+    @TapLocked private(set) var holdGeneration = 0
     /// Every key down the tap lets through to the focused app, with the characters it types, read only when asked:
     /// snippets watch for a keyword (card agent-bo-95423044). True keeps it from the app.
-    var onTyped: (KeyEvent, () -> String) -> Bool = { _, _ in false }
+    @TapLocked var onTyped: (KeyEvent, () -> String) -> Bool = { _, _ in false }
     /// The keyboard's brightness up or down, as a system-defined event (card agent-bo-95423314). True takes it from
     /// macOS; it must return at once, as it runs inside the tap callback.
-    var onBrightness: (BrightnessKeys.Press) -> Bool = { _ in false }
+    @TapLocked var onBrightness: (BrightnessKeys.Press) -> Bool = { _ in false }
     /// One-shot: the next mouse trigger, a plain button or a media key the mouse sent, comes here and is taken (Binds ›
     /// Mouse's Learn, Q184).
-    var captureMouse: ((Key) -> Void)?
+    @TapLocked var captureMouse: ((Key) -> Void)? = nil
     /// Learn listening (MouseButtons): each key pressed, with the HID service that sent it, so a mouse button remapped to
     /// a key is named (Q221). Only watched, never taken; nil outside Learn, so the tap pays one check.
-    var learnKey: ((KeyEvent, UInt64) -> Void)?
+    @TapLocked var learnKey: ((KeyEvent, UInt64) -> Void)? = nil
     /// The catch waiting (MouseButtons): the key type of each media key that passes as the keyboard's, so Binds › Mouse
     /// says so, or asks for Input Monitoring. Only watched, never taken; nil outside a catch.
-    var learnMedia: ((Int) -> Void)?
+    @TapLocked var learnMedia: ((Int) -> Void)? = nil
     /// The key codes bound as keys a mouse sends (MouseKeys.key, NGenuity's Esc on a side button): only these, any key
     /// while a catch waits, and the release of one taken, ask `isKeyFromMouse`, so every other key pays one set lookup.
-    var mouseKeyCodes: Set<Int64> = []
+    @TapLocked var mouseKeyCodes: Set<Int64> = []
     /// Whether a key, as its mouse trigger, came from the mouse it is bound to, or from a mouse at all while a catch waits;
     /// the second value is the HID service that sent it. Inside the tap callback: a lookup in ids resolved beforehand
     /// (MouseSenders), never the I/O registry.
-    var isKeyFromMouse: (Key, UInt64) -> Bool = { _, _ in false }
+    @TapLocked var isKeyFromMouse: (Key, UInt64) -> Bool = { _, _ in false }
     /// The event field holding the registry id of the HID service that sent the event (undocumented; Learn's log shows it).
     /// Nil if macOS ever drops it: Learn then names the key without its device.
     static let senderField = CGEventField(rawValue: 87)
@@ -106,19 +118,19 @@ final class HyperTap {
     private let senderField = HyperTap.senderField
     /// Whether the mouse, not the keyboard, sent this media key (MouseMedia). Asked only for a first press that is bound
     /// to a mouse trigger or learnt, inside the tap callback, so it must return within milliseconds.
-    var isFromMouse: (MouseKeys.MediaPress, Key) -> Bool = { _, _ in false }
+    @TapLocked var isFromMouse: (MouseKeys.MediaPress, Key) -> Bool = { _, _ in false }
     /// Whether a layer key is physically down now, read from the HID state rather than from events: a release the tap
     /// never saw (macOS had it off, a password field took the keyboard) must not leave the layer stuck down. Engine sets
     /// `hidKeyState`; the default trusts the events, so a test's tap never reads the real keyboard.
-    var isLayerKeyDown: (LayerKey) -> Bool = { _ in true }
-    static let hidKeyState: (LayerKey) -> Bool = { CGEventSource.keyState(.hidSystemState, key: CGKeyCode($0.keyCode)) }
+    @TapLocked var isLayerKeyDown: (LayerKey) -> Bool = { _ in true }
+    static let hidKeyState: @Sendable (LayerKey) -> Bool = { CGEventSource.keyState(.hidSystemState, key: CGKeyCode($0.keyCode)) }
     /// Voice › Dictation key (Q224): its tap or hold, for dictation's own action. The key is never taken.
-    var onDictationKey: (DictationKeyWatch.Decision) -> Void = { _ in }
+    @TapLocked var onDictationKey: (DictationKeyWatch.Decision) -> Void = { _ in }
     /// Whether a mouse button went down or the wheel scrolled in the last so many seconds, asked once on a release that
     /// would be a dictation tap and once as a hold would start (a Ctrl+click or Ctrl+scroll zoom is neither). Engine sets
     /// `hidClickedWithin`; a test's tap never reads the real mouse.
-    var clickedWithin: (TimeInterval) -> Bool = { _ in false }
-    static let hidClickedWithin: (TimeInterval) -> Bool = { seconds in
+    @TapLocked var clickedWithin: (TimeInterval) -> Bool = { _ in false }
+    static let hidClickedWithin: @Sendable (TimeInterval) -> Bool = { seconds in
         [CGEventType.leftMouseDown, .rightMouseDown, .otherMouseDown, .scrollWheel].contains {
             CGEventSource.secondsSinceLastEventType(.hidSystemState, eventType: $0) < seconds
         }
@@ -140,9 +152,9 @@ final class HyperTap {
     private var dictationKey = DictationKeyWatch()
     /// Hold mode's one timer, armed as the key goes down alone: held past the tap window, talking starts. Off the tap's
     /// callback, so a test replaces it and calls `dictationKeyHeld(at:)` itself.
-    var armDictationHold: (HyperTap) -> Void = { tap in
+    @TapLocked var armDictationHold: (HyperTap) -> Void = { tap in
         DispatchQueue.main.asyncAfter(deadline: .now() + DictationKeyWatch.window) { [weak tap] in
-            MainActor.assumeIsolated { tap?.dictationKeyHeld(at: ProcessInfo.processInfo.systemUptime) }
+            tap?.dictationKeyHeld(at: ProcessInfo.processInfo.systemUptime)
         }
     }
     /// Secure input is on (a password field): the dictation key's release may never reach the tap, so it is ignored.
@@ -152,17 +164,18 @@ final class HyperTap {
     private var modalKeysDown: Set<Int64> = []
     /// Lock keyboard for cleaning (KeyboardLock): while set, every key is taken before anything else looks at it. Nil
     /// otherwise, so an unlocked key pays this one check.
-    private(set) var keyboardLock: KeyboardLock?
+    @TapLocked private(set) var keyboardLock: KeyboardLock? = nil
     /// Esc went down (true) or came up while locked, at that uptime: the 3 s hold starts or stops.
-    var onLockEscape: (Bool, TimeInterval) -> Void = { _, _ in }
+    @TapLocked var onLockEscape: (Bool, TimeInterval) -> Void = { _, _ in }
     /// The lock ended, whichever way: the overlay closes.
-    var onUnlock: (KeyboardLock.End) -> Void = { _ in }
+    @TapLocked var onUnlock: (KeyboardLock.End) -> Void = { _ in }
 
-    init(layer: HyperLayer) { self.layer = layer }
+    init(layer: HyperLayer) { _layer = TapLocked(wrappedValue: layer) }
 
-    var isRunning: Bool { tap != nil }
+    var isRunning: Bool { lock.withLock { tap != nil } }
 
     func update(layerKeys: [LayerKey], quickTapEscape: Bool) {
+        lock.lock(); defer { lock.unlock() }
         let wasDown = layer.isDown
         layer = HyperLayer(layerKeys: layerKeys, quickTapEscape: quickTapEscape, quickTapWindow: layer.quickTapWindow, isOn: layer.isOn)
         if wasDown { onLayerChange(false) }
@@ -170,10 +183,11 @@ final class HyperTap {
     }
 
     /// The quick tap's window, kept across re-arms (HoldOverlay.quickTapWindow).
-    func update(quickTapWindow: TimeInterval) { layer.quickTapWindow = quickTapWindow }
+    func update(quickTapWindow: TimeInterval) { lock.lock(); defer { lock.unlock() }; layer.quickTapWindow = quickTapWindow }
 
     /// The dictation key and its mode; a layer key is Hyper, never the dictation key too.
     func update(dictationKey key: DictationKey, mode: DictationKeyMode) {
+        lock.lock(); defer { lock.unlock() }
         dictationPick = (key, mode)
         let next = DictationKeyWatch(key: key.isFree(layerKeys: layer.layerKeys) ? key : .off, mode: mode)
         guard next.key != dictationKey.key || next.mode != dictationKey.mode else { return }
@@ -190,10 +204,14 @@ final class HyperTap {
     }
 
     /// Hold mode's timer fired.
-    func dictationKeyHeld(at now: TimeInterval) { dictated(dictationKey.held(at: now, clickedWithin: clickedWithin)) }
+    func dictationKeyHeld(at now: TimeInterval) {
+        lock.lock(); defer { lock.unlock() }
+        dictated(dictationKey.held(at: now, clickedWithin: clickedWithin))
+    }
 
     /// Secure input on or off (SecureInputMonitor): on, the dictation key is let go and ignored until it is off.
     func setSecureInput(_ on: Bool) {
+        lock.lock(); defer { lock.unlock() }
         secureInput = on
         if on { dictated(dictationKey.reset()) }
     }
@@ -206,15 +224,16 @@ final class HyperTap {
 
     /// The layer key's release may have gone past the tap unseen: the screen locked or a password field took the keyboard
     /// while Hyper was held. Until the layer changes, a key under Hyper checks the key's real state.
-    private(set) var releaseMayBeLost = false
+    @TapLocked private(set) var releaseMayBeLost = false
 
-    func mayHaveLostRelease() { if layer.isDown { releaseMayBeLost = true } }
+    func mayHaveLostRelease() { lock.lock(); defer { lock.unlock() }; if layer.isDown { releaseMayBeLost = true } }
 
     /// Whether Hyper is held, as a mouse press or a scroll under it asks (P51): once its release may have gone by unseen
     /// (the screen locked or secure input came on: `releaseMayBeLost`), the layer key's real state answers first
     /// (dropLayerIfKeyUp), so such a release does not keep a click or a scroll taken. A tap macOS turned off settles its
     /// own at re-enable (tapDisabled); a release lost any other way is not checked here. A mouse event's flags are not read: a modifier layer key (Control, Option or Command) may not show its device bit there.
     func isHyperHeld() -> Bool {
+        lock.lock(); defer { lock.unlock() }
         if releaseMayBeLost { dropLayerIfKeyUp() }
         return layer.isDown
     }
@@ -239,6 +258,7 @@ final class HyperTap {
 
     /// Hyper on or off (card agent-bo-95422986); the tap stays installed, so plain combos still run.
     func setHyper(_ on: Bool) {
+        lock.lock(); defer { lock.unlock() }
         let wasDown = layer.isDown
         layer.isOn = on
         if wasDown && !on { onLayerChange(false) }
@@ -246,7 +266,13 @@ final class HyperTap {
 
     enum StartError: Error { case tapCreationFailed }
 
-    func start() throws(StartError) {
+    /// The run loop the tap's source goes on: the tap thread's, never the main one (the probe's seam too).
+    static var eventRunLoop: CFRunLoop { EventTapThread.shared.runLoop }
+    /// The tap's C callback, for the probe to deliver an event the way the window server does.
+    static let callback: CGEventTapCallBack = tapCallback
+
+    @MainActor func start() throws(StartError) {
+        lock.lock(); defer { lock.unlock() }
         guard tap == nil else { return }
         let mask: CGEventMask = (1 << CGEventType.keyDown.rawValue) | (1 << CGEventType.keyUp.rawValue)
             | (1 << CGEventType.flagsChanged.rawValue) | (1 << CGEventMask(BrightnessKeys.eventType))
@@ -258,7 +284,8 @@ final class HyperTap {
             throw .tapCreationFailed
         }
         let source = CFMachPortCreateRunLoopSource(nil, tap, 0)
-        CFRunLoopAddSource(CFRunLoopGetMain(), source, .commonModes)
+        CFRunLoopAddSource(Self.eventRunLoop, source, .commonModes)
+        CFRunLoopWakeUp(Self.eventRunLoop)
         CGEvent.tapEnable(tap: tap, enable: true)
         self.tap = tap
         self.source = source
@@ -269,9 +296,10 @@ final class HyperTap {
 
     /// Off without being taken down: macOS stops sending Pilot any key until resume. Bitwarden's unlock pauses it so the
     /// master password typed into bw never reaches Pilot (card agent-bo-95422814).
-    private(set) var isPaused = false
+    @TapLocked private(set) var isPaused = false
 
     func pause() {
+        lock.lock(); defer { lock.unlock() }
         guard let tap, !isPaused else { return }
         unlockKeyboard(.tapOff)
         isPaused = true
@@ -281,15 +309,17 @@ final class HyperTap {
     }
 
     func resume() {
+        lock.lock(); defer { lock.unlock() }
         guard let tap, isPaused else { return }
         isPaused = false
         CGEvent.tapEnable(tap: tap, enable: true)
     }
 
     func stop() {
+        lock.lock(); defer { lock.unlock() }
         unlockKeyboard(.tapOff)
         if let tap { CGEvent.tapEnable(tap: tap, enable: false) }
-        if let source { CFRunLoopRemoveSource(CFRunLoopGetMain(), source, .commonModes) }
+        if let source { CFRunLoopRemoveSource(Self.eventRunLoop, source, .commonModes) }
         dropLayer()
         releaseAll()
         if let lockObserver { DistributedNotificationCenter.default().removeObserver(lockObserver) }
@@ -310,6 +340,7 @@ final class HyperTap {
     }
 
     func handle(type: CGEventType, event: CGEvent) -> Unmanaged<CGEvent>? {
+        lock.lock(); defer { lock.unlock() }
         let pass = Unmanaged.passUnretained(event)
         Self.handling = event
         defer { Self.handling = nil }
@@ -419,20 +450,22 @@ final class HyperTap {
     /// Locks the keyboard (KeyboardLock): from now every key is taken until `unlockKeyboard`. The layer and every hold let
     /// go first, as their releases will not be seen. Refused while the tap is not taking keys (off, paused) or already
     /// locked, so a lock never claims keys it cannot take.
-    func lockKeyboard(_ lock: KeyboardLock) -> Bool {
+    func lockKeyboard(_ newLock: KeyboardLock) -> Bool {
+        lock.lock(); defer { lock.unlock() }
         guard tap != nil, !isPaused, keyboardLock == nil else { return false }
         dropLayer()
         releaseAll()
-        keyboardLock = lock
+        keyboardLock = newLock
         return true
     }
 
     /// Ends the lock, once: every later call does nothing. A key the lock took that is still down (Esc, held 3 s) stays
     /// taken as a modal's key, its repeats and release with it (modalKey), so none reaches the app in front.
     func unlockKeyboard(_ end: KeyboardLock.End) {
-        guard let lock = keyboardLock else { return }
+        lock.lock(); defer { lock.unlock() }
+        guard let ended = keyboardLock else { return }
         keyboardLock = nil
-        modalKeysDown.formUnion(lock.takenDown)
+        modalKeysDown.formUnion(ended.takenDown)
         onUnlock(end)
     }
 
@@ -440,10 +473,10 @@ final class HyperTap {
     /// keys' are taken (KeyboardLock.takes), so the mouse stays live. Past the safety unlock the lock ends and the event goes
     /// the unlocked way, a held key's repeat taken with its release (unlockKeyboard).
     private func locked(_ type: CGEventType, _ event: CGEvent) -> Bool {
-        guard event.getIntegerValueField(.eventSourceUserData) != Self.ownEventMark, var lock = keyboardLock else { return false }
+        guard event.getIntegerValueField(.eventSourceUserData) != Self.ownEventMark, var held = keyboardLock else { return false }
         let now = ProcessInfo.processInfo.systemUptime
         if type.rawValue == BrightnessKeys.eventType {
-            if now >= lock.until { unlockKeyboard(.safety); return handle(type: type, event: event) == nil }
+            if now >= held.until { unlockKeyboard(.safety); return handle(type: type, event: event) == nil }
             return NSEvent(cgEvent: event).map { KeyboardLock.takes(systemDefinedSubtype: Int($0.subtype.rawValue), data1: $0.data1) } ?? true
         }
         let kind: KeyEvent.Kind
@@ -453,9 +486,9 @@ final class HyperTap {
         case .flagsChanged: kind = .flagsChanged
         default: return false
         }
-        let outcome = lock.handle(KeyEvent(kind: kind, keyCode: event.getIntegerValueField(.keyboardEventKeycode), flags: event.flags.rawValue,
+        let outcome = held.handle(KeyEvent(kind: kind, keyCode: event.getIntegerValueField(.keyboardEventKeycode), flags: event.flags.rawValue,
                                            autorepeat: event.getIntegerValueField(.keyboardEventAutorepeat) != 0, time: now))
-        keyboardLock = lock
+        keyboardLock = held
         switch outcome {
         case .take: return true
         case .pass: return false
@@ -467,6 +500,7 @@ final class HyperTap {
     /// macOS turned the tap off: back on, and every release it may have missed meanwhile is settled now. Keys went past it
     /// meanwhile, so a keyboard lock ends.
     func tapDisabled(_ reason: String) {
+        lock.lock(); defer { lock.unlock() }
         unlockKeyboard(.tapOff)
         if let tap, !isPaused { CGEvent.tapEnable(tap: tap, enable: true) }
         dropLayerIfKeyUp()
@@ -497,6 +531,7 @@ final class HyperTap {
     /// A mouse button past 2 (MouseButtonTap): true takes it. Paused (Bitwarden's unlock) or the keyboard locked, every
     /// press passes and no mouse bind runs. Under Hyper its Hyper bind runs (P51).
     func mouseButton(_ number: Int64, isDown: Bool) -> Bool {
+        lock.lock(); defer { lock.unlock() }
         guard !isPaused, keyboardLock == nil else { return false }
         if captureMouse != nil, isDown { log.notice("mouse learn: button \(number, privacy: .public) (Mouse \(number + 1, privacy: .public))") }
         return take(mouse.route(MouseKeys.button(number), isDown: isDown, hyper: isDown && isHyperHeld(), learning: captureMouse != nil,
@@ -505,6 +540,7 @@ final class HyperTap {
 
     /// One step of Hyper + the wheel, bound (HyperScroll, after its callback): run and let go at once.
     func scrolled(_ key: Key) {
+        lock.lock(); defer { lock.unlock() }
         guard keyboardLock == nil else { return }
         _ = take(.run(key))
         _ = take(.release(key))
@@ -513,6 +549,7 @@ final class HyperTap {
     /// Hold after ran out on a hold-bound press (P74): its hold runs if the press is still down and waiting, and every
     /// hold was not let go since the timer was armed (`generation`; nil from a test).
     func holdFired(_ key: Key, generation: Int? = nil) {
+        lock.lock(); defer { lock.unlock() }
         guard !isPaused, keyboardLock == nil, generation.map({ $0 == holdGeneration }) ?? true else { return }
         _ = take(MouseKeys.isKey(key.keyCode) ? mouseKeys.fire(key) : mouse.fire(key))
     }
@@ -562,6 +599,7 @@ final class HyperTap {
 
     /// What the tap does with a key event, CGEvent aside, so tests drive it: true swallows it.
     func route(_ e: KeyEvent) -> Bool {
+        lock.lock(); defer { lock.unlock() }
         if e.kind == .keyDown, e.keyCode == KeyCode.escape { onEscape() }
         // Watched, never taken: a lone tap of the dictation key reaches the app as the plain modifier it is.
         if dictationKey.key != .off, !secureInput { dictated(dictationKey.handle(e, layerDown: layer.isDown, clickedWithin: clickedWithin)) }
@@ -601,11 +639,12 @@ final class HyperTap {
     }
 
     /// Hyper held alone at a mouse press's flags (HyperLayer.isHeldAlone).
-    func isHeldAlone(flags: UInt64) -> Bool { layer.isHeldAlone(flags: flags) }
+    func isHeldAlone(flags: UInt64) -> Bool { lock.withLock { layer.isHeldAlone(flags: flags) } }
 
     /// A Hyper drag took the held layer (MouseDragTap): no quick-tap Escape at its release, and the overlay closes as
     /// for a key. No bind runs: the tap never sees the mouse.
     func layerUsed() {
+        lock.lock(); defer { lock.unlock() }
         guard layer.isDown else { return }
         layer.markUsed()
         onKey()
@@ -632,8 +671,27 @@ final class HyperTap {
 
 private let tapCallback: CGEventTapCallBack = { _, type, event, userInfo in
     guard let userInfo else { return Unmanaged.passUnretained(event) }
-    let tap = Unmanaged<HyperTap>.fromOpaque(userInfo).takeUnretainedValue()
-    // The tap's run loop source lives on the main run loop, so this runs on the main thread.
-    nonisolated(unsafe) let event = event
-    return MainActor.assumeIsolated { tap.handle(type: type, event: event) }
+    // On the tap thread (EventTapThread): handle holds the tap's lock for the whole event.
+    return Unmanaged<HyperTap>.fromOpaque(userInfo).takeUnretainedValue().handle(type: type, event: event)
+}
+
+/// One of HyperTap's properties, read and written under the tap's lock: the tap thread's callback and the main thread
+/// both reach them.
+@propertyWrapper
+struct TapLocked<Value> {
+    private var value: Value
+
+    init(wrappedValue: Value) { value = wrappedValue }
+
+    @available(*, unavailable, message: "HyperTap's own properties only")
+    var wrappedValue: Value {
+        get { fatalError() }
+        set { fatalError() }
+    }
+
+    static subscript(_enclosingInstance tap: HyperTap, wrapped _: ReferenceWritableKeyPath<HyperTap, Value>,
+                     storage storage: ReferenceWritableKeyPath<HyperTap, TapLocked>) -> Value {
+        get { tap.lock.withLock { tap[keyPath: storage].value } }
+        set { tap.lock.withLock { tap[keyPath: storage].value = newValue } }
+    }
 }

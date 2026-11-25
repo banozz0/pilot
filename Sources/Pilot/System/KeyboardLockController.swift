@@ -26,8 +26,9 @@ final class KeyboardLockController {
 
     init(tap: HyperTap) {
         self.tap = tap
-        tap.onUnlock = { [weak self] in self?.ended($0) }
-        tap.onLockEscape = { [weak self] down, at in self?.escape(down, at: at) }
+        // Inside the tap's callback, on its thread: on to the main queue.
+        tap.onUnlock = hopping { [weak self] in self?.ended($0) }
+        tap.onLockEscape = hopping { [weak self] down, at in self?.escape(down, at: at) }
     }
 
     static func register(into registry: inout ActionRegistry, lock: KeyboardLockController) {

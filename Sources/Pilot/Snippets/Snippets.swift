@@ -4,6 +4,7 @@ import Clipboard
 import Observation
 import OSLog
 import PilotCore
+import Synchronization
 
 private let snippetLog = Logger(subsystem: "dev.banozz.pilot", category: "snippets")
 
@@ -100,16 +101,20 @@ enum PlaceholderReads {
 
 /// Watches what the focused app is typed for a snippet's keyword (the tap hands it every key it lets through). On a
 /// match the keyword's last key is kept from the app and the snippet replaces the rest; never while secure input is on.
-@MainActor
-final class SnippetKeywords {
+/// The keyboard tap asks `typed` on its own thread and the main thread sets and resets it, so its state is behind a lock.
+final class SnippetKeywords: @unchecked Sendable {
     private var typing = SnippetTyping(keywords: [])
     private var byKeyword: [String: Snippet] = [:]
     private let isBlocked: () -> Bool
     private let expand: (Snippet, _ erasing: Int) -> Void
+    private let lock = NSRecursiveLock()
+    /// Whether one of Pilot's own windows is key, as the main thread last read NSApp.keyWindow (SnippetLibrary.start):
+    /// the tap's thread never asks AppKit.
+    static let pilotWindowIsKey = Atomic(false)
 
     /// `isBlocked`: secure input is on, or one of Pilot's own windows takes the keys (the snippet editor, Hyper+Space's
     /// search), where a keyword is being typed, not used.
-    init(isBlocked: @escaping () -> Bool = { IsSecureEventInputEnabled() || NSApp.keyWindow != nil },
+    init(isBlocked: @escaping () -> Bool = { IsSecureEventInputEnabled() || SnippetKeywords.pilotWindowIsKey.load(ordering: .relaxed) },
          expand: @escaping (Snippet, _ erasing: Int) -> Void) {
         self.isBlocked = isBlocked; self.expand = expand
     }
@@ -117,20 +122,22 @@ final class SnippetKeywords {
     /// Every change: the copies the tap pastes follow each name and text edit. What was typed so far is kept unless
     /// the keywords themselves changed.
     func set(_ snippets: [Snippet]) {
+        lock.lock(); defer { lock.unlock() }
         let old = Set(byKeyword.keys)
         byKeyword = Dictionary(snippets.filter { !$0.keyword.isEmpty }.map { ($0.keyword, $0) }) { first, _ in first }
         if Set(byKeyword.keys) != old { typing = SnippetTyping(keywords: Array(byKeyword.keys)) }
     }
 
     /// The snippet typing `keyword` pastes now: the tap's own copy, which the snippets row reads back as typedText.
-    func snippet(for keyword: String) -> Snippet? { byKeyword[keyword] }
+    func snippet(for keyword: String) -> Snippet? { lock.withLock { byKeyword[keyword] } }
 
     /// A click or another app in front: the caret moved, so what came before no longer counts.
-    func reset() { typing.reset() }
+    func reset() { lock.withLock { typing.reset() } }
 
     /// A key down the focused app gets, with the characters it types, read only while a keyword is watched; true keeps it
     /// from the app.
     func typed(_ e: KeyEvent, _ characters: @autoclosure () -> String) -> Bool {
+        lock.lock(); defer { lock.unlock() }
         guard e.kind == .keyDown, !byKeyword.isEmpty else { return false }
         if e.keyCode == KeyCode.delete, e.flags & KeyEvent.chordMask == 0 { typing.backspace(); return false }
         let characters = characters()
@@ -163,9 +170,10 @@ final class SnippetLibrary {
     private(set) var failed: String?
     @ObservationIgnored private let store: SnippetStore
     @ObservationIgnored private let paster: SnippetPaster
-    @ObservationIgnored private(set) lazy var keywords = SnippetKeywords { [weak self] snippet, erasing in
+    /// Asked by the keyboard tap on its own thread: a match hands its paste to the main queue.
+    @ObservationIgnored private(set) lazy var keywords = SnippetKeywords(expand: hopping { [weak self] snippet, erasing in
         self?.typed(snippet, erasing: erasing)
-    }
+    })
     @ObservationIgnored private var monitors: [Any] = []
 
     init(store: SnippetStore = .standard, paster: SnippetPaster = SnippetPaster()) {
@@ -207,5 +215,13 @@ final class SnippetLibrary {
             forName: NSWorkspace.didActivateApplicationNotification, object: nil, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated { self?.keywords.reset() }
         })
+        // Pilot's own key window, read here on the main thread for the tap's `isBlocked`: after each change settles, as a
+        // window resigning key comes before the next one becomes key.
+        let follow: @Sendable (Notification) -> Void = { _ in
+            DispatchQueue.main.async { SnippetKeywords.pilotWindowIsKey.store(NSApp.keyWindow != nil, ordering: .relaxed) }
+        }
+        for name in [NSWindow.didBecomeKeyNotification, NSWindow.didResignKeyNotification, NSApplication.didResignActiveNotification] {
+            monitors.append(NotificationCenter.default.addObserver(forName: name, object: nil, queue: .main, using: follow))
+        }
     }
 }

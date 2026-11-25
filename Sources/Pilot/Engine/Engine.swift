@@ -3,6 +3,7 @@ import Observation
 import OSLog
 import PilotCore
 import PilotTiler
+import Synchronization
 
 let log = Logger(subsystem: "dev.banozz.pilot", category: "engine")
 
@@ -206,7 +207,10 @@ final class PilotSettings {
     /// The keyboard's own brightness keys change the focused window's screen through Pilot (Setup › Displays, card
     /// agent-bo-95423314); on at first. Off, macOS gets them as before.
     var brightnessKeys: Bool {
-        didSet { defaults.set(brightnessKeys, forKey: "displays.brightnessKeys") }
+        didSet {
+            defaults.set(brightnessKeys, forKey: "displays.brightnessKeys")
+            ScreenBrightness.keysOn.store(brightnessKeys, ordering: .relaxed)
+        }
     }
     /// On unless switched off: Pilot is a login item (story 40; ClipBook's open at login, card agent-bo-95422770). A change
     /// applies at once, from Settings › General or onboarding.
@@ -375,7 +379,9 @@ final class Engine {
         }
         // Pilot owns every Hyper key (card agent-bo-95422751): a key with a bind runs it, whatever the preset. App binds
         // (story 143) stay in binds.json but are not acted on while per-app binds are parked (parked/per-app-binds).
-        tap.isBound = { [unowned self] key in binds.store.action(for: key).map(runs) ?? false }
+        // Asked inside the tap callback, on the tap thread: the copy of the store Binds keeps, never the store itself.
+        tap.isBound = { @Sendable [table = binds.table] key in table.runs(key) }
+        binds.table.set(keyBinds: pilotSwitch.isOn)
         // A new layer key takes effect at once, from whichever page changed it.
         settings.onLayerKeyChange = { [unowned self] in settingsChanged() }
         settings.onKeySwapsChange = { [unowned self] in if tap.isRunning { applyLayerKey() } }
@@ -416,10 +422,12 @@ final class Engine {
         }
         overlay.delay = { [unowned self] in settings.overlayDelay }
         overlay.enabled = { [unowned self] in settings.overlayEnabled }
-        tap.onModifiers = { [unowned self] held in overlay.modifiers(held) }
-        tap.onKey = { [unowned self] in overlay.key() }
-        tap.onTyped = { SnippetLibrary.shared.keywords.typed($0, $1()) }
-        tap.onLayerChange = { [unowned self] down in
+        // The tap's hooks run inside its callback, on the tap thread: each one here goes on to the main queue (hopping),
+        // or reads only what is safe off the main thread.
+        tap.onModifiers = hopping { [unowned self] held in overlay.modifiers(held) }
+        tap.onKey = hopping { [unowned self] in overlay.key() }
+        tap.onTyped = { @Sendable [keywords = SnippetLibrary.shared.keywords] in keywords.typed($0, $1()) }
+        tap.onLayerChange = hopping { [unowned self] down in
             // The page Shift or Ctrl already held names, read once as the layer goes down.
             overlay.layer(down: down, held: tap.layer.sublayer(flags: CGEventSource.flagsState(.hidSystemState).rawValue))
             hyperHeld = down
@@ -428,30 +436,14 @@ final class Engine {
             SelectionTools.shared.hyper(down)
             log.debug("Hyper \(down ? "on" : "off", privacy: .public)")
         }
-        tap.onRun = { [unowned self] key, autorepeat in
-            guard let id = binds.store.action(for: key), runs(id), let action = self.action(id) else { return }
-            if autorepeat && !action.repeats { return }
-            // The Launcher switch off (spec pilot-ui-redesign T4): its key opens nothing and a tip names the switch; the
-            // menus other actions open still do.
-            if id == Dropdown.launcherAction, !SessionSwitch.launcher.isOn {
-                if !autorepeat { HUD.tip("The launcher is off: turn on Launcher on Home or in the Pilot menu") }
-                return
-            }
-            record(key, action: action.label)
-            if !autorepeat { countPress(id) }
-            // The press names itself to what it opens (RunCaller): "terminal → … opened via Mouse 3".
-            RunCaller.with(key.label) {
-                if let hold = action.hold {
-                    held[key] = { hold(false) }
-                    hold(true)
-                } else {
-                    action.run()
-                }
-            }
+        tap.onRun = { @Sendable [unowned self] key, autorepeat in
+            // The key-down's time, read inside the callback while the event is still the tap's.
+            let pressedAt = HyperTap.keyDownTime
+            onMain { [unowned self] in run(key, autorepeat: autorepeat, pressedAt: pressedAt) }
         }
-        tap.onRelease = { [unowned self] key in held.removeValue(forKey: key)?() }
+        tap.onRelease = hopping { [unowned self] key in held.removeValue(forKey: key)?() }
         // The same actions the dictation binds run (Q224).
-        tap.onDictationKey = { [unowned self] decision in
+        tap.onDictationKey = hopping { [unowned self] decision in
             switch decision {
             case .toggle: action(DictationModule.toggleID)?.run()
             case .hold(let down): action(DictationModule.holdID)?.hold?(down)
@@ -459,26 +451,25 @@ final class Engine {
             }
         }
         tap.clickedWithin = HyperTap.hidClickedWithin
-        tap.onEscape = { TilerDrag.escape() }
+        tap.onEscape = hopping { TilerDrag.escape() }
         // Esc cancels Pilot's own take as its pill's ✕ does, the words kept for Undo.
         let dictation = PilotDictation.shared
         dictation.onLive = { [unowned self] in tap.cancelsDictationOnEscape = $0 }
-        tap.onDictationEscape = { dictation.cancel() }
+        tap.onDictationEscape = hopping { dictation.cancel() }
         // Esc or Return ends a scrolling capture and keeps what it caught, whichever app is in front; after the tap's
         // callback, as ending hides its panels.
-        ScrollCapture.onWatching = { [weak tap] capture in tap?.endScrollCapture = capture.map { capture in { Task { capture.end() } } } }
-        tap.onUnbound = { [unowned self] key, autorepeat in
+        ScrollCapture.onWatching = { [weak tap] capture in tap?.endScrollCapture = capture.map { capture in hopping { capture.end() } } }
+        tap.onUnbound = hopping { [unowned self] key, autorepeat in
             guard !autorepeat else { return }
             record(key, action: nil)
         }
-        tap.onPaste = { ClipboardHistory.shared.pasted() }
-        tap.onBrightness = { [unowned self] in ScreenBrightness.key($0, switchOn: settings.brightnessKeys) }
-        tap.onToggleCapsLock = {
-            // Off the tap callback: the IOHIDSystem round trip is no work for the hot path.
-            DispatchQueue.main.async {
-                if let on = CapsLockRemap.toggleCapsLockState() { log.notice("Shift+Caps Lock: Caps Lock \(on ? "on" : "off", privacy: .public)") }
-                else { log.error("Shift+Caps Lock: could not reach IOHIDSystem") }
-            }
+        tap.onPaste = hopping { ClipboardHistory.shared.pasted() }
+        ScreenBrightness.keysOn.store(settings.brightnessKeys, ordering: .relaxed)
+        tap.onBrightness = { @Sendable in ScreenBrightness.key($0, switchOn: ScreenBrightness.keysOn.load(ordering: .relaxed)) }
+        // Off the tap callback: the IOHIDSystem round trip is no work for the hot path.
+        tap.onToggleCapsLock = hopping {
+            if let on = CapsLockRemap.toggleCapsLockState() { log.notice("Shift+Caps Lock: Caps Lock \(on ? "on" : "off", privacy: .public)") }
+            else { log.error("Shift+Caps Lock: could not reach IOHIDSystem") }
         }
         tap.isLayerKeyDown = HyperTap.hidKeyState
         keyboardLock.secureInput = { [unowned self] in secureInput.isActive }
@@ -486,13 +477,16 @@ final class Engine {
             if on { tap.mayHaveLostRelease(); keyboardLock.secureInputCameOn() }
             tap.setSecureInput(on)
         }
-        tap.onTapDisabled = { [unowned self] reason in
+        tap.onTapDisabled = hopping { [unowned self] reason in
             // Keys went past the tap meanwhile, so the overlay may have missed its closing key.
             overlay.key()
             log.error("tap disabled by macOS (\(reason, privacy: .public)), re-enabled")
         }
         gate.onGranted = { [unowned self] in start() }
-        pilotSwitch.onBinds = { [unowned self] _ in bindSwitchesChanged() }
+        pilotSwitch.onBinds = { [unowned self] on in
+            binds.table.set(keyBinds: on)
+            bindSwitchesChanged()
+        }
         Self.shared = self
     }
 
@@ -596,6 +590,32 @@ final class Engine {
     /// A bind runs while Key binds is on; with it off, only the launcher's does (Open question 4 of spec
     /// pilot-ui-redesign), and the Launcher switch decides whether it opens (tap.onRun).
     private func runs(_ id: String) -> Bool { pilotSwitch.isOn || id == Dropdown.launcherAction }
+
+    /// A bind's key went down (tap.onRun), on the main thread after the tap's callback: its action runs, with
+    /// `HyperTap.pressedAt` set to the key-down's time meanwhile.
+    private func run(_ key: Key, autorepeat: Bool, pressedAt: TimeInterval?) {
+        guard let id = binds.store.action(for: key), runs(id), let action = self.action(id) else { return }
+        if autorepeat && !action.repeats { return }
+        // The Launcher switch off (spec pilot-ui-redesign T4): its key opens nothing and a tip names the switch; the
+        // menus other actions open still do.
+        if id == Dropdown.launcherAction, !SessionSwitch.launcher.isOn {
+            if !autorepeat { HUD.tip("The launcher is off: turn on Launcher on Home or in the Pilot menu") }
+            return
+        }
+        record(key, action: action.label)
+        if !autorepeat { countPress(id) }
+        HyperTap.pressedAt = pressedAt
+        defer { HyperTap.pressedAt = nil }
+        // The press names itself to what it opens (RunCaller): "terminal → … opened via Mouse 3".
+        RunCaller.with(key.label) {
+            if let hold = action.hold {
+                held[key] = { hold(false) }
+                hold(true)
+            } else {
+                action.run()
+            }
+        }
+    }
 
     /// The key tap runs while Key binds or the launcher is on (Open question 4, independent switches).
     private var wantsTap: Bool { pilotSwitch.isOn || SessionSwitch.launcher.isOn }
@@ -910,13 +930,13 @@ final class Engine {
     /// The Binds editor's Record: the next Hyper key, or plain combo, comes to `done` instead of running; nil stops
     /// listening. `onlyHyper` leaves every other key to run or type as usual (Rings' Record key).
     func recordKey(onlyHyper: Bool = false, _ done: ((Key) -> Void)?) {
-        tap.captureNext = done
+        tap.captureNext = done.map(hopping)
         tap.captureOnlyHyper = done != nil && onlyHyper
     }
 
     /// The Binds board while its window is in front: every Hyper key comes to `pick`, a bound one running too (T48);
     /// nil stops.
-    func pickKeys(_ pick: ((Key) -> Void)?) { tap.picking = pick }
+    func pickKeys(_ pick: ((Key) -> Void)?) { tap.picking = pick.map(hopping) }
 
     /// pilot://bind?action=windows.close&key=x[&shift=1][&ctrl=1][&alt=1][&cmd=1] binds an action under Hyper, or with
     /// &plain=1 as a plain combo (alt=left, alt=right or alt=1 for either side, the same for the others), refused with a log line when
@@ -1039,7 +1059,7 @@ final class Engine {
     /// key's quick press sent on to Now Playing, and what its wedges show and run.
     private func wireRings() {
         rings.scroll = { [hyperScroll] in hyperScroll.ring($0) }
-        rings.escape = { [tap] esc, close in tap.endRing = esc; tap.closeRing = close }
+        rings.escape = { [tap] esc, close in tap.endRing = esc.map(hopping); tap.closeRing = close.map(hopping) }
         rings.run = { [unowned self] id, pointer in
             guard let action = action(id) else { return log.notice("rings: \(LinkToken.redact(id), privacy: .public) is no action") }
             countPress(id)
@@ -1063,7 +1083,7 @@ final class Engine {
             return on
         }
         // A hold-bound media key's quick press, to macOS's own Now Playing as Pilot's media actions post it.
-        tap.onReplay = { Post.media(keyType: Int32($0.keyCode - MouseKeys.media(0).keyCode)) }
+        tap.onReplay = hopping { Post.media(keyType: Int32($0.keyCode - MouseKeys.media(0).keyCode)) }
         rings.store.onChange = { [unowned self] in tap.holdAfter = Double(rings.store.rings.holdAfter) / 1000 }
         rings.store.onChange()
     }
