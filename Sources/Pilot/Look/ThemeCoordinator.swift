@@ -1841,10 +1841,11 @@ final class ThemeCoordinator {
         return plan
     }
 
-    /// `pressed`: a press checks the plan it made a moment before, so Ghostex is not asked again.
-    private func fresh(_ plan: ThemePlan, contextRevision: String, appearance: ThemeAppearanceMutation?, pressed: Bool = false) async throws {
+    /// `justPlanned`: press() made the plan a moment before, so Ghostex is not asked again. The review panel's plan is from
+    /// its Preview, and is checked against Ghostex as the CLI's is.
+    private func fresh(_ plan: ThemePlan, contextRevision: String, appearance: ThemeAppearanceMutation?, justPlanned: Bool = false) async throws {
         // The one wait, first: every other check below then runs in the same main-actor turn as the commit after it.
-        if !pressed { guard try await ghostexColours?.read() == plan.ghostexState else { throw ThemeFailure("Ghostex's colours changed since Preview; preview again") } }
+        if !justPlanned { guard try await ghostexColours?.read() == plan.ghostexState else { throw ThemeFailure("Ghostex's colours changed since Preview; preview again") } }
         if let appearance { guard try native?.read() == appearance.before else { throw ThemeFailure("stale native appearance/personal override") } }
         let local = try effective(for: plan.selection).local
         guard plan.obsidian == (local.obsidian ?? []), plan.obsidianOptOut == (local.obsidianOptOut ?? false), plan.binding == binding, plan.zed == local.zed, plan.zedOptOut == local.zedOptOut, plan.apps == (local.apps ?? []), plan.style == style(), try context() == contextRevision,
@@ -1876,7 +1877,7 @@ final class ThemeCoordinator {
             throw ControlError(.badValue, String(describing: error))
         }
         clock.mark("planned", .step)
-        return try await apply(planned.id, peer: nil, pressed: true, shown: shown != nil, clock: clock)
+        return try await apply(planned.id, peer: nil, pressed: true, shown: shown != nil, justPlanned: true, clock: clock)
     }
     /// The sandbox's stand-in for Look's button: the same press, only on a fixture host.
     func fixturePress(_ id: String?) async throws(ControlError) -> JSONValue {
@@ -1884,8 +1885,10 @@ final class ThemeCoordinator {
         return try await press(id)
     }
 
-    /// `shown`: a press already shows the pack in Pilot's own window. `clock`: a press's, started at the pick.
-    func apply(_ planID: String, peer: ControlPeer?, pressed: Bool = false, shown: Bool = false, clock: ThemeSwitchClock = ThemeSwitchClock()) async throws(ControlError) -> JSONValue {
+    /// `shown`: a press already shows the pack in Pilot's own window. `justPlanned` and `clock`: press() planned it a
+    /// moment before, and timed it from the pick.
+    func apply(_ planID: String, peer: ControlPeer?, pressed: Bool = false, shown: Bool = false, justPlanned: Bool = false,
+               clock: ThemeSwitchClock = ThemeSwitchClock()) async throws(ControlError) -> JSONValue {
         // The theme a press shows in Pilot's own window comes off as the apply ends, however it ends: an applied pack
         // looks the same, a refused or failed one goes.
         var tried = shown
@@ -1919,7 +1922,7 @@ final class ThemeCoordinator {
                                   ThemeAllowText.fit(lead: plan.selection?.title ?? "Your previous look", entries: words.entries, skipped: words.skipped.filter { $0 != Self.cursorSkipped && $0 != Self.modeSkipped } + words.kept, limit: ControlGate.Ask.longest - 150, home: NSHomeDirectory()))
         let committed = try await gate.allow(pressed ? nil : ask, peer: peer) { () throws(ControlError) in
             do {
-                try await fresh(plan, contextRevision: revision, appearance: appearance, pressed: pressed)
+                try await fresh(plan, contextRevision: revision, appearance: appearance, justPlanned: justPlanned)
                 clock.mark("checked", .step)
                 let ready = try self.makingFolders(plan)
                 try self.adoptDetected(ready)
@@ -2002,10 +2005,10 @@ final class ThemeCoordinator {
     private func nudge(_ plan: ThemePlan, clock: ThemeSwitchClock) -> Nudges {
         var nudges = Nudges()
         if plan.mutations.contains(where: { $0.target.root == binding.root }) {
-            nudges.ghostty = Task { let reloaded = await effects.ghostty(); clock.mark("Ghostty reload", .reload); return reloaded }
+            nudges.ghostty = Task { let reloaded = await effects.ghostty(); if reloaded != nil { clock.mark("Ghostty reload", .reload) }; return reloaded }
         }
         if plan.apps.contains(where: { app in app.kind == .btop && plan.mutations.contains { $0.target.root == app.root } }) {
-            nudges.btop = Task { let count = await effects.btop(); clock.mark("btop reload", .reload); return count }
+            nudges.btop = Task { let count = await effects.btop(); if count > 0 { clock.mark("btop reload", .reload) }; return count }
         }
         return nudges
     }
