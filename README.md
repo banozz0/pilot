@@ -20,7 +20,7 @@
   <s>Dictation&nbsp;app</s>&nbsp;·
   <s>File&nbsp;manager</s>&nbsp;·
   <s>File&nbsp;converter</s>&nbsp;·
-  <s>System&nbsp;monitor</s>&nbsp;·
+  <s>Menu&nbsp;bar&nbsp;stats</s>&nbsp;·
   <s>Mac&nbsp;cleaner</s>
 </p>
 
@@ -49,7 +49,7 @@ The keyboard-driven desktop Linux people love, made for the Mac. It runs from Hy
 
 ### 🎨 Your Mac, your look
 
-19 themes built in and 31 packs to get. Apply one and Pilot, your wallpaper and apps like Ghostty, Zed and Obsidian recolour together. [Themes](https://pilotformac.com/look.html) · [Dock](https://pilotformac.com/desktop.html) · [Top bar](https://pilotformac.com/menubar.html)
+17 themes built in and 29 packs to get. Apply one and Pilot, your wallpaper and apps like Ghostty, Zed and Obsidian recolour together. [Themes](https://pilotformac.com/look.html) · [Dock](https://pilotformac.com/desktop.html) · [Top bar](https://pilotformac.com/menubar.html)
 
 ![One workspace of tiled windows (Discord, Codex, Zed, Obsidian's graph and Ghostty), the left half in a dark theme and the right half in a light one](.github/readme/shot-workspace.jpg)
 
@@ -93,7 +93,7 @@ https://github.com/user-attachments/assets/1e7e2e1f-fde0-417b-bd84-2cade22a23e4
 
 <kbd>Hyper</kbd>+<kbd>F</kbd> opens Pilot Files: folder sizes, <kbd>⌘</kbd>+<kbd>K</kbd> on every file and undo for every action. File search finds a file through a typo. [Pilot Files](https://pilotformac.com/pilotfiles.html) · [File search](https://pilotformac.com/files.html)
 
-**Also in the box:** [Update and Clean](https://pilotformac.com/update.html) · [web apps](https://pilotformac.com/webapps.html) · [extensions](https://pilotformac.com/extensions.html) · a drop-down terminal · [Mac stats](https://pilotformac.com/stats.html) · the `pilot` command.
+**Also in the box:** [Update and Clean](https://pilotformac.com/update.html) · [web apps](https://pilotformac.com/webapps.html) · [extensions](https://pilotformac.com/extensions.html) · a drop-down terminal · [menu bar stats](https://pilotformac.com/menubar.html) · the `pilot` command.
 
 <p align="center"><a href="https://pilotformac.com/#features"><b>Everything Pilot does, a key at a time</b></a></p>
 
@@ -104,7 +104,8 @@ https://github.com/user-attachments/assets/1e7e2e1f-fde0-417b-bd84-2cade22a23e4
 1. [Download `Pilot.dmg`](https://github.com/banozz0/pilot/releases/latest/download/Pilot.dmg), open it and drag Pilot
    to Applications.
 2. Open Pilot. macOS asks once whether to open an app downloaded from the Internet: click **Open**.
-3. Pick your Hyper key in Pilot's setup and allow Accessibility. Hyper+Space opens the menu.
+3. In Pilot's setup, pick your Hyper key and a set of keys (Easy, Complex or Scratch), and allow Accessibility.
+   Hyper+Space opens the menu.
 
 Signed with a Developer ID and notarized by Apple. Updates install from inside Pilot.
 
@@ -112,14 +113,17 @@ Signed with a Developer ID and notarized by Apple. Updates install from inside P
 <summary>Permissions and checking the download</summary>
 
 - **Accessibility:** Pilot needs it to see your keys and move windows; nothing works without it.
-- **Full Disk Access** for file search in the menu, and **System Events** for sleep, restart and dark mode.
+- **Full Disk Access** for file search and your browsers' bookmarks and history in the menu, and **System Events**
+  for sleep, restart and dark mode.
+- **Local Network** only for the Network extension's list of devices.
 - **Microphone** for dictation and an **AI provider** for the AI chat, both optional.
 - **Input Monitoring** only if Pilot asks, when you bind a mouse's media buttons.
 - **Screen Recording** when you first take a screenshot or recording, or turn on Menu bar › Other apps › Show exact
   menu bar items. macOS applies it after Pilot reopens: click Quit & Reopen.
 
-Caps Lock as Hyper: tapped alone it is Escape, and Shift+Caps Lock still types capitals. Password fields are blind to
-every key tap on macOS, Pilot's included: your binds do not work while one has focus.
+Caps Lock as Hyper: Shift+Caps Lock still types capitals, and a quick tap sends Escape once you switch it on in
+General. Password fields are blind to every key tap on macOS, Pilot's included: your binds do not work while one has
+focus.
 
 Updates keep the permissions you gave. Check the download against the `.sha256` beside it on the Releases page:
 `shasum -a 256 -c Pilot.dmg.sha256`.
@@ -171,7 +175,6 @@ MIT ([LICENSE](LICENSE)), built on [AeroSpace](https://github.com/nikitabobko/Ae
 - Speech and voice: [WhisperKit](Packaging/WhisperKit-NOTICES.txt), [Whisper](Packaging/Whisper-LICENSE.txt),
   [FluidAudio](Packaging/FluidAudio-NOTICES.txt), [Parakeet](Packaging/Parakeet-LICENSE.txt),
   [Kokoro](Packaging/Kokoro-LICENSE.txt).
-- Images: [Real-ESRGAN](Packaging/Real-ESRGAN-LICENSE.txt), [RealESRGAN-CoreML](Packaging/RealESRGAN-CoreML-LICENSE.txt).
 - [CodexBar](Packaging/CodexBar-LICENSE.txt), [gemoji](Packaging/gemoji-LICENSE.txt),
   [Omarchy](Packaging/Omarchy-LICENSE.txt), [Snapzy](Packaging/Snapzy-LICENSE.txt), and the fonts in
   [Packaging/Fonts](Packaging/Fonts).
