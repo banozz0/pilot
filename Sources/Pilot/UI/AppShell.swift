@@ -83,8 +83,8 @@ struct PageView: View {
 
     var body: some View {
         let key = Self.key(model)
-        // The pages switched to most, built ahead while the window idles (PageDeck.buildAhead), each on its part picked last.
-        let ahead = model.visits.likeliest(PageDeck.cap - 1, besides: model.page).map { page in
+        // The pages switched to most, warmed as the window opens (PageDeck.buildAhead), each on its part picked last.
+        let ahead = model.visits.likeliest(PageDeck.warm, besides: model.page).map { page in
             let section = model.section(of: page)
             return PageDeck.Ahead(key: Self.key(page, section: section, extensionPage: nil), page: page, section: section)
         }
@@ -295,7 +295,10 @@ struct KeptPages<Content: View>: NSViewRepresentable {
         proposal.replacingUnspecifiedDimensions()
     }
     func updateNSView(_ deck: PageDeck, context: Context) {
-        deck.show(key, root(model.page, model.section(of: model.page), model.extensionPage))
+        // A landing, a ring or an edit asked for waits on its block: that part is built whole.
+        let whole = model.blockFocus != nil || model.ringed != nil || model.setupSection != nil || model.wallpaperFocus != nil
+            || model.editBind != nil || model.editAlias != nil || model.editSnippet != nil || model.extensionFocus != nil
+        deck.show(key, root(model.page, model.section(of: model.page), model.extensionPage), whole: whole)
         deck.buildAhead(ahead) { root($0.page, $0.section, nil) }
     }
 
@@ -306,9 +309,13 @@ struct KeptPages<Content: View>: NSViewRepresentable {
 
 /// KeptPages' view: the shown part's host, and the other parts kept, hidden.
 final class PageDeck: NSView {
-    /// How many parts stay built: 27 to 49 MB each while the window is open (page-switch-3, release), all of them gone with
-    /// the window's tree when it closes.
-    static let cap = 4
+    /// How many parts stay built: the warm set and the four shown last, 27 to 49 MB each while the window is open
+    /// (page-switch-3, release), all but the one shown gone 300 s after it leaves the screen (`trimAfter`) and all of them
+    /// with the window's tree when it closes.
+    static let cap = warm + 4
+    /// How many of the pages switched to most are built as the window opens (load-lag; Sven, 2026-11-25, Q375 B: "warm-up
+    /// on window open"), so their first visit is a return visit: as many as the pages counted first (PageVisits.seed).
+    static let warm = PageVisits.seed.count
     private var hosts: [String: PageHost] = [:]
     /// The parts by when they showed, the one showing last.
     private(set) var order: [String] = []
@@ -324,22 +331,27 @@ final class PageDeck: NSView {
     /// What a part's frame shows beyond its page (KeptPages).
     var chrome: () -> String = { "" }
 
-    /// Shows part `key`. A part not built yet is built whole in its first frame, and one half built ahead is finished
-    /// there (load-lag: built in view a piece a frame, a first visit drew its top, then assembled over 20 to 35 frames and
-    /// 0.3 to 1.3 s, each a whole-page layout, two to four times the main thread's time of building it whole once).
-    func show(_ key: String, _ root: AnyView) {
+    /// Shows part `key`. A part not built yet is built in view a few pieces a frame (`buildInView`), unless `whole` (a
+    /// landing or a ring waits on a block that would not be there yet).
+    func show(_ key: String, _ root: AnyView, whole: Bool = false) {
         let host: PageHost
-        // A part half built ahead is a first visit too: whole from now on.
-        let half = building.removeValue(forKey: key) != nil
-        let built = hosts[key] == nil || half
+        // A part still being built (in view, or ahead) is a first visit, and goes on being built in view.
+        let built = hosts[key] == nil || building[key] != nil
+        if whole, let half = building[key] { finish(key, half) }
         if let kept = hosts[key] {
-            if half { kept.stage?.step = .max }
             // A part built a piece at a time keeps its stage: without it every Staged container would be another view, built
             // again.
             kept.rootView = PageHost.root(kept.stage.map { AnyView(root.environment(\.buildStage, $0)) } ?? root, kept.slot)
             host = kept
-        } else {
+        } else if whole {
             host = PageHost(root)
+        } else {
+            let stage = BuildStage()
+            host = PageHost(AnyView(root.environment(\.buildStage, stage)))
+            host.stage = stage
+            building[key] = Building(stage: stage)
+        }
+        if hosts[key] == nil {
             // Sized by this view, never by its content: no constraints, no intrinsic size to work out.
             host.sizingOptions = []
             hosts[key] = host
@@ -354,6 +366,8 @@ final class PageDeck: NSView {
         matchLayers()
         tellSoon()
         keep(Self.cap)
+        // Its first frame: as many pieces as fit now, the rest in the frames after.
+        if let half = building[key] { buildInView(key, half, host) }
     }
 
     /// The window came on screen or left it (AppWindowModel.onScreen). Off it for `trimAfter`, only the part shown stays
@@ -377,9 +391,13 @@ final class PageDeck: NSView {
         trimTimer = nil
     }
 
-    /// The `count` parts shown last stay; the rest go, the one shown longest ago first.
+    /// The `count` parts shown last stay; the rest go, the one shown longest ago first, a warm one (`ahead`) only once
+    /// no other is left, so the window's pages opened in passing never push the warm set out.
     private func keep(_ count: Int) {
-        while order.count > count { drop(order[0]) }
+        let warm = Set(ahead.map(\.key))
+        while order.count > count {
+            drop(order.dropLast().first { !warm.contains($0) } ?? order[0])
+        }
     }
 
     private func drop(_ key: String) {
@@ -391,11 +409,75 @@ final class PageDeck: NSView {
         gone.rootView = AnyView(EmptyView())
     }
 
-    // MARK: Building ahead a piece at a time (page-first, page-instant)
+    // MARK: Building a piece at a time (page-first, page-instant)
 
-    /// The parts built ahead not whole yet, hidden, built on while the window is quiet: each turn's main-thread time so far
-    /// (the stage is the host's).
-    private var building: [String: [Duration]] = [:]
+    /// A part not whole yet: its stage, and each turn's main-thread time so far.
+    final class Building {
+        let stage: BuildStage
+        var turns: [Duration] = []
+        /// When its first piece was built, for the time it took to be whole.
+        let began = ContinuousClock.now
+        /// Shown with all it shows drawn: the rest, below the fold, waits for the window to be quiet (`buildInView`).
+        var below = false
+        /// The page's scroll view, once found (`filled`).
+        weak var scroll: NSScrollView?
+        init(stage: BuildStage) { self.stage = stage }
+    }
+    /// The parts not whole yet: the one shown is built in view, the others hidden while the window is quiet.
+    private var building: [String: Building] = [:]
+
+    /// How long a frame of a part built in view may spend adding pieces: the next piece starts only within it (Sven on
+    /// build 3142, "pages still lag the same": every switch was a first visit, 100 to 330 ms in one frame).
+    static let frameBudget: Duration = .milliseconds(8)
+
+    /// One frame of part `key`, shown: pieces top down, each block whole before the next (BuildStage), until the frame's
+    /// budget is spent; the next frame goes on at the screen's next refresh, so each frame draws more of the page and
+    /// nothing drawn moves. Once the page fills the window, what is below the fold waits for the window to be
+    /// quiet (`buildNextAhead`), as a part built ahead does, and a scroll or a key finishes it at once (page-frames: on
+    /// combined-13 General, Binds and Menu bar held 45 to 170 ms frames after they drew, building blocks no one saw yet).
+    /// A switch away leaves the rest to `buildNextAhead`, hidden.
+    private func buildInView(_ key: String, _ half: Building, _ host: PageHost) {
+        let start = ContinuousClock.now
+        let stage = half.stage
+        stage.inView = true
+        // At least a pass a frame: the first has the part's frame and the page's top, whatever they cost.
+        var full = false
+        repeat {
+            step(stage, host)
+            full = filled(half, host)
+        } while stage.held && !full && ContinuousClock.now - start < Self.frameBudget && stage.step < Self.turnsMost
+        half.turns.append(ContinuousClock.now - start)
+        guard stage.held && stage.step < Self.turnsMost else { return finish(key, half) }
+        if full {
+            half.below = true
+            quietAgain = true
+            return armAhead()
+        }
+        // The next frame's pieces at the screen's next refresh: one pass a frame, the frame in between drawn and shown
+        // (page-frames: passes queued on the run loop ran back to back, the screen's frames waiting on them).
+        passKey = key
+        if passLink == nil { passLink = refreshLink(#selector(pass(_:))) }
+    }
+
+    /// The part built in view at the next refresh (`buildInView`), and the screen's refreshes that bring it.
+    private var passKey: String?
+    private var passLink: CADisplayLink?
+
+    @objc private func pass(_ link: CADisplayLink) {
+        let key = passKey
+        passKey = nil
+        if let key, shown == key, let half = building[key], !half.below, let host = hosts[key] { buildInView(key, half, host) }
+        // None next: the link holds the deck until it goes.
+        if passKey == nil { stopPass() }
+    }
+
+    private func stopPass() {
+        passLink?.invalidate()
+        passLink = nil
+    }
+
+    /// Whether the shown part is still built in view: its switch has not settled (SwitchFrames).
+    var buildingInView: Bool { shown.flatMap { building[$0] }.map { !$0.below } == true }
 
     /// One pass: the container holding children back built last adds one, and the part is laid out with it.
     private func step(_ stage: BuildStage, _ host: PageHost) {
@@ -407,12 +489,34 @@ final class PageDeck: NSView {
         if stage.held, stage.tickets == 1, !stage.holders.isEmpty { stage.holders.removeLast() }
     }
 
-    /// Part `key`, built ahead, is whole from now on: every container shows all its children.
-    private func finish(_ key: String) {
-        guard let turns = building.removeValue(forKey: key), let host = hosts[key] else { return }
-        host.stage?.step = .max
-        if let window { host.left = left(host, in: window) }
-        PageSwitchTiming.builtAhead(key, turns: turns)
+    /// Whether `event` reaches below the fold of part `host`: a scroll, a key, or a press on one of its scrollers, which
+    /// drags the page.
+    private func passesFold(_ event: NSEvent, _ host: PageHost?) -> Bool {
+        if event.type == .scrollWheel || event.type == .keyDown { return true }
+        guard event.type == .leftMouseDown, let host, event.window === window,
+              let hit = host.hitTest(convert(event.locationInWindow, from: nil)) else { return false }
+        return sequence(first: hit, next: \.superview).contains { $0 is NSScroller }
+    }
+
+    /// Whether part `host`'s page runs past the window: its scroll view (the widest, not the page list's) holds more than
+    /// it shows.
+    private func filled(_ half: Building, _ host: PageHost) -> Bool {
+        if half.scroll?.isDescendant(of: host) != true {
+            func scrolls(_ view: NSView) -> [NSScrollView] { (view as? NSScrollView).map { [$0] } ?? view.subviews.flatMap(scrolls) }
+            half.scroll = scrolls(host).max { $0.frame.width < $1.frame.width }
+        }
+        guard let scroll = half.scroll, let page = scroll.documentView else { return false }
+        return page.frame.height > scroll.contentView.bounds.height
+    }
+
+    /// Part `key` is whole from now on: every container shows all its children.
+    private func finish(_ key: String, _ half: Building) {
+        half.stage.step = .max
+        building[key] = nil
+        guard let host = hosts[key] else { return }
+        if host.isHidden, let window { host.left = left(host, in: window) }
+        if half.stage.inView || half.below { PageSwitchTiming.builtInView(key, turns: half.turns, whole: ContinuousClock.now - half.began) }
+        else { PageSwitchTiming.builtAhead(key, turns: half.turns) }
     }
 
     /// A part to build ahead: its key, its page and part.
@@ -423,17 +527,20 @@ final class PageDeck: NSView {
     /// Whether the window shows and is key: nothing is built ahead behind a closed, covered or left window.
     var showing: () -> Bool = { false }
     private var aheadTimer: Timer?
+    /// The screen's refreshes that bring the next slice while the window stays quiet (`armAhead`).
+    private var aheadLink: CADisplayLink?
     private var aheadInput: Any?
     /// How long the window stays quiet (no switch, key, click or scroll) before the next part is built ahead.
     static let quiet: TimeInterval = 0.3
     /// What a press is: any of these waiting or arriving puts the next part off until the window is quiet again.
     private static let input: NSEvent.EventTypeMask = [.keyDown, .leftMouseDown, .rightMouseDown, .otherMouseDown, .scrollWheel]
 
-    /// The window's likeliest next parts (Sven, 2026-11-22, Q341 A): once the window has drawn its page and stays quiet,
-    /// each is built hidden and never past `cap`, so its first visit is a return visit. A part is built a piece a run loop
-    /// turn (BuildStage, Q344 B), so a press waits at most one piece; a key, click, scroll or switch puts the next piece
-    /// off until the window is quiet again. A half-built part shown is finished whole (`show`). They go with the window's
-    /// tree as it closes, as every kept part does.
+    /// The window's likeliest next parts, its warm set (Sven, 2026-11-22, Q341 A; 2026-11-25, Q375 B): once the window
+    /// has drawn its page and stays quiet, each is built hidden and never past `cap`, so its first visit is a return
+    /// visit. A part is built a piece a refresh of the screen (BuildStage, Q344 B), so a press waits at most one piece; a
+    /// key, click, scroll or switch, or a first visit still built in view, puts the next piece off until the window is
+    /// quiet again. A part left half built goes on the same way, hidden; one clicked before it is whole goes on in view at
+    /// once. They go with the window's tree as it closes, as every kept part does.
     func buildAhead(_ parts: [Ahead], root: @escaping (Ahead) -> AnyView) {
         ahead = parts
         aheadRoot = root
@@ -446,8 +553,8 @@ final class PageDeck: NSView {
         order.count < Self.cap ? ahead.first { hosts[$0.key] == nil } : nil
     }
 
-    /// A part half built ahead, hidden, the one shown longest ago first.
-    private var quietHalf: String? { order.first { building[$0] != nil && $0 != shown } }
+    /// A part half built, hidden or shown with its fold filled (`buildInView`), the one shown longest ago first.
+    private var quietHalf: String? { order.first { key in building[key].map { key != shown || $0.below } == true } }
 
     /// The most turns a part is built in a piece at a time.
     static let turnsMost = 400
@@ -463,14 +570,26 @@ final class PageDeck: NSView {
             aheadInput = NSEvent.addLocalMonitorForEvents(matching: Self.input) { [weak self] event in
                 MainActor.assumeIsolated {
                     guard let self else { return }
+                    // The page shown is cut at the fold: whole before the scroll or the key reaches it.
+                    if let shown = self.shown, let half = self.building[shown], half.below, self.passesFold(event, self.hosts[shown]) {
+                        self.finish(shown, half)
+                        self.hosts[shown]?.layoutSubtreeIfNeeded()
+                    }
                     self.quietAgain = true
                     self.armAhead()
                 }
                 return event
             }
         }
-        // A part half built goes on at the next turn the run loop has free; a new one after the window was quiet.
-        let timer = Timer(timeInterval: quiet == nil || quietAgain ? Self.quiet : 0.001, repeats: false) { [weak self] _ in
+        // While the window stays quiet, a slice at each refresh of the screen, so the frames and presses between slices
+        // are served (load-lag: slices back to back on the run loop held the taps that share it); after a press, the next
+        // slice once the window is quiet again.
+        if !quietAgain {
+            if aheadLink == nil { aheadLink = refreshLink(#selector(aheadPass(_:))) }
+            if aheadLink != nil { return }
+        }
+        stopAheadLink()
+        let timer = Timer(timeInterval: Self.quiet, repeats: false) { [weak self] _ in
             MainActor.assumeIsolated { self?.buildNextAhead() }
         }
         quietAgain = false
@@ -478,9 +597,17 @@ final class PageDeck: NSView {
         aheadTimer = timer
     }
 
+    @objc private func aheadPass(_ link: CADisplayLink) { buildNextAhead() }
+
+    private func stopAheadLink() {
+        aheadLink?.invalidate()
+        aheadLink = nil
+    }
+
     private func stopAhead() {
         aheadTimer?.invalidate()
         aheadTimer = nil
+        stopAheadLink()
         if let aheadInput { NSEvent.removeMonitor(aheadInput) }
         aheadInput = nil
     }
@@ -489,9 +616,10 @@ final class PageDeck: NSView {
         aheadTimer = nil
         let quiet = quietHalf
         guard let window, quiet != nil || nextAhead != nil else { return stopAhead() }
-        guard showing() else { stopAhead(); return waitToShow() }
-        // A press already waiting goes first.
-        if NSApp.nextEvent(matching: Self.input, until: .distantPast, inMode: .default, dequeue: false) != nil {
+        // The page shown, cut at the fold, goes on behind another window too: it scrolls there.
+        guard showing() || quiet != nil && quiet == shown else { stopAhead(); return waitToShow() }
+        // A press already waiting goes first, and the page shown, still built in view.
+        if buildingInView || NSApp.nextEvent(matching: Self.input, until: .distantPast, inMode: .default, dequeue: false) != nil {
             quietAgain = true
             return armAhead()
         }
@@ -509,25 +637,33 @@ final class PageDeck: NSView {
             host.frame = bounds
             host.isHidden = true
             hosts[next.key] = host
-            // Shown longest ago: the first to go past `cap`, before any part the user opened.
+            // Shown longest ago, yet warm: it goes past `cap` only after every part opened in passing (`keep`).
             order.insert(next.key, at: 0)
             addSubview(host, positioned: .below, relativeTo: nil)
-            building[next.key] = []
+            building[next.key] = Building(stage: stage)
             key = next.key
         }
-        guard building[key] != nil, let host = hosts[key], let stage = host.stage else { return armAhead() }
-        // This turn's piece built and drawn, then hidden before its commit, so no frame shows it and no event reaches it;
-        // the keyboard stays where it was.
-        let responder = window.firstResponder
-        host.isHidden = false
-        step(stage, host)
-        host.displayIfNeeded()
-        host.isHidden = true
-        if window.firstResponder !== responder { window.makeFirstResponder(responder) }
-        building[key]?.append(ContinuousClock.now - start)
+        guard let half = building[key], let host = hosts[key] else { return armAhead() }
+        // A row or a card a pass, as nothing it adds shows yet (page-frames-5: the shown part's blocks below the fold,
+        // whole, held 40 to 80 ms turns).
+        half.stage.inView = false
+        if key == shown {
+            // The shown part's next piece below the fold, drawn as the window draws.
+            step(half.stage, host)
+        } else {
+            // This turn's piece built and drawn, then hidden before its commit, so no frame shows it and no event reaches
+            // it; the keyboard stays where it was.
+            let responder = window.firstResponder
+            host.isHidden = false
+            step(half.stage, host)
+            host.displayIfNeeded()
+            host.isHidden = true
+            if window.firstResponder !== responder { window.makeFirstResponder(responder) }
+        }
+        half.turns.append(ContinuousClock.now - start)
         // Nothing held back: the part is whole, drawn at its size, so its first visit flips to it (picture). A part still
         // held back after `turnsMost` turns is finished whole in the next.
-        if !stage.held || stage.step >= Self.turnsMost { finish(key) }
+        if !half.stage.held || half.stage.step >= Self.turnsMost { finish(key, half) }
         armAhead()
     }
 
@@ -554,10 +690,11 @@ final class PageDeck: NSView {
         super.viewDidMoveToWindow()
         if window == nil {
             stopAhead()
+            stopPass()
             stopLeft()
             stopTrim()
         } else {
-            // What a switch's frames line reads (SwitchFrames): this window's screen.
+            // What a switch's frames line reads (SwitchFrames): this window's screen, and whether the page shown is settled.
             PageSwitchTiming.deck = self
             armAhead()
         }
@@ -567,7 +704,8 @@ final class PageDeck: NSView {
     private func hide(_ host: PageHost) {
         if let responder = window?.firstResponder as? NSView, responder.isDescendant(of: host) { window?.makeFirstResponder(nil) }
         host.isHidden = true
-        host.left = window.map { left(host, in: $0) }
+        // A part left half built has no picture: shown again, it is built on in view (`finish` takes one once it is whole).
+        host.left = host.stage.map { $0.step != .max } == true ? nil : window.map { left(host, in: $0) }
     }
 
     /// How `host` is left: under which look and frame, where in the window and at what window size (picture).
@@ -662,19 +800,19 @@ final class PageDeck: NSView {
         leftLink = nil
     }
 
-    /// A display link on the window's screen (the main one while the window is on none) calling `selector` each refresh.
+    /// A display link on the window's screen (the main one while the deck is in no window or the window on no screen)
+    /// calling `selector` each refresh. The window's first part is shown before the deck is in the window (load-lag:
+    /// without a link then, Home stayed half built, and the warm-up waiting on it never began).
     private func refreshLink(_ selector: Selector) -> CADisplayLink? {
-        guard let window else { return nil }
-        let link = window.screen != nil ? displayLink(target: self, selector: selector)
+        let link = window?.screen != nil ? displayLink(target: self, selector: selector)
             : (NSScreen.main ?? NSScreen.screens.first)?.displayLink(target: self, selector: selector)
         link?.add(to: .main, forMode: .common)
         return link
     }
 }
 
-/// A part built a piece at a time ahead, hidden (PageDeck.buildAhead; Sven, 2026-11-22, Q344 B: "no key waits more than
-/// one frame"). `inView` is the offscreen renders' model of a first visit built a frame at a time (WidePagesRenders), which
-/// Pilot no longer does (load-lag: PageDeck.show).
+/// A part built a piece at a time: ahead, hidden (PageDeck.buildAhead; Sven, 2026-11-22, Q344 B: "no key waits more than
+/// one frame"), or in view on its first visit (PageDeck.buildInView; Sven on build 3142: "pages still lag the same").
 /// Each pass the Staged container that began holding children back last shows one more, so a block is whole before the
 /// next one comes and nothing drawn moves, until none holds any back. A part built whole has no stage.
 @MainActor @Observable final class BuildStage {
@@ -691,7 +829,7 @@ final class PageDeck: NSView {
 }
 
 extension EnvironmentValues {
-    /// The stage of the part being built ahead; nil in a part built whole.
+    /// The stage of the part being built ahead; nil in a part built in view.
     @Entry var buildStage: BuildStage?
 }
 

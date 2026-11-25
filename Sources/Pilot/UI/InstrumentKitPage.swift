@@ -89,7 +89,6 @@ struct PageStack<Content: View>: View {
 /// then its content inset as the header; without a title, the content alone on the panel.
 struct InstrumentBlock<Trailing: View, Content: View>: View {
     @Environment(\.style) private var style
-    @Environment(\.blockRowsWhole) private var rowsWhole
     var title: String?
     var symbol: String?
     var note: String?
@@ -115,11 +114,10 @@ struct InstrumentBlock<Trailing: View, Content: View>: View {
             if let note {
                 Text(note).styleText(\.caption).foregroundStyle(style.color(\.text3)).fixedSize(horizontal: false, vertical: true).padding(.bottom, 10)
             }
-            // A row a turn while the part is built ahead (Staged), and in view a frame's worth at a time, top down, so a
-            // first visit never holds a frame on a whole block (page-frames-5: 30 to 60 ms frames after the page drew).
-            // A block whose height sizes what stands beside it comes whole (`blockRowsWhole`). KitBlock's rows stage in
+            // A row a turn while the part is built ahead (Staged); in view the block whole, a block a frame (load-lag, Sven's
+            // pick on 2026-11-25: a row a frame assembled each first visit over 20 to 35 frames). KitBlock's rows stage in
             // BlockRowColumns, which stands them in columns once the block is wide (wide-pages).
-            if staged { Staged(inView: !rowsWhole) { content } } else { content }
+            if staged { Staged(inView: false) { content } } else { content }
         }
         .padding(.horizontal, style.density.padding).padding(.vertical, InstrumentKitPage.blockPadding)
         .frame(maxHeight: fill ? .infinity : nil, alignment: .top)
@@ -135,7 +133,6 @@ struct InstrumentBlock<Trailing: View, Content: View>: View {
 struct BlockRowColumns<Content: View>: View {
     @Environment(\.style) private var style
     @Environment(\.blockRowColumns) private var on
-    @Environment(\.blockRowsWhole) private var rowsWhole
     /// The block's children as KitBlock read them, and what each is (BlockRow's container value).
     let children: SubviewsCollection
     let kinds: [BlockRowKind?]
@@ -149,9 +146,8 @@ struct BlockRowColumns<Content: View>: View {
                 ForEach(0..<count, id: \.self) { _ in InstrumentRule() }
             }
         } else {
-            // A frame's worth of rows at a time in view, as InstrumentBlock's (page-frames-5); rows in columns come whole,
-            // as each row added would split the columns again.
-            Staged(inView: !rowsWhole) { ForEach(children) { $0 } }
+            // The block whole in view, as InstrumentBlock's (load-lag).
+            Staged(inView: false) { ForEach(children) { $0 } }
         }
     }
 
@@ -361,13 +357,6 @@ struct InstrumentPair<Left: View, Right: View>: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .onGeometryChange(for: Bool.self) { $0.size.width >= InstrumentKitPage.pairWidth } action: { wide = $0 }
     }
-}
-
-extension EnvironmentValues {
-    /// A first visit builds a block's rows in view a frame's worth at a time (InstrumentBlock), unless the block's height
-    /// sizes something beside it (Look's preview takes its row's height): there the block comes whole, as nothing drawn
-    /// may move.
-    @Entry var blockRowsWhole = false
 }
 
 extension View {

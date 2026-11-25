@@ -129,8 +129,6 @@ struct LookPage: View {
                         WallpaperBlock(settings: wallpaper, screens: screens, focus: focus, part: .front).id(AppSection.wallpaper)
                     }
                     .frame(width: ink.isInstrument ? 290 : 330)
-                    // The preview takes this column's height: its blocks come whole on a first visit.
-                    .environment(\.blockRowsWhole, true)
                 } }
                 .fixedSize(horizontal: false, vertical: true)
                 // With packs, ThemeSection draws the heading: Apply theme and Restore default sit on its line (Sven Q69).

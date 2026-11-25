@@ -62,7 +62,7 @@ struct WidePagesRenders {
                 for (page, place) in Self.places {
                     let file = "\(name)-\(suffix)-\(page)"
                     guard only.map({ $0.contains { file.contains($0) } }) ?? true else { continue }
-                    // Built whole: in view a page goes on a piece a frame at the screen's refresh (the in-view build before load-lag),
+                    // Built whole: in view a page goes on a piece a frame at the screen's refresh (PageDeck.buildInView),
                     // which a window never ordered in does not get, so it would stop after its first frame. A ring asked
                     // for builds the part whole (PageView); this one names no row, so none is ringed. Set after the switch,
                     // which clears a ring, in the same turn, so the deck sees both at once.
@@ -88,7 +88,7 @@ struct WidePagesRenders {
     }
 
     /// Pages whose short runs and blocks of rows the wide rule lays out, built a piece at a time as a first visit builds
-    /// them (the in-view build before load-lag) at 1700 by 1290: shot after the first frame and once whole (`staged-<page>-first`,
+    /// them (PageDeck.buildInView) at 1700 by 1290: shot after the first frame and once whole (`staged-<page>-first`,
     /// `-whole`), so a block drawn in the first frame can be seen to keep its place and width; and built hidden, a
     /// piece a pass (PageDeck.buildAhead), the passes counted, into `staged.txt`.
     static func staged(engine: Engine, look: Look, to dir: URL) throws {
@@ -115,14 +115,14 @@ struct WidePagesRenders {
                 window.contentView = host
                 var passes = 0, frames = 0
                 repeat {
-                    // In view: passes until a frame's budget is spent, then drawn (the in-view build before load-lag); hidden: a pass a turn.
+                    // In view: passes until a frame's budget is spent, then drawn (PageDeck.buildInView); hidden: a pass a turn.
                     let start = ContinuousClock.now
                     repeat {
                         stage.step += 1; stage.held = false; stage.tickets = 1
                         host.layoutSubtreeIfNeeded()
                         if stage.held, stage.tickets == 1, !stage.holders.isEmpty { stage.holders.removeLast() }
                         passes += 1
-                    } while inView && stage.held && ContinuousClock.now - start < .milliseconds(8)
+                    } while inView && stage.held && ContinuousClock.now - start < PageDeck.frameBudget
                     frames += 1
                     if inView && frames == 1 {
                         try #require(snapshot(host, scale: 1)?.representation(using: .png, properties: [:])).write(to: dir.appendingPathComponent("staged-\(name)-first.png"))
@@ -138,7 +138,7 @@ struct WidePagesRenders {
     }
 
     /// How long Captures, Update & Clean, Open with and Pilot take to build, lay out and draw as a first visit does, alone in a
-    /// host at the window's first size and at 1700 by 1290, in Tokyo Night: a piece at a time as the in-view build before load-lag builds
+    /// host at the window's first size and at 1700 by 1290, in Tokyo Night: a piece at a time as PageDeck.buildInView builds
     /// them (passes until its 8 ms frame budget is spent, drawn, then the next frame), the first frame and the time until
     /// whole. The first run warms up and is left out; the median of the next nine is written. A debug build's
     /// before-and-after measure, not the app's own milliseconds.
@@ -169,7 +169,7 @@ struct WidePagesRenders {
                     stage.step += 1; stage.held = false; stage.tickets = 1
                     host.layoutSubtreeIfNeeded()
                     if stage.held, stage.tickets == 1, !stage.holders.isEmpty { stage.holders.removeLast() }
-                } while stage.held && ContinuousClock.now - frameStart < .milliseconds(8)
+                } while stage.held && ContinuousClock.now - frameStart < PageDeck.frameBudget
                 host.display()
                 CATransaction.flush()
                 frames.append((ContinuousClock.now - frameStart) / .milliseconds(1))
