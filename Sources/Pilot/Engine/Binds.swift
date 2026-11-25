@@ -230,7 +230,7 @@ final class BindTable: Sendable {
         var keyBinds = true
     }
     private let state = Mutex(State())
-    /// The launcher's action runs with Key binds off (Engine.runs).
+    /// The launcher's action runs with Key binds off (Open question 4 of spec pilot-ui-redesign).
     private let launcher: String
 
     init(launcher: String = Dropdown.launcherAction) { self.launcher = launcher }

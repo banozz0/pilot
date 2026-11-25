@@ -44,7 +44,7 @@ struct TapThreadProbe {
         ]
         nonisolated(unsafe) let keyInfo = Unmanaged.passUnretained(tap).toOpaque()
         nonisolated(unsafe) let buttonInfo = Unmanaged.passUnretained(buttons).toOpaque()
-        nonisolated(unsafe) let loop = HyperTap.eventRunLoop
+        nonisolated(unsafe) let loop = EventTapThread.shared.runLoop
         nonisolated(unsafe) let proxy = OpaquePointer(bitPattern: 1)!
         DispatchQueue.global(qos: .userInteractive).async {
             usleep(30_000)   // inside the main thread's 250 ms

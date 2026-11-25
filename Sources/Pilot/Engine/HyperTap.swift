@@ -266,8 +266,6 @@ final class HyperTap: @unchecked Sendable {
 
     enum StartError: Error { case tapCreationFailed }
 
-    /// The run loop the tap's source goes on: the tap thread's, never the main one (the probe's seam too).
-    static var eventRunLoop: CFRunLoop { EventTapThread.shared.runLoop }
     /// The tap's C callback, for the probe to deliver an event the way the window server does.
     static let callback: CGEventTapCallBack = tapCallback
 
@@ -283,14 +281,13 @@ final class HyperTap: @unchecked Sendable {
                                           eventsOfInterest: mask, callback: tapCallback, userInfo: me) else {
             throw .tapCreationFailed
         }
-        let source = CFMachPortCreateRunLoopSource(nil, tap, 0)
-        CFRunLoopAddSource(Self.eventRunLoop, source, .commonModes)
-        CFRunLoopWakeUp(Self.eventRunLoop)
+        let source = CFMachPortCreateRunLoopSource(nil, tap, 0)!
+        EventTapThread.shared.add(source)
         CGEvent.tapEnable(tap: tap, enable: true)
         self.tap = tap
         self.source = source
         lockObserver = DistributedNotificationCenter.default().addObserver(forName: ScreenEvents.locked, object: nil, queue: .main) { [weak self] _ in
-            MainActor.assumeIsolated { self?.mayHaveLostRelease() }
+            self?.mayHaveLostRelease()
         }
     }
 
@@ -319,7 +316,7 @@ final class HyperTap: @unchecked Sendable {
         lock.lock(); defer { lock.unlock() }
         unlockKeyboard(.tapOff)
         if let tap { CGEvent.tapEnable(tap: tap, enable: false) }
-        if let source { CFRunLoopRemoveSource(Self.eventRunLoop, source, .commonModes) }
+        if let source { EventTapThread.shared.remove(source) }
         dropLayer()
         releaseAll()
         if let lockObserver { DistributedNotificationCenter.default().removeObserver(lockObserver) }

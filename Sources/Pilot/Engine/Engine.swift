@@ -438,7 +438,7 @@ final class Engine {
         }
         tap.onRun = { @Sendable [unowned self] key, autorepeat in
             // The key-down's time, read inside the callback while the event is still the tap's.
-            let pressedAt = HyperTap.keyDownTime
+            let pressedAt = autorepeat ? nil : HyperTap.keyDownTime
             onMain { [unowned self] in run(key, autorepeat: autorepeat, pressedAt: pressedAt) }
         }
         tap.onRelease = hopping { [unowned self] key in held.removeValue(forKey: key)?() }
@@ -465,7 +465,7 @@ final class Engine {
         }
         tap.onPaste = hopping { ClipboardHistory.shared.pasted() }
         ScreenBrightness.keysOn.store(settings.brightnessKeys, ordering: .relaxed)
-        tap.onBrightness = { @Sendable in ScreenBrightness.key($0, switchOn: ScreenBrightness.keysOn.load(ordering: .relaxed)) }
+        tap.onBrightness = ScreenBrightness.key
         // Off the tap callback: the IOHIDSystem round trip is no work for the hot path.
         tap.onToggleCapsLock = hopping {
             if let on = CapsLockRemap.toggleCapsLockState() { log.notice("Shift+Caps Lock: Caps Lock \(on ? "on" : "off", privacy: .public)") }
@@ -587,14 +587,12 @@ final class Engine {
         if armKeys() { armPointerTaps() }
     }
 
-    /// A bind runs while Key binds is on; with it off, only the launcher's does (Open question 4 of spec
-    /// pilot-ui-redesign), and the Launcher switch decides whether it opens (tap.onRun).
-    private func runs(_ id: String) -> Bool { pilotSwitch.isOn || id == Dropdown.launcherAction }
-
     /// A bind's key went down (tap.onRun), on the main thread after the tap's callback: its action runs, with
-    /// `HyperTap.pressedAt` set to the key-down's time meanwhile.
+    /// `HyperTap.pressedAt` set to the key-down's time meanwhile. A bind runs while Key binds is on; with it off, only the
+    /// launcher's does (Open question 4 of spec pilot-ui-redesign, BindTable.runs), and the Launcher switch decides
+    /// whether it opens.
     private func run(_ key: Key, autorepeat: Bool, pressedAt: TimeInterval?) {
-        guard let id = binds.store.action(for: key), runs(id), let action = self.action(id) else { return }
+        guard binds.table.runs(key), let id = binds.store.action(for: key), let action = self.action(id) else { return }
         if autorepeat && !action.repeats { return }
         // The Launcher switch off (spec pilot-ui-redesign T4): its key opens nothing and a tip names the switch; the
         // menus other actions open still do.

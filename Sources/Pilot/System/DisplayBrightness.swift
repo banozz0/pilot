@@ -140,6 +140,7 @@ enum ScreenBrightness {
     /// Reads every screen now and again after each display change or wake, never on a timer.
     static func start() {
         refresh(after: 0)
+        followPilotWindow()
         CGDisplayRegisterReconfigurationCallback({ _, flags, _ in
             guard !flags.contains(.beginConfigurationFlag) else { return }
             Task { @MainActor in ScreenBrightness.refresh(after: 1) }
@@ -196,10 +197,10 @@ enum ScreenBrightness {
     /// The keyboard's brightness keys (card agent-bo-95423314), from inside the tap callback on the tap thread: the first
     /// press asks for the focused window's display and its route, its step runs on the main thread after the callback
     /// returns.
-    nonisolated static func key(_ press: BrightnessKeys.Press, switchOn: Bool) -> Bool {
+    nonisolated static func key(_ press: BrightnessKeys.Press) -> Bool {
         let first = press.isDown && !press.isRepeat
         let (taken, display) = keys.withLock { keys in
-            keys.route(press, switchOn: switchOn) {
+            keys.route(press, switchOn: keysOn.load(ordering: .relaxed)) {
                 let display = focusedDisplay()
                 return (display, routes.withLock { $0[display] })
             }
@@ -210,36 +211,54 @@ enum ScreenBrightness {
     }
 
     /// The display holding the focused window's centre, else the main one: Screens.focusedScreen's display, read off the
-    /// main thread from the Accessibility API and CoreGraphics' display bounds (AX coordinates both). A mirror is left out,
-    /// as NSScreen lists only the display it mirrors.
+    /// main thread from the front app's focused window (AXFront, which never asks Pilot itself) and CoreGraphics' display
+    /// bounds, AX coordinates both. With Pilot in front, its own key window's display as the main thread last saw it. A
+    /// mirror is left out, as NSScreen lists only the display it mirrors.
     nonisolated private static func focusedDisplay() -> UInt32 {
+        if NSWorkspace.shared.frontmostApplication?.processIdentifier == getpid() {
+            let own = pilotWindowDisplay.load(ordering: .relaxed)
+            return own == 0 ? CGMainDisplayID() : own
+        }
         var count: UInt32 = 0
-        CGGetActiveDisplayList(0, nil, &count)
+        guard CGGetActiveDisplayList(0, nil, &count) == .success, count > 0 else { return CGMainDisplayID() }
         var ids = [CGDirectDisplayID](repeating: 0, count: Int(count))
-        CGGetActiveDisplayList(count, &ids, &count)
+        guard CGGetActiveDisplayList(count, &ids, &count) == .success else { return CGMainDisplayID() }
         let shown = ids.prefix(Int(count)).filter { CGDisplayMirrorsDisplay($0) == kCGNullDirectDisplay }
-        guard let frame = focusedWindowFrame(),
+        guard let frame = AXFront.focusedWindow().flatMap(standardFrame),
               let index = WindowGeometry.screen(holding: frame, among: shown.map(CGDisplayBounds)) else { return CGMainDisplayID() }
         return shown[index]
     }
 
-    /// AXWindow.focused()'s frame, read off the main thread: the front app's focused window when it is a standard one
-    /// (a standard subrole, or none and a close button), else nil.
-    nonisolated private static func focusedWindowFrame() -> CGRect? {
-        guard let pid = NSWorkspace.shared.frontmostApplication?.processIdentifier else { return nil }
-        func value(_ element: AXUIElement, _ attribute: String) -> AnyObject? {
+    /// A window's frame when it is a standard one, as AXWindow.isStandard and frame read it (a standard subrole, or none
+    /// and a close button); nil otherwise.
+    nonisolated private static func standardFrame(_ window: AXUIElement) -> CGRect? {
+        func value(_ attribute: String) -> AnyObject? {
             var v: AnyObject?
-            return AXUIElementCopyAttributeValue(element, attribute as CFString, &v) == .success ? v : nil
+            return AXUIElementCopyAttributeValue(window, attribute as CFString, &v) == .success ? v : nil
         }
-        guard let found = value(AXUIElementCreateApplication(pid), kAXFocusedWindowAttribute) else { return nil }
-        let window = found as! AXUIElement
-        let subrole = value(window, kAXSubroleAttribute) as? String
-        guard subrole.map({ $0 == kAXStandardWindowSubrole }) ?? (value(window, kAXCloseButtonAttribute) != nil) else { return nil }
-        guard let pos = value(window, kAXPositionAttribute), let size = value(window, kAXSizeAttribute) else { return nil }
+        let subrole = value(kAXSubroleAttribute) as? String
+        guard subrole.map({ $0 == kAXStandardWindowSubrole }) ?? (value(kAXCloseButtonAttribute) != nil),
+              let pos = value(kAXPositionAttribute), let size = value(kAXSizeAttribute) else { return nil }
         var p = CGPoint.zero, s = CGSize.zero
         AXValueGetValue(pos as! AXValue, .cgPoint, &p)
         AXValueGetValue(size as! AXValue, .cgSize, &s)
         return CGRect(origin: p, size: s)
+    }
+
+    /// The display of Pilot's own key window when it is a titled window (not a panel), 0 with none: read on the main
+    /// thread as key windows and screens change, for `focusedDisplay` while Pilot is in front.
+    nonisolated private static let pilotWindowDisplay = Atomic<UInt32>(0)
+
+    private static func followPilotWindow() {
+        let read: @Sendable (Notification) -> Void = { _ in
+            DispatchQueue.main.async {
+                let window = NSApp.keyWindow.flatMap { $0.styleMask.contains(.titled) && !($0 is NSPanel) ? $0 : nil }
+                pilotWindowDisplay.store(window?.screen.flatMap(number) ?? 0, ordering: .relaxed)
+            }
+        }
+        for name in [NSWindow.didBecomeKeyNotification, NSWindow.didResignKeyNotification, NSWindow.didChangeScreenNotification] {
+            _ = NotificationCenter.default.addObserver(forName: name, object: nil, queue: .main, using: read)
+        }
     }
 
     private static func number(_ screen: NSScreen) -> UInt32? {

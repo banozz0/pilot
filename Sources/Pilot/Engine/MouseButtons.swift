@@ -366,11 +366,11 @@ final class MouseSenders {
         resolve()
     }
 
-    /// A bound key from a sender no watched mouse has: resolved once more, after the tap callback, in case the mouse's
-    /// event service published after the last read.
+    /// A bound key from a sender no watched mouse has (the tap hands it over after its callback): resolved once more, in
+    /// case the mouse's event service published after the last read.
     func missed(_ sender: UInt64) {
         guard !watched.isEmpty, misses.insert(sender).inserted else { return }
-        DispatchQueue.main.async { [weak self] in self?.resolve() }
+        resolve()
     }
 
     /// Reads every watched mouse's sending services afresh.
