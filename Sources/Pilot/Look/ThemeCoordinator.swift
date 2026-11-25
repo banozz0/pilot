@@ -1623,9 +1623,12 @@ final class ThemeCoordinator {
         }
     }
 
-    func plan(_ id: String?) async throws -> ThemePlan {
+    /// `catalogue` false (a press): a shipped pack that has its pictures plans from that copy at once, and press() reads
+    /// the catalogue for it after the switch (`shippedDue`); only a pack with no copy yet waits for the download.
+    func plan(_ id: String?, catalogue: Bool = true) async throws -> ThemePlan {
         // Ghostex answers through a child process, awaited with the pictures below, so the rest plans in one main-actor turn.
         let ghostexRead = Task { try await ghostexColours?.read() }
+        let copied = await loadedOffMain(id)
         // Use my wallpaper folder for every theme: the folder's pictures, read off the main thread (it runs the tap), in
         // place of the pack's, so a shipped pack's are never fetched.
         if id != nil, try following().wallpapers, let folder = wallpaperFolder() {
@@ -1633,8 +1636,24 @@ final class ThemeCoordinator {
             return try await plan(id, ghostex: ghostexRead.value, folder: (folder, pictures.images, pictures.portraits))
         }
         var note: String?
-        if let id { note = await fetchShipped(id) }
+        if let id, catalogue || copied == false { note = await fetchShipped(id) } else if copied == true { shippedDue = id }
         return try await plan(id, ghostex: ghostexRead.value, shippedNote: note)
+    }
+
+    /// A shipped pack a press planned from its fetched copy, its catalogue read once the switch is done.
+    private var shippedDue: String?
+
+    /// The pack and a shipped pack's fetched pictures loaded off the main thread (theme-switch, Sven on combined-14: a pick
+    /// waited 130 ms on a pack's first load there, decoding every picture whole). A picture decodes once by its bytes
+    /// (ThemePackStore's proved), so the plan's loads after this read it from there. Whether a shipped pack already has
+    /// its pictures; nil for any other pack, or one that does not load.
+    private func loadedOffMain(_ id: String?) async -> Bool? {
+        guard let id else { return nil }
+        let store = store, wallpapers = shipped?.wallpapers
+        return await Task.detached(priority: .userInitiated) { () -> Bool? in
+            guard let loaded = try? store.load(id), let wallpapers, ShippedWallpapers.wants(loaded) else { return nil }
+            return !wallpapers.picturing(loaded).images.isEmpty
+        }.value
     }
 
     /// A shipped pack's pictures fetched from the catalogue before its plan reads them; why there are none to use, else nil.
@@ -1871,7 +1890,10 @@ final class ThemeCoordinator {
             try? await Task.sleep(for: Self.pressedFrame)
         }
         let planned: ThemePlan
-        do { planned = try await plan(id) } catch {
+        // The catalogue is read for a shipped pack after the switch, never before it (theme-switch: GitHub's index every
+        // ten minutes held a pick); a newer copy of its pictures is there for the next pick.
+        defer { if let due = shippedDue { shippedDue = nil; Task { _ = await fetchShipped(due) } } }
+        do { planned = try await plan(id, catalogue: false) } catch {
             if shown != nil { showPressed(nil) }
             looklog.notice("\(clock.line(shown?.title ?? id ?? "Restore", status: "not planned: \(error)"), privacy: .public)")
             throw ControlError(.badValue, String(describing: error))
