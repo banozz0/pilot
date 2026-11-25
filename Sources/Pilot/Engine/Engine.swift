@@ -427,7 +427,8 @@ final class Engine {
         tap.onModifiers = hopping { [unowned self] held in overlay.modifiers(held) }
         tap.onKey = hopping { [unowned self] in overlay.key() }
         tap.onTyped = { @Sendable [keywords = SnippetLibrary.shared.keywords] in keywords.typed($0, $1()) }
-        tap.onLayerChange = hopping { [unowned self] down in
+        // The drag tap's press tap goes on for Hyper on the tap thread, as the key's callback returns, never a main turn late.
+        nonisolated(unsafe) let layerChanged = hopping { [unowned self] (down: Bool) in
             // The page Shift or Ctrl already held names, read once as the layer goes down.
             overlay.layer(down: down, held: tap.layer.sublayer(flags: CGEventSource.flagsState(.hidSystemState).rawValue))
             hyperHeld = down
@@ -435,6 +436,10 @@ final class Engine {
             mouseTap.hyper(down)
             SelectionTools.shared.hyper(down)
             log.debug("Hyper \(down ? "on" : "off", privacy: .public)")
+        }
+        tap.onLayerChange = { @Sendable [gate = mouseTap.gate] down in
+            gate.hyper(down)
+            layerChanged(down)
         }
         tap.onRun = { @Sendable [unowned self] key, autorepeat in
             // The key-down's time, read inside the callback while the event is still the tap's.

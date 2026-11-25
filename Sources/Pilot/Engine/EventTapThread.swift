@@ -34,6 +34,34 @@ final class EventTapThread: Sendable {
     }
 
     func remove(_ source: CFRunLoopSource) { CFRunLoopRemoveSource(runLoop, source, .commonModes) }
+
+    /// Runs `body` on the tap thread once its current callback, if any, has returned.
+    func perform(_ body: @escaping @Sendable () -> Void) {
+        CFRunLoopPerformBlock(runLoop, CFRunLoopMode.commonModes.rawValue, body)
+        CFRunLoopWakeUp(runLoop)
+    }
+}
+
+/// Runs `body` on the main thread and waits for it, up to `timeout` seconds: false when the main thread had not taken it
+/// by then, and it never runs. A block on the main run loop in its common modes, as a tap's source there was, so it runs
+/// inside a nested run loop too (a menu's tracking), where the main queue may be held by the block that opened it.
+func waitOnMain(timeout: TimeInterval, _ body: @escaping @MainActor () -> Void) -> Bool {
+    final class Handoff: @unchecked Sendable {
+        let lock = NSLock(), done = DispatchSemaphore(value: 0)
+        var claimed = false
+        func claim() -> Bool { lock.withLock { defer { claimed = true }; return !claimed } }
+    }
+    let handoff = Handoff()
+    CFRunLoopPerformBlock(CFRunLoopGetMain(), CFRunLoopMode.commonModes.rawValue) {
+        guard handoff.claim() else { return }
+        MainActor.assumeIsolated { body() }
+        handoff.done.signal()
+    }
+    CFRunLoopWakeUp(CFRunLoopGetMain())
+    if handoff.done.wait(timeout: .now() + timeout) == .success { return true }
+    if handoff.claim() { return false }   // never started: it never will
+    handoff.done.wait()                   // started just now: its answer stands
+    return true
 }
 
 /// Runs `body` on the main queue, after the tap callback that calls it returned, in the order the tap handed them over.

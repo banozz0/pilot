@@ -14,6 +14,11 @@ import PilotTiler
 /// or the empty desktop (its own menu, Q743) is this tap's too, so it and a Hyper resize never race in two taps: with Hyper the drag modifier, a right press over
 /// a file waits for its release, a resize once it moves past `clickSlop`, the file menu if it never does; with no drag
 /// modifier picked, the tap is on only while Hyper is held.
+///
+/// The press tap (left and right down and up) is on the keyboard tap's thread (EventTapThread): with a drag modifier picked
+/// it sees every click on the Mac, and a plain one passes there (PressGate), never waiting on the main thread. A press Pilot
+/// may take (the modifier, Hyper, a widget's or a held press's) is decided on the main thread as before, the tap thread
+/// waiting for it. The drags stay in their own tap on the main run loop, on only while this tap holds a press.
 @MainActor
 final class MouseDragTap {
     /// What a drag writes to: another app's window through AX, or one of Pilot's own through AppKit.
@@ -40,14 +45,14 @@ final class MouseDragTap {
     }
     var widgets: WidgetHooks?
     /// A widget shows on the desktop: the tap is on for its right presses (its menu), else Finder would take them.
-    var widgetsShown = false { didSet { enable() } }
+    var widgetsShown = false { didSet { gate.set(widgetsShown: widgetsShown); enable() } }
     /// The right press a widget's menu took: its drags and its release are taken too, so Finder never sees half a click.
     private var menuDown = false
     /// A widget's press is held, and by which button: its drags and its release are taken too, so Finder never draws a
     /// selection box or opens its menu.
     private var widgetDown: MouseDrag.Button?
     /// A drag modifier is picked: the tap is on all the time, else only while Hyper is held or a file press is still down.
-    var dragging = true { didSet { enable() } }
+    var dragging = true { didSet { gate.set(modifier: modifier()); enable() } }
     private var hyperDown = false
     /// The right press Hyper + right-click took: its drags and its release are taken too, so no context menu opens.
     private var fileClickDown = false
@@ -57,8 +62,8 @@ final class MouseDragTap {
     /// How far a waiting press moves before it is a resize, in points.
     static let clickSlop: CGFloat = 4
     private var wanted: Bool { dragging || hyperDown || fileClickDown || widgetDown != nil || widgetsShown || menuDown }
-    /// What the tap was last set to, so a Hyper press with a drag modifier picked costs no WindowServer call.
-    private var enabled = false
+    /// The press tap as its thread reads it: what passes there, and whether it is on.
+    nonisolated let gate: PressGate
 
     private var tap: CFMachPort?
     private var source: CFRunLoopSource?
@@ -91,10 +96,16 @@ final class MouseDragTap {
     /// AX writes into other apps, one at a time, off the main thread.
     private static let axQueue = DispatchQueue(label: "dev.banozz.pilot.drag-ax", qos: .userInteractive)
 
+    /// The press tap's C callback and the run loop its source goes on, for the probe.
+    nonisolated static let pressCallback: CGEventTapCallBack = pressTapCallback
+    nonisolated static var pressRunLoop: CFRunLoop { EventTapThread.shared.runLoop }
+
     init(modifier: @escaping () -> DragModifier, layer: HyperTap, tiler: TilerService) {
         self.modifier = modifier
         self.layer = layer
         self.tiler = tiler
+        gate = PressGate(layer: layer)
+        gate.set(modifier: modifier())
     }
 
     func start() {
@@ -104,42 +115,36 @@ final class MouseDragTap {
         let me = Unmanaged.passUnretained(self).toOpaque()
         // Session level, so the button state the tiler reads (NSEvent.pressedMouseButtons) should be recorded before this tap
         // drops the press; unverified until the live check.
-        func make(_ types: [CGEventType]) -> (CFMachPort, CFRunLoopSource)? {
+        func make(_ types: [CGEventType], _ callback: CGEventTapCallBack) -> (CFMachPort, CFRunLoopSource)? {
             let mask = types.reduce(CGEventMask(0)) { $0 | (1 << $1.rawValue) }
             guard let tap = CGEvent.tapCreate(tap: .cgSessionEventTap, place: .headInsertEventTap, options: .defaultTap,
-                                              eventsOfInterest: mask, callback: mouseCallback, userInfo: me) else { return nil }
-            let source = CFMachPortCreateRunLoopSource(nil, tap, 0)!
-            CFRunLoopAddSource(CFRunLoopGetMain(), source, .commonModes)
-            return (tap, source)
+                                              eventsOfInterest: mask, callback: callback, userInfo: me) else { return nil }
+            CGEvent.tapEnable(tap: tap, enable: false)
+            return (tap, CFMachPortCreateRunLoopSource(nil, tap, 0)!)
         }
-        guard let (tap, source) = make(presses), let (dragTap, dragSource) = make(drags) else {
+        guard let (tap, source) = make(presses, pressTapCallback), let (dragTap, dragSource) = make(drags, dragTapCallback) else {
             return wlog.error("drag: mouse tap not created")
         }
-        enabled = wanted
-        CGEvent.tapEnable(tap: tap, enable: enabled)
-        CGEvent.tapEnable(tap: dragTap, enable: false)
+        EventTapThread.shared.add(source)
+        CFRunLoopAddSource(CFRunLoopGetMain(), dragSource, .commonModes)
         self.tap = tap
         self.source = source
         self.dragTap = dragTap
         self.dragSource = dragSource
+        gate.set(widgetsShown: widgetsShown)
+        gate.attach(tap)
+        enable()
         wlog.notice("drag: mouse tap installed")
     }
 
-    /// Hyper down or up, from inside the keyboard tap's callback: the WindowServer round trip waits until it returned.
+    /// Hyper down or up, on the main thread after the keyboard tap's callback (its thread armed the tap already: gate.hyper).
     func hyper(_ down: Bool) {
         hyperDown = down
         enable()
     }
 
-    /// On or off as the drag modifier, Hyper and a file press say, after the callback returned.
-    private func enable() {
-        let on = wanted
-        DispatchQueue.main.async { [weak self] in
-            guard let self, let tap, wanted == on, enabled != on else { return }
-            enabled = on
-            CGEvent.tapEnable(tap: tap, enable: on)
-        }
-    }
+    /// On or off as the drag modifier, Hyper and a file press say: the gate switches the tap on its own thread.
+    private func enable() { gate.set(wants: wanted) }
 
     /// The drag tap on while a press is held, off once it is let go, after the callback returned (its window server round
     /// trip waits until then, as `enable`'s). A drag the window server sends before it is on reaches the app, which never
@@ -154,14 +159,23 @@ final class MouseDragTap {
     }
 
     func stop() {
-        if let tap { CGEvent.tapEnable(tap: tap, enable: false) }
-        if let source { CFRunLoopRemoveSource(CFRunLoopGetMain(), source, .commonModes) }
+        gate.detach()
+        if let source { EventTapThread.shared.remove(source) }
         if let dragTap { CGEvent.tapEnable(tap: dragTap, enable: false) }
         if let dragSource { CFRunLoopRemoveSource(CFRunLoopGetMain(), dragSource, .commonModes) }
         tap = nil; source = nil; dragTap = nil; dragSource = nil; dragsOn = false
-        fileClickDown = false; enabled = false; waiting = nil; menuDown = false
+        fileClickDown = false; waiting = nil; menuDown = false
         if widgetDown != nil { widgetDown = nil; widgets?.drop() }
         end()
+    }
+
+    /// An event from either tap, on the main thread: the drag tap follows a press taken or let go, and the gate learns
+    /// whether a press is still held. A drag changes nothing either reads.
+    fileprivate func received(type: CGEventType, event: CGEvent) -> Unmanaged<CGEvent>? {
+        let result = handle(type: type, event: event)
+        if type != .leftMouseDragged && type != .rightMouseDragged { followDrags() }
+        gate.set(idle: !holdsPress)
+        return result
     }
 
     private static func button(_ type: CGEventType) -> MouseDrag.Button? {
@@ -176,9 +190,8 @@ final class MouseDragTap {
     fileprivate func handle(type: CGEventType, event: CGEvent) -> Unmanaged<CGEvent>? {
         let pass = Unmanaged.passUnretained(event)
         // Only a timeout turns back on (AGENTS.md): .tapDisabledByUserInput is Pilot's own switch-off, which a re-enable here
-        // would race, leaving the tap on while `enabled` says off.
+        // would race. The press tap's come to its gate, on its own thread; this is the drag tap's.
         if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
-            if type == .tapDisabledByTimeout, let tap, wanted { CGEvent.tapEnable(tap: tap, enable: true); enabled = true }
             if type == .tapDisabledByTimeout, let dragTap, dragsOn { CGEvent.tapEnable(tap: dragTap, enable: true) }
             return pass
         }
@@ -464,18 +477,93 @@ final class MouseDragTap {
         tracker.end(); target = nil; pending = nil; counts = (0, 0, .now); generation += 1
         tilerHolds = false; releasePoint = nil
         followDrags()
+        gate.set(idle: !holdsPress)
     }
 }
 
-private let mouseCallback: CGEventTapCallBack = { _, type, event, userInfo in
+/// The press tap's callback, on the tap thread: a press that can't be Pilot's passes here; any other is decided on the main
+/// thread, waited for up to half a second (a main thread stuck longer lets the press go on, as macOS would by turning
+/// the tap off).
+private let pressTapCallback: CGEventTapCallBack = { _, type, event, userInfo in
+    let pass = Unmanaged.passUnretained(event)
+    guard let userInfo else { return pass }
+    let tap = Unmanaged<MouseDragTap>.fromOpaque(userInfo).takeUnretainedValue()
+    if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
+        if type == .tapDisabledByTimeout { tap.gate.timedOut() }
+        return pass
+    }
+    if tap.gate.passes(type, flags: event.flags.rawValue) { return pass }
+    nonisolated(unsafe) let event = event
+    nonisolated(unsafe) var result: Unmanaged<CGEvent>? = pass
+    _ = waitOnMain(timeout: 0.5) { result = tap.received(type: type, event: event) }
+    return result
+}
+
+/// The drag tap's callback: its source is on the main run loop, so this runs on the main thread.
+private let dragTapCallback: CGEventTapCallBack = { _, type, event, userInfo in
     guard let userInfo else { return Unmanaged.passUnretained(event) }
     let tap = Unmanaged<MouseDragTap>.fromOpaque(userInfo).takeUnretainedValue()
-    // The tap's run loop source lives on the main run loop, so this runs on the main thread.
     nonisolated(unsafe) let event = event
-    return MainActor.assumeIsolated {
-        let result = tap.handle(type: type, event: event)
-        // A press taken or let go, a timeout: the drag tap follows. A drag changes nothing it reads.
-        if type != .leftMouseDragged && type != .rightMouseDragged { tap.followDrags() }
-        return result
+    return MainActor.assumeIsolated { tap.received(type: type, event: event) }
+}
+
+/// MouseDragTap's press tap as its own thread sees it (EventTapThread): copies of what decides whether a press can be
+/// Pilot's, set on the main thread as they change, and the tap's switch, flipped only on the tap thread.
+final class PressGate: @unchecked Sendable {
+    private let lock = NSLock()
+    private let layer: HyperTap
+    private var tap: CFMachPort?
+    /// No press taken, waiting or held, as the main thread last left it: a new one is only ever taken on the main thread,
+    /// inside the wait for it, so this never says idle while one is held.
+    private var idle = true
+    private var widgetsShown = false
+    private var modifier = DragModifier.off
+    /// The main thread's wish (MouseDragTap.wanted), Hyper as the keyboard tap's thread saw it, and what the tap is set to.
+    private var wants = false, hyper = false, applied = false
+
+    init(layer: HyperTap) { self.layer = layer }
+
+    func attach(_ tap: CFMachPort) { lock.withLock { self.tap = tap; applied = false }; schedule() }
+
+    func detach() {
+        lock.withLock {
+            if let tap { CGEvent.tapEnable(tap: tap, enable: false) }
+            tap = nil; applied = false
+        }
+    }
+
+    func set(idle: Bool) { lock.withLock { self.idle = idle } }
+    func set(widgetsShown: Bool) { lock.withLock { self.widgetsShown = widgetsShown } }
+    func set(modifier: DragModifier) { lock.withLock { self.modifier = modifier } }
+    func set(wants: Bool) { lock.withLock { self.wants = wants }; schedule() }
+
+    /// Hyper down or up, from inside the keyboard tap's callback: the tap goes on just after it returns, on the same thread,
+    /// so a Hyper press that follows is never missed for a busy main thread.
+    func hyper(_ down: Bool) { lock.withLock { hyper = down }; schedule() }
+
+    /// macOS turned the tap off for a slow answer: back on if it should be.
+    func timedOut() { lock.withLock { if let tap, applied { CGEvent.tapEnable(tap: tap, enable: true) } } }
+
+    /// Whether this press or release goes on untouched without asking the main thread: no press held, and a plain press, not
+    /// the drag modifier's, not under Hyper, and no right press while a widget's menu may be under it. Every release then
+    /// passes, as MouseDragTap.handle passes it.
+    func passes(_ type: CGEventType, flags: UInt64) -> Bool {
+        let (idle, widgetsShown, modifier) = lock.withLock { (idle, widgetsShown, modifier) }
+        guard idle else { return false }
+        guard type == .leftMouseDown || type == .rightMouseDown else { return true }
+        if layer.isHyperHeld() || layer.isHeldAlone(flags: flags) || modifier.matches(flags: flags) { return false }
+        return !(type == .rightMouseDown && widgetsShown)
+    }
+
+    /// The switch, on the tap thread: every flip there, in order, so the main thread's and the keyboard tap's never race.
+    private func schedule() { EventTapThread.shared.perform { [self] in apply() } }
+
+    private func apply() {
+        lock.withLock {
+            let want = wants || hyper
+            guard let tap, want != applied else { return }
+            applied = want
+            CGEvent.tapEnable(tap: tap, enable: want)
+        }
     }
 }

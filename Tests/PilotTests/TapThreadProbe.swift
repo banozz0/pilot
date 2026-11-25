@@ -164,6 +164,63 @@ struct TapThreadProbe {
         #expect(later == ticked, "no tick after the drags ended")
     }
 
+    @Test("A click passes the drag tap's press tap in under a few ms while the main thread is blocked 250 ms",
+          .enabled(if: ProcessInfo.processInfo.environment["PILOT_TAP_PROBE"] == "1"))
+    func clickWhileMainBlocked() async throws {
+        let layer = HyperTap(layer: HyperLayer(layerKey: .capsLock))
+        let drag = MouseDragTap(modifier: { .alt }, layer: layer, tiler: TilerService(engine: WorkspaceListTests.FakeTiler(), tip: { _ in }))
+        drag.widgetsShown = true   // a plain right press then asks the main thread, as a widget's menu would (no widget here)
+        let box = Box()
+        func click(_ type: CGEventType, _ button: CGMouseButton) throws -> CGEvent {
+            try #require(CGEvent(mouseEventSource: nil, mouseType: type, mouseCursorPosition: CGPoint(x: 5, y: 5), mouseButton: button))
+        }
+        nonisolated(unsafe) let events: [(String, CGEventType, CGEvent)] = [
+            ("left down", .leftMouseDown, try click(.leftMouseDown, .left)), ("left up", .leftMouseUp, try click(.leftMouseUp, .left)),
+            ("left down", .leftMouseDown, try click(.leftMouseDown, .left)), ("left up", .leftMouseUp, try click(.leftMouseUp, .left)),
+            ("right down (widgets shown: main)", .rightMouseDown, try click(.rightMouseDown, .right)),
+            ("right up", .rightMouseUp, try click(.rightMouseUp, .right)),
+        ]
+        nonisolated(unsafe) let info = Unmanaged.passUnretained(drag).toOpaque()
+        nonisolated(unsafe) let loop = MouseDragTap.pressRunLoop
+        nonisolated(unsafe) let proxy = OpaquePointer(bitPattern: 1)!
+        DispatchQueue.global(qos: .userInteractive).async {
+            usleep(30_000)
+            for (name, type, event) in events {
+                let answered = DispatchSemaphore(value: 0)
+                let start = DispatchTime.now().uptimeNanoseconds
+                nonisolated(unsafe) var taken = false
+                nonisolated(unsafe) var onMain = false
+                CFRunLoopPerformBlock(loop, CFRunLoopMode.commonModes.rawValue) {
+                    taken = MouseDragTap.pressCallback(proxy, type, event, info) == nil
+                    onMain = Thread.isMainThread
+                    answered.signal()
+                }
+                CFRunLoopWakeUp(loop)
+                answered.wait()
+                let ms = Double(DispatchTime.now().uptimeNanoseconds - start) / 1_000_000
+                box.lock.withLock { box.rows.append((name, ms, taken, onMain)) }
+                usleep(20_000)
+            }
+            box.lock.withLock { box.done = true }
+        }
+        let blockedFor = Self.blockMain(until: { box.lock.withLock { box.done } })
+        let rows = box.lock.withLock { box.rows }
+        print("TAPPROBE click: main blocked \(blockedFor)")
+        for row in rows {
+            print("TAPPROBE click \(row.name): \(String(format: "%.3f", row.ms)) ms, \(row.taken ? "taken" : "passed"), callback on \(row.main ? "main" : "tap thread")")
+        }
+        #expect(rows.allSatisfy { !$0.taken }, "every click goes on to the app")
+        #expect(rows.prefix(4).allSatisfy { $0.ms < 5 }, "plain left clicks answered in under 5 ms")
+        // What the gate leaves to the main thread: a press under Hyper, or with the drag modifier; a plain one passes.
+        let alt = UInt64(CGEventFlags.maskAlternate.rawValue)
+        let plain = drag.gate.passes(.leftMouseDown, flags: 0), withAlt = drag.gate.passes(.leftMouseDown, flags: alt)
+        _ = layer.route(KeyEvent(kind: .keyDown, keyCode: KeyCode.f18))
+        let underHyper = drag.gate.passes(.leftMouseDown, flags: 0)
+        _ = layer.route(KeyEvent(kind: .keyUp, keyCode: KeyCode.f18))
+        print("TAPPROBE click gate: plain passes \(plain), Alt passes \(withAlt), under Hyper passes \(underHyper), release passes \(drag.gate.passes(.leftMouseUp, flags: 0))")
+        #expect(plain && !withAlt && !underHyper && drag.gate.passes(.leftMouseUp, flags: 0))
+    }
+
     @Test("The bind table the tap reads off the main thread follows every change to the store, and Key binds' switch",
           .enabled(if: ProcessInfo.processInfo.environment["PILOT_TAP_PROBE"] == "1"))
     func tableFollowsStore() throws {
