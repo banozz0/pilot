@@ -25,8 +25,8 @@ final class TerminalDrop {
         self.tip = tip
     }
 
-    /// Hyper+T runs inside the tap's callback, so the drop opens on the run loop's next pass: the first open starts
-    /// libghostty and reads the config, and the tap must not wait on that (keys typed meanwhile queue, none is lost).
+    /// Hyper+T runs on the main thread after the tap's callback, and the drop opens on the run loop's next pass: the first
+    /// open starts libghostty and reads the config, and the bind's own turn should not carry that.
     static func register(into registry: inout ActionRegistry, drop: @escaping @Sendable @MainActor () -> TerminalDrop = { .shared }) {
         do {
             try registry.register(Action(id: actionID, label: "Drop the terminal", module: .apps, defaultKey: Key("t"), tier: .v1, keywords: "terminal shell") {

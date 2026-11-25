@@ -70,7 +70,7 @@ final class HyperScroll {
         }
     }
 
-    /// Hyper down or up, from inside the keyboard tap's callback: the WindowServer round trip waits until it returned.
+    /// Hyper down or up, on the main thread after the keyboard tap's callback; the WindowServer round trip runs a turn later.
     func hyper(_ isDown: Bool) {
         down = isDown
         bound = isDown ? Set([MouseKeys.scrollUp, MouseKeys.scrollDown].filter(layer.isBound)) : []

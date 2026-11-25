@@ -7,12 +7,15 @@ import Synchronization
 /// build held every key up to 250 ms). Their callbacks read only locked state and hand actions to the main queue; a press
 /// the drag tap may take waits for the main thread's answer (waitOnMain).
 final class EventTapThread: Sendable {
-    static let shared = EventTapThread()
+    static let shared = EventTapThread(name: "event-taps")
+    /// The drag tap's press tap, on a thread of its own: a press it hands to the main thread waits there, and the keys on
+    /// `shared` go on meanwhile.
+    static let presses = EventTapThread(name: "drag-presses")
 
     /// CFRunLoop is thread-safe for adding, removing and waking sources.
     nonisolated(unsafe) let runLoop: CFRunLoop
 
-    private init() {
+    private init(name: String) {
         let ready = DispatchSemaphore(value: 0)
         nonisolated(unsafe) var loop: CFRunLoop?
         let thread = Thread {
@@ -23,7 +26,7 @@ final class EventTapThread: Sendable {
             ready.signal()
             while true { CFRunLoopRun() }
         }
-        thread.name = "dev.banozz.pilot.event-taps"
+        thread.name = "dev.banozz.pilot.\(name)"
         thread.qualityOfService = .userInteractive
         thread.start()
         ready.wait()

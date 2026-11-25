@@ -181,7 +181,12 @@ struct TapThreadProbe {
             ("right up", .rightMouseUp, try click(.rightMouseUp, .right)),
         ]
         nonisolated(unsafe) let info = Unmanaged.passUnretained(drag).toOpaque()
-        nonisolated(unsafe) let loop = EventTapThread.shared.runLoop
+        nonisolated(unsafe) let loop = EventTapThread.presses.runLoop
+        // A key typed while the widgets-shown right press waits on the main thread: on the keyboard tap's own thread.
+        nonisolated(unsafe) let keyInfo = Unmanaged.passUnretained(layer).toOpaque()
+        nonisolated(unsafe) let key = try #require(CGEvent(keyboardEventSource: nil, virtualKey: 0, keyDown: true))
+        final class KeyWait: @unchecked Sendable { var ms: Double? }
+        let keyWait = KeyWait()
         nonisolated(unsafe) let proxy = OpaquePointer(bitPattern: 1)!
         DispatchQueue.global(qos: .userInteractive).async {
             usleep(30_000)
@@ -196,6 +201,18 @@ struct TapThreadProbe {
                     answered.signal()
                 }
                 CFRunLoopWakeUp(loop)
+                if name.hasPrefix("right down") {
+                    usleep(10_000)
+                    let keyAnswered = DispatchSemaphore(value: 0), keyStart = DispatchTime.now().uptimeNanoseconds
+                    let keys = EventTapThread.shared.runLoop
+                    CFRunLoopPerformBlock(keys, CFRunLoopMode.commonModes.rawValue) {
+                        _ = HyperTap.callback(proxy, .keyDown, key, keyInfo)
+                        keyAnswered.signal()
+                    }
+                    CFRunLoopWakeUp(keys)
+                    keyAnswered.wait()
+                    keyWait.ms = Double(DispatchTime.now().uptimeNanoseconds - keyStart) / 1_000_000
+                }
                 answered.wait()
                 let ms = Double(DispatchTime.now().uptimeNanoseconds - start) / 1_000_000
                 box.lock.withLock { box.rows.append((name, ms, taken, onMain)) }
@@ -211,6 +228,8 @@ struct TapThreadProbe {
         }
         #expect(rows.allSatisfy { !$0.taken }, "every click goes on to the app")
         #expect(rows.prefix(4).allSatisfy { $0.ms < 5 }, "plain left clicks answered in under 5 ms")
+        print("TAPPROBE click: a key typed while the right press waited on main: \(keyWait.ms.map { String(format: "%.3f", $0) } ?? "nil") ms")
+        #expect((keyWait.ms ?? 999) < 5, "keys go on while a press waits on the main thread")
         // What the gate leaves to the main thread: a press under Hyper, or with the drag modifier; a plain one passes.
         let alt = UInt64(CGEventFlags.maskAlternate.rawValue)
         let plain = drag.gate.passes(.leftMouseDown, flags: 0), withAlt = drag.gate.passes(.leftMouseDown, flags: alt)
@@ -219,6 +238,14 @@ struct TapThreadProbe {
         _ = layer.route(KeyEvent(kind: .keyUp, keyCode: KeyCode.f18))
         print("TAPPROBE click gate: plain passes \(plain), Alt passes \(withAlt), under Hyper passes \(underHyper), release passes \(drag.gate.passes(.leftMouseUp, flags: 0))")
         #expect(plain && !withAlt && !underHyper && drag.gate.passes(.leftMouseUp, flags: 0))
+        // With no drag modifier, a press held past Hyper's release keeps the tap on for its own release.
+        drag.dragging = false
+        drag.widgetsShown = false
+        drag.gate.set(idle: false); drag.gate.hyper(true); drag.gate.hyper(false)
+        let heldOn = drag.gate.wantsOn
+        drag.gate.set(idle: true)
+        print("TAPPROBE click gate: a press held after Hyper's release keeps the tap on \(heldOn), off once let go \(!drag.gate.wantsOn)")
+        #expect(heldOn && !drag.gate.wantsOn)
     }
 
     @Test("The bind table the tap reads off the main thread follows every change to the store, and Key binds' switch",

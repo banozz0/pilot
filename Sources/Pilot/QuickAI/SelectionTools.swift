@@ -132,7 +132,7 @@ final class SelectionTools {
         }
     }
 
-    /// Hyper down or up, from inside the keyboard tap's callback: the WindowServer round trip waits until it returned. A
+    /// Hyper down or up, on the main thread after the keyboard tap's callback; the WindowServer round trip runs a turn later. A
     /// drag under way keeps the tap on past Hyper's release, for its mouse-up.
     func hyper(_ isDown: Bool) {
         hyperDown = isDown

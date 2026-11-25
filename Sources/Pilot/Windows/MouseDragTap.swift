@@ -15,7 +15,7 @@ import PilotTiler
 /// a file waits for its release, a resize once it moves past `clickSlop`, the file menu if it never does; with no drag
 /// modifier picked, the tap is on only while Hyper is held.
 ///
-/// The press tap (left and right down and up) is on the keyboard tap's thread (EventTapThread): with a drag modifier picked
+/// The press tap (left and right down and up) is on a tap thread of its own (EventTapThread.presses): with a drag modifier picked
 /// it sees every click on the Mac, and a plain one passes there (PressGate), never waiting on the main thread. A press Pilot
 /// may take (the modifier, Hyper, a widget's or a held press's) is decided on the main thread as before, the tap thread
 /// waiting for it. The drags stay in their own tap on the main run loop, on only while this tap holds a press.
@@ -124,7 +124,7 @@ final class MouseDragTap {
         guard let (tap, source) = make(presses, pressTapCallback), let (dragTap, dragSource) = make(drags, dragTapCallback) else {
             return wlog.error("drag: mouse tap not created")
         }
-        EventTapThread.shared.add(source)
+        EventTapThread.presses.add(source)
         CFRunLoopAddSource(CFRunLoopGetMain(), dragSource, .commonModes)
         self.tap = tap
         self.source = source
@@ -153,7 +153,7 @@ final class MouseDragTap {
 
     func stop() {
         gate.detach()
-        if let source { EventTapThread.shared.remove(source) }
+        if let source { EventTapThread.presses.remove(source) }
         if let dragTap { CGEvent.tapEnable(tap: dragTap, enable: false) }
         if let dragSource { CFRunLoopRemoveSource(CFRunLoopGetMain(), dragSource, .commonModes) }
         tap = nil; source = nil; dragTap = nil; dragSource = nil; dragsOn = false
@@ -498,7 +498,7 @@ private let dragTapCallback: CGEventTapCallBack = { _, type, event, userInfo in
     return MainActor.assumeIsolated { tap.received(type: type, event: event) }
 }
 
-/// MouseDragTap's press tap as its own thread sees it (EventTapThread): copies of what decides whether a press can be
+/// MouseDragTap's press tap as its own thread sees it (EventTapThread.presses): copies of what decides whether a press can be
 /// Pilot's, set on the main thread as they change, and the tap's switch, flipped only on the tap thread.
 final class PressGate: @unchecked Sendable {
     private let lock = NSLock()
@@ -511,6 +511,9 @@ final class PressGate: @unchecked Sendable {
     private var modifier = DragModifier.off
     /// The main thread's wish (MouseDragTap.wanted), Hyper as the keyboard tap's thread saw it, and what the tap is set to.
     private var wants = false, hyper = false, applied = false
+    /// Whether the tap should be on: the main thread's wish, Hyper held, or a press still held (its release must come here).
+    var wantsOn: Bool { lock.withLock { wanted } }
+    private var wanted: Bool { wants || hyper || !idle }
 
     init(layer: HyperTap) { self.layer = layer }
 
@@ -523,13 +526,14 @@ final class PressGate: @unchecked Sendable {
         }
     }
 
-    func set(idle: Bool) { lock.withLock { self.idle = idle } }
+    /// A press held keeps the tap on until its release, whatever Hyper and the drag modifier do meanwhile.
+    func set(idle: Bool) { if lock.withLock({ defer { self.idle = idle }; return self.idle != idle }) { schedule() } }
     func set(widgetsShown: Bool) { lock.withLock { self.widgetsShown = widgetsShown } }
     func set(modifier: DragModifier) { lock.withLock { self.modifier = modifier } }
     func set(wants: Bool) { if lock.withLock({ defer { self.wants = wants }; return self.wants != wants }) { schedule() } }
 
-    /// Hyper down or up, from inside the keyboard tap's callback: the tap goes on just after it returns, on the same thread,
-    /// so a Hyper press that follows is never missed for a busy main thread.
+    /// Hyper down or up, from inside the keyboard tap's callback: the press tap's thread switches the tap at once, so a Hyper
+    /// press that follows is never missed for a busy main thread.
     func hyper(_ down: Bool) { if lock.withLock({ defer { hyper = down }; return hyper != down }) { schedule() } }
 
     /// macOS turned the tap off for a slow answer: back on if it should be.
@@ -547,11 +551,11 @@ final class PressGate: @unchecked Sendable {
     }
 
     /// The switch, on the tap thread: every flip there, in order, so the main thread's and the keyboard tap's never race.
-    private func schedule() { EventTapThread.shared.perform { [self] in apply() } }
+    private func schedule() { EventTapThread.presses.perform { [self] in apply() } }
 
     private func apply() {
         lock.withLock {
-            let want = wants || hyper
+            let want = wanted
             guard let tap, want != applied else { return }
             applied = want
             CGEvent.tapEnable(tap: tap, enable: want)

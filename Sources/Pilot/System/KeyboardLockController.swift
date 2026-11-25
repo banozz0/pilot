@@ -39,8 +39,8 @@ final class KeyboardLockController {
 
     var isLocked: Bool { tap.keyboardLock != nil }
 
-    /// Locks the keyboard, or says why it can't. Runs inside the tap's callback when its bind runs: the tap is locked at
-    /// once, so the bind's own release is taken, and the lock screen shows after the callback has returned.
+    /// Locks the keyboard, or says why it can't. Runs on the main thread when its bind runs, after the tap's callback: the
+    /// tap is locked at once, and the lock screen shows on the next turn.
     func lock() {
         guard !isLocked else { return }
         guard !secureInput() else { return Self.tipLater("A password field has the keyboard, so Pilot can't lock it") }
