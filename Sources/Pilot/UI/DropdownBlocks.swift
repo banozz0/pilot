@@ -11,7 +11,7 @@ enum DropdownBlocks {
         var held: Set<BarKind> = []
         readings.hold([.volume], replacing: &held)
         defer { readings.hold([], replacing: &held) }
-        await ScreenBrightness.engine.refresh(ScreenBrightness.displays())
+        await ScreenBrightness.read()
         while !Task.isCancelled { try? await Task.sleep(for: .seconds(3600)) }
     }
 

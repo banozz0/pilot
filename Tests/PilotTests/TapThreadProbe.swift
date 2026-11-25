@@ -1,4 +1,5 @@
 import AppKit
+import Carbon.HIToolbox
 import PilotCore
 import Testing
 @testable import Pilot
@@ -78,6 +79,61 @@ struct TapThreadProbe {
         #expect(rows.map(\.taken) == [false, false, true, true, true, true, true, true])
         #expect(rows.allSatisfy { $0.ms < 5 }, "every event answered in under 5 ms")
         #expect(box.lock.withLock { box.ranOnMain } == [hyperH, mouse4])
+    }
+
+    @Test("The system calls the callback makes off the main thread answer there, and the tap thread idles at no CPU",
+          .enabled(if: ProcessInfo.processInfo.environment["PILOT_TAP_PROBE"] == "1"))
+    func offMainCalls() throws {
+        let hyperH = Key(keyCode: 4)
+        let tap = HyperTap(layer: HyperLayer(layerKey: .capsLock))
+        final class Seen: @unchecked Sendable {
+            var typed = "", pressedAt: TimeInterval?, secure = false, front: pid_t?, media = false, thread: thread_act_t = 0
+        }
+        let seen = Seen()
+        tap.isBound = { $0 == hyperH }
+        tap.onTyped = { _, characters in seen.typed += characters(); return false }   // HyperTap.characters: keyboardGetUnicodeString
+        tap.onRun = { _, _ in seen.pressedAt = HyperTap.keyDownTime }                    // NSEvent(cgEvent:)
+        tap.isFromMouse = { _, _ in seen.media = true; return false }                   // reached through NSEvent(cgEvent:)'s subtype
+        tap.captureMouse = { _ in }   // a catch waiting: the media key asks isFromMouse
+        let media = try #require(NSEvent.otherEvent(with: .systemDefined, location: .zero, modifierFlags: [], timestamp: 0, windowNumber: 0,
+                                                    context: nil, subtype: 8, data1: 17 << 16 | 0x0A << 8, data2: -1)?.cgEvent)
+        func key(_ code: Int64, _ down: Bool) throws -> CGEvent {
+            try #require(CGEvent(keyboardEventSource: nil, virtualKey: CGKeyCode(code), keyDown: down))
+        }
+        nonisolated(unsafe) let events: [(CGEventType, CGEvent)] = [
+            (.keyDown, try key(0, true)), (.keyUp, try key(0, false)),
+            (.keyDown, try key(KeyCode.f18, true)), (.keyDown, try key(4, true)), (.keyUp, try key(4, false)), (.keyUp, try key(KeyCode.f18, false)),
+            (CGEventType(rawValue: BrightnessKeys.eventType)!, media),
+        ]
+        nonisolated(unsafe) let info = Unmanaged.passUnretained(tap).toOpaque()
+        nonisolated(unsafe) let proxy = OpaquePointer(bitPattern: 1)!
+        nonisolated(unsafe) let loop = EventTapThread.shared.runLoop
+        let answered = DispatchSemaphore(value: 0)
+        // @Sendable: a block formed in this main-actor test would carry a main-actor check and trap on the tap thread.
+        CFRunLoopPerformBlock(loop, CFRunLoopMode.commonModes.rawValue) { @Sendable in
+            seen.thread = mach_thread_self()
+            for (type, event) in events { _ = HyperTap.callback(proxy, type, event, info) }
+            seen.secure = IsSecureEventInputEnabled()
+            seen.front = NSWorkspace.shared.frontmostApplication?.processIdentifier
+            answered.signal()
+        }
+        CFRunLoopWakeUp(loop)
+        #expect(answered.wait(timeout: .now() + 2) == .success, "the tap thread answered")
+        func cpu() -> Double {
+            var info = thread_basic_info()
+            var count = mach_msg_type_number_t(MemoryLayout<thread_basic_info>.size / MemoryLayout<integer_t>.size)
+            _ = withUnsafeMutablePointer(to: &info) {
+                $0.withMemoryRebound(to: integer_t.self, capacity: Int(count)) { thread_info(seen.thread, thread_flavor_t(THREAD_BASIC_INFO), $0, &count) }
+            }
+            return Double(info.user_time.seconds + info.system_time.seconds) + Double(info.user_time.microseconds + info.system_time.microseconds) / 1e6
+        }
+        let before = cpu()
+        Thread.sleep(forTimeInterval: 0.3)
+        let idle = (cpu() - before) * 1000
+        print("TAPPROBE off main: typed \"\(seen.typed)\", key-down time \(seen.pressedAt.map { String(format: "%.3f", $0) } ?? "nil"), media key reached isFromMouse \(seen.media), secure input \(seen.secure), front pid \(seen.front.map(String.init) ?? "nil")")
+        print("TAPPROBE tap thread CPU over 300 ms idle: \(String(format: "%.3f", idle)) ms")
+        #expect(seen.typed == "a" && seen.pressedAt != nil && seen.media && seen.front != nil)
+        #expect(idle < 5, "the tap thread sleeps between events")
     }
 
     @Test("The bind table the tap reads off the main thread follows every change to the store, and Key binds' switch",

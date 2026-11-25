@@ -159,9 +159,14 @@ enum ScreenBrightness {
         pending = Task {
             try? await Task.sleep(for: .seconds(seconds))
             guard !Task.isCancelled else { return }
-            await engine.refresh(displays())
-            routes.withLock { $0 = engine.screens.mapValues(\.route) }
+            await read()
         }
+    }
+
+    /// Every screen read now, its route copied for the keyboard tap's thread: every read of the engine goes through here.
+    static func read() async {
+        await engine.refresh(displays())
+        routes.withLock { $0 = engine.screens.mapValues(\.route) }
     }
 
     /// The screens AppKit has, each with MonitorControl's guard: a non-Apple screen with HDR on is no Apple display.
