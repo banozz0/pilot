@@ -2,15 +2,22 @@
 import AppKit
 
 @MainActor var currentlyManipulatedWithMouseWindowId: UInt32? = nil
+/// Pilot (float-resize): the floating window Pilot's modifier right-drag resizes (TilerDrag.resizeBegan).
+@MainActor var pilotResizedWindowId: UInt32? = nil
 var isLeftMouseButtonDown: Bool { isUnitTest ? unitTestScreen.withLock { $0.leftMouseDown } : NSEvent.pressedMouseButtons == 1 }
 
 @MainActor
 func isManipulatedWithMouse(_ window: Window) async throws -> Bool {
+    try await mouseMayHold(window).andAsync { @Sendable @MainActor in try await getNativeFocusedWindow(.cancellable) == window }
+}
+
+/// Pilot (float-resize): isManipulatedWithMouse without the AX read of the focused window.
+@MainActor
+func mouseMayHold(_ window: Window) -> Bool {
     // Pilot: a held gap's button is no window's drag or resize, whatever the tiles it moves report (Moody REJECT CKZpHR_bQTQ)
-    try await (gapDrag == nil && !window.isHiddenInCorner && // Don't allow to resize/move windows of hidden workspaces
+    gapDrag == nil && !window.isHiddenInCorner && // Don't allow to resize/move windows of hidden workspaces
         isLeftMouseButtonDown &&
-        (currentlyManipulatedWithMouseWindowId == nil || window.windowId == currentlyManipulatedWithMouseWindowId))
-        .andAsync { @Sendable @MainActor in try await getNativeFocusedWindow(.cancellable) == window }
+        (currentlyManipulatedWithMouseWindowId == nil || window.windowId == currentlyManipulatedWithMouseWindowId)
 }
 
 /// Same motivation as in monitorFrameNormalized
@@ -33,6 +40,7 @@ func windowMoved(_ windowId: UInt32?, _ notif: String) {
         // The release places it; until then, its drop zone and the live swap follow the mouse (cards agent-bo-95423032, 034)
         if let windowId, windowId == draggedWindowId { return dragMoved() }
         if let windowId, windowId == cancelledDragWindowId { return } // Esc cancelled it: nothing until the release
+        if let windowId, windowId == pilotResizedWindowId { return } // Pilot's resize: its end refreshes once
         if let windowId, let window = Window.get(byId: windowId), try await isManipulatedWithMouse(window) {
             startDrag(window)
             if draggedWindowId == windowId { return }

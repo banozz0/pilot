@@ -85,6 +85,7 @@ public struct InProcessTiler: TilerRunning {
         try? endPreview {} // a drag under way never lands: its live swap goes back, its drop zone goes
         draggedWindowId = nil
         cancelledDragWindowId = nil
+        pilotResizedWindowId = nil
         gapDrag = nil
         publishGaps()
         unparkAllWindows()
