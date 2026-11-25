@@ -330,11 +330,8 @@ enum AppsModule {
 
     /// Installed apps a person launches plus every running one, so apps outside the application folders (Finder) can
     /// take a rule too: Add app's choices in Workspaces and Focus sessions. Hidden apps are left out, running or not, unless
-    /// `hidden` (Hidden apps' own picker).
-    static func pickableApps(hidden: Bool = false) -> [(name: String, bundle: String)] { pickable(pickableInstalled(), hidden: hidden) }
-
-    /// pickableApps with the disk read off the main actor: the scan opens every app's Info.plist and walks the home
-    /// folder, which held Tiling's and Workspaces' switch (page-perf).
+    /// `hidden` (Hidden apps' own picker). The disk is read off the main actor: the scan opens every app's Info.plist and
+    /// walks the home folder, which held Tiling's, Workspaces' and Install › More's switch (page-perf, page-frames-5).
     static func pickableAppsOffMain(hidden: Bool = false) async -> [(name: String, bundle: String)] {
         pickable(await Task.detached(priority: .userInitiated) { pickableInstalled() }.value, hidden: hidden)
     }

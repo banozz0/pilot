@@ -98,7 +98,7 @@ struct PartFrame<Content: View>: View {
                 }
                 VStack(spacing: 0) { Staged(inView: false) {
                     if bar {
-                        InstrumentToolbar(model: model, page: page, extensionPage: extensionPage, listed: list)
+                        InstrumentToolbar(model: model, page: page, section: section, extensionPage: extensionPage, listed: list)
                         InstrumentRule()
                     }
                     content.frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
@@ -543,8 +543,10 @@ extension AppWindowModel {
 struct InstrumentToolbar: View {
     @Environment(\.style) private var style
     @Bindable var model: AppWindowModel
-    /// The page it names: its part's (PartFrame).
+    /// The page it names and the tab it marks: its part's (PartFrame), never the window's, so a tab picked elsewhere
+    /// redraws no kept part's bar (page-frames-5: each Launcher part's bar redrawn on a tab click, 35 ms a return visit).
     let page: AppPage
+    let section: AppSection?
     let extensionPage: String?
     /// The page list shows beside: the area's pages are there, not here. The page's parts are here at every width.
     let listed: Bool
@@ -563,7 +565,7 @@ struct InstrumentToolbar: View {
     /// while it fits (P36); tighter where the bar is too narrow for them whole, never cut.
     private func tabs(_ page: AppPage) -> some View {
         let options = page.tabs.map { ($0.value, $0.title) }
-        let selection = Binding(get: { model.section(of: page) }, set: { model.pick($0, of: page) })
+        let selection = Binding(get: { section }, set: { model.pick($0, of: page) })
         func segments(tight: Bool = false) -> InstrumentSegments<AppSection?> {
             InstrumentSegments(options: options, selection: selection, tight: tight)
         }

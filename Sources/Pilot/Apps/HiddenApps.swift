@@ -3,7 +3,7 @@ import Observation
 
 /// Hidden apps (Pilot 1.0.2, Sven Q713: "hide apps from everywhere on mac"), by bundle id, on Install › Hidden apps and
 /// `pilot get|set apps.hidden`. Pilot's lists of installed apps leave them out at AppsModule's installedApps,
-/// pickableApps and apps(opening:); a hidden app that runs still shows where running apps do, and its windows tile as
+/// pickableAppsOffMain and apps(opening:); a hidden app that runs still shows where running apps do, and its windows tile as
 /// ever. macOS has no system-wide hide: an app in /Applications or ~/Applications gets Finder's flag too (FinderFlag), a
 /// built-in one hides in Pilot alone, and Spotlight still finds every app. Pilot keeps the files it flagged, so Unhide
 /// and Uninstall clear only its own flags, never one set by hand.
