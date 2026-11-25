@@ -29,21 +29,25 @@ struct TilingBody: View {
 
     var body: some View {
         // The focused window whole and the apps that float, back from More (Sven, 2026-11-11, after 2276); the window
-        // titles and the mouse and motion too (pages round 4, Sven's Q98); the focused window's exact rows (pages-fill).
+        // titles and the mouse and motion too (pages round 4, Sven's Q98); the focused window's exact rows (pages-fill),
+        // each under its preset (the Tiling pass).
         KitLanding {
             KitPage(intro: Self.intro) {
                 tilingSwitch
+                // The window in front (a place, `focusedWindow`): Gaps over Border beside Dim other windows, about as tall,
+                // the columns ending level (the Tiling pass, Sven on build 3223); each block its preset and its rows.
                 if ink.isInstrument {
-                    // Instrument's two columns, rows ending level (no full-width block with one control at its far edge).
-                    InstrumentPair { gaps } right: { FocusedWindowBlock(look: look).id(AppSection.focusedWindow) }
+                    InstrumentPair {
+                        gaps
+                        FocusedWindowBlock(look: look, place: .focusedBorder)
+                    } right: {
+                        FocusedWindowBlock(look: look, place: .focusedDim)
+                    }
+                    .id(AppSection.focusedWindow)
                 } else {
-                    gaps; FocusedWindowBlock(look: look).id(AppSection.focusedWindow)
-                }
-                // The focused window's exact rows, back from More (pages-fill, Sven 2026-11-25: about the page).
-                if ink.isInstrument {
-                    InstrumentPair { FocusedWindowExact(look: look, place: .focusedBorder) } right: { FocusedWindowExact(look: look, place: .focusedDim) }
-                } else {
-                    FocusedWindowExact(look: look, place: .focusedBorder); FocusedWindowExact(look: look, place: .focusedDim)
+                    gaps
+                    FocusedWindowBlock(look: look, place: .focusedBorder).id(AppSection.focusedWindow)
+                    FocusedWindowBlock(look: look, place: .focusedDim)
                 }
                 FloatAppsBlock(block: block, apps: apps).id(AppSection.floatApps)
                 if ink.isInstrument {

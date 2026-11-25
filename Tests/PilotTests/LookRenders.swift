@@ -145,7 +145,7 @@ struct LookRenders {
         func shot(_ name: String) throws {
             Self.mirror(look, spot: nil)
             try writeRender(VStack(alignment: .leading, spacing: 16) {
-                FocusedWindowExact(look: look, place: .focusedBorder); FocusedWindowExact(look: look, place: .focusedDim)
+                FocusedWindowBlock(look: look, place: .focusedBorder); FocusedWindowBlock(look: look, place: .focusedDim)
             }.styled(.page(.tiling), look: look).padding(.horizontal, 24)
                                 .frame(width: Self.page(AppWindowController.minSize.width), height: 820, alignment: .top)
                                 .pilotTheme(look: look).background(Theme.background),

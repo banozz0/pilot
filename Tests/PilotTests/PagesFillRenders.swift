@@ -7,7 +7,7 @@ import Testing
 @testable import Pilot
 
 /// Pages-fill (Sven, 2026-11-25: "make sure that on the page theres only relevant stuff"): every page and tab the round
-/// changed, drawn in the whole window as WidePagesRenders draws a page, at 1700 by 1290 and at the window's first size, in
+/// changed, drawn in the whole window as WidePagesRenders draws a page, at 1700 by 1290, 1630 by 1200 and the window's first size, in
 /// Tokyo Night and Porcelain, with made-up data in the moved home (Update & Clean's four runs, ReportsPageRenders' seed);
 /// then each once more in Tokyo Night at its whole length (`tall-`), and the Dock at the window's least size, where its
 /// look's column stands over the widgets. The page shows the placement it had: nothing here writes the defaults a render
@@ -71,7 +71,9 @@ struct PagesFillRenders {
             try #require(rep.representation(using: .png, properties: [:])).write(to: dir.appendingPathComponent("\(file).png"))
         }
 
-        let sizes: [(String, NSSize)] = [("1700", NSSize(width: 1700, height: 1290)), ("default", AppWindowController.size)]
+        // Sven's Tiling on build 3223 was about 1630 by 1200 (the Tiling pass).
+        let sizes: [(String, NSSize)] = [("1700", NSSize(width: 1700, height: 1290)), ("1630", NSSize(width: 1630, height: 1200)),
+                                         ("default", AppWindowController.size)]
         for (name, theme) in SharedLook.HomeRenders.looks {
             look.tryOn(id: theme, pack: nil)
             AppWindowController.applyLook(look, to: window)

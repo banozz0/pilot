@@ -1,83 +1,13 @@
 import PilotCore
 import SwiftUI
 
-/// Tiling › Focused window (page map, Sven 2026-10-17; presets since pilot-ui-redesign T16, S1 B, round 1 shot 1b): Border
-/// and Dim other windows each as Off, Soft, Strong or Custom, and the shake's switch. The presets are a view over the rows
-/// (T15's `BorderLook` and `DimLook`, Open question 10): a pick writes them, and Custom, which no pick can write, opens
-/// that feature's exact rows below it (FocusedWindowExact). Its keys stay `look.*`.
+/// Tiling's focused window (page map, Sven 2026-10-17): Border and Dim other windows, each one block with its preset at its
+/// head, Off, Soft, Strong or Custom (pilot-ui-redesign T16, S1 B, round 1 shot 1b), and its exact rows under it (the
+/// Tiling pass, Sven on build 3223: "only this page looks a bit bad now", the presets and the rows they set were two
+/// blocks apart). The presets are a view over the rows (T15's `BorderLook` and `DimLook`, Open question 10): a pick
+/// writes them, and Custom is any mix no pick writes. Dim adds the shake's switch and tuning, what sets Defocus off and
+/// the contrast badge. Each block is a place a link or the search lands on; its keys stay `look.*`.
 struct FocusedWindowBlock: View {
-    @Environment(\.ink) private var ink
-    let look: Look
-
-    /// What each row does, the ⓘ's words.
-    enum Info {
-        static let border = "A line around the window in front. Soft is 2 pt and Strong 4 pt, both in the theme's accent. Custom is any other width or colour, set under Border."
-        static let dim = "The other windows blur and darken so the one in front stands out. Soft blurs lightly and darkens 18%, Strong blurs most and darkens 40%. Custom is any other mix, set under Dim other windows."
-        static let shake = "Shaking the mouse turns Dim other windows on or off. How hard and how fast are under Dim other windows."
-    }
-
-    static let presets = FocusPreset.allCases.map { (value: $0, title: $0.title) }
-
-    var body: some View {
-        KitBlock(title: "Focused window", symbol: "macwindow") {
-            BlockRow(first: true) { preset("Border", Info.border, border, custom: borderSummary, pick: pickBorder) }
-                .landingRing("look.windowBorder").landingRing("look.windowBorderPreset")
-            BlockRow { preset("Dim other windows", Info.dim, dim, custom: dimSummary, pick: pickDim) }
-                .landingRing("look.defocusPreset")
-            BlockRow { Toggle("Shake the mouse to dim", isOn: shake).toggleStyle(.pilotSwitchRow(info: Info.shake)) }
-                .landingRing("look.defocusShake")
-        }
-    }
-
-    /// One feature's row: its name, and under it while it reads Custom what the rows hold; its four choices beside.
-    private func preset(_ title: String, _ info: String, _ now: FocusPreset, custom: String, pick: @escaping (FocusPreset) -> Void) -> some View {
-        LabelledControls {
-            VStack(alignment: .leading, spacing: 1) {
-                HStack(spacing: 6) { Text(title); InfoMark(text: info) }
-                if now == .custom { Text(custom).font(ink.ui(12)).foregroundStyle(ink.muted).lineLimit(1) }
-            }
-            .padding(.vertical, now == .custom ? 5 : 0)
-        } controls: {
-            Segments(selection: Binding(get: { now }, set: pick), options: Self.presets, label: title)
-        }
-    }
-
-    private var border: FocusPreset { BorderLook(on: look.windowBorder, width: look.windowBorderWidth, colour: look.windowBorderColour).preset }
-    private var dim: FocusPreset { DimLook(blur: look.defocusStrength, dim: look.defocusDim).preset }
-
-    /// Custom's border as set: its width and whose colour.
-    private var borderSummary: String {
-        "\(look.windowBorderWidth) pt, \(look.windowBorderColour == .theme ? "the theme's colour" : "your colour")"
-    }
-
-    /// Custom's dim as set: the blur's step and the darkening.
-    private var dimSummary: String {
-        "Blur \(look.defocusStrength == 0 ? "off" : "\(look.defocusStrength)"), darken \(look.defocusDim == 0 ? "off" : "\(look.defocusDim)%")"
-    }
-
-    private var shake: Binding<Bool> {
-        Binding(get: { look.defocusShake }, set: { look.defocusShake = $0 })
-    }
-
-    /// Off, Soft or Strong writes the border's rows; Custom lands on them under Border.
-    private func pickBorder(_ preset: FocusPreset) {
-        let now = BorderLook(on: look.windowBorder, width: look.windowBorderWidth, colour: look.windowBorderColour)
-        guard let picked = BorderLook.picked(preset, from: now) else { return AppWindowController.shared.open(AppPlace(.focusedBorder)) }
-        look.windowBorder = picked.on; look.windowBorderWidth = picked.width; look.windowBorderColour = picked.colour
-    }
-
-    /// Off, Soft or Strong writes Defocus's blur and dim; Custom lands on them under Dim other windows.
-    private func pickDim(_ preset: FocusPreset) {
-        guard let picked = DimLook.picked(preset) else { return AppWindowController.shared.open(AppPlace(.focusedDim)) }
-        look.defocusStrength = picked.blur; look.defocusDim = picked.dim
-    }
-}
-
-/// The focused window's exact rows on Tiling's front, under the Focused window block (Tiling's More from
-/// pilot-ui-redesign T16 until pages-fill, Sven 2026-11-25: they are about the page): Border or Dim other windows, the
-/// rows the presets set, exact, each block headed by the preset they read now; Dim adds Defocus's shake tuning, what
-/// sets it off, and the contrast badge. Each block is a place a link or the search lands on.
-struct FocusedWindowExact: View {
     @Environment(\.ink) private var ink
     /// Defocus's bind as bound now; none offscreen, where a page is drawn without an engine.
     @Environment(Engine.self) private var engine: Engine?
@@ -87,6 +17,9 @@ struct FocusedWindowExact: View {
 
     /// What each row does, the ⓘ's words.
     enum Info {
+        static let border = "A line around the window in front. Soft is 2 pt and Strong 4 pt, both in the theme's accent. Custom is any other width or colour, set below."
+        static let dim = "The other windows blur and darken so the one in front stands out. Soft blurs lightly and darkens 18%, Strong blurs most and darkens 40%. Custom is any other mix, set below."
+        static let shake = "Shaking the mouse turns Dim other windows on or off."
         static let borderWidth = "How thick the line around the window in front is, in points."
         static let borderColour = "The line's colour: Theme follows the theme's accent, Custom keeps the one you pick."
         static let blur = "How strongly the other windows blur: Off, or 1 light to 5 heavy."
@@ -96,18 +29,24 @@ struct FocusedWindowExact: View {
         static let contrast = "How well Pilot's dimmest text reads over the brightest spot behind its glass. Amber means Pilot raised the surface to keep it readable."
     }
 
-    /// Under each block: how the front's presets and these rows meet.
-    static let footnote = "Focused window's Off, Soft and Strong set these rows; any other mix reads Custom."
+    static let presets = FocusPreset.allCases.map { (value: $0, title: $0.title) }
 
     var body: some View {
         if place == .focusedBorder { borderBlock.id(AppSection.focusedBorder) } else { dimBlock.id(AppSection.focusedDim) }
     }
 
+    /// The border's preset at the head, then its width and colour, set by the preset or by hand (Custom).
     private var borderBlock: some View {
         @Bindable var look = look
-        let preset = BorderLook(on: look.windowBorder, width: look.windowBorderWidth, colour: look.windowBorderColour).preset
-        return KitBlock(title: AppSection.focusedBorder.title, symbol: "square.dashed") {
-            presetTitle(preset)
+        let now = BorderLook(on: look.windowBorder, width: look.windowBorderWidth, colour: look.windowBorderColour)
+        // Stretches to its pair's height, so the columns end level.
+        return KitBlock(title: AppSection.focusedBorder.title, symbol: "square.dashed", fill: true) {
+            preset(AppSection.focusedBorder.title, Info.border, now.preset) { picked in
+                // Custom writes nothing: the rows below are the custom border.
+                guard let picked = BorderLook.picked(picked, from: now) else { return }
+                look.windowBorder = picked.on; look.windowBorderWidth = picked.width; look.windowBorderColour = picked.colour
+            }
+            .landingRing("look.windowBorder").landingRing("look.windowBorderPreset")
         } content: {
             BlockRow(first: true) {
                 label("Width", Info.borderWidth)
@@ -122,15 +61,20 @@ struct FocusedWindowExact: View {
                 ColourChoicePicker(choice: $look.windowBorderColour, theme: look.theme.accent, label: "Border colour")
             }
             .disabled(!look.windowBorder).landingRing("look.windowBorderColour")
-            BlockRow { note(look.windowBorder ? Self.footnote : "The border is off: pick Soft, Strong or Custom on Tiling's front to change these.") }
         }
     }
 
+    /// Dim's preset at the head, then its blur and darkening, what sets it off, the shake's switch and tuning, and how
+    /// well text reads over it.
     private var dimBlock: some View {
         @Bindable var look = look
-        let preset = DimLook(blur: look.defocusStrength, dim: look.defocusDim).preset
-        return KitBlock(title: AppSection.focusedDim.title, symbol: "circle.lefthalf.filled") {
-            presetTitle(preset)
+        return KitBlock(title: AppSection.focusedDim.title, symbol: "circle.lefthalf.filled", fill: true) {
+            preset(AppSection.focusedDim.title, Info.dim, DimLook(blur: look.defocusStrength, dim: look.defocusDim).preset) { picked in
+                // Custom writes nothing: the rows below are the custom dim.
+                guard let picked = DimLook.picked(picked) else { return }
+                look.defocusStrength = picked.blur; look.defocusDim = picked.dim
+            }
+            .landingRing("look.defocusPreset")
         } content: {
             BlockRow(first: true) {
                 label("Blur", Info.blur)
@@ -146,6 +90,8 @@ struct FocusedWindowExact: View {
             }
             .landingRing("look.defocusDim")
             BlockRow { defocusHint.font(ink.ui(12)).padding(.vertical, 6) }
+            BlockRow { Toggle("Shake the mouse to dim", isOn: $look.defocusShake).toggleStyle(.pilotSwitchRow(info: Info.shake)) }
+                .landingRing("look.defocusShake")
             BlockRow {
                 label("How hard to shake", Info.swings)
                 Stepper(value: $look.defocusShakeSwings, in: ShakeDetector.swingsRange) {
@@ -164,17 +110,15 @@ struct FocusedWindowExact: View {
             }
             .disabled(!look.defocusShake).landingRing("look.defocusShakeWithin")
             BlockRow { contrastBadge.font(ink.ui(12)).padding(.vertical, 6); InfoMark(text: Info.contrast) }
-            BlockRow { note(Self.footnote) }
         }
     }
 
-    /// The preset the rows read now, muted at the block's head (shot 1b's "Custom").
-    private func presetTitle(_ preset: FocusPreset) -> some View {
-        Text(preset.title).font(ink.ui(12.5)).foregroundStyle(ink.muted)
-    }
-
-    private func note(_ text: String) -> some View {
-        Text(text).font(ink.ui(12)).foregroundStyle(ink.muted).fixedSize(horizontal: false, vertical: true).padding(.vertical, 6)
+    /// A feature's preset at its block's head: its ⓘ and the four choices.
+    private func preset(_ title: String, _ info: String, _ now: FocusPreset, pick: @escaping (FocusPreset) -> Void) -> some View {
+        HStack(spacing: 8) {
+            InfoMark(text: info)
+            Segments(selection: Binding(get: { now }, set: pick), options: Self.presets, label: title)
+        }
     }
 
     /// A row's label with its ⓘ beside it, taking the row's spare width.
