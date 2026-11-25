@@ -338,8 +338,8 @@ class NewsTests(ExtensionTestCase):
         self.assertLessEqual(len(face["value"]), 24)
         popover = self.popover()
         counts, newest, summary = popover[0], popover[1], popover[-1]
-        self.assertEqual([(l["title"], l["word"]) for l in counts["items"]], [("Malta", "5"), ("Tech", "2")])
-        self.assertEqual(counts["items"][0]["actions"], [{"type": "push", "command": "group", "title": "Malta",
+        self.assertEqual([(l["title"], l["word"]) for l in counts["items"]], [("Tech", "2"), ("Malta", "5")])
+        self.assertEqual(counts["items"][1]["actions"], [{"type": "push", "command": "group", "title": "Malta",
                                                           "context": {"group": "Malta"}}])
         self.assertEqual((newest["title"], len(newest["items"])), ("Newest", 3))
         row = newest["items"][1]

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""News for Pilot (Sven, 2026-11-22): headlines from the sources he picks, Malta first, newest first in Hyper+Space and
+"""News for Pilot (Sven, 2026-11-22): headlines from the sources he picks, world and tech first, newest first in Hyper+Space and
 on the extension's page, and a 24-hour summary made only when he presses for one, laid out as a newspaper's front
 page in one HTML file.
 
@@ -632,7 +632,7 @@ def group_counts(view):
 
 
 def count_links(view):
-    """The popover's first rows: Malta 20 · World 8 · Tech 12, each opening that group's headlines in the popover (a push
+    """The popover's first rows: World 8 · Tech 12 · Malta 20, each opening that group's headlines in the popover (a push
     to the hidden group command), at most GROUPS_PER_ROW to a row, so a row never passes the popover's edge."""
     links = [{"title": g, "word": str(n), "help": "%s: %d headline%s in the last 24 hours" % (g, n, "" if n == 1 else "s"),
               "actions": [{"type": "push", "command": "group", "title": g, "context": {"group": g}}]}
@@ -685,7 +685,7 @@ def bar(run):
 
 
 def group(run):
-    """A group's headlines of the last 24 hours, pushed over the popover from its count (Malta 20), newest first."""
+    """A group's headlines of the last 24 hours, pushed over the popover from its count (World 8), newest first."""
     view = View(run)
     name = str((run.get("context") or {}).get("group") or "")
     groups = view.sources.groups()
