@@ -93,7 +93,7 @@ struct DockPage: View {
 
     /// The dock's look and behaviour: Style and Size, then magnification, placement, icon colours and the visualizer.
     private func lookPanel(_ dock: DockController) -> some View {
-        TitledPanel(title: "Look") { VStack(alignment: .leading, spacing: 0) { look(dock); effects(dock) } }.id(AppSection.dockLook)
+        TitledPanel(title: AppSection.dockLook.title) { VStack(alignment: .leading, spacing: 0) { look(dock); effects(dock) } }.id(AppSection.dockLook)
     }
 
     /// The widgets, then the Dock's apps taken out while there are any.

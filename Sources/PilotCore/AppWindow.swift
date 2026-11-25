@@ -604,7 +604,7 @@ public enum AppSection: String, CaseIterable, Sendable {
         case .notifications: "Notifications"
         case .voiceMore, .menuMore, .installMore: "More"
         case .menuBarItems: "Items"
-        case .dockLook: "Placement and effects"
+        case .dockLook: "Look"
         case .focusedBorder: "Border"
         case .focusedDim: "Dim other windows"
         case .workspaceOpens: "Opens here"
