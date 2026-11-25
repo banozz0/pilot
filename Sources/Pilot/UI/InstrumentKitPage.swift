@@ -94,6 +94,8 @@ struct InstrumentBlock<Trailing: View, Content: View>: View {
     var note: String?
     /// Takes the height its row gives it, so blocks side by side end level.
     var fill = false
+    /// Whether it builds its content a row a turn (Staged); KitBlock's BlockRowColumns does that itself.
+    var staged = true
     @ViewBuilder var trailing: Trailing
     @ViewBuilder var content: Content
 
@@ -114,45 +116,42 @@ struct InstrumentBlock<Trailing: View, Content: View>: View {
             }
             // A row a turn while the part is built ahead (Staged); in view the block comes whole, so it never grows under
             // what is drawn beside and below it. Rows stand in columns once the block is wide (wide-pages).
-            BlockRowColumns { content }
+            if staged { Staged(inView: false) { content } } else { content }
         }
         .padding(.horizontal, style.density.padding).padding(.vertical, InstrumentKitPage.blockPadding)
         .frame(maxHeight: fill ? .infinity : nil, alignment: .top)
     }
 }
 
-/// A block's children: a block of rows (every child a BlockRow, two or more) stands them in columns once it is wide
+/// A KitBlock's children: a block of rows (every child a BlockRow, two or more) stands them in columns once it is wide
 /// enough for two rows side by side, each as wide as a page column's row (wide-pages: Update beside Clean, Open with's
 /// ten Apps for keys in three columns in a big window); the columns draw the rules, none over a column's top row. Only on
-/// a page's own flowing block (`blockRowColumns`); any other block's children stay as they were, a row a turn while the
-/// part is built ahead (Staged) and whole in view. The rows are read as they are, to see what they are, then built (and
-/// staged) once, told to draw no rule of their own: a row keeps the environment it was first read in.
+/// a page's own flowing block (`blockRowColumns`). Any other block draws the children KitBlock read, a row a turn while
+/// the part is built ahead (Staged), so its rows are built once, as before; a block in columns builds them again told
+/// to draw no rule of their own, as a row keeps the environment it was first read in.
 struct BlockRowColumns<Content: View>: View {
     @Environment(\.style) private var style
     @Environment(\.blockRowColumns) private var on
+    /// The block's children as KitBlock read them, and what each is (BlockRow's container value).
+    let children: SubviewsCollection
+    let kinds: [BlockRowKind?]
     @ViewBuilder var content: Content
 
     var body: some View {
-        if on == true {
-            Group(subviews: content) { children in
-                if let count = Self.rows(children) {
-                    let firsts = children.map { $0.containerValues.blockRow == .first }
-                    RowColumns(least: KitPage<EmptyView>.column(.instrument) - style.density.padding * 2, gap: style.density.padding * 2, firsts: firsts) {
-                        Staged(inView: false) { content.environment(\.blockRowRule, false) }
-                        ForEach(0..<count, id: \.self) { _ in InstrumentRule() }
-                    }
-                } else {
-                    Staged(inView: false) { content }
-                }
+        if on == true, let count = Self.rows(kinds) {
+            RowColumns(least: KitPage<EmptyView>.column(.instrument) - style.density.padding * 2, gap: style.density.padding * 2,
+                       firsts: kinds.map { $0 == .first }) {
+                Staged(inView: false) { content.environment(\.blockRowRule, false) }
+                ForEach(0..<count, id: \.self) { _ in InstrumentRule() }
             }
         } else {
-            Staged(inView: false) { content }
+            Staged(inView: false) { ForEach(children) { $0 } }
         }
     }
 
     /// How many rows a block holds when every child is one and there are two or more; nil for any other block.
-    static func rows(_ children: SubviewsCollection) -> Int? {
-        children.count >= 2 && children.allSatisfy { $0.containerValues.blockRow != nil } ? children.count : nil
+    static func rows(_ kinds: [BlockRowKind?]) -> Int? {
+        kinds.count >= 2 && kinds.allSatisfy { $0 != nil } ? kinds.count : nil
     }
 }
 

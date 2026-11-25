@@ -194,12 +194,15 @@ struct KitBlock<Trailing: View, Content: View>: View {
     var body: some View {
         // A block flows into the page's columns (PageFlow) unless it is marked `.pageWide()`. A block of rows says how
         // many it holds, so a wide page gives it the columns its rows can stand in (wide-pages).
+        // The rows are read once here; a block that does not stand them in columns draws what was read (BlockRowColumns).
         Group(subviews: content) { children in
-            let rows = BlockRowColumns<EmptyView>.rows(children)
-            InstrumentBlock(title: title, symbol: symbol, note: note, fill: fill, trailing: { trailing }, content: { content })
-                .padding(.top, style.density.padding)
-                .layoutValue(key: PageSpan.self, value: rows ?? 1)
-                .pageFlows()
+            let kinds = children.map { $0.containerValues.blockRow }
+            InstrumentBlock(title: title, symbol: symbol, note: note, fill: fill, staged: false, trailing: { trailing }, content: {
+                BlockRowColumns(children: children, kinds: kinds) { content }
+            })
+            .padding(.top, style.density.padding)
+            .layoutValue(key: PageSpan.self, value: BlockRowColumns<Content>.rows(kinds) ?? 1)
+            .pageFlows()
         }
     }
 }
