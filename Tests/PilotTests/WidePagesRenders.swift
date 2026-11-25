@@ -67,6 +67,12 @@ struct WidePagesRenders {
                     model.ringed = "wide-pages.render"
                     RunLoop.main.run(until: Date().addingTimeInterval(0.7))
                     model.ringed = nil
+                    // Look ends what was tried on there once it is left or let go from the deck: on again for the shot.
+                    if look.trialID != theme {
+                        look.tryOn(id: theme, pack: nil)
+                        AppWindowController.applyLook(look, to: window)
+                        RunLoop.main.run(until: Date().addingTimeInterval(0.3))
+                    }
                     frame.layoutSubtreeIfNeeded()
                     let rep = try #require(snapshot(frame, scale: 2))
                     try #require(rep.representation(using: .png, properties: [:])).write(to: dir.appendingPathComponent("\(file).png"))
