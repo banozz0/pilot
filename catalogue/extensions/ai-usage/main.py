@@ -362,11 +362,11 @@ def ask_ghostex(deadline):
 
 
 def ghostex_answer(cache_dir, now, ask_until=None, fresh=GHOSTEX_FRESH):
-    """Ghostex's last answer in paths.cache, {at, accounts: credits, usage} (asked again inline once over `fresh` s old
-    when `ask_until` is given, never by the bar); {} without one."""
+    """Ghostex's last answer in paths.cache, {at, credits, usage} (asked again inline once over `fresh` s old when
+    `ask_until` is given, never by the bar; 3.8.0's answer, without usage, counts as none); {} without one."""
     path = os.path.join(cache_dir, GHOSTEX_FILE) if cache_dir else None
     saved = read_json(path) if path else None
-    saved = saved if isinstance(saved, dict) and number(saved.get("at")) is not None else None
+    saved = saved if isinstance(saved, dict) and number(saved.get("at")) is not None and "usage" in saved else None
     if ask_until and (saved is None or now - saved["at"] > min(fresh, GHOSTEX_FRESH)):
         credits, usage = ask_ghostex(ask_until) or ({}, {})
         saved = {"at": now, "credits": credits, "usage": usage}
