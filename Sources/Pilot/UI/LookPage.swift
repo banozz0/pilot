@@ -290,25 +290,7 @@ private struct ThemePackControls: View {
                 Button("Export…") { exportPack() }.disabled(selected.isEmpty)
                 Button("Delete…") { deleting = packs.first { $0.id == selected } }.disabled(!deletable)
             }
-            if let apps {
-                // Off is Pilot only (Sven, 2026-11-17): Pilot's own look takes the theme and no other app's files change.
-                appSwitch("Themes recolour other apps", on: apps.othersOn, app: .others)
-                    .help("Off: Pilot only. A theme changes Pilot's own look, and no other app's files.")
-                Group {
-                    if apps.zedFound { appSwitch("Zed follows", on: apps.zedOn, app: .zed) }
-                    if apps.ghostexFound { appSwitch("Ghostex follows", on: apps.ghostexOn, app: .ghostex) }
-                    ForEach(apps.apps, id: \.kind) { app in
-                        if let kind = ThemeAppKind(rawValue: app.kind) { appSwitch("\(app.name) follows", on: app.on, app: .app(kind)) }
-                    }
-                    if !apps.vaults.isEmpty {
-                        appSwitch("Obsidian follows", on: apps.obsidianOn, app: .obsidian)
-                        ForEach(apps.vaults, id: \.root) { vault in
-                            appSwitch(ThemeCoordinator.vaultLabel(vault.root, among: apps.vaults.map(\.root)), on: vault.on, app: .vault(vault.root))
-                                .help(vault.root).padding(.leading, 18).disabled(!apps.obsidianOn)
-                        }
-                    }
-                }.padding(.leading, 18).disabled(!apps.othersOn)
-            }
+            if let apps { ThemeAppSwitches(apps: apps, stage: stageFollows).disabled(running) }
         }
     }
 
@@ -394,11 +376,9 @@ private struct ThemePackControls: View {
         }
     }
 
-    private func appSwitch(_ title: String, on: Bool, app: ThemeCoordinator.AppSwitch) -> some View {
-        Toggle(title, isOn: Binding(get: { on }, set: { value in
-            do { apps = try ThemeCoordinator.production().stageFollows(app, on: value); plan = nil; outcome = "Saved. Preview again before Apply." }
-            catch { outcome = String(describing: error) }
-        })).disabled(running)
+    private func stageFollows(_ app: ThemeCoordinator.AppSwitch, on value: Bool) {
+        do { apps = try ThemeCoordinator.production().stageFollows(app, on: value); plan = nil; outcome = "Saved. Preview again before Apply." }
+        catch { outcome = String(describing: error) }
     }
 
     /// One press applies or restores (Sven, after testing 2180): no second button and no Allow from Pilot's own window;
@@ -435,6 +415,61 @@ private struct ThemePackControls: View {
 /// Look's preview (simplify-pages T28; Sven's pick A of the look-preview-design round and its tweak, 2026-11-11): this
 /// Mac's wallpaper in small with a desk in the theme over it (LookDesk), an editor, a terminal and a notes graph with the
 /// tiler's gaps between them. It reads the main screen's wallpaper as it shows and after each step.
+/// Themes › More's switches: which other apps a theme recolours. The apps sit in two columns of narrow cells, each switch
+/// beside its app's name (Sven, Q402, 2026-11-26: a switch at the page's far edge was misread for the row above). The
+/// names drop "follows": the master switch above already says what they do, and short names keep the cells narrow.
+struct ThemeAppSwitches: View {
+    let apps: ThemeCoordinator.AppFollowing
+    let stage: (ThemeCoordinator.AppSwitch, Bool) -> Void
+    static let cell: CGFloat = 170, gap: CGFloat = 40, indent: CGFloat = 18
+
+    private struct Item { let title: String; let on: Bool; let app: ThemeCoordinator.AppSwitch; var vaults = false }
+
+    /// In the order the one column had: Zed, Ghostex, the detected apps, then Obsidian with its vaults.
+    private var items: [Item] {
+        var list: [Item] = []
+        if apps.zedFound { list.append(.init(title: "Zed", on: apps.zedOn, app: .zed)) }
+        if apps.ghostexFound { list.append(.init(title: "Ghostex", on: apps.ghostexOn, app: .ghostex)) }
+        for app in apps.apps { if let kind = ThemeAppKind(rawValue: app.kind) { list.append(.init(title: app.name, on: app.on, app: .app(kind))) } }
+        if !apps.vaults.isEmpty { list.append(.init(title: "Obsidian", on: apps.obsidianOn, app: .obsidian, vaults: true)) }
+        return list
+    }
+
+    var body: some View {
+        let items = items
+        VStack(alignment: .leading, spacing: 10) {
+            // Off is Pilot only (Sven, 2026-11-17): Pilot's own look takes the theme and no other app's files change.
+            appSwitch("Themes recolour other apps", on: apps.othersOn, app: .others)
+                .help("Off: Pilot only. A theme changes Pilot's own look, and no other app's files.")
+                .frame(width: Self.cell * 2 + Self.gap + Self.indent)
+            Grid(alignment: .topLeading, horizontalSpacing: Self.gap, verticalSpacing: 10) {
+                ForEach(Array(stride(from: 0, to: items.count, by: 2)), id: \.self) { row in
+                    GridRow {
+                        cell(items[row])
+                        if row + 1 < items.count { cell(items[row + 1]) }
+                    }
+                }
+            }.padding(.leading, Self.indent).disabled(!apps.othersOn)
+        }
+    }
+
+    private func cell(_ item: Item) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            appSwitch(item.title, on: item.on, app: item.app)
+            if item.vaults {
+                ForEach(apps.vaults, id: \.root) { vault in
+                    appSwitch(ThemeCoordinator.vaultLabel(vault.root, among: apps.vaults.map(\.root)), on: vault.on, app: .vault(vault.root))
+                        .help(vault.root).padding(.leading, Self.indent).disabled(!apps.obsidianOn)
+                }
+            }
+        }.frame(width: Self.cell)
+    }
+
+    private func appSwitch(_ title: String, on: Bool, app: ThemeCoordinator.AppSwitch) -> some View {
+        Toggle(title, isOn: Binding(get: { on }, set: { stage(app, $0) })).lineLimit(1)
+    }
+}
+
 struct LookPreview: View {
     let look: Look
     /// A render's wallpaper, so nothing is read; nil reads the main screen's.
