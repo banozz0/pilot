@@ -22,7 +22,7 @@
     { "name": "otherCodex", "type": "checkbox", "title": "List other Codex folders", "default": true,
       "description": "Also list Codex folders not in Codex accounts: each ~/.codex-* or Pilot › AI's own Codex home signed in to Codex is asked like the others, one with logs only is read from them." },
     { "name": "claudeSignIn", "type": "checkbox", "title": "Read Claude's sign-in to show usage", "default": false,
-      "description": "Without Ghostex, Claude Code no longer keeps its usage on this Mac. On, Pilot reads Claude Code's own sign-in from your keychain and asks Anthropic for your usage, at most every 5 minutes, as Claude Code does. The sign-in is used for that one request only: never stored, shown or renewed. If it has expired, sign in to Claude Code again. With Ghostex you never need this." },
+      "description": "Without Ghostex, Claude Code no longer keeps its usage on this Mac. On, Pilot reads Claude Code's sign-in from the Keychain without a macOS prompt, and uses it only to ask Anthropic for your usage, at most every 5 minutes. The sign-in is never stored, shown or renewed. If it has expired, use Claude Code once to renew it. With Ghostex you never need this." },
     { "name": "gemini", "type": "checkbox", "title": "Show Gemini", "default": true,
       "description": "Gemini's card, shown only once the gemini CLI is installed; it says only that Gemini keeps no limit on this Mac." }
   ],

@@ -68,10 +68,11 @@ Claude Code's own picker, which asks before it spends one.
 Read Claude's sign-in (the claudeSignIn setting, off by default; the card offers it without Ghostex while it has only the
 status line or nothing): for a Mac without Ghostex, whose Claude Code no longer keeps its usage read. One detached run
 at a time reads Claude Code's own keychain item (service "Claude Code-credentials", account $USER, as Claude Code
-2.1.332 names them) with /usr/bin/security, which Claude Code writes it with too, and asks the usage API once, as
-Claude Code does: GET https://api.anthropic.com/api/oauth/usage with `Authorization: Bearer` and `anthropic-beta:
-oauth-2025-04-20`, no redirect followed. The token lives only for that request: never printed, logged, cached or
-renewed (renewing would rotate Claude Code's sign-in); an expired one or a 401 says sign in to Claude Code again.
+2.1.332 names them) with /usr/bin/security, which Claude Code writes it with too, so macOS shows no prompt, and asks
+the usage API once, as Claude Code does: GET https://api.anthropic.com/api/oauth/usage with `Authorization: Bearer`
+and `anthropic-beta: oauth-2025-04-20`, no redirect followed. The token is used only for that request: never printed,
+logged, cached or renewed (renewing would rotate Claude Code's sign-in); an expired one says use Claude Code once to
+renew it, a 401 says sign in to Claude Code again.
 Only the figures are kept (paths.cache/claude-api.json), asked at most every 5 minutes, longer after a 429; never while
 Ghostex has a reading of the account.
 
@@ -1407,7 +1408,7 @@ def section(title, subtitle, aside, aside_note, blocks):
 
 
 SIGN_IN_WORDS = {  # Pilot's own read with Claude Code's sign-in, when it did not answer
-    "expired": "Sign in to Claude Code again: its sign-in has expired, and Pilot never renews it.",
+    "expired": "Use Claude Code once to renew its sign-in: it has expired, and Pilot never renews it.",
     "signed_out": "Sign in to Claude Code again: Anthropic turned its sign-in away.",
     "no_token": "Claude Code isn't signed in on this Mac.",
     "refused": "macOS didn't let Pilot read Claude Code's sign-in. Refresh now asks again.",
@@ -2149,7 +2150,7 @@ def background_claude_api(cache_dir):
     state: a good answer replaces them, anything else keeps the last ones (their read time says how old) and counts
     toward the hold-off, so a signed-out Claude Code is not asked every 5 minutes; all but an expired token, which made
     no request, so the card picks up a renewed one within 5 minutes."""
-    signal.alarm(90)  # security may wait on a keychain prompt
+    signal.alarm(90)  # security may wait while a locked keychain asks to be unlocked
     lock = take_lock(cache_dir, CLAUDE_API_LOCK)
     if lock is None:
         return

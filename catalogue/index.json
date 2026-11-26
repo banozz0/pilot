@@ -50,14 +50,14 @@
       "files": [
         {
           "path": "extension.json",
-          "sha256": "b22aa6230f2650d1aa03b827bf67ff2a39b207417ac8bdff92bcbcfd3536a5b2",
-          "size": 5081,
+          "sha256": "cba6d6d8e0fa0f4e4e73a84e3eefee5b131539ab223a3c860fc9bac3405b138e",
+          "size": 5066,
           "executable": false
         },
         {
           "path": "main.py",
-          "sha256": "74cade09da8a9ef92c0b64bb92f50ea16b6c56b0503e4e73bf9edd6bcdec806b",
-          "size": 108470,
+          "sha256": "91860033a9e40e5e80ecb93f40f60e4560244d9c4b4928767ed2a2a17bd4af03",
+          "size": 108561,
           "executable": true
         }
       ]
