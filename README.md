@@ -41,7 +41,10 @@
 
 <!-- video 1: Pilot in a minute -->
 
-https://github.com/user-attachments/assets/15dc79b5-5d8e-494b-b20f-ec5d4d398910
+
+https://github.com/user-attachments/assets/485f72d4-3fbf-4f48-a780-1e0db347512b
+
+
 
 ## What it does
 
@@ -73,7 +76,9 @@ Click any key on a picture of your keyboard to give it a job, never in a config 
 
 <!-- video 2: Your keyboard runs the Mac -->
 
-https://github.com/user-attachments/assets/1e7e2e1f-fde0-417b-bd84-2cade22a23e4
+
+https://github.com/user-attachments/assets/53c56b39-1f21-4a22-9c8d-24db5a296f0a
+
 
 ### 📋 Clipboard and notes
 
