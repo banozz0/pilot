@@ -309,7 +309,7 @@ struct KeptPages<Content: View>: NSViewRepresentable {
 /// KeptPages' view: the shown part's host, and the other parts kept, hidden.
 final class PageDeck: NSView {
     /// How many parts stay built: the warm set and the four shown last, 27 to 49 MB each while the window is open
-    /// (page-switch-3, release), all but the one shown gone 300 s after it leaves use (`trimAfter`) and all of them
+    /// (page-switch-3, release), all but the one shown gone 15 min after it leaves use (`trimAfter`) and all of them
     /// with the window's tree when it closes.
     static let cap = warm + 4
     /// How many of the pages switched to most are built as the window opens (load-lag; Sven, 2026-11-25, Q375 B: "warm-up
@@ -383,7 +383,8 @@ final class PageDeck: NSView {
         RunLoop.main.add(timer, forMode: .common)
         trimTimer = timer
     }
-    var trimAfter: TimeInterval = 300
+    /// 15 min out of use (Sven, 2026-11-26, Q412: "make it 15m"): a quick switch away keeps every page fast.
+    var trimAfter: TimeInterval = 900
     private var trimTimer: Timer?
 
     private func stopTrim() {
