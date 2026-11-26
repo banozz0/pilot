@@ -2,8 +2,9 @@ import Foundation
 import Testing
 @testable import Pilot
 
-/// Setup › Wi-Fi (card agent-bo-95422803): the switch, the signal, and, once Location access is given, the network's name
-/// and the networks nearby to join. Every case runs on a fake; no test turns Wi-Fi off, scans, joins or asks for Location.
+/// Setup › Wi-Fi (card agent-bo-95422803): the switch, the signal, and, once Location access is given, the network's name;
+/// the networks nearby are macOS's own settings. Every case runs on a fake; no test turns Wi-Fi off, scans, joins or asks
+/// for Location.
 @MainActor
 @Suite("Setup Wi-Fi")
 struct SetupWiFiTests {
@@ -32,64 +33,28 @@ struct SetupWiFiTests {
         func join(_ name: String, password: String?) async throws { joins.append((name, password)); joined = name }
     }
 
-    static func defaults(shown: Bool = false) -> UserDefaults { setupDefaults(SetupWiFi.shownKey, shown: shown) }
-
     @Test("The switch calls setPower once with the new state")
     func power() async {
-        let wifi = FakeWiFi(), section = SetupWiFi(wifi: wifi, defaults: Self.defaults())
-        await section.start()
+        let wifi = FakeWiFi(), section = SetupWiFi(wifi: wifi)
+        section.start()
         #expect(section.status?.on == true && section.status?.signal == -48)
         await section.setPower(false)
         #expect(wifi.powerCalls == [false] && section.status?.on == false)
     }
 
-    @Test("Without Location access: no network name, the line saying why, and no scan, not even after starting again")
-    func noLocation() async {
-        let wifi = FakeWiFi()
-        wifi.location = .denied
-        let section = SetupWiFi(wifi: wifi, defaults: Self.defaults(shown: true))
-        await section.start()
-        await section.refreshNetworks(fresh: true)
-        #expect(section.status?.network == nil && section.networks.isEmpty && wifi.scans.isEmpty)
-        #expect(section.location == .denied)
+    @Test("The page reads the status and macOS's stored Location answer only: it never asks, scans or joins")
+    func readsOnly() {
+        for access in [PrivacyAccess.notAsked, .denied, .allowed] {
+            let wifi = FakeWiFi()
+            wifi.location = access
+            let section = SetupWiFi(wifi: wifi)
+            section.start()
+            // Allowed, the name shows, so the answer is not read; otherwise it words the hidden name.
+            #expect(section.status?.network == (access == .allowed ? "Home" : nil) && section.checked)
+            #expect(section.location == (access == .allowed ? .notAsked : access))
+            #expect(wifi.asked == 0 && wifi.scans.isEmpty && wifi.joins.isEmpty)
+        }
         #expect(SetupWiFi.hiddenLine.contains("Location") && SetupWiFi.deniedLine.contains("Privacy & Security"))
-    }
-
-    @Test("Nothing asks for Location before Show networks; Show asks once, then lists the networks strongest first, joined one marked")
-    func showNetworks() async {
-        let wifi = FakeWiFi(), store = Self.defaults()
-        let section = SetupWiFi(wifi: wifi, defaults: store)
-        await section.start()
-        #expect(wifi.asked == 0 && wifi.scans.isEmpty && section.offersShow)
-        await section.showNetworks()
-        #expect(wifi.asked == 1 && wifi.scans == [true] && !section.offersShow)
-        #expect(section.status?.network == "Home")
-        #expect(section.networks.map(\.name) == ["Home", "Cafe", "Neighbour"])
-        #expect(section.networks.first?.signal == -48)
-        #expect(section.isJoined(section.networks[0]) && !section.isJoined(section.networks[1]))
-        // The press is remembered: the next page show lists macOS's last scan without asking or scanning the radio.
-        let again = SetupWiFi(wifi: wifi, defaults: store)
-        await again.start()
-        #expect(wifi.asked == 1 && wifi.scans == [true, false] && again.networks.count == 3)
-    }
-
-    @Test("Joining a secured network passes the typed password once, and the section keeps no copy of it")
-    func join() async {
-        let wifi = FakeWiFi(), section = SetupWiFi(wifi: wifi, defaults: Self.defaults(shown: true))
-        wifi.location = .allowed
-        await section.start()
-        let neighbour = section.networks[2], typed = "hunter22-sample"
-        await section.join(neighbour, password: typed)
-        #expect(wifi.joins.count == 1 && wifi.joins[0].name == "Neighbour" && wifi.joins[0].password == typed)
-        #expect(section.status?.network == "Neighbour" && section.problem == nil)
-        #expect(!String(describing: Mirror(reflecting: section).children.map(\.value)).contains(typed))
-        // An open network joins with no password at all.
-        await section.join(section.networks.first { $0.name == "Cafe" }!, password: "ignored")
-        #expect(wifi.joins.count == 2)
-        #expect(wifi.joins.last?.password == nil)
-        // A secured network this Mac already knows joins with no password typed: macOS uses the one it saved.
-        await section.join(neighbour, password: nil)
-        #expect(wifi.joins.count == 3 && wifi.joins.last?.name == "Neighbour" && wifi.joins.last?.password == nil)
     }
 
     @Test("Info.plist says why Pilot asks for Location: macOS shows Wi-Fi names only to apps that have it")

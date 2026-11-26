@@ -16,8 +16,6 @@ protocol BluetoothSystem: AnyObject {
     func authorization() -> PrivacyAccess
     /// Raises macOS's prompt when Pilot was never asked, and returns once it is answered.
     func requestAccess() async -> PrivacyAccess
-    /// Clears Pilot's own stored answer, so the next request raises macOS's prompt again; false when that failed.
-    func resetAccess() async -> Bool
     func paired() async -> [BluetoothDevice]
     func connect(_ address: String) async -> Bool
     func disconnect(_ address: String) async -> Bool
@@ -33,9 +31,9 @@ protocol BluetoothSystem: AnyObject {
     func inputs() -> [InputDevice]
 }
 
-/// IOBluetooth's public device calls (Setup › Bluetooth, card agent-bo-95422802), each off the main thread, since a
-/// connect pages the device for seconds. Asking goes through CoreBluetooth: making a central manager raises macOS's
-/// prompt, and its state callback comes once the prompt is answered.
+/// IOBluetooth's public device calls (the pilot command's bluetooth verbs, card agent-bo-95422802), each off the main
+/// thread, since a connect pages the device for seconds. Asking goes through CoreBluetooth: making a central manager
+/// raises macOS's prompt, and its state callback comes once the prompt is answered.
 final class IOBluetoothSystem: NSObject, BluetoothSystem, CBCentralManagerDelegate {
     private var asker: CBCentralManager?
     private let asking = PermissionAsk()
@@ -52,14 +50,6 @@ final class IOBluetoothSystem: NSObject, BluetoothSystem, CBCentralManagerDelega
         let access = await asking.ask(current: authorization) { asker = CBCentralManager(delegate: self, queue: .main) }
         asker = nil
         return access
-    }
-
-    /// macOS never asks twice, so Ask again (card agent-bo-95422970) clears Pilot's own Bluetooth answer and nothing
-    /// else; a user may reset their own app's answer without sudo (checked on macOS 27, 2026-10-07).
-    static let resetCommand = ["/usr/bin/tccutil", "reset", "BluetoothAlways", "dev.banozz.pilot"]
-
-    func resetAccess() async -> Bool {
-        (try? await ChildProcess.run(Self.resetCommand[0], Array(Self.resetCommand.dropFirst()), timeout: .seconds(10))) != nil
     }
 
     nonisolated func centralManagerDidUpdateState(_ central: CBCentralManager) {

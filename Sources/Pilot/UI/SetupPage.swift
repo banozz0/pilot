@@ -13,8 +13,6 @@ struct SetupDevices {
     var displays: SetupDisplays
     /// The keyboard layouts come from the Look page's model (story 111), the one place Pilot switches them.
     var look: Look
-    /// Where Setup remembers Bluetooth's first Show press.
-    var defaults: UserDefaults = .pilot()
     /// The brightness keys' switch (card agent-bo-95423314); none in the renders.
     var settings: PilotSettings?
     /// Each screen's brightness (story 144); none in the renders, which read nothing of the Mac's.
@@ -48,9 +46,6 @@ struct SetupPage: View {
     @State private var wifi: SetupWiFi
     private let displays: SetupDisplays
     private let brightness: Brightness?
-    /// The secured network whose password field is open, and what is typed in it; cleared once it is used.
-    @State private var joining: String?
-    @State private var password = ""
     /// Its cards read the Mac once already. A class, so setting it redraws nothing.
     @State private var read = Read()
     private final class Read { var yes = false }
@@ -75,8 +70,8 @@ struct SetupPage: View {
         self.section = section
         self.tookSection = tookSection
         _sound = State(initialValue: SetupSound(audio: devices.audio))
-        _bluetooth = State(initialValue: SetupBluetooth(bluetooth: devices.bluetooth, defaults: devices.defaults))
-        _wifi = State(initialValue: SetupWiFi(wifi: devices.wifi, defaults: devices.defaults))
+        _bluetooth = State(initialValue: SetupBluetooth(bluetooth: devices.bluetooth))
+        _wifi = State(initialValue: SetupWiFi(wifi: devices.wifi))
         displays = devices.displays
         brightness = devices.brightness
         look = devices.look
@@ -118,8 +113,8 @@ struct SetupPage: View {
     private func start(following: Bool = true) {
         read.yes = true
         if following { sound.start() } else { sound.read() }
-        Task { await bluetooth.start() }
-        Task { await wifi.start() }
+        bluetooth.start()
+        wifi.start()
         displays.startOnPage()
         look.followLayouts()
         pointer?.refresh()
@@ -232,13 +227,8 @@ struct SetupPage: View {
                 Text(wifi.checked ? "No Wi-Fi" : "Reading…")
             }
         case .bluetooth:
-            if bluetooth.offersShow { Text("Not shown yet") }
-            else if bluetooth.access == .denied { Text("Not allowed") }
-            else if bluetooth.power == false { Text("Off") }
-            else {
-                let connected = bluetooth.devices.filter(\.connected).count
-                Text(bluetooth.devices.isEmpty ? "No paired devices" : "\(connected) connected")
-            }
+            if let on = bluetooth.power { Text(on ? "On" : "Off") }
+            else { Text(bluetooth.access == .denied ? "Not allowed" : bluetooth.access == .notAsked ? "Not allowed yet" : "—") }
         case .displays:
             if displays.displays.count == 1, let only = displays.displays.first { Text(only.mode.sizeLabel) }
             else { Text("\(displays.displays.count) screens") }
@@ -255,8 +245,8 @@ struct SetupPage: View {
     private func info(_ part: SetupSection) -> String? {
         switch part {
         case .sound: nil
-        case .wifi: "Pilot never logs or keeps a network's password. Turning Wi-Fi on or off may need an administrator if macOS's Wi-Fi settings ask for one."
-        case .bluetooth: "Pairing a new device and forgetting one stay in Control Centre and System Settings: macOS gives apps no public way to do them. The Bluetooth switch uses a private macOS call, and hides if an update removes it."
+        case .wifi: "Networks nearby and joining one are in macOS's Wi-Fi settings. Turning Wi-Fi on or off may need an administrator if macOS's Wi-Fi settings ask for one."
+        case .bluetooth: "Paired devices, connecting and pairing are in macOS's Bluetooth settings. The Bluetooth switch uses a private macOS call, and hides if an update removes it."
         case .displays: "A new resolution goes back by itself in 15 s unless you keep it; a rotation stays unless you press Revert. Click a screen in the picture and an arrow to move it beside another, with Undo in the tip; the main display and mirroring stay with macOS."
         case .keepAwake: "Stops the display and the Mac sleeping while it is on; quitting Pilot ends it."
         case .keyboard: "Pilot switches between the layouts macOS has enabled and never adds or removes one; add more in System Settings › Keyboard › Text Input."
@@ -281,7 +271,7 @@ struct SetupPage: View {
         case .wifi:
             wifiSection
             if let problem = wifi.problem { problemLine(problem) }
-        case .bluetooth: bluetoothDevices
+        case .bluetooth: bluetoothSection
         case .displays: displaySection
         case .keepAwake:
             BlockRow(first: true) {
@@ -464,90 +454,26 @@ struct SetupPage: View {
         if let status = wifi.status {
             BlockRow(first: true) {
                 TitledText(title: "Wi-Fi", detail: wifiState(status)).padding(.vertical, 4)
-                InfoMark(text: "Turns this Mac's Wi-Fi on or off; the line under it is the network joined.")
+                InfoMark(text: "Turns this Mac's Wi-Fi on or off; the line under it is the network joined. macOS shows its name only to apps with Location access, which \(AppPlace(.permissions).path) asks.")
                 Spacer()
                 Toggle("Wi-Fi", isOn: Binding(get: { status.on }, set: { on in Task { await wifi.setPower(on) } })).toggleStyle(.pilotSwitch)
             }
-            if status.on { networkRows }
         } else {
             BlockRow(first: true) { Text(wifi.checked ? "This Mac has no Wi-Fi" : "Reading Wi-Fi…").foregroundStyle(ink.muted) }
         }
+        settingsRow("Networks", info: "The networks nearby and joining one are in macOS's own Wi-Fi settings.", button: "Wi-Fi Settings…",
+                    pane: SetupWiFi.networksPane)
     }
 
-    /// Under the switch while Wi-Fi is on: the Show networks press, the refusal, or the networks nearby.
-    @ViewBuilder private var networkRows: some View {
-        if wifi.offersShow {
-            BlockRow {
-                Text("Networks nearby")
-                InfoMark(text: SetupWiFi.hiddenLine + " The first time, macOS asks.")
-                Spacer()
-                Button("Show networks") { Task { await wifi.showNetworks() } }.buttonStyle(.pilotPrimary)
-            }
-        } else if wifi.location == .denied {
-            BlockRow { problemLine(SetupWiFi.deniedLine) }
-        } else {
-            BlockRow {
-                Text("Networks nearby").foregroundStyle(ink.text2)
-                InfoMark(text: "Join a network below; a secured one asks for its password first. Scan again looks afresh.")
-                Spacer()
-                Button(wifi.scanning ? "Scanning…" : "Scan again") { Task { await wifi.refreshNetworks(fresh: true) } }
-                    .buttonStyle(.pilot).disabled(wifi.scanning)
-            }
-            HidingList(list: .wifi, items: wifi.networks, id: { $0.name }, name: \.name, inUse: wifi.isJoined, slot: true) { network, _ in
-                VStack(spacing: 0) { networkRow(network) }
-            }
-        }
-    }
-
-    /// The bars' fill for a signal: -90 dBm none, -40 dBm full.
-    private static func bars(_ signal: Int) -> Double { min(1, max(0, Double(signal + 90) / 50)) }
-
-    /// Join: a secured network asks for its password first, an open one joins at once.
-    private func join(_ network: WiFiNetwork) {
-        if network.secured {
-            joining = network.name
-            password = ""
-        } else {
-            Task { await wifi.join(network, password: nil) }
-        }
-    }
-
-    private func passwordRow(_ network: WiFiNetwork) -> some View {
-        BlockRow {
-            SecureField("Password, or empty if this Mac knows \(network.name)", text: $password).pilotField().secureFieldTip()
-                .onSubmit { joinTyped(network) }
-            InfoMark(text: "Pilot hands the password to macOS once and keeps no copy; empty uses the one this Mac saved.")
-            Button("Cancel") { (joining, password) = (nil, "") }.buttonStyle(.pilot)
-            Button("Join") { joinTyped(network) }.buttonStyle(.pilotPrimary)
-        }
-    }
-
-    @ViewBuilder private func networkRow(_ network: WiFiNetwork) -> some View {
-        BlockRow {
-            Image(systemName: "wifi", variableValue: Self.bars(network.signal))
-                .foregroundStyle(wifi.isJoined(network) ? ink.accent : ink.text2).frame(width: 18).accessibilityHidden(true)
-            Text(network.name)
-            if network.secured {
-                Image(systemName: "lock.fill").font(ink.ui(9)).foregroundStyle(ink.muted).accessibilityLabel("Secured")
-            }
+    /// A row opening macOS's own settings for what the card leaves to them (Sven, 2026-11-26: "they open the actual Mac
+    /// settings"), as the top bar's menus do.
+    private func settingsRow(_ title: String, info: String, button: String, pane: String, first: Bool = false) -> some View {
+        BlockRow(first: first) {
+            Text(title)
+            InfoMark(text: info)
             Spacer()
-            Text("\(network.signal) dBm").font(ink.mono(12)).foregroundStyle(ink.muted)
-            if wifi.isJoined(network) {
-                Chip(text: "joined", color: ink.green)
-            } else if joining != network.name {
-                Button("Join") { join(network) }.buttonStyle(.pilot)
-            }
+            Button(button) { SystemModule.pane(pane) }.buttonStyle(.pilot)
         }
-        if joining == network.name { passwordRow(network) }
-    }
-
-    /// Hands the typed password to macOS once and clears the field, so the page keeps no copy either; an empty field lets
-    /// macOS use the password it saved for a network this Mac knows.
-    private func joinTyped(_ network: WiFiNetwork) {
-        let typed = password
-        (joining, password) = (nil, "")
-        let given = typed.isEmpty ? nil : typed
-        Task { await wifi.join(network, password: given) }
     }
 
     /// "Home · -48 dBm · 866 Mbit/s", or the name hidden for want of Location access.
@@ -557,32 +483,20 @@ struct SetupPage: View {
         return ([name] + [status.signal.map { "\($0) dBm" }, status.rate.map { "\(Int($0)) Mbit/s" }].compactMap { $0 }).joined(separator: " · ")
     }
 
-    @ViewBuilder private var bluetoothDevices: some View {
-        if bluetooth.offersShow {
-            BlockRow(first: true) {
-                Text("Paired devices")
-                InfoMark(text: "The first time, macOS asks whether Pilot may use Bluetooth.")
-                Spacer()
-                Button("Show paired devices") { Task { await bluetooth.show() } }.buttonStyle(.pilotPrimary)
-            }
+    /// The switch once Bluetooth is allowed, else why there is none, then the way to macOS's Bluetooth settings.
+    @ViewBuilder private var bluetoothSection: some View {
+        if let on = bluetooth.power {
+            bluetoothSwitch(on)
         } else if bluetooth.access == .denied {
-            // The Show row's shape with its way out (card agent-bo-95422970): macOS never asks twice by itself.
-            BlockRow(first: true) {
-                Text("Paired devices")
-                InfoMark(text: "macOS asks an app only once. Ask again clears Pilot's answer, so macOS shows its prompt again.")
-                Spacer()
-                Button("Open Settings") { bluetooth.openSettings() }.buttonStyle(.pilot)
-                Button("Ask again") { Task { await bluetooth.askAgain() } }.buttonStyle(.pilotPrimary)
-            }
             problemLine(SetupBluetooth.deniedLine)
-            if let failure = bluetooth.resetFailure { problemLine(failure) }
-        } else {
-            if let on = bluetooth.power { bluetoothSwitch(on) }
-            if bluetooth.read, bluetooth.devices.isEmpty {
-                BlockRow(first: bluetooth.power == nil) { Text("No paired devices").foregroundStyle(ink.muted) }
+        } else if bluetooth.access == .notAsked {
+            BlockRow(first: true) {
+                Text("The switch shows once Pilot may use Bluetooth: \(AppPlace(.permissions).path) asks.").foregroundStyle(ink.muted)
+                    .fixedSize(horizontal: false, vertical: true).padding(.vertical, 6)
             }
-            deviceRows
         }
+        settingsRow("Devices", info: "Paired devices, connecting one and pairing a new one are in macOS's own Bluetooth settings.",
+                    button: "Bluetooth Settings…", pane: SetupBluetooth.devicesPane, first: bluetooth.power == nil && bluetooth.access == .allowed)
     }
 
     /// The radio's switch (T47), and under it the warning that holds a turn off while Bluetooth keyboards and mice are the
@@ -602,22 +516,6 @@ struct SetupPage: View {
                 Spacer()
                 Button("Cancel") { bluetooth.cancelOff() }.buttonStyle(.pilot)
                 Button("Turn off") { Task { await bluetooth.confirmOff() } }.buttonStyle(.pilotPrimary)
-            }
-        }
-    }
-
-    @ViewBuilder private var deviceRows: some View {
-        HidingList(list: .bluetooth, items: bluetooth.devices, id: { $0.address }, name: \.name, inUse: \.connected, slot: true) { device, first in
-            let busy = bluetooth.busy.contains(device.address)
-            BlockRow(first: first && bluetooth.power == nil) {
-                Image(systemName: SetupGlyph.device(device.name)).font(ink.ui(14))
-                    .foregroundStyle(device.connected ? ink.green : ink.muted).frame(width: 22).accessibilityHidden(true)
-                TitledText(title: device.name, detail: bluetooth.failures[device.address] ?? (device.connected ? "Connected" : "Not connected"))
-                    .padding(.vertical, 4)
-                InfoMark(text: "Connects or disconnects this paired device; pairing and forgetting stay in Control Centre.")
-                Spacer()
-                Button(busy ? "…" : device.connected ? "Disconnect" : "Connect") { Task { await bluetooth.toggle(device) } }
-                    .buttonStyle(.pilot).disabled(busy)
             }
         }
     }

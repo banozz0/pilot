@@ -44,7 +44,7 @@ struct SetupSoundRenders {
         defer { HiddenRows.shared.set("monitor-a", hidden: false, in: .soundOutput) }
         let devices = SetupDevices(audio: audio, bluetooth: SetupBluetoothTests.FakeBluetooth(), wifi: SetupWiFiTests.FakeWiFi(),
                                    displays: SetupDisplays(system: SetupDisplaysTests.FakeDisplays()),
-                                   look: Look(inputSources: SetupKeepAwakeTests.FakeSources()), defaults: SetupBluetoothTests.defaults(shown: false))
+                                   look: Look(inputSources: SetupKeepAwakeTests.FakeSources()))
         let host = NSHostingView(rootView: SetupPage(onScreen: true, devices: devices).frame(width: AppWindowController.minSize.width - 207, height: 900)
             .pilotTheme().background(Theme.background))
         host.frame.size = host.fittingSize

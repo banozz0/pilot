@@ -329,12 +329,12 @@ enum SystemModule {
         }
     }
 
-    /// Why there is no switch: the private call is gone, Bluetooth is not allowed yet (System › Bluetooth asks), or no radio.
+    /// Why there is no switch: the private call is gone, Bluetooth is not allowed yet (Settings › Permissions asks), or no radio.
     private static func cannotSwitchBluetooth() {
         guard bluetooth.canSetPower else { return HUD.tip("This macOS no longer lets Pilot switch Bluetooth; use Control Centre", seconds: 3) }
         guard bluetooth.authorization() == .allowed else {
-            AppWindowController.shared.open(.system, setup: .bluetooth)
-            return HUD.tip("Allow Bluetooth first: Show paired devices", seconds: 3)
+            AppWindowController.shared.open(AppPlace(.permissions))
+            return HUD.tip("Allow Bluetooth first, in Permissions", seconds: 3)
         }
         HUD.tip("This Mac has no Bluetooth", seconds: 2)
     }

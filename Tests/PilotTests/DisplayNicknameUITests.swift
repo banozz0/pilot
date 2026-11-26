@@ -222,7 +222,7 @@ struct DisplayNicknameUITests {
         let look = Look(inputSources: SetupKeepAwakeTests.FakeSources(), defaults: .pilot())
         look.style = try #require(PilotStyle(rawValue: style))
         let devices = SetupDevices(audio: SetupSoundTests.FakeAudio(), bluetooth: SetupBluetoothTests.FakeBluetooth(), wifi: SetupWiFiTests.FakeWiFi(),
-                                   displays: rig.displays, look: look, defaults: .pilot())
+                                   displays: rig.displays, look: look)
         let wallpaper = WallpaperBlock(settings: WallpaperSettings(defaults: .pilot()), screens: [
             WallpaperScreen(id: 1, name: "CU34G4Z", portrait: false, detail: "No wallpaper file", thumb: nil, next: nil, nextName: nil, displayUUID: Self.first)
         ], count: 0, nicknames: names)

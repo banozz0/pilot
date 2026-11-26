@@ -78,24 +78,13 @@ struct PageFillRenders {
         SharedLook.StatsRenders.seed(SystemSampler.shared)
         SharedLook.StatsRenders.pickMockup(BarItemsStore.shared)
         let made = SetupDevices.make
-        // Wi-Fi and Bluetooth as on a Mac that has shown them once, Location allowed, so the renders list networks and devices.
+        // Location allowed, so Wi-Fi names its network; networks and devices are macOS's own settings.
         SetupDevices.make = {
             let wifi = SetupWiFiTests.FakeWiFi()
             wifi.location = .allowed
-            // As many networks and devices as a flat in a town sees and a desk holds.
-            wifi.nearby += [WiFiNetwork(name: "Vodafone-5G-2F1A", signal: -66, secured: true), WiFiNetwork(name: "GO-Fibre-8812", signal: -74, secured: true),
-                            WiFiNetwork(name: "Melita_Home", signal: -77, secured: true), WiFiNetwork(name: "DIRECT-HP-Printer", signal: -83, secured: true),
-                            WiFiNetwork(name: "Airport Guest", signal: -86, secured: false), WiFiNetwork(name: "iPhone de Sofía", signal: -88, secured: true)]
-            let bluetooth = SetupBluetoothTests.FakeBluetooth()
-            bluetooth.devices += [BluetoothDevice(address: "aa-04", name: "Magic Trackpad", connected: true),
-                                  BluetoothDevice(address: "aa-05", name: "Sony WH-1000XM5", connected: false),
-                                  BluetoothDevice(address: "aa-06", name: "Apple Watch", connected: false)]
-            bluetooth.reached.insert("aa-04")
-            let defaults = SetupBluetoothTests.defaults(shown: true)
-            defaults.set(true, forKey: SetupWiFi.shownKey)
-            return SetupDevices(audio: SetupSoundTests.FakeAudio(), bluetooth: bluetooth, wifi: wifi,
+            return SetupDevices(audio: SetupSoundTests.FakeAudio(), bluetooth: SetupBluetoothTests.FakeBluetooth(), wifi: wifi,
                                 displays: SetupDisplays(system: SetupDisplaysTests.FakeDisplays()),
-                                look: Look(inputSources: SetupKeepAwakeTests.FakeSources()), defaults: defaults,
+                                look: Look(inputSources: SetupKeepAwakeTests.FakeSources()),
                                 pointer: PointerSpeed(system: SharedLook.PointerSpeedRenders.FakePointer()))
         }
         defer { SetupDevices.make = made }

@@ -120,8 +120,8 @@ public enum Onboarding {
             case .microphone: "for Pilot's own dictation; skip it if you never dictate"
             case .screenRecording: "for screenshots, scrolling captures, recordings and exact menu bar items; skipped, your first capture asks"
             case .inputMonitoring: "tells a mouse's media keys from your keyboard's, in \(AppPlace(.mouse).path)"
-            case .bluetooth: "lists and connects your paired devices in Setup › Bluetooth"
-            case .location: "macOS hides Wi-Fi names without it, in Setup › Wi-Fi"
+            case .bluetooth: "so Pilot can turn Bluetooth on and off, in System › Bluetooth and the top bar"
+            case .location: "macOS hides the Wi-Fi network's name without it, in System › Wi-Fi"
             case .calendars: "your events in the clock's popover, and quick events"
             case .reminders: "reminders with a due day beside your events in the clock's popover"
             }

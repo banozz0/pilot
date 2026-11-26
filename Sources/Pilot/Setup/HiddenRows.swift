@@ -3,14 +3,14 @@ import Observation
 import SwiftUI
 
 /// The rows hidden from a device list (spec hide-rows, Sven 2026-10-15, Q137), per list, by each row's stable id: a sound
-/// device's UID, a Bluetooth address, a network's name, a display's UUID. Saved in Pilot's defaults; one store, so the
-/// System page and the top bar's popovers hide the same rows.
+/// device's UID, a display's UUID. Saved in Pilot's defaults; one store, so the System page and the top bar's popovers
+/// hide the same rows.
 @Observable @MainActor
 final class HiddenRows {
     static let shared = HiddenRows()
 
     enum List: String, CaseIterable {
-        case soundOutput, soundInput, bluetooth, wifi, displays
+        case soundOutput, soundInput, displays
 
         static func sound(_ direction: AudioDirection) -> List { direction == .output ? .soundOutput : .soundInput }
     }
@@ -47,8 +47,8 @@ final class HiddenRows {
 
 /// A device list with Hide on each row that may hide (an eye on hover, or right-click), and the hidden rows folded under
 /// one Hidden (N) toggle at its end, dimmed when open, each with Show. The page and the popovers draw their own rows;
-/// `row` is told whether it is the list's first. `slot` puts Hide beside rows that end in their own button (Connect,
-/// Join); otherwise it sits over the row's free end, where only the row in use has a check.
+/// `row` is told whether it is the list's first. `slot` puts Hide beside rows that end in their own button (the
+/// displays popover's); otherwise it sits over the row's free end, where only the row in use has a check.
 struct HidingList<Item, Row: View>: View {
     let list: HiddenRows.List
     let items: [Item]

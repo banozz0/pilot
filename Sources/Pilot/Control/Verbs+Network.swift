@@ -1,7 +1,8 @@
 import PilotCore
 
-/// What `pilot wifi` and `pilot bluetooth` reach (CLI W8): the Mac's Wi-Fi and paired Bluetooth devices, through the same
-/// calls as System › Wi-Fi and Bluetooth. Made on first use and kept, so a join finds the networks the last list scanned.
+/// What `pilot wifi` and `pilot bluetooth` reach (CLI W8): the Mac's Wi-Fi and paired Bluetooth devices, through the calls
+/// System › Wi-Fi and Bluetooth's switches use; the page itself leaves networks and devices to macOS's settings (Sven,
+/// 2026-11-26). Made on first use and kept, so a join finds the networks the last list scanned.
 /// The tests hand in the Setup fakes and their own gate, so nothing turns Wi-Fi off, scans, joins, connects or raises a
 /// macOS prompt or Pilot's Allow.
 @MainActor
@@ -15,12 +16,10 @@ final class NetworkTools {
     /// allowed, notAsked or denied.
     static func access(_ access: PrivacyAccess) -> JSONValue { .string("\(access)") }
 
-    /// The System section where Sven gives what a verb lacks: the verbs never raise macOS's prompt, which needs his hands.
-    static func next(_ section: SetupSection) -> String { "Next: pilot open system --section \(section.rawValue)" }
-
-    /// Why a Location or Bluetooth answer other than allowed stops a verb, and where Sven gives it.
-    static func blocked(_ access: PrivacyAccess, notAsked: String, denied: String, section: SetupSection) -> ControlError {
-        ControlError(.notReady, "\(access == .denied ? denied : notAsked) \(next(section))")
+    /// Why a Location or Bluetooth answer other than allowed stops a verb, and where Sven gives it: Settings › Permissions,
+    /// since the verbs never raise macOS's prompt, which needs his hands.
+    static func blocked(_ access: PrivacyAccess, notAsked: String, denied: String) -> ControlError {
+        ControlError(.notReady, "\(access == .denied ? denied : notAsked) Next: pilot open permissions")
     }
 }
 
@@ -32,12 +31,12 @@ extension ControlVerbs {
         let wifiDetail: [String: String] = [
             "status": "pilot wifi: on, the joined network, signal (dBm), rate (Mbit/s) and Location access; macOS hides the network's name without Location. present false: this Mac has no Wi-Fi.",
             "on": "pilot wifi on|off: asks Allow, then turns Wi-Fi on or off, as the page's switch, and answers the status after.",
-            "networks": "pilot wifi networks [--fresh]: the networks nearby, strongest first, each name once: name, signal, secured, joined. --fresh scans the radio (Scan again); otherwise macOS's last results. Needs Wi-Fi on and Location access.",
-            "join": "pilot wifi join <name>: asks Allow, then joins an open network, or a secured one this Mac knows (macOS uses its saved password), and answers the status after. A password is typed on the page, never sent through the command.",
+            "networks": "pilot wifi networks [--fresh]: the networks nearby, strongest first, each name once: name, signal, secured, joined. --fresh scans the radio; otherwise macOS's last results. Needs Wi-Fi on and Location access.",
+            "join": "pilot wifi join <name>: asks Allow, then joins an open network, or a secured one this Mac knows (macOS uses its saved password), and answers the status after. A password is typed in macOS's Wi-Fi settings, never sent through the command.",
         ]
         let bluetoothDetail: [String: String] = [
             "devices": "pilot bluetooth: Bluetooth access, whether Pilot can switch the radio, and, once allowed, the radio's power and the paired devices: address, name, connected.",
-            "connect": "pilot bluetooth connect|disconnect <address|name>: asks Allow, then connects or disconnects a paired device, as its row's button, and answers its row after.",
+            "connect": "pilot bluetooth connect|disconnect <address|name>: asks Allow, then connects or disconnects a paired device and answers its row after.",
         ]
         register(ControlVerb("wifi", help: "Wi-Fi's status, on or off, the networks nearby, and joining an open or known one; on, off and join ask Allow.",
                              usage: "pilot wifi [status | on | off | networks [--fresh] | join <name>]",
@@ -112,13 +111,13 @@ extension ControlVerbs {
         }
     }
 
-    /// What the page's list and join need: Wi-Fi on and Location access. The status, or not-ready saying which is missing.
+    /// What the list and join need: Wi-Fi on and Location access. The status, or not-ready saying which is missing.
     private static func listable(_ wifi: WiFiSystem) throws(ControlError) -> WiFiStatus {
         let status = try present(wifi)
         guard status.on else { throw ControlError(.notReady, "Wi-Fi is off. Next: pilot wifi on") }
         let location = wifi.locationAccess()
         guard location == .allowed else {
-            throw NetworkTools.blocked(location, notAsked: SetupWiFi.hiddenLine + " Show networks on the page asks.", denied: SetupWiFi.deniedLine, section: .wifi)
+            throw NetworkTools.blocked(location, notAsked: SetupWiFi.hiddenLine + " Permissions asks.", denied: SetupWiFi.deniedLine)
         }
         return status
     }
@@ -127,7 +126,7 @@ extension ControlVerbs {
         do { return try await wifi.scan(fresh: fresh) } catch { throw ControlError(.badValue, "Scanning failed: \(error.localizedDescription)") }
     }
 
-    /// The page's list: strongest first, each name once, the joined one marked.
+    /// The list: strongest first, each name once, the joined one marked.
     private static func networks(_ wifi: WiFiSystem, fresh: Bool) async throws(ControlError) -> JSONValue {
         let joined = try listable(wifi).network
         let found = try await scan(wifi, fresh: fresh)
@@ -137,7 +136,7 @@ extension ControlVerbs {
     }
 
     /// Joins `name` with no password: an open network, or a secured one macOS has saved. macOS's last scan is read first,
-    /// as the page's list is; a name it lacks is scanned for by the join itself.
+    /// as the list is; a name it lacks is scanned for by the join itself.
     private static func join(_ name: String, _ tools: NetworkTools, peer: ControlPeer?) async throws(ControlError) -> JSONValue {
         let wifi = tools.wifi
         _ = try listable(wifi)
@@ -146,7 +145,7 @@ extension ControlVerbs {
         let ask = ControlGate.Ask("Join Wi-Fi network", ControlGate.Ask.visible(name) + (open ? ", an open network" : ""))
         return try await tools.gate.allow(ask, peer: peer) { () throws(ControlError) in
             do { try await wifi.join(name, password: nil) } catch {
-                let password = open ? "" : "; a secured network this Mac does not know needs its password on the page. \(NetworkTools.next(.wifi))"
+                let password = open ? "" : "; a secured network this Mac does not know needs its password in macOS's Wi-Fi settings. Next: pilot open system --section wifi"
                 throw ControlError(.badValue, "Did not join: \(error.localizedDescription)\(password)")
             }
             slog.notice("wi-fi join done, from the pilot command")
@@ -157,8 +156,8 @@ extension ControlVerbs {
     private static func bluetoothDevices(_ bluetooth: BluetoothSystem) async -> JSONValue {
         let access = bluetooth.authorization()
         var answer: [String: JSONValue] = ["access": NetworkTools.access(access), "canSwitch": .bool(bluetooth.canSetPower)]
-        // Listing or reading the power before access is given would raise macOS's prompt, so both wait for the page's Show
-        // paired devices.
+        // Listing or reading the power before access is given would raise macOS's prompt, so both wait for Bluetooth access
+        // (Settings › Permissions).
         if access == .allowed {
             answer["devices"] = .array(await bluetooth.paired().map(row))
             answer["power"] = bluetooth.powerOn().map(JSONValue.bool)
@@ -176,8 +175,8 @@ extension ControlVerbs {
         let bluetooth = tools.bluetooth
         let access = bluetooth.authorization()
         guard access == .allowed else {
-            throw NetworkTools.blocked(access, notAsked: "Pilot has not asked for Bluetooth yet; Show paired devices on the page asks.",
-                                       denied: SetupBluetooth.deniedLine, section: .bluetooth)
+            throw NetworkTools.blocked(access, notAsked: "Pilot has not asked for Bluetooth yet; Permissions asks.",
+                                       denied: SetupBluetooth.deniedLine)
         }
         let device = try pick(target, await bluetooth.paired())
         guard device.connected != connecting else { return row(device) }

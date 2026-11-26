@@ -103,11 +103,11 @@ struct ControlNetworkTests {
         #expect(await rig.ask("wifi", "status", "--fresh").error?.code == .unknownFlag)
     }
 
-    @Test("Without Location or with Wi-Fi off, networks and join answer not-ready with the page, and never ask or scan")
+    @Test("Without Location or with Wi-Fi off, networks and join answer not-ready with Permissions, and never ask or scan")
     func blocked() async {
         let rig = Rig(location: .notAsked)
         let notAsked = await rig.ask("wifi", "networks")
-        #expect(notAsked.error?.code == .notReady && notAsked.error?.message.contains("pilot open system --section wifi") == true)
+        #expect(notAsked.error?.code == .notReady && notAsked.error?.message.contains("pilot open permissions") == true)
         #expect(notAsked.error?.message.contains(SetupWiFi.hiddenLine) == true)
         rig.fake.location = .denied
         #expect(await rig.ask("wifi", "join", "Cafe").error?.message.contains(SetupWiFi.deniedLine) == true)
@@ -130,7 +130,7 @@ struct ControlNetworkTests {
 
         rig.wifi.refuses = true
         let unknown = await rig.ask("wifi", "join", "Neighbour")
-        #expect(unknown.error?.message.hasPrefix("Did not join") == true && unknown.error?.message.contains("password on the page") == true)
+        #expect(unknown.error?.message.hasPrefix("Did not join") == true && unknown.error?.message.contains("password in macOS's Wi-Fi settings") == true)
         let open = await rig.ask("wifi", "join", "Cafe")
         #expect(open.error?.message.contains("password") == false)
         #expect(await rig.ask("wifi", "join", "Cafe", "--password", "x").error?.code == .unknownFlag)
@@ -173,7 +173,7 @@ struct ControlNetworkTests {
         rig.bluetooth.access = .denied
         let denied = await rig.ask("bluetooth", "disconnect", "aa-02")
         #expect(denied.error?.code == .notReady && denied.error?.message.contains(SetupBluetooth.deniedLine) == true)
-        #expect(rig.bluetooth.disconnects == ["aa-01"] && rig.bluetooth.asked == 0 && rig.bluetooth.resets == 0)
+        #expect(rig.bluetooth.disconnects == ["aa-01"] && rig.bluetooth.asked == 0)
     }
 
     @Test("Two devices of one name are refused with their addresses")

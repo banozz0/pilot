@@ -12,8 +12,7 @@ import Testing
 struct SettingsPagesTests {
     static func setupDevices() -> SetupDevices {
         SetupDevices(audio: SetupSoundTests.FakeAudio(), bluetooth: SetupBluetoothTests.FakeBluetooth(), wifi: SetupWiFiTests.FakeWiFi(),
-                     displays: SetupDisplays(system: SetupDisplaysTests.FakeDisplays()), look: Look(inputSources: SetupKeepAwakeTests.FakeSources()),
-                     defaults: SetupBluetoothTests.defaults())
+                     displays: SetupDisplays(system: SetupDisplaysTests.FakeDisplays()), look: Look(inputSources: SetupKeepAwakeTests.FakeSources()))
     }
 
     static func setup(open: SetupSection = .sound, onScreen: Bool = false) -> SetupPage {

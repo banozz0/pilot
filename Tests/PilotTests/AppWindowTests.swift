@@ -513,9 +513,9 @@ struct AppWindowRenders {
     }
 
     /// A view in a titled dark window of its own size, frame and all, at Retina scale.
-    /// Setup on the fakes as on screen (cards agent-bo-95422800 to 802): speakers with a slider and mute and Bluetooth not
-    /// shown yet; then the TV whose volume apps may not change, and Bluetooth's Show pressed before, listing the fake's
-    /// devices. Async, so the page's own Bluetooth read finishes before the picture.
+    /// Setup on the fakes as on screen (cards agent-bo-95422800 to 802): speakers with a slider and mute; then the TV whose
+    /// volume apps may not change, with Location allowed, so Wi-Fi names its network. Async, so the page's reads finish
+    /// before the picture.
     @Test("Setup renders on the fakes", .enabled(if: env["PILOT_RENDER_DIR"] != nil && env["CFFIXED_USER_HOME"] != nil))
     func renderSetup() async throws {
         let home = try #require(Self.env["CFFIXED_USER_HOME"])
@@ -526,20 +526,16 @@ struct AppWindowRenders {
         for (name, output) in [("setup-sound", AudioDeviceID(10)), ("setup-sound-fixed-volume", AudioDeviceID(12))] {
             let audio = SetupSoundTests.FakeAudio()
             audio.defaults[.output] = output
-            // The second also has Wi-Fi's Show networks pressed and Location allowed, so it lists the fake's networks.
             let wifi = SetupWiFiTests.FakeWiFi()
             wifi.location = output == 12 ? .allowed : .notAsked
-            let remembered = SetupBluetoothTests.defaults(shown: output == 12)
-            remembered.set(output == 12, forKey: SetupWiFi.shownKey)
             let devices = SetupDevices(audio: audio, bluetooth: SetupBluetoothTests.FakeBluetooth(), wifi: wifi,
-                                       displays: SetupDisplays(system: SetupDisplaysTests.FakeDisplays()), look: setupLook,
-                                       defaults: remembered)
+                                       displays: SetupDisplays(system: SetupDisplaysTests.FakeDisplays()), look: setupLook)
             try await Self.renderSettled(SetupPage(onScreen: true, devices: devices).frame(width: 700, height: 1800).pilotTheme()
                 .background(Theme.background), to: dir.appendingPathComponent("\(name).png"))
         }
         // Hyper+Ctrl+W's landing (card agent-bo-95422805): a window-sized page scrolled to Wi-Fi.
         let devices = SetupDevices(audio: SetupSoundTests.FakeAudio(), bluetooth: SetupBluetoothTests.FakeBluetooth(), wifi: SetupWiFiTests.FakeWiFi(),
-                                   displays: SetupDisplays(system: SetupDisplaysTests.FakeDisplays()), look: setupLook, defaults: SetupBluetoothTests.defaults())
+                                   displays: SetupDisplays(system: SetupDisplaysTests.FakeDisplays()), look: setupLook)
         try await Self.renderSettled(SetupPage(onScreen: true, section: .wifi, devices: devices).frame(width: 700, height: 520).pilotTheme()
             .background(Theme.background), to: dir.appendingPathComponent("setup-at-wifi.png"))
     }
