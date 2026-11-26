@@ -498,6 +498,15 @@ class AIUsageTests(ExtensionTestCase):
         stored = "".join(p.read_text(errors="replace") for p in self.box.cache.rglob("*") if p.is_file())
         self.assertNotIn("FAKE-TOKEN", out.getvalue() + stored, "the token is in no protocol line and no cache file")
 
+        spawned.clear()  # a Mac with Ghostex, its first bar run: Ghostex is asked, the keychain never
+        with mock.patch.dict(os.environ, {"HOME": str(self.box.home), "USER": "sven"}), \
+                mock.patch.dict(ai_usage.VIEW, {"claudeSignIn": True}), \
+                mock.patch.object(ai_usage, "ghostex_program", lambda: "/x/ghostex"), \
+                mock.patch.object(ai_usage, "codex_accounts", lambda *a: []), \
+                mock.patch.object(ai_usage, "spawn", lambda *a: spawned.append(a)):
+            ai_usage.limits({"paths": {"cache": str(self.box.cache / "ghostex-mac")}}, n)
+        self.assertEqual([a[0] for a in spawned if a[0] in ("--ghostex", "--claude-api")], ["--ghostex"])
+
     def test_redeem_in_claude_code_opens_its_limit_reset_in_a_terminal(self):
         """Ghostty as a new window running claude /limit-reset, else Terminal running a script; nothing is spent here:
         Claude Code's picker asks first."""

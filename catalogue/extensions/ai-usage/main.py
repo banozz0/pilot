@@ -419,15 +419,16 @@ def load_ghostex(path):
     return saved if isinstance(saved, dict) and number(saved.get("at")) is not None and "usage" in saved else None
 
 
-def record_ask(path, saved, answer, now, **extra):
-    """Keeps an ask's result in paths.cache with `extra` and its time: its `answer`, or after a failure the last one with
-    one more failure counted, which holds off the next detached ask (due)."""
+def record_ask(path, saved, answer, now, counts=True, **extra):
+    """Keeps an ask's result in paths.cache with `extra` and its time: its `answer`, or after a failure the last one,
+    with one more failure counted unless `counts` is false, which holds off the next detached ask (due)."""
     if answer:
         saved = dict(answer)
     else:
         saved = dict(saved or {})
         saved.pop("pending", None)
-        saved["fails"] = (number(saved.get("fails")) or 0) + 1
+        if counts:
+            saved["fails"] = (number(saved.get("fails")) or 0) + 1
     saved.update(extra, at=now)
     if path:
         write_json(path, saved)
@@ -456,7 +457,8 @@ def ghostex_answer(cache_dir, now, ask_until=None, fresh=GHOSTEX_FRESH):
     if ask_until and (saved is None or now - saved["at"] > min(fresh, GHOSTEX_FRESH)):
         saved = record_ghostex(path, saved, ask_ghostex(min(ask_until, time.monotonic() + GHOSTEX_WAIT)), now)
     elif path and not ask_until and ghostex_program() and due(saved, now):
-        write_json(path, dict(saved or dict(GHOSTEX_NONE, pending=True), at=now))  # claimed: one ask at a time
+        saved = dict(saved or dict(GHOSTEX_NONE, pending=True), at=now)  # claimed: one ask at a time
+        write_json(path, saved)
         spawn("--ghostex", cache_dir)
     return saved or {}
 
@@ -2145,7 +2147,8 @@ def background_ghostex(cache_dir):
 def background_claude_api(cache_dir):
     """Asks the usage API with Claude Code's sign-in, one at a time across runs, and keeps the figures with the read's
     state: a good answer replaces them, anything else keeps the last ones (their read time says how old) and counts
-    toward the hold-off, so a signed-out Claude Code is not asked every 5 minutes."""
+    toward the hold-off, so a signed-out Claude Code is not asked every 5 minutes; all but an expired token, which made
+    no request, so the card picks up a renewed one within 5 minutes."""
     signal.alarm(90)  # security may wait on a keychain prompt
     lock = take_lock(cache_dir, CLAUDE_API_LOCK)
     if lock is None:
@@ -2156,7 +2159,7 @@ def background_claude_api(cache_dir):
         now = time.time()
         email = claude_account(os.path.expanduser("~"), now)[0] if found else None
         record_ask(path, read_json(path), found and {"read_at": now, "who": (email or "").lower(), "windows": found},
-                   now, state=state)
+                   now, counts=state != "expired", state=state)  # expired: no request made; it is asked again in 5 min
     finally:
         lock.close()
 
