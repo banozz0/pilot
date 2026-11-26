@@ -57,7 +57,8 @@ way, draining as it is used.
 Claude's limit reset credits come from Ghostex, which holds the Claude sign-in: `ghostex accounts --json` lists each
 Claude account's `resetCreditDetails` (`id`, `expiresAt`, an optional `note`), the account matched by the email Claude
 Code signed in with. A popover asks it again once the last answer (paths.cache/claude-resets.json) is over 30 s old, a
-page over 120 s, Refresh now always, waiting at most 1 s; the bar only reads that answer. A grant whose id names a Claude model (launch-2610-fable) counts as that model's.
+page over 120 s, Refresh now always, waiting at most 1 s; the bar never waits on Ghostex: an answer over 5 minutes old
+goes to one detached ask, only when Ghostex is installed, and a failed ask holds off the next one longer each time. A grant whose id names a Claude model (launch-2610-fable) counts as that model's.
 Anthropic reads and redeems these only with Claude Code's sign-in token, so Redeem in Ghostex opens Ghostex, whose
 account usage panel redeems them. Without Ghostex nothing on this Mac counts them: Claude Code reports no reset grant
 headless (`claude -p /usage` shows the limits alone, and `/limit-reset` "isn't available in this environment"), so the
@@ -119,6 +120,9 @@ GHOSTEX_CLI = "/Applications/Ghostex.app/Contents/Resources/CLI/ghostex"
 GHOSTEX_ID = "com.madda.ghostex.host"
 GHOSTEX_FILE = "claude-resets.json"
 GHOSTEX_FRESH = 300  # at most this old an answer of Ghostex's is reused (a popover's 30 s, a page's 120 s); Ghostex asks Anthropic every 15 min
+GHOSTEX_ASK = 10.0  # seconds the bar's detached ask waits for Ghostex
+GHOSTEX_LOCK = "ghostex.lock"
+GHOSTEX_NONE = {"credits": {}, "usage": {}}
 GHOSTEX_WAIT = 1.0  # seconds Ghostex may take, so Codex keeps the rest of a popover's or page's wait
 CLAUDE_CLIS = (os.path.join(".local", "bin", "claude"), "/opt/homebrew/bin/claude", "/usr/local/bin/claude")
 GHOSTTY = ("/Applications/Ghostty.app", os.path.expanduser("~/Applications/Ghostty.app"))
@@ -290,9 +294,11 @@ def claude_limits(home, now, ghostex):
             if w["resets_at"] and abs(exact.get(w["name"], 0) - w["resets_at"]) < 120:
                 w["resets_at"] = exact[w["name"]]
         windows = windows + [w for w in (cached[1] if cached else []) if w["name"] not in ("Session", "Weekly")]
+        since = "Claude Code reply"
     else:
         read_at, windows = cached
-    return {"state": "ok", "who": email, "plan": plan, "read_at": read_at, "windows": windows}
+        since = "update"
+    return {"state": "ok", "who": email, "plan": plan, "read_at": read_at, "windows": windows, "since": since}
 
 
 def ghostex_program():
@@ -338,7 +344,7 @@ def ask_ghostex(deadline):
         return None
     try:
         out = subprocess.run([program, "accounts", "--json"], stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
-                             stderr=subprocess.DEVNULL, timeout=max(0.2, min(GHOSTEX_WAIT, deadline - time.monotonic())),
+                             stderr=subprocess.DEVNULL, timeout=max(0.2, deadline - time.monotonic()),
                              start_new_session=True).stdout
         data = json.loads(out)
     except (OSError, subprocess.SubprocessError, ValueError):
@@ -361,17 +367,37 @@ def ask_ghostex(deadline):
     return credits, usage
 
 
-def ghostex_answer(cache_dir, now, ask_until=None, fresh=GHOSTEX_FRESH):
-    """Ghostex's last answer in paths.cache, {at, credits, usage} (asked again inline once over `fresh` s old when
-    `ask_until` is given, never by the bar; 3.8.0's answer, without usage, counts as none); {} without one."""
-    path = os.path.join(cache_dir, GHOSTEX_FILE) if cache_dir else None
+def load_ghostex(path):
+    """Ghostex's last answer in paths.cache, {at, credits, usage, fails}, or None (3.8.0's, without usage, counts as none)."""
     saved = read_json(path) if path else None
-    saved = saved if isinstance(saved, dict) and number(saved.get("at")) is not None and "usage" in saved else None
+    return saved if isinstance(saved, dict) and number(saved.get("at")) is not None and "usage" in saved else None
+
+
+def record_ghostex(path, saved, found, now):
+    """Keeps an ask's answer: Ghostex's `found`, or after a failure the last answer with one more failure counted, which
+    holds off the bar's next ask twice as long each time (10 minutes, 20, … at most an hour)."""
+    if found:
+        saved = {"at": now, "credits": found[0], "usage": found[1]}
+    else:
+        saved = dict(GHOSTEX_NONE, **(saved or {}))
+        saved.update(at=now, fails=(number(saved.get("fails")) or 0) + 1)
+    if path:
+        write_json(path, saved)
+    return saved
+
+
+def ghostex_answer(cache_dir, now, ask_until=None, fresh=GHOSTEX_FRESH):
+    """Ghostex's last answer ({} without one). With `ask_until` (a popover, page or Refresh) Ghostex is asked inline once
+    the answer is over `fresh` s old; without it (the bar, the detail) the run never waits on Ghostex: an answer over 5
+    minutes old (longer after failures) goes to one detached ask, and only when Ghostex is installed."""
+    path = os.path.join(cache_dir, GHOSTEX_FILE) if cache_dir else None
+    saved = load_ghostex(path)
     if ask_until and (saved is None or now - saved["at"] > min(fresh, GHOSTEX_FRESH)):
-        credits, usage = ask_ghostex(ask_until) or ({}, {})
-        saved = {"at": now, "credits": credits, "usage": usage}
-        if path:
-            write_json(path, saved)
+        saved = record_ghostex(path, saved, ask_ghostex(min(ask_until, time.monotonic() + GHOSTEX_WAIT)), now)
+    elif (path and not ask_until and ghostex_program() and (saved is None or now - saved["at"] >
+                                                              min(3600, GHOSTEX_FRESH * 2 ** (number(saved.get("fails")) or 0)))):
+        write_json(path, dict(saved or GHOSTEX_NONE, at=now))  # claimed: one ask at a time
+        spawn("--ghostex", cache_dir)
     return saved or {}
 
 
@@ -1239,7 +1265,7 @@ def claude_card(claude, now):
         return section("Claude", "Unknown", claude.get("who"), claude.get("plan"),
                        [{"type": "markdown", "text": CLAUDE_UNKNOWN}] + extra)
     return section("Claude", "Updated " + stamp(claude["read_at"], now), claude.get("who"), claude.get("plan"),
-                   [meter(w, "Claude Code reply", now) for w in claude["windows"]] + extra)
+                   [meter(w, claude["since"], now) for w in claude["windows"]] + extra)
 
 
 def kinds_text(found):
@@ -1405,7 +1431,7 @@ def calm_claude(claude, now):
     stale = now - claude["read_at"] > STALE
     return calm_section("claude", "Claude", read if stale else None, claude.get("who"), claude.get("plan"),
                         [claude.get("who"), None if stale else read],
-                        [calm_meter(w, "Claude Code reply", now) for w in claude["windows"]] + extra)
+                        [calm_meter(w, claude["since"], now) for w in claude["windows"]] + extra)
 
 
 def calm_codex(codex, now):
@@ -1591,7 +1617,7 @@ def show_usage(run):
     tokens = claude_tokens(run, now, START + DETAIL_SCAN)
     md, rows = ["## Claude"], []
     if claude["state"] == "ok":
-        windows_markdown(claude, "Claude Code reply", now, md, rows, "Claude")
+        windows_markdown(claude, claude["since"], now, md, rows, "Claude")
         md += ["", "%s, read %s." % (subtitle(claude.get("who"), claude.get("plan")) or "Claude Code",
                                      stamp(claude["read_at"], now))]
     else:
@@ -1938,14 +1964,28 @@ def background_codex(cache_dir, homes):
         lock.close()
 
 
+def background_ghostex(cache_dir):
+    """Asks Ghostex for the bar, one at a time across runs."""
+    signal.alarm(20)
+    lock = take_lock(cache_dir, GHOSTEX_LOCK)
+    if lock is None:
+        return
+    try:
+        path = os.path.join(cache_dir, GHOSTEX_FILE)
+        record_ghostex(path, load_ghostex(path), ask_ghostex(time.monotonic() + GHOSTEX_ASK), time.time())
+    finally:
+        lock.close()
+
+
 COMMANDS = {"usage": show_usage, "summary": show_summary, "page": show_page, "bar": show_bar,
             "add-account": add_account, "remove-account": remove_account, "refresh": refresh, "redeem-reset": redeem_reset,
             "open-ghostex": open_ghostex, "claude-limit-reset": claude_limit_reset}
+BACKGROUND = {"--refresh": background_refresh, "--status": background_status, "--ghostex": background_ghostex}
 
 
 def main():
-    if len(sys.argv) == 3 and sys.argv[1] in ("--refresh", "--status"):
-        (background_refresh if sys.argv[1] == "--refresh" else background_status)(sys.argv[2])
+    if len(sys.argv) == 3 and sys.argv[1] in BACKGROUND:
+        BACKGROUND[sys.argv[1]](sys.argv[2])
         return
     if len(sys.argv) == 4 and sys.argv[1] == "--login":
         background_login(sys.argv[2], sys.argv[3])

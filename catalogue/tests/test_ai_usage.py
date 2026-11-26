@@ -331,9 +331,35 @@ class AIUsageTests(ExtensionTestCase):
         self.assertEqual(len(self.ghostex_calls()), 1, "an answer under 30 s old is not asked again")
         bar = self.bar(home=self.box.home)
         self.assertIn(self.REDEEM_CLAUDE, card(bar["blocks"], "Claude")["blocks"], "the bar carries Ghostex's last answer")
-        self.assertEqual(len(self.ghostex_calls()), 1, "the bar never asks Ghostex")
+        self.assertEqual(len(self.ghostex_calls()), 1, "an answer under 5 minutes old the bar does not ask for again")
         self.assertIn("3 available (2 Fable)", json.dumps(card(self.page(home=self.box.home), "Claude")))
         self.assertIn("3 available (2 Fable)", self.detail()[0]["markdown"])
+        # The bar never waits on Ghostex: an answer over 5 minutes old goes to one detached ask, here a Ghostex taking 3 s.
+        answer = self.box.cache / "claude-resets.json"
+        aged = lambda: answer.write_text(json.dumps(dict(json.loads(answer.read_text()), at=time.time() - 6 * MIN)))
+        self.box.shim("ghostex", 'printf "%%s\\n" "ghostex $*" >> "%s"\nsleep 3\n[ -f "%s" ] && exec cat "%s"\nexit 1'
+                      % (self.box.log, self.ghostex_file, self.ghostex_file))
+        said = json.loads(self.ghostex_file.read_text())
+        said["accounts"][0]["resetCreditDetails"].pop()  # Ghostex's new answer: one credit fewer
+        self.ghostex_file.write_text(json.dumps(said))
+        credits = lambda: len(json.loads(answer.read_text())["credits"].get(EMAIL.lower(), []))
+        aged()
+        started = time.monotonic()
+        bar = self.bar(home=self.box.home)
+        self.assertLess(time.monotonic() - started, 2.5, "the bar answered without waiting on Ghostex")
+        self.assertIn(self.REDEEM_CLAUDE, card(bar["blocks"], "Claude")["blocks"], "with Ghostex's last answer")
+        self.assertEqual(credits(), 3)
+        self.assertTrue(self.wait_for(lambda: credits() == 2), answer.read_text())
+        self.assertEqual(len(self.ghostex_calls()), 2)
+        # A Ghostex that fails keeps the last answer and holds off the next ask: no ask every 5 minutes.
+        self.ghostex_file.unlink()
+        aged()
+        self.bar(home=self.box.home)
+        self.assertTrue(self.wait_for(lambda: "fails" in json.loads(answer.read_text()), 8), answer.read_text())
+        self.assertEqual(len(self.ghostex_calls()), 3)
+        aged()
+        self.assertIn(self.REDEEM_CLAUDE, card(self.bar(home=self.box.home)["blocks"], "Claude")["blocks"])
+        self.assertFalse(self.wait_for(lambda: len(self.ghostex_calls()) > 3, 1), "held off for 10 minutes after a failure")
 
     def test_no_claude_credits_without_ghostex_its_answer_or_the_signed_in_account(self):
         n = self.now
@@ -369,15 +395,18 @@ class AIUsageTests(ExtensionTestCase):
         n = self.now
         self.claude_cache(claude_json(n - MIN, (10, n + HOUR), (20, n + DAY)))
         run = {"paths": {"cache": str(self.box.cache)}}
+        spawned = []
 
         def claude(ghostex, cli):
             with mock.patch.dict(os.environ, {"HOME": str(self.box.home)}), \
                     mock.patch.object(ai_usage, "ghostex_program", lambda: ghostex), \
                     mock.patch.object(ai_usage, "claude_program", lambda: cli), \
-                    mock.patch.object(ai_usage, "codex_accounts", lambda *a: []):
+                    mock.patch.object(ai_usage, "codex_accounts", lambda *a: []), \
+                    mock.patch.object(ai_usage, "spawn", lambda *a: spawned.append(a)):
                 return ai_usage.limits(run, n)["claude"]
 
         alone = claude(None, "/x/claude")
+        self.assertEqual(spawned, [], "without Ghostex the bar starts no ask of it")
         self.assertEqual(ai_usage.claude_card(alone, n)["blocks"][2:], [self.REDEEM_IN_CLAUDE])
         self.assertEqual(ai_usage.calm_claude(alone, n)["blocks"][2:], [self.REDEEM_IN_CLAUDE])
         for ghostex, cli, why in (("/x/ghostex", "/x/claude", "Ghostex comes first: without its answer, nothing"),
