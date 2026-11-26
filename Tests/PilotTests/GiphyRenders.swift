@@ -129,6 +129,9 @@ struct GiphyRenders {
         let look = try LookPageTests().look().0
         let store = MemoryKeyStore()
         let folders = PilotFolders(defaults: SetupGapsTests.defaults())
+        // A fixed path, never the run's random temp folder: the row above draws it, and Vision's read of "Replace…"
+        // changed with it (about one run in ten read "Heplace..", on main as well).
+        folders.gifs = "/tmp/Pilot renders/GIFs"
         for (name, lines, absent) in [("none", ["GIPHY key", "Save", "Get a key", "GIPHY rating", "PG-13"], "Saved in your Keychain"),
                                       ("saved", ["GIPHY key", "Saved in your Keychain", "Replace", "Remove", "GIPHY rating", "PG"], "Get a key")] {
             if name == "saved" { try store.write("k3y-never-shown"); folders.giphyRating = .pg }
