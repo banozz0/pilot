@@ -1,16 +1,21 @@
 #!/usr/bin/env python3
 """AI usage for Pilot: how much of each AI plan's limits is left, CodexBar's way, from this Mac and the providers' own CLIs.
 
-Claude, two sources for the session and the week, Claude Code's cached read winning unless the status line is over
-10 minutes newer (the cache holds the usage API's own answer, which CodexBar reads too; the status line read the week a
-point lower on 2026-10-11):
+Claude, three sources for the session and the week, the usage API's answer (Ghostex's reading or Claude Code's cached
+read, the newer) winning unless the status line is over 10 minutes newer (the status line read the week a point lower
+on 2026-10-11):
+- Ghostex reads the usage API for each Claude account it holds every 15 minutes: `ghostex accounts --json` lists its
+  `usage` (each `label` 5h or 7d, or a model's `model`, with `usedPercent` and `resetsAt` ISO) and `usageUpdatedAt`,
+  asked with the reset credits below and kept with them. Claude Code 2.1.332 no longer writes the cache below, so on
+  2026-11-26 this was the only fresh source: Ultra plans show no 5-hour window, only the weeks.
 - Claude Code hands its status-line command `rate_limits` after every reply (`five_hour` and `seven_day`, each
   `used_percentage` and `resets_at` in epoch seconds), and Ghostex keeps that per session in
   ~/.local/state/ghostex/agent-hooks/claude-statusline/<session>.json as `{"version", "updatedAt", "payload": {…}}`.
 - Claude Code caches its own usage read in ~/.claude.json: `cachedUsageUtilization` (`fetchedAtMs`, `accountUuid` and
   `utilization.limits`, each `kind` session, weekly_all or weekly_scoped with a model's `display_name`, `percent`,
-  `resets_at` ISO), the only place a per-model week such as "Fable weekly" shows; `oauthAccount` there gives the email
-  and plan (`organizationType`, `organizationRateLimitTier`). Only those two keys are used; the file holds no token.
+  `resets_at` ISO), with Ghostex's the only places a per-model week such as "Fable weekly" shows; `oauthAccount` there
+  gives the email and plan (`planDisplayName`, else `organizationType` and `organizationRateLimitTier`). Only those two
+  keys are used; the file holds no token.
 
 Codex, per account (a CODEX_HOME folder): the folders in the `codexHomes` preference, then Pilot's own accounts (each a
 folder under paths.data/codex-accounts, made by Add Codex account, which runs Codex's own `codex login` in it), then
@@ -120,6 +125,7 @@ GHOSTTY = ("/Applications/Ghostty.app", os.path.expanduser("~/Applications/Ghost
 LIMIT_RESET = "/limit-reset"  # Claude Code's reset picker (an interactive command: no -p, no count)
 USAGE_KEYS = ("input_tokens", "output_tokens", "cache_creation_input_tokens", "cache_read_input_tokens")
 SESSION, WEEK = 300, 10080  # window lengths in minutes
+GHOSTEX_LABELS = {"5h": ("Session", SESSION), "7d": ("Weekly", WEEK)}  # Ghostex's usage windows (a model's week names its model)
 WARN, ALERT = 60, 85  # percent used
 BAR = 20
 # The settings (the manifest's preferences), read once per run by configure().
@@ -226,6 +232,10 @@ def claude_statusline(home, now):
 
 
 def claude_plan(account):
+    """The plan's own name (`planDisplayName`, "Ultra" on 2026-11-26), else one made from the organization's type and tier."""
+    name = account.get("planDisplayName")
+    if isinstance(name, str) and name.strip():
+        return name.strip()
     plan = CLAUDE_PLANS.get(account.get("organizationType"))
     tier = re.search(r"_(\d+)x\Z", account.get("organizationRateLimitTier") or "")
     return "%s %sx" % (plan, tier.group(1)) if plan and tier else plan
@@ -262,10 +272,14 @@ def claude_account(home, now):
     return email, claude_plan(account), (fetched / 1000.0, windows) if windows else None
 
 
-def claude_limits(home, now):
-    """Claude's windows: the session and the week from Claude Code's cached read (the usage API's answer, as CodexBar
-    reads it) unless the status line is over 10 minutes newer, then the cached per-model weeks."""
+def claude_limits(home, now, ghostex):
+    """Claude's windows: the session and the week from the usage API's answer (Ghostex's reading in `ghostex`, {email:
+    [read time, [[name, percent, resets_at, minutes]]]}, or Claude Code's cached read, the newer) unless the status line
+    is over 10 minutes newer, then that answer's per-model weeks."""
     email, plan, cached = claude_account(home, now)
+    read = (ghostex or {}).get(email.lower()) if email else None
+    if read and (cached is None or read[0] >= cached[0]):
+        cached = read[0], [window(name, percent, resets_at, now, minutes) for name, percent, resets_at, minutes in read[1]]
     line = claude_statusline(home, now)
     if line is None and cached is None:
         return {"state": "unknown", "who": email, "plan": plan}
@@ -294,10 +308,31 @@ def claude_program():
     return found or next((p for p in (os.path.join(home, c) for c in CLAUDE_CLIS) if os.access(p, os.X_OK)), None)
 
 
+def ghostex_usage(row):
+    """Ghostex's usage reading of one Claude account (`usage`: each `label` 5h or 7d, or a model's `model`, with
+    `usedPercent` and `resetsAt`; `usageUpdatedAt`, when Ghostex asked Anthropic): [read time, [[name, percent,
+    resets_at, minutes]]], or None without a window."""
+    found = []
+    for raw in row.get("usage") if isinstance(row.get("usage"), list) else []:
+        if not isinstance(raw, dict) or number(raw.get("usedPercent")) is None:
+            continue
+        model = raw.get("model")
+        if isinstance(model, str) and model:
+            name, minutes = "%s weekly" % model, WEEK
+        elif raw.get("label") in GHOSTEX_LABELS:
+            name, minutes = GHOSTEX_LABELS[raw["label"]]
+        else:
+            continue
+        found.append([name, raw["usedPercent"], parse_time(raw.get("resetsAt")), minutes])
+    at = parse_time(row.get("usageUpdatedAt"))
+    return [at, found] if found and at else None
+
+
 def ask_ghostex(deadline):
-    """Claude's limit reset credits per account as Ghostex reads them (`ghostex accounts --json`: `resetCreditDetails`,
-    each `id`, `expiresAt` and an optional `note`): {email lower case: [{id, expires, note}]}; None when Ghostex is
-    missing, fails or is quiet at `deadline`. An account Ghostex could not read (`resetCreditsError`) is left out."""
+    """Claude's accounts as Ghostex reads them (`ghostex accounts --json`), keyed by email in lower case: (limit reset
+    credits, from `resetCreditDetails`, each `id`, `expiresAt` and an optional `note`: [{id, expires, note}]; usage, as
+    ghostex_usage); None when Ghostex is missing, fails or is quiet at `deadline`. An account whose credits Ghostex could
+    not read (`resetCreditsError`) has none listed."""
     program = ghostex_program()
     if not program:
         return None
@@ -309,33 +344,42 @@ def ask_ghostex(deadline):
     except (OSError, subprocess.SubprocessError, ValueError):
         return None
     rows = data.get("accounts") if isinstance(data, dict) else None
-    found = {}
+    credits, usage = {}, {}
     for row in rows if isinstance(rows, list) else []:
-        if not isinstance(row, dict) or row.get("provider") != "claude" or row.get("resetCreditsError"):
+        if not isinstance(row, dict) or row.get("provider") != "claude":
             continue
         email, details = row.get("email"), row.get("resetCreditDetails")
-        if not isinstance(email, str) or not email or not isinstance(details, list):
+        if not isinstance(email, str) or not email:
             continue
-        found[email.lower()] = [{"id": c["id"], "expires": parse_time(c.get("expiresAt")),
-                                 "note": c["note"] if isinstance(c.get("note"), str) else None}
-                                for c in details if isinstance(c, dict) and isinstance(c.get("id"), str)]
-    return found
+        if isinstance(details, list) and not row.get("resetCreditsError"):
+            credits[email.lower()] = [{"id": c["id"], "expires": parse_time(c.get("expiresAt")),
+                                       "note": c["note"] if isinstance(c.get("note"), str) else None}
+                                      for c in details if isinstance(c, dict) and isinstance(c.get("id"), str)]
+        read = ghostex_usage(row)
+        if read:
+            usage[email.lower()] = read
+    return credits, usage
 
 
-def claude_resets(cache_dir, claude, now, ask_until=None, fresh=GHOSTEX_FRESH):
-    """The Claude account's limit reset credits, Codex's shape ({count, expires, kinds, notes}), from Ghostex's last answer
-    in paths.cache (asked again inline once over `fresh` s old when `ask_until` is given, never by the bar); None without Ghostex,
-    an account it lists under the email Claude Code signed in with, or a credit."""
-    email = claude.get("who")
+def ghostex_answer(cache_dir, now, ask_until=None, fresh=GHOSTEX_FRESH):
+    """Ghostex's last answer in paths.cache, {at, accounts: credits, usage} (asked again inline once over `fresh` s old
+    when `ask_until` is given, never by the bar); {} without one."""
     path = os.path.join(cache_dir, GHOSTEX_FILE) if cache_dir else None
     saved = read_json(path) if path else None
     saved = saved if isinstance(saved, dict) and number(saved.get("at")) is not None else None
     if ask_until and (saved is None or now - saved["at"] > min(fresh, GHOSTEX_FRESH)):
-        accounts = ask_ghostex(ask_until)
-        saved = {"at": now, "accounts": accounts or {}}
+        credits, usage = ask_ghostex(ask_until) or ({}, {})
+        saved = {"at": now, "credits": credits, "usage": usage}
         if path:
             write_json(path, saved)
-    credits = ((saved or {}).get("accounts") or {}).get(email.lower()) if email else None
+    return saved or {}
+
+
+def claude_resets(ghostex, claude):
+    """The Claude account's limit reset credits, Codex's shape ({count, expires, kinds, notes}), from Ghostex's answer;
+    None without Ghostex, an account it lists under the email Claude Code signed in with, or a credit."""
+    email = claude.get("who")
+    credits = (ghostex.get("credits") or {}).get(email.lower()) if email else None
     if not credits:
         return None
     models = [w["name"][:-len(" weekly")] for w in claude.get("windows") or [] if w["name"].endswith(" weekly")]
@@ -788,8 +832,9 @@ def limits(run, now=None, ask_until=None, fresh=LIVE_FRESH):
     home = os.path.expanduser("~")
     now = time.time() if now is None else now
     cache_dir = (run.get("paths") or {}).get("cache")
-    claude = claude_limits(home, now)
-    claude["reset_credits"] = claude_resets(cache_dir, claude, now, ask_until, fresh)
+    ghostex = ghostex_answer(cache_dir, now, ask_until, fresh)
+    claude = claude_limits(home, now, ghostex.get("usage"))
+    claude["reset_credits"] = claude_resets(ghostex, claude)
     claude["redeem_in_claude"] = ghostex_program() is None and claude_program() is not None
     return {"now": now, "claude": claude, "codex": codex_accounts(home, now, run, ask_until, fresh),
             "gemini": gemini_state(), "status": status_read(cache_dir, now)}

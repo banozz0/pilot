@@ -697,6 +697,26 @@ class AIUsageTests(ExtensionTestCase):
         self.status("newest-half-written", '{"version":1,"payl', age=0)
         self.assertEqual(self.face(self.bar(home=self.box.home)), "claude 88%")
 
+    def test_claude_takes_ghostexs_reading_when_claude_code_keeps_none(self):
+        """Sven 2026-11-26: Claude Code 2.1.332 keeps no cached read and the status line was a day old (week 8% used)
+        while Ghostex had read 47% minutes before; the plan is Ultra (`planDisplayName`), not Max 20x. Ghostex's rows
+        as read live that day: 7d and a model's week, no 5h window."""
+        n = self.now
+        self.status("old", statusline(n - DAY, None, (8, n + 4 * HOUR)), age=DAY)
+        account = claude_json(n)
+        del account["cachedUsageUtilization"]
+        account["oauthAccount"]["planDisplayName"] = "Ultra"
+        self.claude_cache(account)
+        row = {"id": "a0", "number": "1", "provider": "claude", "email": EMAIL, "state": "ready", "sessions": [],
+               "resetCredits": 0, "resetCreditDetails": [], "resetCreditsError": None,
+               "usageUpdatedAt": iso(n - 2 * MIN), "usageStale": False, "usage": [
+                   {"id": "sevenDay", "label": "7d", "usedPercent": 47, "resetsAt": iso_offset(n + 4 * HOUR)},
+                   {"id": "Fable", "label": "Fable 7d", "usedPercent": 15, "resetsAt": iso_offset(n + 4 * HOUR), "model": "Fable"}]}
+        self.ghostex_file.write_text(json.dumps({"ok": True, "accounts": [row], "helpers": {}}))
+        claude = card(self.popover(home=self.box.home), "Claude")
+        self.assertEqual([(m["label"], m["value"]) for m in claude["blocks"]], [("Weekly", "53% left"), ("Fable weekly", "85% left")])
+        self.assertEqual((claude["subtitle"], claude["asideNote"]), ("Updated " + hhmm(n - 2 * MIN), "Ultra"))
+
     def test_claude_unknown_without_ghostex_or_a_reply(self):
         for setup in (lambda: None, lambda: self.status("bare", statusline(self.now))):
             setup()
