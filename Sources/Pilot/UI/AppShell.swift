@@ -280,7 +280,6 @@ struct KeptPages<Content: View>: NSViewRepresentable {
         let deck = PageDeck()
         model.picking = { [weak deck] in deck?.picture($0) }
         deck.showing = { [weak model] in model?.live == true }
-        model.screenChanged = { [weak deck] in deck?.screen(on: $0) }
         // What a part's frame (PartFrame) shows beyond its page: its picture is stale once any of it changed while hidden.
         // Not the tab picked: each part marks its own (InstrumentToolbar).
         deck.chrome = { [more] in
@@ -310,7 +309,7 @@ struct KeptPages<Content: View>: NSViewRepresentable {
 /// KeptPages' view: the shown part's host, and the other parts kept, hidden.
 final class PageDeck: NSView {
     /// How many parts stay built: the warm set and the four shown last, 27 to 49 MB each while the window is open
-    /// (page-switch-3, release), all but the one shown gone 300 s after it leaves the screen (`trimAfter`) and all of them
+    /// (page-switch-3, release), all but the one shown gone 300 s after it leaves use (`trimAfter`) and all of them
     /// with the window's tree when it closes.
     static let cap = warm + 4
     /// How many of the pages switched to most are built as the window opens (load-lag; Sven, 2026-11-25, Q375 B: "warm-up
@@ -370,11 +369,12 @@ final class PageDeck: NSView {
         if let half = building[key] { buildInView(key, half, host) }
     }
 
-    /// The window came on screen or left it (AppWindowModel.onScreen). Off it for `trimAfter`, only the part shown stays
-    /// (memory-2: Sven's window, left open behind others for 27 h, held four parts, 29 MB of the 56 MB it took); back on
-    /// it, building ahead refills the deck once the window is key and quiet, and a return visit to a part that went before
-    /// then is a first visit again.
-    func screen(on: Bool) {
+    /// The window came into use or left it (AppWindowModel.live: on screen and key). Out of use for `trimAfter`, only the
+    /// part shown stays (memory-2: Sven's window, left open behind others for 27 h, held four parts, 29 MB of the 56 MB it
+    /// took; memory-launch: a window left open in view but not key held its warm set, 9 to 11 parts, 60 to 120 MB more
+    /// than one, as only covered or off screen counted); back in use, building ahead refills the deck once the window is
+    /// quiet, and a return visit to a part that went before then is a first visit again. Told by `followShowing`.
+    private func live(_ on: Bool) {
         stopTrim()
         guard !on else { return armAhead() }
         guard order.count > 1 else { return }
@@ -617,7 +617,7 @@ final class PageDeck: NSView {
         let quiet = quietHalf
         guard let window, quiet != nil || nextAhead != nil else { return stopAhead() }
         // The page shown, cut at the fold, goes on behind another window too: it scrolls there.
-        guard showing() || quiet != nil && quiet == shown else { stopAhead(); return waitToShow() }
+        guard showing() || quiet != nil && quiet == shown else { return stopAhead() }
         // A press already waiting goes first, and the page shown, still built in view.
         if buildingInView || NSApp.nextEvent(matching: Self.input, until: .distantPast, inMode: .default, dequeue: false) != nil {
             quietAgain = true
@@ -667,18 +667,25 @@ final class PageDeck: NSView {
         armAhead()
     }
 
-    private var waitingToShow = false
+    /// Whether the window was in use (`showing`) at the watch's last look.
+    private var wasShowing = false
+    private var following = false
 
-    /// The window not key yet (it becomes key a moment after it opens) or left: building ahead goes on once it is again.
-    private func waitToShow() {
-        guard !waitingToShow else { return }
-        waitingToShow = true
-        // A run loop block, not the main queue's, so a nested run loop (a test's) runs it too.
+    /// The window coming into use (AppWindowModel.live: on screen and key) or leaving it, watched while the deck is in a
+    /// window: `live` builds ahead again or waits to trim. A run loop block, not the main queue's, so a nested run loop (a
+    /// test's) runs it too.
+    private func followShowing() {
+        guard !following, window != nil else { return }
+        following = true
         withObservationTracking { _ = showing() } onChange: { [weak self] in
             CFRunLoopPerformBlock(CFRunLoopGetMain(), CFRunLoopMode.commonModes.rawValue) {
                 MainActor.assumeIsolated {
-                    self?.waitingToShow = false
-                    self?.armAhead()
+                    guard let self else { return }
+                    self.following = false
+                    guard self.window != nil else { return }
+                    self.followShowing()
+                    let now = self.showing()
+                    if now != self.wasShowing { self.wasShowing = now; self.live(now) }
                 }
             }
             CFRunLoopWakeUp(CFRunLoopGetMain())
@@ -696,6 +703,8 @@ final class PageDeck: NSView {
         } else {
             // What a switch's frames line reads (SwitchFrames): this window's screen, and whether the page shown is settled.
             PageSwitchTiming.deck = self
+            wasShowing = showing()
+            followShowing()
             armAhead()
         }
     }
