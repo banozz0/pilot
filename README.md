@@ -102,7 +102,7 @@ https://github.com/user-attachments/assets/53c56b39-1f21-4a22-9c8d-24db5a296f0a
 ## Install
 
 1. [Download `Pilot.dmg`](https://github.com/banozz0/pilot/releases/latest/download/Pilot.dmg), open it and drag Pilot
-   to Applications.
+   to Applications. Or install it with Homebrew: `brew install --cask banozz0/tap/pilot`.
 2. Open Pilot. macOS asks once whether to open an app downloaded from the Internet: click **Open**.
 3. In Pilot's setup, pick your Hyper key and a set of keys (Easy, Complex or Scratch), and allow Accessibility.
    Hyper+Space opens the menu.
