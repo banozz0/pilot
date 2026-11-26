@@ -518,6 +518,8 @@ public struct MenuEntry: Identifiable, Equatable, Sendable {
         /// Search the web for what was typed, in the default browser with its default search engine (Sven 2026-10-16):
         /// every root search offers it, as it offers Ask AI (MenuNavigator.fallbacks); not a pick.
         case searchWeb(String)
+        /// A web address typed at the root (WebSearch.entries, Q405): Return opens it in the default browser; not a pick.
+        case openURL(URL)
         /// The Files view's one row while Pilot lacks Full Disk Access (card agent-bo-95423031): Return opens that
         /// setting; not a pick.
         case allowFullDiskAccess
@@ -549,7 +551,7 @@ public struct MenuEntry: Identifiable, Equatable, Sendable {
         public var key: String? {
             switch self {
             case .app(let b): "app:\(SameApp.canonical(b))"
-            case .window, .remove, .update, .clean, .copy, .reminder, .note, .ask, .calendarEvent, .searchFiles, .searchInstall, .searchWeb, .allowFullDiskAccess, .openPage, .process: nil
+            case .window, .remove, .update, .clean, .copy, .reminder, .note, .ask, .calendarEvent, .searchFiles, .searchInstall, .searchWeb, .openURL, .allowFullDiskAccess, .openPage, .process: nil
             case .file(let path): "file:\(path)"
             case .package(let key): "package:\(key)"
             case .action(let id): "action:\(id)"
@@ -707,7 +709,7 @@ public struct MenuEntry: Identifiable, Equatable, Sendable {
         if isAnswer { return .answer }
         if let ownKind { return ownKind }
         return switch target {
-        case .app: .app; case .window: .window; case .file, .allowFullDiskAccess: .file; case .package, .remove, .update: .package; case .action, .copy, .clean, .reminder, .note, .ask, .calendarEvent, .openPage, .process: .action
+        case .app: .app; case .window: .window; case .file, .allowFullDiskAccess: .file; case .package, .remove, .update: .package; case .action, .copy, .clean, .reminder, .note, .ask, .calendarEvent, .openPage, .openURL, .process: .action
         case .emoji: .emoji
         case .snippet: .snippet
         case .sticker: .sticker
@@ -748,7 +750,7 @@ public struct MenuEntry: Identifiable, Equatable, Sendable {
         case .file: "Open file"
         // Install's Searching row searches the web while the sources answer.
         case .package: MenuEntries.isSearching(self) ? "Search the web" : "Install"
-        case .branch, .searchFiles, .searchInstall, .note(.open), .openPage: "Open"
+        case .branch, .searchFiles, .searchInstall, .note(.open), .openPage, .openURL: "Open"
         case .searchWeb: "Search"
         case .note(.append), .calendarEvent: "Add"
         case .ask: "Ask"

@@ -1676,6 +1676,10 @@ final class PilotMenu {
             close(restoreFocus: false)
             WebSearchReader.open(query, with: choice)
             mlog.notice("menu: search the web with \(choice.via, privacy: .public)")
+        case .openURL(let url):
+            close(restoreFocus: false)
+            NSWorkspace.shared.open(url)
+            mlog.notice("menu: open a typed web address")
         case .openPage(let place):
             close(restoreFocus: false)
             AppWindowController.shared.open(place)

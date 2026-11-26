@@ -146,7 +146,7 @@ extension MenuEntry {
         switch target {
         case .branch(let b): return (b.look.symbol, .module(b.look.colour))
         case .searchFiles: return ("magnifyingglass", .module(0))
-        case .searchWeb: return ("globe", .module(0))
+        case .searchWeb, .openURL: return ("globe", .module(0))
         case .searchInstall: return (MenuBranch.homebrew.look.symbol, .module(MenuBranch.homebrew.look.colour))
         case .window: return ("macwindow", .module(0))
         case .app, .emoji: return nil

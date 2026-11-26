@@ -28,6 +28,37 @@ public enum WebSearch {
 
     public static let placeholder = "{query}"
 
+    /// The root's answer to one word that reads as a web address (Sven 2026-11-26, Q405): "Open vercel.com", whose Return
+    /// opens it in the default browser; Search the web still follows. None for anything else.
+    public static func entries(for query: String) -> [MenuEntry] {
+        address(query).map { [MenuEntry(title: "Open \(query.trimmingCharacters(in: .whitespaces))", target: .openURL($0),
+                                        detail: "Return opens it in your browser", isAnswer: true)] } ?? []
+    }
+
+    /// The page one word names: text typed with http:// or https:// as it is, or a host whose last label is a well-known
+    /// top-level domain (vercel.com, docs.github.com, x.com/foo) given https. Never a file name (notes.md, report.pdf,
+    /// Pilot.app: the domains that read as file extensions are left out), a version (1.4.2), a decimal, a sum, an email
+    /// address or words. A scan of the text, cheap on every keystroke.
+    static func address(_ text: String) -> URL? {
+        let t = text.trimmingCharacters(in: .whitespaces), lower = t.lowercased()
+        let typed = lower.hasPrefix("http://") || lower.hasPrefix("https://")
+        guard typed || (t.contains(".") && !lower.contains("://")), !t.contains(where: \.isWhitespace),
+              let url = URL(string: typed ? t : "https://" + t), url.user == nil, let host = url.host(), !host.isEmpty
+        else { return nil }
+        if typed { return url }
+        guard let dot = host.lastIndex(of: "."), topLevel.contains(host[host.index(after: dot)...].lowercased()) else { return nil }
+        return url
+    }
+
+    /// The top-level domains a bare host may end in: the common ones, less those that are also file extensions
+    /// (md, py, sh, rs, pl, zip, mov, app).
+    private static let topLevel: Set<String> = [
+        "com", "net", "org", "edu", "gov", "io", "co", "ai", "dev", "me", "tv", "xyz", "info", "biz", "gg", "fm", "ly", "to",
+        "tech", "site", "online", "page", "cloud", "blog", "news", "shop", "store", "design", "studio", "art", "so",
+        "eu", "uk", "de", "fr", "es", "it", "nl", "be", "ch", "at", "se", "no", "dk", "fi", "ie", "pt", "mt", "us", "ca", "au",
+        "nz", "jp", "cn", "in", "br", "mx", "ru", "kr", "tw", "hk", "sg", "il", "za", "cz", "gr", "hu", "ro", "lu", "is", "li",
+    ]
+
     public static let google = Engine(name: "Google", template: "https://www.google.com/search?q={query}")
     /// Safari searches with the engine Safari's settings pick.
     public static let safari = Engine(name: "Safari's search engine", template: "x-web-search://?{query}")

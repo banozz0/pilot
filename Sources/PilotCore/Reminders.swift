@@ -110,7 +110,7 @@ public enum Reminders {
 public enum RootAnswers {
     /// A question for Claude ("ask …"), a line for Scratch ("note …") or an event ("event …") alone; else a quicklink's keyword and words first
     /// (card agent-bo-95423030), then a script's title and arguments (card agent-bo-95423048), then an extension command's
-    /// keyword and words ("todo buy milk"), then a sum (after "calc " too, T40), a colour or
+    /// keyword and words ("todo buy milk"), then a sum (after "calc " too, T40), a web address (Q405), a colour or
     /// CalculatorWorld's answer, else a reminder.
     public static func entries(for query: String, now: Date, links: [Quicklink] = [], scripts: [ScriptCommand] = [],
                                extensions: [Extension] = [], zone: TimeZone = .current,
@@ -118,6 +118,7 @@ public enum RootAnswers {
         let alone = QuickAI.entries(for: query) + Notes.entries(for: query) + QuickEvent.entries(for: query, timeZone: zone)
         if !alone.isEmpty { return alone }
         var sums = Calculator.entries(for: calc(query) ?? query)
+        if sums.isEmpty { sums = WebSearch.entries(for: query) }
         if sums.isEmpty { sums = ColourAnswer.entries(for: query) }
         if sums.isEmpty { sums = CalculatorWorld.entries(for: query, now: now, zone: zone, rates: rates) }
         return Quicklink.answers(for: query, in: links) + ScriptCommand.answers(for: query, in: scripts)

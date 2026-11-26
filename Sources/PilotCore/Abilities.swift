@@ -34,7 +34,7 @@ public enum Abilities {
     /// What the menu answers when typed at its root, which no action names (the calculator, file search, Ask AI);
     /// `groups` gives each the menu's key.
     public static let typed: [Ability] = [
-        typed("calculator", "Calculator", "Type a sum or a unit, 12*7 or 10 km in mi; Return copies the answer.", "12*7"),
+        typed("calculator", "Calculator", "Type a sum or a unit, 12*7 or 20 hours into seconds; Return copies the answer.", "12*7"),
         typed("world", "Money, time zones and dates", "40 eur in usd, time in tokyo, today + 30 days; Return copies it.", "time in tokyo"),
         typed("ask", "Ask AI", "Type ask and a question; the AI chat opens under the top bar with it sent, answered by the AI picked on the AI page, on your own plan or key.", "ask "),
         typed("translate", "Translate", "Type tr and the words; Return copies the translation.", "tr hola"),
