@@ -49,7 +49,7 @@ The keyboard-driven desktop Linux people love, made for the Mac. It runs from Hy
 
 ### 🎨 Your Mac, your look
 
-16 themes built in and 29 packs to get. Apply one and Pilot, your wallpaper and apps like Ghostty, Zed and Obsidian recolour together. [Themes](https://pilotformac.com/look.html) · [Dock](https://pilotformac.com/desktop.html) · [Top bar](https://pilotformac.com/menubar.html)
+16 themes built in and 31 packs to get. Apply one and Pilot, your wallpaper and apps like Ghostty, Zed and Obsidian recolour together. [Themes](https://pilotformac.com/look.html) · [Dock](https://pilotformac.com/desktop.html) · [Top bar](https://pilotformac.com/menubar.html)
 
 ![One workspace of tiled windows (Discord, Codex, Zed, Obsidian's graph and Ghostty), the left half in a dark theme and the right half in a light one](.github/readme/shot-workspace.jpg)
 
