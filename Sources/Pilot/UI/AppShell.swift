@@ -502,11 +502,19 @@ final class PageDeck: NSView {
     /// Whether part `host`'s page runs past the window: its scroll view (the widest, not the page list's) holds more than
     /// it shows.
     private func filled(_ half: Building, _ host: PageHost) -> Bool {
-        if half.scroll?.isDescendant(of: host) != true {
-            func scrolls(_ view: NSView) -> [NSScrollView] { (view as? NSScrollView).map { [$0] } ?? view.subviews.flatMap(scrolls) }
-            half.scroll = scrolls(host).max { $0.frame.width < $1.frame.width }
-        }
-        guard let scroll = half.scroll, let page = scroll.documentView else { return false }
+        if half.scroll?.isDescendant(of: host) != true { half.scroll = Self.pageScroll(in: host) }
+        return half.scroll.map(Self.runsPast) ?? false
+    }
+
+    /// A part's page scroll view: the widest, not the page list's.
+    static func pageScroll(in host: NSView) -> NSScrollView? {
+        func scrolls(_ view: NSView) -> [NSScrollView] { (view as? NSScrollView).map { [$0] } ?? view.subviews.flatMap(scrolls) }
+        return scrolls(host).max { $0.frame.width < $1.frame.width }
+    }
+
+    /// Whether `scroll` holds more than it shows.
+    static func runsPast(_ scroll: NSScrollView) -> Bool {
+        guard let page = scroll.documentView else { return false }
         return page.frame.height > scroll.contentView.bounds.height
     }
 
@@ -554,8 +562,13 @@ final class PageDeck: NSView {
         order.count < Self.cap ? ahead.first { hosts[$0.key] == nil } : nil
     }
 
-    /// A part half built, hidden or shown with its fold filled (`buildInView`), the one shown longest ago first.
-    private var quietHalf: String? { order.first { key in building[key].map { key != shown || $0.below } == true } }
+    /// A part half built: the one shown, its fold filled (`buildInView`), first, then those hidden, the one shown longest
+    /// ago first. Hidden ones first held the page shown half built behind them (Sven's first System visit on build 3268:
+    /// whole 1,939 ms after its first frame, Menu built ahead in between).
+    private var quietHalf: String? {
+        if let shown, building[shown]?.below == true { return shown }
+        return order.first { $0 != shown && building[$0] != nil }
+    }
 
     /// The most turns a part is built in a piece at a time.
     static let turnsMost = 400

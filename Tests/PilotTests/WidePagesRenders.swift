@@ -101,6 +101,7 @@ struct WidePagesRenders {
             ("openWith", .openWith, { AnyView(OpenWithPage()) }),
             ("upkeep", .upkeep, { AnyView(UpkeepPage(mole: true, homebrew: true)) }),
             ("general", .general, { AnyView(GeneralPage()) }),
+            ("system", .system, { AnyView(SetupPage(onScreen: true, devices: SettingsPagesTests.setupDevices())) }),
         ]
         var lines: [String] = []
         for (name, page, view) in pages {
@@ -151,8 +152,10 @@ struct WidePagesRenders {
             ("openWith", .openWith, { AnyView(OpenWithPage()) }),
             // The page with the most blocks flowing into PageFlow's columns.
             ("general", .general, { AnyView(GeneralPage()) }),
+            // Sound, Wi-Fi, displays and the rest on fakes (SettingsPagesTests), so nothing reads the Mac's.
+            ("system", .system, { AnyView(SetupPage(onScreen: true, devices: SettingsPagesTests.setupDevices())) }),
         ]
-        func once(_ page: AppPage, _ view: () -> AnyView, _ size: CGSize) -> (first: Double, frames: Int, whole: Double) {
+        func once(_ page: AppPage, _ view: () -> AnyView, _ size: CGSize) -> (first: Double, frames: Int, fold: Double, whole: Double) {
             drawingQoS()
             let stage = BuildStage()
             stage.inView = true
@@ -163,7 +166,8 @@ struct WidePagesRenders {
             let window = NSWindow(contentRect: host.frame, styleMask: [.borderless], backing: .buffered, defer: false)
             window.isReleasedWhenClosed = false
             window.contentView = host
-            var frames: [Double] = [], frameStart = start
+            // Fold: when the page first runs past the window, as PageDeck.filled reads it.
+            var frames: [Double] = [], frameStart = start, fold: Double?
             repeat {
                 repeat {
                     stage.step += 1; stage.held = false; stage.tickets = 1
@@ -174,11 +178,12 @@ struct WidePagesRenders {
                 CATransaction.flush()
                 frames.append((ContinuousClock.now - frameStart) / .milliseconds(1))
                 frameStart = .now
+                if fold == nil, PageDeck.pageScroll(in: host).map(PageDeck.runsPast) == true { fold = (ContinuousClock.now - start) / .milliseconds(1) }
             } while stage.held && frames.count < 60
             let whole = (ContinuousClock.now - start) / .milliseconds(1)
             window.close()
             PanelTestSupport.pump(0.05)
-            return (frames[0], frames.count, whole)
+            return (frames[0], frames.count, fold ?? whole, whole)
         }
         func line(_ values: [Double]) -> String {
             String(format: "median %.1f ms (", values.sorted()[values.count / 2]) + values.map { String(format: "%.1f", $0) }.joined(separator: " ") + ")"
@@ -189,7 +194,7 @@ struct WidePagesRenders {
                 _ = once(page, view, size)
                 let runs = (0..<9).map { _ in once(page, view, size) }
                 lines.append("\(name) \(suffix) \(Int(size.width)) × \(Int(size.height)), first frame: " + line(runs.map(\.first))
-                             + ", frames \(runs.map(\.frames).max() ?? 0), whole " + line(runs.map(\.whole)))
+                             + ", frames \(runs.map(\.frames).max() ?? 0), fold " + line(runs.map(\.fold)) + ", whole " + line(runs.map(\.whole)))
             }
         }
         try (lines + ["debug build"]).joined(separator: "\n").appending("\n").write(to: dir.appending(path: "first-visit.txt"), atomically: true, encoding: .utf8)

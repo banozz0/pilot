@@ -51,6 +51,9 @@ struct SetupPage: View {
     /// The secured network whose password field is open, and what is typed in it; cleared once it is used.
     @State private var joining: String?
     @State private var password = ""
+    /// Its cards read the Mac once already. A class, so setting it redraws nothing.
+    @State private var read = Read()
+    private final class Read { var yes = false }
     private let look: Look
     private let settings: PilotSettings?
     private let pointer: PointerSpeed?
@@ -83,7 +86,14 @@ struct SetupPage: View {
 
     var body: some View {
         frontPage
-        .onChange(of: onScreen, initial: true) { onScreen ? start() : sound.stop() }
+        .onChange(of: onScreen, initial: true) {
+            if onScreen { return start() }
+            sound.stop()
+            // Built hidden (ahead, or a first visit's first frame): every card read once, the sound without its watch, so
+            // the page flips in whole rather than filling in once it shows (Sven on build 3268: "mac system page takes
+            // so long to load").
+            if !read.yes { start(following: false) }
+        }
         .onReceive(NotificationCenter.default.publisher(for: BluetoothPower.changed)) { _ in bluetooth.refreshPower() }
         .onDisappear { sound.stop() }
     }
@@ -103,9 +113,11 @@ struct SetupPage: View {
         } }
     }
 
-    /// Every card's reads: the sound, the radios, the screens, the layouts and the pointer.
-    private func start() {
-        sound.start()
+    /// Every card's reads: the sound, the radios, the screens, the layouts and the pointer; the sound followed only
+    /// while `following`.
+    private func start(following: Bool = true) {
+        read.yes = true
+        if following { sound.start() } else { sound.read() }
         Task { await bluetooth.start() }
         Task { await wifi.start() }
         displays.startOnPage()

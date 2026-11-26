@@ -203,7 +203,8 @@ struct PageVisits {
     static let key = "appWindow.visits"
     static let most = 200
     /// The pages built ahead, those whose build reads only Pilot's own data or what a visit reads while hidden and paused
-    /// (page-first's audit; Launcher's four parts audited in slow-pages). Not the rest: Extensions runs extension
+    /// (page-first's audit; Launcher's four parts audited in slow-pages); System reads its cards once as it is built, with
+    /// no prompt and no sound watch (SetupPage), so it flips in whole. Not the rest: Extensions runs extension
     /// programs, General reads the update count and Full Disk Access as it is built, AI runs the claude and codex tools;
     /// nothing a page opened unasked should start.
     static let ahead: Set<AppPage> = [.binds, .menuBar, .look, .system, .dock, .widgets, .tiling, .workspaces, .home, .menu]
@@ -220,26 +221,26 @@ struct PageVisits {
 
     /// The likeliest pages before any are counted (page-instant; Sven on build 3142: with no counts yet nothing was built
     /// ahead, so every switch was a first visit): those of `ahead` Sven went to most on combined-16 (load-lag, his 43
-    /// switches of 2026-11-25), most first, with Launcher added after Look (slow-pages) and System last (`always`), which
+    /// switches of 2026-11-25), most first, with Launcher added after Look (slow-pages) and System (`always`), which
     /// makes the warm set eight.
     static let seed: [AppPage] = [.menuBar, .workspaces, .look, .menu, .home, .binds, .widgets, .system]
 
     /// The pages warmed whatever the counts say (Sven, 2026-11-26, Q390 A: "warm System too"): his counts rank System
-    /// ninth, and built in view its first visit assembles over about a second.
+    /// ninth, and built in view its first visit assembles over about a second. Built first (Sven on build 3268, "mac
+    /// system page takes so long to load"): last, it was still waiting behind seven pages when he went there 4 s after
+    /// the window opened.
     static let always: [AppPage] = [.system]
 
-    /// The `count` pages of `ahead` switched to most, most first (ties by name), then `seed`'s not counted yet, with
-    /// `always` in the last places; never `shown`, which is built already.
+    /// `always` first, then the pages of `ahead` switched to most, most first (ties by name), then `seed`'s not counted
+    /// yet, `count` in all; never `shown`, which is built already.
     func likeliest(_ count: Int, besides shown: AppPage? = nil) -> [AppPage] {
         let counts = counts
-        let always = Self.always.filter { $0 != shown }
-        let pages: [AppPage] = counts.keys.compactMap(AppPage.init(rawValue:)).filter { Self.ahead.contains($0) && $0 != shown && !always.contains($0) }
-        let sorted = pages.sorted { a, b in
+        let sorted = counts.keys.compactMap(AppPage.init(rawValue:)).filter(Self.ahead.contains).sorted { a, b in
             let na = counts[a.rawValue, default: 0], nb = counts[b.rawValue, default: 0]
             return na != nb ? na > nb : a.rawValue < b.rawValue
         }
-        let counted = sorted + Self.seed.filter { !sorted.contains($0) && $0 != shown && !always.contains($0) }
-        return Array(counted.prefix(max(0, count - always.count))) + always.prefix(count)
+        var seen: Set<AppPage> = shown.map { [$0] } ?? []
+        return Array((Self.always + sorted + Self.seed).filter { seen.insert($0).inserted }.prefix(count))
     }
 }
 

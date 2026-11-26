@@ -32,6 +32,12 @@ final class SetupSound {
     /// The page shows: read everything and follow changes.
     func start() { refresh() }
 
+    /// The page is built hidden: everything read once, nothing followed.
+    func read() {
+        guard watch == nil else { return }
+        readAll()
+    }
+
     /// The page went or its window left the screen: stop following, and drop a read already on its way.
     func stop() {
         watch?.watch.cancel()
@@ -89,14 +95,18 @@ final class SetupSound {
     }
 
     private func refresh() {
-        for direction in AudioDirection.allCases {
-            sides[direction] = Side(devices: audio.devices(direction), current: audio.defaultDevice(direction))
-        }
-        readLevels()
+        readAll()
         let ids = AudioDirection.allCases.compactMap { side($0).current }
         guard ids != watch?.devices else { return }
         watch?.watch.cancel()
         watch = (ids, audio.watch(ids) { [weak self] devices in self?.changed(devices: devices) })
+    }
+
+    private func readAll() {
+        for direction in AudioDirection.allCases {
+            sides[direction] = Side(devices: audio.devices(direction), current: audio.defaultDevice(direction))
+        }
+        readLevels()
     }
 
     private func readLevels() {
