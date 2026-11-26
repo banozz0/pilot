@@ -2,12 +2,12 @@
   "id": "ai-usage",
   "title": "AI usage",
   "icon": "📊",
-  "version": "3.8.1",
+  "version": "3.9.0",
   "description": "See how much of your Claude and Codex limits is left this session and this week, how your pace compares, and when each resets, in the menu bar, as CodexBar shows it. Add a second Codex account with Codex's own sign-in.",
   "examples": ["Glance at the menu bar: Claude's and Codex's logo with the session left, amber once a window is 60% used, red from 85%", "Click it: a card per provider and Codex account with its plan, each window's share left draining, its pace tick (red in deficit) and its reset, the pace in words on hover; Claude's per-model week, Claude's limit reset credits from Ghostex with Redeem in Ghostex (without Ghostex, Redeem in Claude Code opens its /limit-reset), Codex's limit reset credits with Redeem reset (asked first), and one row with each status page, the usage dashboards and Add Codex account"],
   "runtime": "process",
   "requires": ["python3"],
-  "permissions": { "clipboard": true, "network": ["status.claude.com", "status.openai.com"], "files": ["~/.local/state/ghostex/agent-hooks/claude-statusline", "~/.claude.json", "~/.codex/sessions", "~/.codex/archived_sessions", "~/.claude/projects"] },
+  "permissions": { "clipboard": true, "network": ["status.claude.com", "status.openai.com", "api.anthropic.com"], "files": ["~/.local/state/ghostex/agent-hooks/claude-statusline", "~/.claude.json", "~/.codex/sessions", "~/.codex/archived_sessions", "~/.claude/projects"] },
   "preferences": [
     { "name": "codexHomes", "type": "text", "title": "Codex accounts", "default": "~/.codex",
       "description": "Codex folders (CODEX_HOME) asked through Codex's own app-server, comma separated; Codex signs in with its own login. Accounts added with Add Codex account are asked too, and so is any other folder signed in to Codex (a ~/.codex-* or Pilot › AI's own) while List other Codex folders is on. A ~/.codex-* with logs but no login is listed from its session logs only." },
@@ -21,6 +21,8 @@
       "description": "Each meter's mark where its usage should be by now, and its words: in reserve or in deficit, lasts until the reset or runs out when (on hover in the popover)." },
     { "name": "otherCodex", "type": "checkbox", "title": "List other Codex folders", "default": true,
       "description": "Also list Codex folders not in Codex accounts: each ~/.codex-* or Pilot › AI's own Codex home signed in to Codex is asked like the others, one with logs only is read from them." },
+    { "name": "claudeSignIn", "type": "checkbox", "title": "Read Claude's sign-in to show usage", "default": false,
+      "description": "Without Ghostex, Claude Code no longer keeps its usage on this Mac. On, Pilot reads Claude Code's own sign-in from your keychain and asks Anthropic for your usage, at most every 5 minutes, as Claude Code does. The sign-in is used for that one request only: never stored, shown or renewed. If it has expired, sign in to Claude Code again. With Ghostex you never need this." },
     { "name": "gemini", "type": "checkbox", "title": "Show Gemini", "default": true,
       "description": "Gemini's card, shown only once the gemini CLI is installed; it says only that Gemini keeps no limit on this Mac." }
   ],

@@ -65,7 +65,17 @@ headless (`claude -p /usage` shows the limits alone, and `/limit-reset` "isn't a
 card shows no count and Redeem in Claude Code opens a terminal (Ghostty, else Terminal) running `claude /limit-reset`,
 Claude Code's own picker, which asks before it spends one.
 
-Nothing else is read: no auth.json, credentials, keychain items or cookies of any provider.
+Read Claude's sign-in (the claudeSignIn setting, off by default; the card offers it without Ghostex while it has only the
+status line or nothing): for a Mac without Ghostex, whose Claude Code no longer keeps its usage read. One detached run
+at a time reads Claude Code's own keychain item (service "Claude Code-credentials", account $USER, as Claude Code
+2.1.332 names them) with /usr/bin/security, which Claude Code writes it with too, and asks the usage API once, as
+Claude Code does: GET https://api.anthropic.com/api/oauth/usage with `Authorization: Bearer` and `anthropic-beta:
+oauth-2025-04-20`, no redirect followed. The token lives only for that request: never printed, logged, cached or
+renewed (renewing would rotate Claude Code's sign-in); an expired one or a 401 says sign in to Claude Code again.
+Only the figures are kept (paths.cache/claude-api.json), asked at most every 5 minutes, longer after a 429; never while
+Ghostex has a reading of the account.
+
+Nothing else is read: no auth.json, credentials, other keychain items or cookies of any provider.
 """
 import calendar
 import fcntl
@@ -124,6 +134,12 @@ GHOSTEX_ASK = 10.0  # seconds the bar's detached ask waits for Ghostex
 GHOSTEX_LOCK = "ghostex.lock"
 GHOSTEX_NONE = {"credits": {}, "usage": {}}
 GHOSTEX_WAIT = 1.0  # seconds Ghostex may take, so Codex keeps the rest of a popover's or page's wait
+ASK_EVERY, ASK_MOST = 300, 3600  # a detached ask's answer is due again after this, doubled per failure, at most this
+# Pilot's own usage read with Claude Code's sign-in (the claudeSignIn setting), as Claude Code 2.1.332 asks it.
+CLAUDE_API = "https://api.anthropic.com/api/oauth/usage"
+CLAUDE_BETA = "oauth-2025-04-20"
+SECURITY = "/usr/bin/security"
+CLAUDE_API_FILE, CLAUDE_API_LOCK = "claude-api.json", "claude-api.lock"
 CLAUDE_CLIS = (os.path.join(".local", "bin", "claude"), "/opt/homebrew/bin/claude", "/usr/local/bin/claude")
 GHOSTTY = ("/Applications/Ghostty.app", os.path.expanduser("~/Applications/Ghostty.app"))
 LIMIT_RESET = "/limit-reset"  # Claude Code's reset picker (an interactive command: no -p, no count)
@@ -133,7 +149,8 @@ GHOSTEX_LABELS = {"5h": ("Session", SESSION), "7d": ("Weekly", WEEK)}  # Ghostex
 WARN, ALERT = 60, 85  # percent used
 BAR = 20
 # The settings (the manifest's preferences), read once per run by configure().
-VIEW = {"barProviders": "both", "barWindow": "session", "pace": True, "otherCodex": True, "gemini": True}
+VIEW = {"barProviders": "both", "barWindow": "session", "pace": True, "otherCodex": True, "gemini": True,
+        "claudeSignIn": False}
 # Each provider's status page (Statuspage's api/v2/status.json) and usage dashboard, as CodexBar links them.
 STATUS_PAGES = {"claude": "https://status.claude.com", "codex": "https://status.openai.com"}
 PROVIDERS = (("claude", "Claude"), ("codex", "Codex"))
@@ -257,9 +274,18 @@ def claude_account(home, now):
     fetched = number(cached.get("fetchedAtMs")) if isinstance(cached, dict) else None
     if fetched is None or cached.get("accountUuid") != account.get("accountUuid"):
         return email, claude_plan(account), None
-    usage = cached.get("utilization") if isinstance(cached.get("utilization"), dict) else {}
-    windows = []
-    for raw in usage.get("limits") or []:
+    windows = windows_at(api_windows(cached.get("utilization")), now)
+    return email, claude_plan(account), (fetched / 1000.0, windows) if windows else None
+
+
+def api_windows(usage):
+    """The usage API's answer as Claude Code reads it (`limits`, each `kind` session, weekly_all or weekly_scoped with a
+    model's `display_name`, `percent` and `resets_at` ISO; without them `five_hour` and `seven_day`, each `utilization`
+    0-100 and `resets_at`), as [[name, percent, resets_at, minutes]]."""
+    if not isinstance(usage, dict):
+        return []
+    found = []
+    for raw in usage.get("limits") if isinstance(usage.get("limits"), list) else []:
         if not isinstance(raw, dict) or number(raw.get("percent")) is None:
             continue
         kind, scope = raw.get("kind"), raw.get("scope")
@@ -272,21 +298,40 @@ def claude_account(home, now):
             name, minutes = "%s weekly" % model["display_name"], WEEK
         else:
             continue
-        windows.append(window(name, raw["percent"], parse_time(raw.get("resets_at")), now, minutes))
-    return email, claude_plan(account), (fetched / 1000.0, windows) if windows else None
+        found.append([name, raw["percent"], parse_time(raw.get("resets_at")), minutes])
+    if not found:
+        for key, name, minutes in (("five_hour", "Session", SESSION), ("seven_day", "Weekly", WEEK)):
+            raw = usage.get(key)
+            if isinstance(raw, dict) and number(raw.get("utilization")) is not None:
+                found.append([name, raw["utilization"], parse_time(raw.get("resets_at")), minutes])
+    return found
 
 
-def claude_limits(home, now, ghostex):
-    """Claude's windows: the session and the week from the usage API's answer (Ghostex's reading in `ghostex`, {email:
-    [read time, [[name, percent, resets_at, minutes]]]}, or Claude Code's cached read, the newer) unless the status line
-    is over 10 minutes newer, then that answer's per-model weeks."""
+def windows_at(found, now):
+    """[[name, percent, resets_at, minutes]] as windows, read against `now`."""
+    return [window(name, percent, resets_at, now, minutes) for name, percent, resets_at, minutes in found]
+
+
+def claude_limits(home, now, ghostex, cache_dir=None, force=False):
+    """Claude's windows: the session and the week from the usage API's answer, the newest of Ghostex's reading (in
+    `ghostex`, its answer), Pilot's own read with Claude Code's sign-in (api_answer) and Claude Code's cached read, a tie
+    going in that order, unless the status line is over 10 minutes newer, then that answer's per-model weeks; with the
+    own read's last state as `sign_in`."""
     email, plan, cached = claude_account(home, now)
-    read = (ghostex or {}).get(email.lower()) if email else None
-    if read and (cached is None or read[0] >= cached[0]):
-        cached = read[0], [window(name, percent, resets_at, now, minutes) for name, percent, resets_at, minutes in read[1]]
+    key = email.lower() if email else None
+    api = api_answer(cache_dir, now, ghostex, key, force)
+    reads = []
+    if key in (ghostex.get("usage") or {}):
+        reads.append((ghostex["usage"][key][0], windows_at(ghostex["usage"][key][1], now)))
+    if key and api.get("who") == key and api.get("windows"):
+        reads.append((api["read_at"], windows_at(api["windows"], now)))
+    if cached:
+        reads.append(cached)
+    cached = max(reads, key=lambda r: r[0]) if reads else None
+    sign_in = api.get("state")
     line = claude_statusline(home, now)
     if line is None and cached is None:
-        return {"state": "unknown", "who": email, "plan": plan}
+        return {"state": "unknown", "who": email, "plan": plan, "sign_in": sign_in}
     if cached is None or (line is not None and line[0] > cached[0] + LINE_AHEAD):
         read_at, windows = line
         exact = {w["name"]: w["resets_at"] for w in (cached[1] if cached else []) if w["resets_at"]}
@@ -298,7 +343,8 @@ def claude_limits(home, now, ghostex):
     else:
         read_at, windows = cached
         since = "update"
-    return {"state": "ok", "who": email, "plan": plan, "read_at": read_at, "windows": windows, "since": since}
+    return {"state": "ok", "who": email, "plan": plan, "read_at": read_at, "windows": windows, "since": since,
+            "sign_in": sign_in}
 
 
 def ghostex_program():
@@ -373,31 +419,127 @@ def load_ghostex(path):
     return saved if isinstance(saved, dict) and number(saved.get("at")) is not None and "usage" in saved else None
 
 
-def record_ghostex(path, saved, found, now):
-    """Keeps an ask's answer: Ghostex's `found`, or after a failure the last answer with one more failure counted, which
-    holds off the bar's next ask twice as long each time (10 minutes, 20, … at most an hour)."""
-    if found:
-        saved = {"at": now, "credits": found[0], "usage": found[1]}
+def record_ask(path, saved, answer, now, **extra):
+    """Keeps an ask's result in paths.cache with `extra` and its time: its `answer`, or after a failure the last one with
+    one more failure counted, which holds off the next detached ask (due)."""
+    if answer:
+        saved = dict(answer)
     else:
-        saved = dict(GHOSTEX_NONE, **(saved or {}))
-        saved.update(at=now, fails=(number(saved.get("fails")) or 0) + 1)
+        saved = dict(saved or {})
+        saved.pop("pending", None)
+        saved["fails"] = (number(saved.get("fails")) or 0) + 1
+    saved.update(extra, at=now)
     if path:
         write_json(path, saved)
     return saved
 
 
+def record_ghostex(path, saved, found, now):
+    """Keeps Ghostex's answer (`found`, from ask_ghostex) as record_ask does; Ghostex gone, none of its answer stays."""
+    if found is None and not ghostex_program():
+        found = {}, {}
+    return record_ask(path, dict(GHOSTEX_NONE, **(saved or {})), found and {"credits": found[0], "usage": found[1]}, now)
+
+
+def due(saved, now):
+    """Whether a detached ask's last answer (or none) is due again: over 5 minutes old, twice as long after each failure
+    in a row (10 minutes, 20, …), at most an hour."""
+    return saved is None or now - saved["at"] > min(ASK_MOST, ASK_EVERY * 2 ** (number(saved.get("fails")) or 0))
+
+
 def ghostex_answer(cache_dir, now, ask_until=None, fresh=GHOSTEX_FRESH):
-    """Ghostex's last answer ({} without one). With `ask_until` (a popover, page or Refresh) Ghostex is asked inline once
-    the answer is over `fresh` s old; without it (the bar, the detail) the run never waits on Ghostex: an answer over 5
-    minutes old (longer after failures) goes to one detached ask, and only when Ghostex is installed."""
+    """Ghostex's last answer ({} without one; `pending` while the first is asked). With `ask_until` (a popover, page or
+    Refresh) Ghostex is asked inline once the answer is over `fresh` s old; without it (the bar, the detail) the run never
+    waits on Ghostex: a due answer goes to one detached ask, and only when Ghostex is installed."""
     path = os.path.join(cache_dir, GHOSTEX_FILE) if cache_dir else None
     saved = load_ghostex(path)
     if ask_until and (saved is None or now - saved["at"] > min(fresh, GHOSTEX_FRESH)):
         saved = record_ghostex(path, saved, ask_ghostex(min(ask_until, time.monotonic() + GHOSTEX_WAIT)), now)
-    elif (path and not ask_until and ghostex_program() and (saved is None or now - saved["at"] >
-                                                              min(3600, GHOSTEX_FRESH * 2 ** (number(saved.get("fails")) or 0)))):
-        write_json(path, dict(saved or GHOSTEX_NONE, at=now))  # claimed: one ask at a time
+    elif path and not ask_until and ghostex_program() and due(saved, now):
+        write_json(path, dict(saved or dict(GHOSTEX_NONE, pending=True), at=now))  # claimed: one ask at a time
         spawn("--ghostex", cache_dir)
+    return saved or {}
+
+
+def claude_keychain_item():
+    """(service, account) of Claude Code's sign-in in the login keychain, as Claude Code 2.1.332 names them: "Claude
+    Code-credentials", with "-" and the first 8 hex of the SHA-256 of CLAUDE_CONFIG_DIR when that is set, under $USER."""
+    folder = os.environ.get("CLAUDE_CONFIG_DIR")
+    service = "Claude Code-credentials"
+    if folder:
+        import unicodedata
+        service += "-" + hashlib.sha256(unicodedata.normalize("NFC", folder).encode()).hexdigest()[:8]
+    user = os.environ.get("USER") or ""
+    return service, user if re.match(r"[a-zA-Z0-9._-]+\Z", user) else "claude-code-user"
+
+
+def claude_sign_in():
+    """(state, access token or None) from Claude Code's keychain item, read by macOS's own security tool in a child.
+    The token is never refreshed (that would rotate Claude Code's sign-in): an expired one is "expired". Nothing read
+    here is ever formatted into a message: a parse error's text would carry the item."""
+    service, account = claude_keychain_item()
+    try:
+        out = subprocess.run([SECURITY, "find-generic-password", "-a", account, "-w", "-s", service],
+                             stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, timeout=60)
+    except (OSError, subprocess.SubprocessError):
+        return "unreadable", None
+    if out.returncode == 44:  # errSecItemNotFound, as Claude Code reads it
+        return "no_token", None
+    if out.returncode != 0:
+        return "refused", None
+    try:
+        oauth = json.loads(out.stdout).get("claudeAiOauth")
+    except (ValueError, AttributeError):
+        oauth = None
+    token = oauth.get("accessToken") if isinstance(oauth, dict) else None
+    if not isinstance(token, str) or not token:
+        return "unreadable", None  # another shape, or Claude Code's sealed overflow item, which Pilot does not open
+    expires = number(oauth.get("expiresAt"))
+    return ("expired", None) if expires is not None and expires / 1000.0 <= time.time() else ("ok", token)
+
+
+def ask_claude_api():
+    """(state, [[name, percent, resets_at, minutes]] or None): the usage API asked once with Claude Code's sign-in, as
+    Claude Code asks it (GET /api/oauth/usage, `Authorization: Bearer`, `anthropic-beta`). No redirect is followed, so
+    the token goes nowhere else; it lives only for this request."""
+    from urllib.request import HTTPRedirectHandler, Request, build_opener  # only a detached run reaches the network
+    from urllib.error import HTTPError
+
+    class NoRedirect(HTTPRedirectHandler):
+        def redirect_request(self, *args):
+            return None
+
+    state, token = claude_sign_in()
+    if token is None:
+        return state, None
+    request = Request(CLAUDE_API, headers={"Authorization": "Bearer " + token, "anthropic-beta": CLAUDE_BETA,
+                                           "Content-Type": "application/json", "User-Agent": "Pilot-AI-usage"})
+    try:
+        with build_opener(NoRedirect).open(request, timeout=10) as answer:
+            data = json.loads(answer.read(1 << 20))
+    except HTTPError as e:
+        e.close()
+        return {401: "signed_out", 403: "signed_out", 429: "rate_limited"}.get(e.code, "error"), None
+    except (OSError, ValueError):
+        return "error", None
+    found = api_windows(data)
+    return ("ok", found) if found else ("no_windows", None)
+
+
+def api_answer(cache_dir, now, ghostex, key, force=False):
+    """Pilot's own read of Claude's usage with Claude Code's sign-in, {at, read_at, who, windows, state, fails} in
+    paths.cache (figures only, never the token); {} while the setting is off. Asked by one detached run, never inline,
+    only while the setting is on and Ghostex has no reading of this account (`key`, its email in lower case) nor is
+    about to give its first; when due; after macOS refused the item, only on Refresh now (`force`)."""
+    path = os.path.join(cache_dir, CLAUDE_API_FILE) if cache_dir else None
+    if not (VIEW["claudeSignIn"] and path and key):
+        return {}
+    saved = read_json(path)
+    saved = saved if isinstance(saved, dict) and number(saved.get("at")) is not None else None
+    ghostex_has = ghostex.get("pending") or key in (ghostex.get("usage") or {})
+    if not (ghostex_has and ghostex_program()) and (force or (due(saved, now) and (saved or {}).get("state") != "refused")):
+        write_json(path, dict(saved or {}, at=now))  # claimed: one ask at a time
+        spawn("--claude-api", cache_dir)
     return saved or {}
 
 
@@ -859,9 +1001,12 @@ def limits(run, now=None, ask_until=None, fresh=LIVE_FRESH):
     now = time.time() if now is None else now
     cache_dir = (run.get("paths") or {}).get("cache")
     ghostex = ghostex_answer(cache_dir, now, ask_until, fresh)
-    claude = claude_limits(home, now, ghostex.get("usage"))
+    claude = claude_limits(home, now, ghostex, cache_dir, force=bool(ask_until) and fresh == 0)
     claude["reset_credits"] = claude_resets(ghostex, claude)
-    claude["redeem_in_claude"] = ghostex_program() is None and claude_program() is not None
+    without_ghostex = ghostex_program() is None
+    claude["redeem_in_claude"] = without_ghostex and claude_program() is not None
+    claude["offer_sign_in"] = (without_ghostex and not VIEW["claudeSignIn"]
+                               and (claude["state"] != "ok" or claude["since"] == "Claude Code reply"))
     return {"now": now, "claude": claude, "codex": codex_accounts(home, now, run, ask_until, fresh),
             "gemini": gemini_state(), "status": status_read(cache_dir, now)}
 
@@ -1198,7 +1343,8 @@ OWN_FAILED = ("sign-in failed", "Codex's sign-in stopped without signing in: %s"
 SAME = "This is the same account as one above: remove it, then add the other one."
 GEMINI_WORDS = ("limit unknown", "Gemini keeps no limit on this Mac, and asking Google needs your sign-in token, which "
                                   "Pilot never reads.")
-FOOTNOTE = "Codex's numbers come from Codex itself. Pilot reads no sign-in tokens."
+FOOTNOTE = ("Codex's numbers come from Codex itself. Pilot reads no sign-in token, unless you turn on Read Claude's "
+            "sign-in: then it uses Claude Code's for one usage read at a time, never storing or renewing it.")
 
 
 def codex_words(codex):
@@ -1258,9 +1404,28 @@ def section(title, subtitle, aside, aside_note, blocks):
     return {k: v for k, v in card.items() if v is not None}
 
 
+SIGN_IN_WORDS = {  # Pilot's own read with Claude Code's sign-in, when it did not answer
+    "expired": "Sign in to Claude Code again: its sign-in has expired, and Pilot never renews it.",
+    "signed_out": "Sign in to Claude Code again: Anthropic turned its sign-in away.",
+    "no_token": "Claude Code isn't signed in on this Mac.",
+    "refused": "macOS didn't let Pilot read Claude Code's sign-in. Refresh now asks again.",
+    "unreadable": "Pilot can't read Claude Code's sign-in on this Mac.",
+    "no_windows": "Anthropic's usage answer had no limit Pilot knows."}
+READ_SIGN_IN = {"type": "buttons", "actions": [{"type": "open", "url": "pilot://open?page=extensions&extension=ai-usage",
+                                                "title": "Read Claude's sign-in to show usage…"}]}
+
+
+def claude_sign_in_blocks(claude):
+    """Why Pilot's own read did not answer, or, without Ghostex while the card has only the status line or nothing, the
+    way to the setting that turns that read on (its Settings form, on the Extensions page)."""
+    if claude.get("sign_in") in SIGN_IN_WORDS:
+        return [{"type": "markdown", "text": SIGN_IN_WORDS[claude["sign_in"]]}]
+    return [READ_SIGN_IN] if claude.get("offer_sign_in") else []
+
+
 def claude_card(claude, now):
     credits = reset_credits_text(claude.get("reset_credits"), now)
-    extra = claude_redeem(claude, credits and {"type": "markdown", "text": credits})
+    extra = claude_sign_in_blocks(claude) + claude_redeem(claude, credits and {"type": "markdown", "text": credits})
     if claude["state"] != "ok":
         return section("Claude", "Unknown", claude.get("who"), claude.get("plan"),
                        [{"type": "markdown", "text": CLAUDE_UNKNOWN}] + extra)
@@ -1423,7 +1588,7 @@ def calm_credits(found, now):
 
 
 def calm_claude(claude, now):
-    extra = claude_redeem(claude, calm_credits(claude.get("reset_credits"), now))
+    extra = claude_sign_in_blocks(claude) + claude_redeem(claude, calm_credits(claude.get("reset_credits"), now))
     if claude["state"] != "ok":
         return calm_section("claude", "Claude", "unknown", claude.get("who"), None,
                             [CLAUDE_UNKNOWN, claude.get("who"), claude.get("plan")], extra)
@@ -1977,10 +2142,30 @@ def background_ghostex(cache_dir):
         lock.close()
 
 
+def background_claude_api(cache_dir):
+    """Asks the usage API with Claude Code's sign-in, one at a time across runs, and keeps the figures with the read's
+    state: a good answer replaces them, anything else keeps the last ones (their read time says how old) and counts
+    toward the hold-off, so a signed-out Claude Code is not asked every 5 minutes."""
+    signal.alarm(90)  # security may wait on a keychain prompt
+    lock = take_lock(cache_dir, CLAUDE_API_LOCK)
+    if lock is None:
+        return
+    try:
+        path = os.path.join(cache_dir, CLAUDE_API_FILE)
+        state, found = ask_claude_api()
+        now = time.time()
+        email = claude_account(os.path.expanduser("~"), now)[0] if found else None
+        record_ask(path, read_json(path), found and {"read_at": now, "who": (email or "").lower(), "windows": found},
+                   now, state=state)
+    finally:
+        lock.close()
+
+
 COMMANDS = {"usage": show_usage, "summary": show_summary, "page": show_page, "bar": show_bar,
             "add-account": add_account, "remove-account": remove_account, "refresh": refresh, "redeem-reset": redeem_reset,
             "open-ghostex": open_ghostex, "claude-limit-reset": claude_limit_reset}
-BACKGROUND = {"--refresh": background_refresh, "--status": background_status, "--ghostex": background_ghostex}
+BACKGROUND = {"--refresh": background_refresh, "--status": background_status, "--ghostex": background_ghostex,
+              "--claude-api": background_claude_api}
 
 
 def main():

@@ -413,6 +413,91 @@ class AIUsageTests(ExtensionTestCase):
                                   (None, None, "neither Ghostex nor Claude Code")):
             self.assertEqual(len(ai_usage.claude_card(claude(ghostex, cli), n)["blocks"]), 2, why)
 
+    def test_read_claudes_sign_in_without_ghostex(self):
+        """Sven Q410, 2026-11-26: without Ghostex, with the setting on, Pilot reads Claude Code's keychain item and asks
+        the usage API itself. All in-process, with security, the API and every detached run stood in for, so no run here
+        can reach this Mac's keychain; a fake token, which must show nowhere."""
+        import contextlib, http.server, io, threading
+        n, token = self.now, "sk-ant-oat01-FAKE-TOKEN-NEVER-SHOWN"
+        account = claude_json(n)
+        del account["cachedUsageUtilization"]
+        self.claude_cache(account)
+        self.status("old", statusline(n - HOUR, (30, n + HOUR), (40, n + DAY)), age=HOUR)
+        security = self.box.shim("security", 'printf "%%s\\n" "security $*" >> "%s"\nprintf %%s \'%s\''
+                                 % (self.box.log, json.dumps({"claudeAiOauth": {"accessToken": token, "expiresAt": int((n + HOUR) * 1000)}})))
+        seen, answer = [], {"status": 200, "body": {"five_hour": None, "limits": [
+            {"kind": "weekly_all", "group": "weekly", "percent": 47, "resets_at": iso_offset(n + 4 * HOUR)},
+            {"kind": "weekly_scoped", "group": "weekly", "percent": 15, "resets_at": iso_offset(n + 4 * HOUR),
+             "scope": {"model": {"display_name": "Fable"}}}]}}
+
+        class API(http.server.BaseHTTPRequestHandler):
+            def do_GET(self):
+                seen.append((self.path, self.headers.get("Authorization"), self.headers.get("anthropic-beta")))
+                body = json.dumps(answer["body"]).encode()
+                self.send_response(answer["status"])
+                self.end_headers()
+                self.wfile.write(body)
+
+            def log_message(self, *args):
+                pass
+
+        server = http.server.HTTPServer(("127.0.0.1", 0), API)
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+        self.addCleanup(server.server_close)
+        self.addCleanup(server.shutdown)
+        spawned, out = [], io.StringIO()
+        run = {"command": "bar", "surface": "popover", "paths": {"cache": str(self.box.cache)}}
+
+        def popover(on):
+            spawned.clear()
+            with mock.patch.dict(os.environ, {"HOME": str(self.box.home), "USER": "sven"}), \
+                    mock.patch.dict(ai_usage.VIEW, {"claudeSignIn": on}), \
+                    mock.patch.object(ai_usage, "ghostex_program", lambda: None), \
+                    mock.patch.object(ai_usage, "codex_accounts", lambda *a: []), \
+                    mock.patch.object(ai_usage, "spawn", lambda *a: spawned.append(a)), \
+                    contextlib.redirect_stdout(out):
+                ai_usage.show_bar(run)
+            return card(json.loads(out.getvalue().splitlines()[-1])["blocks"], "Claude")
+
+        def detached():
+            self.assertIn(("--claude-api", str(self.box.cache)), spawned)
+            with mock.patch.dict(os.environ, {"HOME": str(self.box.home), "USER": "sven"}), \
+                    mock.patch.object(ai_usage, "SECURITY", str(security)), \
+                    mock.patch.object(ai_usage, "CLAUDE_API", "http://127.0.0.1:%d/api/oauth/usage" % server.server_port), \
+                    mock.patch.object(ai_usage.signal, "alarm", lambda s: None):
+                ai_usage.background_claude_api(str(self.box.cache))
+
+        off = popover(False)
+        self.assertEqual([(m["label"], m["value"]) for m in off["blocks"][:2]], [("Session", "70% left"), ("Weekly", "60% left")])
+        self.assertIn(ai_usage.READ_SIGN_IN, off["blocks"], "the card offers the setting")
+        self.assertNotIn("--claude-api", json.dumps(spawned), "setting off: nothing asks")
+        self.assertEqual([c for c in self.box.shim_calls() if c.startswith("security")], [], "setting off: no security call")
+
+        popover(True)
+        detached()
+        self.assertEqual(seen, [("/api/oauth/usage", "Bearer " + token, "oauth-2025-04-20")], "asked as Claude Code asks")
+        self.assertEqual([c for c in self.box.shim_calls() if c.startswith("security")],
+                         ["security find-generic-password -a sven -w -s Claude Code-credentials"])
+        good = popover(True)
+        self.assertEqual([(m["label"], m["value"]) for m in good["blocks"][:2]], [("Weekly", "53% left"), ("Fable weekly", "85% left")])
+        self.assertNotIn(ai_usage.READ_SIGN_IN, good["blocks"])
+        self.assertNotIn("--claude-api", json.dumps(spawned), "asked at most every 5 minutes")
+
+        answer["status"] = 401
+        cache = self.box.cache / "claude-api.json"
+        cache.write_text(json.dumps(dict(json.loads(cache.read_text()), at=n - 6 * MIN)))
+        popover(True)
+        detached()
+        fallen = popover(True)
+        self.assertEqual(json.loads(cache.read_text())["state"], "signed_out")
+        self.assertIn({"type": "markdown", "text": "Sign in to Claude Code again: Anthropic turned its sign-in away."},
+                      fallen["blocks"])
+        self.assertEqual([m["label"] for m in fallen["blocks"] if m["type"] == "meter"], ["Weekly", "Fable weekly"],
+                         "the last good read stays, its age on the card")
+
+        stored = "".join(p.read_text(errors="replace") for p in self.box.cache.rglob("*") if p.is_file())
+        self.assertNotIn("FAKE-TOKEN", out.getvalue() + stored, "the token is in no protocol line and no cache file")
+
     def test_redeem_in_claude_code_opens_its_limit_reset_in_a_terminal(self):
         """Ghostty as a new window running claude /limit-reset, else Terminal running a script; nothing is spent here:
         Claude Code's picker asks first."""
@@ -624,7 +709,9 @@ class AIUsageTests(ExtensionTestCase):
         self.assertEqual([r["title"] for r in rows], ["Claude status", "Codex status", "Claude usage dashboard",
                                                       "Codex usage dashboard", "Add Codex account…"])
         self.assertEqual(rows[-1]["actions"], [{"type": "run", "command": "add-account", "title": "Add Codex account…"}])
-        self.assertEqual(blocks[-1]["text"], "Codex's numbers come from Codex itself. Pilot reads no sign-in tokens.")
+        self.assertEqual(blocks[-1]["text"], "Codex's numbers come from Codex itself. Pilot reads no sign-in token, unless "
+                         "you turn on Read Claude's sign-in: then it uses Claude Code's for one usage read at a time, never "
+                         "storing or renewing it.")
         self.assertEqual(self.codex_calls(), [str(self.box.home / ".codex")])
         bar = self.bar(home=self.box.home)
         self.assertEqual((bar["text"], bar["tone"], bar["gauges"]),
@@ -1099,7 +1186,9 @@ class AIUsageTests(ExtensionTestCase):
         self.assertEqual(blocks[3]["type"], "list")
         self.assertEqual(blocks[4]["text"], "Claude Code tokens: 1.2M in the last 7 days, 1.2M in this 5-hour block. "
                                             "They come from Claude Code's own logs and aren't your limit. Codex's numbers "
-                                            "come from Codex itself. Pilot reads no sign-in tokens.")
+                                            "come from Codex itself. Pilot reads no sign-in token, unless you turn on "
+                                            "Read Claude's sign-in: then it uses Claude Code's for one usage read at a "
+                                            "time, never storing or renewing it.")
         self.assertEqual(blocks[5]["actions"][0], {"type": "run", "command": "refresh", "title": "Refresh now", "icon": "refresh"})
         self.assertEqual(blocks[5]["actions"][1]["text"], "Claude: Session 90% left, Weekly 10% left, Fable weekly 100% "
                                                           "left · Codex: Session 89% left, Weekly 87% left")
