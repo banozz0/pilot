@@ -41,7 +41,9 @@
 
 <!-- video 1: Pilot in a minute -->
 
-https://github.com/user-attachments/assets/ebde2cf9-6db2-4b7d-9256-27761546cb73
+
+https://github.com/user-attachments/assets/41b9498b-7894-4fe5-897d-8ee620c79dee
+
 
 ## What it does
 
@@ -95,7 +97,8 @@ https://github.com/user-attachments/assets/53c56b39-1f21-4a22-9c8d-24db5a296f0a
 
 <!-- video 6: Files -->
 
-https://github.com/user-attachments/assets/1530c639-d110-4349-b624-02e873b94fe5
+https://github.com/user-attachments/assets/4033252c-3049-4d5d-9c34-ee6b6965db99
+
 
 **Also in the box:** [Update and Clean](https://pilotformac.com/update.html) · [web apps](https://pilotformac.com/webapps.html) · [extensions](https://pilotformac.com/extensions.html) · a drop-down terminal · [menu bar stats](https://pilotformac.com/menubar.html) · the `pilot` command.
 
