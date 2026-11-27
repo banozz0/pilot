@@ -66,7 +66,7 @@ struct AppWindowTests {
         #expect(AppPage.install.tabs.map(\.title) == ["Search", "Web apps", "More"])
         #expect(AppSection.helpers.frontTab == .catalogue && AppSection.hiddenApps.onMore == .installMore)
         // Overlay, Swap keys, Export and import and Cleaning are places under the board (pages round 4; pages-fill, Sven 2026-11-25).
-        #expect(AppPage.binds.tabs.map(\.title) == ["Keyboard", "Mouse"] && AppSection.cleaning.onFront && AppSection.exportImport.onFront)
+        #expect(AppPage.binds.tabs.map(\.title) == ["Keyboard", "Mouse", "All actions"] && AppSection.cleaning.onFront && AppSection.exportImport.onFront)
         // The page map (Sven 2026-10-17): AI holds its setup, Captures its recording.
         #expect(AppPage.ai.tabs.map(\.title) == ["Chat", "Setup"])
         // Captures' More went (pages-fill): its capture blocks on Capture, a recording's quality on Recording.

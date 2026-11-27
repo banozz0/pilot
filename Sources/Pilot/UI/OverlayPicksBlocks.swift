@@ -2,9 +2,9 @@ import PilotCore
 import SwiftUI
 
 /// Binds › Overlay (story 56, Sven 2026-10-10: "a list of all keybinds and let me toggle"): what holding Hyper shows. The
-/// mode on top, then every bind of the active preset the overlay can show, grouped by module with its key and a switch,
-/// searched. A switch in Every bind or My most used turns the overlay to My own pick from what it shows now, so nothing
-/// else moves; Show all goes back to Every bind, the default. Its blocks stand on Keys' More (simplify-pages T14; a Binds
+/// mode on top, then, in My own pick alone (Sven, 2026-11-27: the groups crowded Binds), every bind of the active preset
+/// the overlay can show, grouped by module with its key and a switch, searched; Show all goes back to Every bind, the
+/// default. `pilot set` still switches one in any mode, turning the overlay to My own pick from what it shows now. Its blocks stand on Keys' More (simplify-pages T14; a Binds
 /// tab until then), the first a place and the page's old intro its note.
 struct OverlayPicksBlocks: View {
     @Environment(Engine.self) private var engine
@@ -23,8 +23,6 @@ struct OverlayPicksBlocks: View {
         // From the mode and the pick, both stored settings, so a switch redraws the page.
         let shown = engine.overlayShown()
         let all = OverlayPage.choices(store: engine.binds.store, actions: engine.bindActions, shown: shown)
-        let typed = query.isEmpty ? search : query
-        let groups = typed.isEmpty ? all : OverlayPage.choices(store: engine.binds.store, actions: engine.bindActions, shown: shown, search: typed)
         let total = all.reduce(0) { $0 + $1.choices.count }, on = shown.count
         let head = KitBlock(title: "The overlay shows", symbol: "rectangle.grid.2x2",
                             note: "\(Self.intro(delay: settings.overlayDelay)) \(Self.introInfo)") {
@@ -45,6 +43,13 @@ struct OverlayPicksBlocks: View {
             }
         }
         head.moreBlock(.overlay)
+        if settings.overlayMode == .pick { switches(settings, shown: shown, all: all, total: total) }
+    }
+
+    /// My own pick's switches: the search, then a group per module, a switch per bind.
+    @ViewBuilder private func switches(_ settings: PilotSettings, shown: Set<String>, all: [OverlayPage.Group], total: Int) -> some View {
+        let typed = query.isEmpty ? search : query
+        let groups = typed.isEmpty ? all : OverlayPage.choices(store: engine.binds.store, actions: engine.bindActions, shown: shown, search: typed)
         SearchBox(prompt: "Search binds", text: $query).padding(.vertical, 8)
         if groups.isEmpty { EmptyState(title: total == 0 ? "No binds on Hyper yet" : "No bind matches", line: total == 0 ? nil : "Try another word.") }
         // Lazy: a switch row for every bind, under the keyboard and below the fold, cost about 160 ms of each switch to
@@ -78,8 +83,8 @@ struct OverlayPicksBlocks: View {
     /// What the mode in use means here, under the switches.
     static func modeLine(_ mode: OverlayPage.Mode) -> String {
         switch mode {
-        case .every: "Every bind shows. Switch one off to start your own pick."
-        case .mostUsed: "Each page shows its 12 most pressed binds. Switch one to start your own pick from these."
+        case .every: "Every bind shows. My own pick shows only the binds you switch on."
+        case .mostUsed: "Each page shows its 12 most pressed binds. My own pick shows only the binds you switch on."
         case .pick: "Only the binds switched on show."
         }
     }

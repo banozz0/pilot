@@ -158,6 +158,37 @@ public enum BindsPage {
         return filter.search(found)
     }
 
+    /// A group of Binds › All actions: a module's bound actions, or every action with no key.
+    public struct Group: Identifiable, Equatable, Sendable {
+        public var title: String
+        public var rows: [Row]
+        /// Not bound: its rows' button binds rather than changes.
+        public var unbound: Bool
+        public var id: String { title }
+    }
+
+    /// Binds › All actions (Sven, 2026-11-27): every bound action under its group in the keyboard's order (Apps, Windows,
+    /// Workspaces, …), each with its whole key, then Not bound. A search keeps each hit in its group; a group with no rows
+    /// is left out.
+    public static func groups(store: BindStore, actions: [ActionInfo], search: String = "") -> [Group] {
+        let filter = FuzzyRanker.Filter(search.trimmingCharacters(in: .whitespaces).lowercased())
+        func found(_ test: ([String]) -> Bool) -> [Group] {
+            var bound = Array(repeating: [Row](), count: BindsKeyboard.modules.count), free: [Row] = []
+            for a in actions {
+                let key = store.trigger(for: a.id)
+                guard test([a.label, a.module, key?.label ?? ""]) else { continue }
+                let row = Row(id: a.id, key: key?.label, label: a.label, module: a.module, custom: store.isCustom(a.id),
+                              warning: key.flatMap(PlainComboShadow.warning))
+                if key == nil { free.append(row) } else { bound[BindsKeyboard.module(a.module)].append(row) }
+            }
+            let byLabel = { (a: Row, b: Row) in a.label.localizedStandardCompare(b.label) == .orderedAscending }
+            let groups = zip(BindsKeyboard.modules, bound).map { Group(title: $0, rows: $1.sorted(by: byLabel), unbound: false) }
+                + [Group(title: Tab.unbound.title, rows: free.sorted(by: byLabel), unbound: true)]
+            return groups.filter { !$0.rows.isEmpty }
+        }
+        return filter.search(found)
+    }
+
     /// The editor's warning when `key` is taken by another action; nil when it is free, already this action's, or held by
     /// `old`, the bind being edited.
     public static func clash(store: BindStore, actions: [ActionInfo], key: Key, for action: String, from old: String? = nil) -> String? {

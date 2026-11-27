@@ -10,7 +10,7 @@ import Testing
 struct OverlayPicksTests {
     @Test("Overlay is a place on Keys' front, under the board (pages round 4, Sven's Q95; on More from simplify-pages T14, a Binds tab since story 56), which a link and the window's search reach; Instrument gives Mouse the frame's bar")
     func place() {
-        #expect(AppPage.binds.tabs.map(\.title) == ["Keyboard", "Mouse"],
+        #expect(AppPage.binds.tabs.map(\.title) == ["Keyboard", "Mouse", "All actions"],
                 "Abilities went to Menu (C3); Export and import and Cleaning are under the board (pages-fill)")
         #expect(AppSection.overlay.onFront && AppSection.overlay.onMore == nil && AppSection.keySwaps.onFront)
         #expect(AppPlace.linked(URL(string: "pilot://open?page=binds&tab=overlay")!) == AppPlace(.overlay))

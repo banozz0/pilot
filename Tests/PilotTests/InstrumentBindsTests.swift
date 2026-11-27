@@ -134,7 +134,7 @@ struct InstrumentBindsTests {
     func opens() throws {
         var opened: [BindEditing] = []
         let acts = BindsKeyboardPage.Acts(pick: { _ in }, show: { _, _ in }, edit: { opened.append($0) }, clear: { _ in }, reset: { _ in },
-                                          switchTo: { _ in }, resetAll: {}, showList: {}, go: { _ in })
+                                          switchTo: { _ in }, resetAll: {}, go: { _ in })
         let t = try #require(KeyNames.code(for: "T")), b = try #require(KeyNames.code(for: "B"))
         let bound: [Int64: [String]] = [b: ["apps.zen"]]
         acts.open(b, bound: bound, layer: .hyper)

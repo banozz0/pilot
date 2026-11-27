@@ -1,20 +1,21 @@
 import PilotCore
 import SwiftUI
 
-/// Binds' list in Instrument (card agent-bo-95423181): what a search and Show as list open, the list
-/// (PilotCore's BindsPage.sections) in Instrument's parts: the page's bar with back to the
-/// keyboard, the search, the preset and Add bind; the layers as a filter; a panel per layer whose rows edit on a click,
-/// each with Reset where Sven set it; a search that finds nothing says so and how to widen it; Reset all at the foot.
+/// Binds › All actions in Instrument (Sven, 2026-11-27; the List button's list until then, card agent-bo-95423181), and
+/// what a search on the keyboard lists: the page's bar with Binds' tabs, the search, the preset and New bind; the groups
+/// as a filter; a panel per group (PilotCore's BindsPage.groups) whose rows open the bind editor on a click, a bound one's
+/// Change and a Not bound one's Bind each with Reset where Sven set it; a search that finds nothing says so and how to
+/// widen it; Reset all at the foot.
 struct InstrumentBindsList: View {
     @Environment(Engine.self) private var engine
     @Environment(\.style) private var style
-    /// The Plain combos list: that section alone, no preset or filter.
-    let only: BindsPage.Tab?
     /// The window's search, followed while it changes.
     let seed: String
-    /// Back to the keyboard; nil while the window's search lists.
-    let back: (() -> Void)?
-    @State private var filter: BindsPage.Tab?
+    /// The tab the bar marks: All actions, or nil (Keyboard) while the keyboard's search lists.
+    let picked: AppSection?
+    let go: (AppPlace) -> Void
+    /// The group picked; nil for all.
+    @State private var filter: String?
     @State private var search = ""
     @State private var editing: BindEditing?
     @State private var confirmingResetAll = false
@@ -22,40 +23,43 @@ struct InstrumentBindsList: View {
     @State private var refusal: String?
     @FocusState private var searching: Bool
 
+    /// `filter`: the group picked as it opens (a render's).
+    init(seed: String, picked: AppSection?, filter: String? = nil, go: @escaping (AppPlace) -> Void) {
+        self.seed = seed
+        self.picked = picked
+        self.go = go
+        _filter = State(initialValue: filter)
+    }
+
     var body: some View {
-        let actions = engine.bindActions, store = engine.binds.store
-        let (layers, sections) = BindsList.list(engine.binds.store, actions: actions, only: only, filter: filter, search: search)
+        let store = engine.binds.store
+        let groups = BindsPage.groups(store: store, actions: engine.bindActions, search: search)
+        // A group that has since emptied lists everything again; a search spans every group.
+        let pick = search.isEmpty ? filter.flatMap { f in groups.contains { $0.title == f } ? f : nil } : nil
+        let shown = pick.map { p in groups.filter { $0.title == p } } ?? groups
         VStack(spacing: 0) {
             ViewThatFits(in: .horizontal) {
-                InstrumentPageBar(title: only == .plain ? AppSection.plainCombos.title : "Binds") { backButton; Spacer(minLength: 8); controls(store) }
+                InstrumentPageBar(title: "Binds") { tabs; Spacer(minLength: 8); controls(store) }
                 VStack(alignment: .leading, spacing: 0) {
-                    InstrumentPageBar(title: only == .plain ? AppSection.plainCombos.title : "Binds") { backButton; Spacer(minLength: 8) }
+                    InstrumentPageBar(title: "Binds") { tabs; Spacer(minLength: 8) }
                     controls(store).padding(.horizontal, style.density.page).padding(.bottom, 12)
                 }
             }
             InstrumentRule()
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 16) {
-                    // A search spans every layer, so the filter waits out of sight.
-                    if only == nil && search.isEmpty { filters(layers) }
-                    ForEach(sections) { section in
-                        InstrumentPanel(title: section.tab.title, note: "\(section.rows.count)") {
+                    if search.isEmpty { filters(groups.map(\.title), picked: pick) }
+                    ForEach(shown) { group in
+                        InstrumentPanel(title: group.title, note: "\(group.rows.count)") {
                             VStack(alignment: .leading, spacing: 0) {
-                                if let note = section.tab.explanation {
-                                    Text(note).styleText(\.caption).foregroundStyle(style.color(\.text3)).fixedSize(horizontal: false, vertical: true)
-                                        .padding(.horizontal, 18).padding(.top, 12)
-                                }
-                                if section.rows.isEmpty {
-                                    Text("None yet").styleText(\.body).foregroundStyle(style.color(\.text3)).padding(18)
-                                }
-                                ForEach(Array(section.rows.enumerated()), id: \.element.id) { i, row in
+                                ForEach(Array(group.rows.enumerated()), id: \.element.id) { i, row in
                                     if i > 0 { InstrumentRule() }
-                                    self.row(row, tab: section.tab)
+                                    self.row(row, unbound: group.unbound)
                                 }
                             }
                         }
                     }
-                    if sections.isEmpty { noMatch }
+                    if shown.isEmpty { noMatch }
                     HStack {
                         if let refusal { Text(refusal).styleText(\.caption).foregroundStyle(style.color(\.accentText)) }
                         Spacer()
@@ -73,68 +77,63 @@ struct InstrumentBindsList: View {
         .bindsDialogs(editing: $editing, switchingTo: $switchingTo, confirmingResetAll: $confirmingResetAll, refusal: $refusal)
     }
 
-    @ViewBuilder private var backButton: some View {
-        if let back {
-            Button(action: back) { InstrumentKeyedLabel(title: "Keyboard", symbol: "chevron.left") }.buttonStyle(InstrumentButtonStyle(kind: .ghost))
-        }
-    }
+    private var tabs: some View { BindsPartTabs(picked: picked, go: go).padding(.leading, 8) }
 
     private func controls(_ store: BindStore) -> some View {
         HStack(spacing: 8) {
             let shape = RoundedRectangle(cornerRadius: style.radii.control, style: .continuous)
             HStack(spacing: 8) {
                 Image(systemName: "magnifyingglass").font(style.font(\.icon)).foregroundStyle(style.color(\.text3)).accessibilityHidden(true)
-                TextField("Search binds", text: $search, prompt: Text("Search binds…").foregroundStyle(style.color(\.text3)))
+                TextField("Search actions", text: $search, prompt: Text("Search actions…").foregroundStyle(style.color(\.text3)))
                     .textFieldStyle(.plain).styleText(\.body).foregroundStyle(style.color(\.text)).focused($searching)
             }
             .padding(.horizontal, 9).frame(width: 220, height: style.density.control)
             .background(style.color(\.raised), in: shape)
             .overlay { shape.strokeBorder(style.color(\.line)) }
-            if only == nil {
-                InstrumentSegments(options: store.presets.map { ($0, $0.title) },
-                                   selection: Binding(get: { store.preset }, set: { if $0 != store.preset { switchingTo = $0 } }))
-                    .accessibilityLabel("Preset")
-                PresetMoreMenu()
-            }
+            InstrumentSegments(options: store.presets.map { ($0, $0.title) },
+                               selection: Binding(get: { store.preset }, set: { if $0 != store.preset { switchingTo = $0 } }))
+                .accessibilityLabel("Preset")
+            PresetMoreMenu()
             Button { editing = .init(action: nil) } label: { InstrumentKeyedLabel(title: "New bind", symbol: "plus") }
                 .buttonStyle(InstrumentButtonStyle(kind: .primary))
         }
         .fixedSize()
     }
 
-    /// All, or one layer that has binds, as the module chips under the keyboard pick.
-    private func filters(_ tabs: [BindsPage.Tab]) -> some View {
+    /// All, or one group, as the module chips under the keyboard pick.
+    private func filters(_ titles: [String], picked: String?) -> some View {
         Flow(spacing: 6, lineSpacing: 6) {
-            ForEach(Array(([nil] + tabs.map(Optional.some)).enumerated()), id: \.offset) { _, tab in
-                InstrumentChip(title: tab.map(\.title) ?? "All", on: tab == filter) { filter = tab }
+            ForEach(Array(([nil] + titles.map(Optional.some)).enumerated()), id: \.offset) { _, title in
+                InstrumentChip(title: title ?? "All", on: title == picked) { filter = title }
             }
         }
     }
 
-    /// One bind: its keys, its name with its module, Reset where Sven set it, Edit; a click anywhere edits it.
-    private func row(_ row: BindsPage.Row, tab: BindsPage.Tab) -> some View {
-        HStack(spacing: 14) {
-            keys(row.key, hyper: tab.keysAlone).frame(minWidth: tab.keysAlone ? 96 : BindsList.keyColumn, alignment: .leading)
+    /// One action: its keys, its name (with its group under Not bound, which does not name it), Reset where Sven set it,
+    /// then Change, or Bind with no key; a click anywhere opens the bind editor, which takes the key.
+    private func row(_ row: BindsPage.Row, unbound: Bool) -> some View {
+        let module = BindsKeyboard.modules[BindsKeyboard.module(row.module)]
+        let caption = unbound ? module + (row.custom ? " · yours" : "") : row.custom ? "Yours" : nil
+        return HStack(spacing: 14) {
+            keys(row.key).frame(minWidth: BindsList.keyColumn, alignment: .leading)
             VStack(alignment: .leading, spacing: 2) {
                 Text(row.label).styleText(\.body).foregroundStyle(style.color(\.text)).fixedSize(horizontal: false, vertical: true)
-                Text(BindsKeyboard.modules[BindsKeyboard.module(row.module)] + (row.custom ? " · yours" : ""))
-                    .styleText(\.caption).foregroundStyle(style.color(\.text3))
+                if let caption { Text(caption).styleText(\.caption).foregroundStyle(style.color(\.text3)) }
                 if let warning = row.warning { Text(warning).styleText(\.caption).foregroundStyle(style.color(\.accentText)).fixedSize(horizontal: false, vertical: true) }
             }
             Spacer(minLength: 8)
             if row.custom { Button("Reset") { reset(row.id) }.buttonStyle(InstrumentButtonStyle(kind: .ghost)) }
-            Button("Edit") { editing = .init(action: row.id) }.buttonStyle(InstrumentButtonStyle())
+            Button(unbound ? "Bind" : "Change") { editing = .init(action: row.id) }.buttonStyle(InstrumentButtonStyle())
         }
         .padding(.horizontal, 18).padding(.vertical, 9)
         .contentShape(.rect)
         .onTapGesture { editing = .init(action: row.id) }
     }
 
-    /// A row's keys as chips, as the menu shows a bind's (InstrumentBindKeys): the layer key's where the heading names the
-    /// layer, then each part of the trigger, a modifier as its sign.
-    @ViewBuilder private func keys(_ key: String?, hyper: Bool) -> some View {
+    /// A row's keys as chips, as the menu shows a bind's (InstrumentBindKeys), a modifier as its sign.
+    @ViewBuilder private func keys(_ key: String?) -> some View {
         if let key {
-            InstrumentBindKeys(label: hyper && !key.hasPrefix("Hyper") ? "Hyper+" + key : key, layerKeys: engine.settings.layerKeys).fixedSize()
+            InstrumentBindKeys(label: key, layerKeys: engine.settings.layerKeys).fixedSize()
         } else {
             Text("No key").styleText(\.caption).foregroundStyle(style.color(\.text3))
         }
@@ -143,8 +142,8 @@ struct InstrumentBindsList: View {
     /// A search that found nothing: what was searched, and what a search reads.
     private var noMatch: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text("No bind matches “\(search.trimmingCharacters(in: .whitespaces))”").styleText(\.title).foregroundStyle(style.color(\.text))
-            Text("A search reads each bind's name, its keys and its module. Clear it to see every layer.")
+            Text("No action matches “\(search.trimmingCharacters(in: .whitespaces))”").styleText(\.title).foregroundStyle(style.color(\.text))
+            Text("A search reads each action's name, its keys and its group. Clear it to see every action.")
                 .styleText(\.caption).foregroundStyle(style.color(\.text3)).fixedSize(horizontal: false, vertical: true)
             if !search.isEmpty {
                 Button { search = "" } label: { InstrumentKeyedLabel(title: "Clear search", symbol: "xmark") }

@@ -129,7 +129,7 @@ struct AbilitiesTests {
 
     @Test("Menu has the Abilities tab (C3; Binds' until then), which its old link, its own and the window's search reach")
     func place() {
-        #expect(AppPage.menu.tabs.map(\.title).prefix(2) == ["Your menu", "Abilities"] && AppPage.binds.tabs.map(\.title) == ["Keyboard", "Mouse"])
+        #expect(AppPage.menu.tabs.map(\.title).prefix(2) == ["Your menu", "Abilities"] && AppPage.binds.tabs.map(\.title) == ["Keyboard", "Mouse", "All actions"])
         #expect(AppPlace.linked(URL(string: "pilot://open?page=binds&tab=abilities")!) == AppPlace(.menu, .abilities))
         #expect(AppPlace.linked(URL(string: "pilot://open?page=menu&tab=abilities")!) == AppPlace(.menu, .abilities))
         #expect(AppPlace.search("what can pilot do").first == AppPlace(.abilities))

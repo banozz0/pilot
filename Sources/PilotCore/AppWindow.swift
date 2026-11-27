@@ -395,6 +395,9 @@ public enum AppSection: String, CaseIterable, Sendable {
     /// Binds' tab for a mouse's extra buttons (Q184); on System beside its Mouse card from Sven's Q68 until his round 3
     /// notes on build 2300 (2026-11-11), when it came back.
     case mouse
+    /// Binds' tab: every action under its group with its key and Change, then Not bound with Bind (Sven, 2026-11-27: the
+    /// List button's list, promoted to a tab).
+    case allActions
     /// Binds' tab: pairs of keys swapped while Pilot runs, Caps Lock ↔ Control and the like (Q406).
     case keySwaps
     /// Launcher's tab for the Ring menu (P74; Binds' until Sven on Build 76): the rings, their wedges, what opens each, and
@@ -483,7 +486,7 @@ public enum AppSection: String, CaseIterable, Sendable {
 
     public var page: AppPage {
         switch self {
-        case .plainCombos, .conflicts, .overlay, .mouse, .keySwaps, .exportImport, .cleaning: .binds
+        case .plainCombos, .conflicts, .overlay, .mouse, .allActions, .keySwaps, .exportImport, .cleaning: .binds
         case .abilities, .aliases, .quicklinks, .rings, .menuMore, .menuExtras, .translate, .appsShowAs: .menu
         case .fileSearch, .folders: .files
         case .reports: .upkeep
@@ -648,6 +651,7 @@ public enum AppSection: String, CaseIterable, Sendable {
         case .extensionCatalogue: "Catalogue"
         case .overlay: "Overlay"
         case .mouse: "Mouse"
+        case .allActions: "All actions"
         case .keySwaps: "Swap keys"
         case .rings: "Rings"
         case .aiSetup: "Setup"
@@ -744,6 +748,7 @@ public enum AppSection: String, CaseIterable, Sendable {
                                    "break"]
         case .overlay: ["overlay", "hold hyper", "cheat sheet", "what the overlay shows", "show in overlay", "my own pick", "most used"]
         case .mouse: ["mouse", "mouse button", "side button", "extra button", "hyperx", "learn button", "hold button"]
+        case .allActions: ["all actions", "every action", "actions list", "binds list", "not bound", "unbound", "bind an action"]
         case .keySwaps: ["swap keys", "swap", "remap", "key mapping", "hidutil"]
         case .rings: ["ring", "ring menu", "radial menu", "pie menu", "wheel", "flick", "opie", "wedge", "hold to open"]
         // Its keys, fallback and new chat are places of their own on Setup (pages round 4).

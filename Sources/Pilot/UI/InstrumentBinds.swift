@@ -2,13 +2,27 @@ import AppKit
 import PilotCore
 import SwiftUI
 
+/// Binds' parts, Keyboard, Mouse and All actions, as every page's toolbar shows its tabs (InstrumentToolbar): Binds draws
+/// its own bar on Keyboard and All actions, so it draws these there; Mouse's page shows the same tabs in the frame's bar
+/// (Sven, 2026-11-27: Mouse was reached only from the search).
+struct BindsPartTabs: View {
+    /// The tab marked: nil for Keyboard.
+    let picked: AppSection?
+    let go: (AppPlace) -> Void
+
+    var body: some View {
+        InstrumentSegments(options: AppPage.binds.tabs, selection: Binding(get: { picked }, set: { go(AppPlace(.binds, $0)) }))
+            .fixedSize().accessibilityLabel("Binds parts")
+    }
+}
+
 /// Binds in Instrument (mockup A's binds.html, card agent-bo-95423181, ADR 0008; simplify-pages T14): the page's bar with
-/// its Keyboard and Mouse tabs, the six layer tabs and their counts, Conflicts while there is a clash, List, the preset and New bind; the keyboard in one
+/// its Keyboard, Mouse and All actions tabs, the six layer tabs and their counts, Conflicts while there is a clash, the preset and New bind; the keyboard in one
 /// piece (Sven's Q36) on its panel with the modules under it (each picks what the board lights) and how to see the
 /// overlay; and the picked key's inspector: what it does, its route, today's presses, where else it shows, its clash,
 /// Change key, Unbind and Reset, the tab's free keys and the key on every tab; then Swap keys and what the overlay shows
-/// (pages round 4), under the board in its column while the inspector stands beside it (pages round 5). The binds as a table are List's; Cleaning is on More. Every act is BindsKeyboardPage's own (`Acts`), so picking, binding, clearing,
-/// presets and the list go through that page. Over 1100 pt the inspector stands beside the board while the board there
+/// (pages round 4), under the board in its column while the inspector stands beside it (pages round 5). The binds as a table are the All actions tab's. Every act is BindsKeyboardPage's own (`Acts`), so picking, binding, clearing
+/// and presets go through that page. Over 1100 pt the inspector stands beside the board while the board there
 /// holds every name whole, else under a board across the page, in two columns while it is 600 pt wide. The page
 /// scrolls; nothing in it scrolls on its own.
 struct InstrumentBindsPage: View {
@@ -87,13 +101,7 @@ struct InstrumentBindsPage: View {
 
     // MARK: Bar
 
-    /// Binds' parts, Keyboard and Mouse, as every page's toolbar shows its tabs (InstrumentToolbar): Binds draws its own
-    /// bar, so without them Mouse was reached only from the search (Sven, 2026-11-27). Mouse's page shows the same tabs back.
-    private var pageTabs: some View {
-        let selection = Binding<AppSection?>(get: { nil }, set: { acts.go(AppPlace(.binds, $0)) })
-        return InstrumentSegments(options: AppPage.binds.tabs, selection: selection).fixedSize()
-            .accessibilityLabel("Binds parts")
-    }
+    private var pageTabs: some View { BindsPartTabs(picked: nil, go: acts.go) }
 
     /// The line under the bar on a page too narrow for the tabs in it, as many a line as fit.
     private func underBar(@ViewBuilder _ content: () -> some View) -> some View {
@@ -169,9 +177,7 @@ struct InstrumentBindsPage: View {
                 .buttonStyle(InstrumentButtonStyle(kind: .raised))
                 .help("macOS shortcuts that clash with your binds without Hyper, and actions whose default key another holds")
             }
-            // Every bind of the tab as a list (the table the page drew until simplify-pages T14).
-            Button(action: acts.showList) { barLabel("List", symbol: "list.bullet", compact: compact) }
-                .buttonStyle(InstrumentButtonStyle()).help("Every bind as a list, to search and filter")
+            // Every action as a list is the All actions tab (Sven, 2026-11-27; the List button's until then).
             Menu {
                 PresetPicker(presets: store.presets, active: store.preset, pick: acts.switchTo)
                 PresetMenuItems()

@@ -8,24 +8,9 @@ struct BindEditing: Identifiable, Hashable {
     var id: Self { self }
 }
 
-/// The Binds list's layers in every style.
-@MainActor
+/// Binds › All actions' list.
 enum BindsList {
-    /// The sections there are, the layer picked (`only`, else `filter` while it still holds binds) and its sections. A
-    /// search spans every section.
-    static func list(_ store: BindStore, actions: [BindsPage.ActionInfo], only: BindsPage.Tab?, filter: BindsPage.Tab?, search: String)
-        -> (tabs: [BindsPage.Tab], sections: [BindsPage.Section]) {
-        // Every section, which also names the layers the filter offers; a filter on a layer that has since emptied lists
-        // everything again. Only a filter or a search needs a second pass.
-        let all = BindsPage.sections(store: store, actions: actions)
-        let tabs = all.map(\.tab)
-        let pick = only ?? filter.flatMap { tabs.contains($0) ? $0 : nil }
-        let sections = !search.isEmpty ? BindsPage.sections(store: store, actions: actions, search: search)
-            : pick == nil ? all : BindsPage.sections(store: store, actions: actions, only: pick)
-        return (tabs, sections)
-    }
-
-    /// The keys' column of a list row whose keys name their layer, so every row's words line up (Instrument's list).
+    /// The keys' column of a list row, so every row's words line up (Instrument's list).
     static let keyColumn: CGFloat = 150
 }
 

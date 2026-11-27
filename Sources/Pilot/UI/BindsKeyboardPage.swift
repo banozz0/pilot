@@ -3,8 +3,8 @@ import PilotCore
 import SwiftUI
 
 /// Binds as a keyboard (design round 4, card agent-bo-95422894): the sublayer tabs with Plain last, the keyboard with
-/// each key coloured by what its bind does, the clicked key's inspector (rebind, clear, or bind a free key); Show as list
-/// opens the full list (search, filters, Reset per bind). Instrument draws its own page and list on this page's state,
+/// each key coloured by what its bind does, the clicked key's inspector (rebind, clear, or bind a free key); a search
+/// lists every action (Binds › All actions' list). Instrument draws its own page and list on this page's state,
 /// keys and dialogs (ADR 0008; `Acts`).
 struct BindsKeyboardPage: View {
     @Environment(Engine.self) private var engine
@@ -33,7 +33,6 @@ struct BindsKeyboardPage: View {
     /// The key picked on a tab; another tab shows its own first pick.
     @State private var picked: (layer: BindsKeyboard.Layer, code: Int64)?
     @FocusState private var boardFocused: Bool
-    @State private var asList = false
     @State private var editing: BindEditing?
     @State private var switchingTo: BindStore.Preset?
     @State private var confirmingResetAll = false
@@ -43,15 +42,14 @@ struct BindsKeyboardPage: View {
 
     var body: some View {
         // The tab's binds once a pass: each key's actions, names and pictures (card agent-bo-95423023).
-        let listed = asList || !search.trimmingCharacters(in: .whitespaces).isEmpty
+        let listed = !search.trimmingCharacters(in: .whitespaces).isEmpty
         let binds = HomeBinds(engine: engine, layer: layer, pictures: !listed)
         let bound = binds.bound
         let key = (picked?.layer == layer ? picked?.code : nil) ?? Self.firstPick(bound, board: board.full)
-        let only: BindsPage.Tab? = layer == .plain && asList ? .plain : nil, back = search.isEmpty ? { asList = false } : nil
         // A link or the search to Swap keys or Overlay scrolls under the board to it.
         KitLanding { Group {
             if listed {
-                InstrumentBindsList(only: only, seed: search, back: back)
+                InstrumentBindsList(seed: search, picked: nil, go: go)
             } else {
                 boardKeys(instrument(binds, key: key), bound: bound, key: key)
             }
@@ -93,8 +91,8 @@ struct BindsKeyboardPage: View {
         return board.spots.compactMap(\.code).first { bound[$0] != nil } ?? KeyNames.code(for: "B")
     }
 
-    /// What Instrument's page's buttons do: this page's state and dialogs, so picking, binding, clearing, presets and the
-    /// list go through this page.
+    /// What Instrument's page's buttons do: this page's state and dialogs, so picking, binding, clearing and
+    /// presets go through this page.
     struct Acts {
         let pick: (Int64) -> Void
         /// Shows a tab with a key picked on it.
@@ -104,14 +102,13 @@ struct BindsKeyboardPage: View {
         let reset: (String) -> Void
         let switchTo: (BindStore.Preset) -> Void
         let resetAll: () -> Void
-        let showList: () -> Void
         let go: (AppPlace) -> Void
     }
 
     private var acts: Acts {
         Acts(pick: { picked = (layer, $0); boardFocused = true }, show: { layer = $0; picked = ($0, $1); boardFocused = true },
              edit: { editing = $0 }, clear: clear, reset: reset, switchTo: { switchingTo = $0 }, resetAll: { confirmingResetAll = true },
-             showList: { asList = true }, go: go)
+             go: go)
     }
 
     /// Instrument (card agent-bo-95423181): its own page on this page's state, dialogs and keys.

@@ -144,6 +144,9 @@ private struct PagePart: View {
             if section == .mouse {
                 // Back from System (Sven's round 3 notes on build 2300): the blocks carry the page's intro.
                 KitPage { MouseButtonsBlocks() }
+            } else if section == .allActions {
+                // The List button's list as a tab (Sven, 2026-11-27); the window's search narrows it.
+                HeldSearch(model: model) { InstrumentBindsList(seed: $0, picked: .allActions) { model.go($0) } }
             } else {
                 HeldSearch(model: model) {
                     BindsKeyboardPage(search: $0, startOnPlain: section == .plainCombos, editBind: model.editBind, tookEdit: { model.editBind = nil }) { model.go($0) }

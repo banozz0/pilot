@@ -9,7 +9,8 @@ import Testing
 /// Binds in Instrument (card agent-bo-95423181, mockup A binds-dark.png and binds-light.png), opt-in like the other
 /// renders: the page as the window hosts it beside the sidebar, at 1207, 767 and 551 pt (the 1440, 1000 and 760 windows
 /// less the sidebar), dark and light: the board with B picked, a free key picked, the Windows module picked, the Plain tab,
-/// the list a search opens and a search that finds nothing, the 1440 window's states also whole below the fold. Seeded as
+/// the list a search opens, a search that finds nothing and the All actions tab, the 1440 window's states also whole below
+/// the fold, and that page whole in Every bind and My own pick. Seeded as
 /// HomeRenders seeds Home, in a moved home.
 /// `CFFIXED_USER_HOME=<fresh dir> PILOT_RENDER_DIR=<fresh dir> swift test --filter InstrumentBindsRenders`
 extension SharedLook {
@@ -33,7 +34,7 @@ struct InstrumentBindsRenders {
 
     /// Every act does nothing: a render only draws.
     static let acts = BindsKeyboardPage.Acts(pick: { _ in }, show: { _, _ in }, edit: { _ in }, clear: { _ in }, reset: { _ in },
-                                             switchTo: { _ in }, resetAll: {}, showList: {}, go: { _ in })
+                                             switchTo: { _ in }, resetAll: {}, go: { _ in })
 
     /// The page hosted as the window hosts it: the page surface, `width` by `height`, on the shared Look.
     func hosted(_ page: some View, _ engine: Engine, width: CGFloat, height: CGFloat) -> some View {
@@ -85,17 +86,33 @@ struct InstrumentBindsRenders {
             ("1-hyper", AnyView(page(.hyper, key: "B"))), ("2-free", AnyView(page(.hyper, key: "Q"))),
             ("3-windows", AnyView(page(.hyper, key: "H", module: 1))), ("4-plain", AnyView(BindsKeyboardPage(search: "", startOnPlain: true) { _ in })),
             ("5-list", AnyView(BindsKeyboardPage(search: "Open") { _ in })), ("6-no-match", AnyView(BindsKeyboardPage(search: "zzqx") { _ in })),
+            ("7-all-actions", AnyView(InstrumentBindsList(seed: "", picked: .allActions) { _ in })),
         ]
+        // The keyboard's page whole in each overlay mode: the switches under the board only in My own pick (Sven, 2026-11-27).
+        let mode = engine.settings.overlayMode
+        Look.shared.style = .instrument
+        for each in [OverlayPage.Mode.every, .pick] {
+            engine.settings.overlayMode = each
+            try write("instrument-1207-overlay-\(each.rawValue)-page", hosted(BindsKeyboardPage(search: "") { _ in }, engine, width: 1207, height: 2600),
+                      trimmed: false)
+        }
+        engine.settings.overlayMode = mode
+        // All actions with Not bound picked: its Bind buttons.
+        try write("instrument-1207-all-actions-not-bound",
+                  hosted(InstrumentBindsList(seed: "", picked: .allActions, filter: BindsPage.Tab.unbound.title) { _ in }, engine, width: 1207, height: 900),
+                  trimmed: false)
         Look.shared.style = .instrument
         for dark in [true, false] {
             for width in [CGFloat(1207), 767, 551] {
                 for (name, view) in states {
-                    let stacked = width < InstrumentBindsPage.beside && !name.hasPrefix("5") && !name.hasPrefix("6")
+                    // The lists fill the window and scroll inside it: drawn at its height alone.
+                    let list = ["5", "6", "7"].contains(where: name.hasPrefix)
+                    let stacked = width < InstrumentBindsPage.beside && !list
                     try write("instrument-\(dark ? "dark" : "light")-\(Int(width))-\(name)", hosted(view, engine, width: width, height: stacked ? 4400 : 900),
                               trimmed: stacked)
                     // The 1440 window's page whole, below its 900 pt fold, as it scrolls; and its window scrolled halfway and to
                     // the foot, the inspector held in sight beside the table.
-                    if !stacked, width >= InstrumentBindsPage.beside, !name.hasPrefix("5"), !name.hasPrefix("6") {
+                    if !stacked, width >= InstrumentBindsPage.beside, !list {
                         try write("instrument-\(dark ? "dark" : "light")-\(Int(width))-\(name)-page", hosted(view, engine, width: width, height: 4400),
                                   trimmed: true)
                         for (part, share) in [("half", 0.5), ("foot", 1.0)] where name.hasPrefix("1") {
