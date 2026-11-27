@@ -49,4 +49,4 @@ and again with `PILOT_EXT_PYTHON=/usr/bin/python3`.
 
 ## Where things are
 
-README.md's file map shows every file with its own first line; Sven's `file-map` tool rewrites it after files are added, moved or renamed.
+The file map is the vault note `Projects/Pilot/pilot file map.md`, every file with its own first line (a public repo's README carries none); Sven's `file-map` tool rewrites it after files are added, moved or renamed.
