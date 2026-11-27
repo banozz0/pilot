@@ -70,17 +70,11 @@ final class ThemeCatalogueModel {
         guard let owner = try? ThemeCoordinator.production() else { return }
         let installer = Self.installer(owner), store = owner.store, ids = themes.map(\.id)
         // Off the main thread, which runs the key tap: every installed file is hashed, and a pack's load decodes its pictures.
-        let read = await Task.detached {
+        (installed, builtIn, pictured) = await Task.detached {
             let builtIn = Set(ids.filter(installer.isBuiltIn))
             return (installer.installed(ids), builtIn, builtIn.filter { id in (try? store.load(id)).map(ShippedWallpapers.wants) == true })
         }.value
-        // Only what changed is set: each set redraws the whole gallery, even to the same value, and this runs after every
-        // Get, Update and Apply (theme-switch-lag, 2026-11-27: 25 to 40 ms a set with 16 tiles, debug).
-        if installed != read.0 { installed = read.0 }
-        if builtIn != read.1 { builtIn = read.1 }
-        if pictured != read.2 { pictured = read.2 }
-        let now = try? owner.appliedTheme().id
-        if applied != now { applied = now }
+        applied = try? owner.appliedTheme().id
     }
 
     /// A built-in theme you removed (Look.hiddenThemes) stands as one to get: Get brings it back.
