@@ -3,7 +3,7 @@ import PilotCore
 import SwiftUI
 
 /// Binds in Instrument (mockup A's binds.html, card agent-bo-95423181, ADR 0008; simplify-pages T14): the page's bar with
-/// the six tabs and their counts, Conflicts while there is a clash, List, the preset and New bind; the keyboard in one
+/// its Keyboard and Mouse tabs, the six layer tabs and their counts, Conflicts while there is a clash, List, the preset and New bind; the keyboard in one
 /// piece (Sven's Q36) on its panel with the modules under it (each picks what the board lights) and how to see the
 /// overlay; and the picked key's inspector: what it does, its route, today's presses, where else it shows, its clash,
 /// Change key, Unbind and Reset, the tab's free keys and the key on every tab; then Swap keys and what the overlay shows
@@ -60,11 +60,15 @@ struct InstrumentBindsPage: View {
         // A piece a turn while the page is built ahead (Staged): the bar, then the board and what is beside and under it.
         VStack(spacing: 0) { Staged {
             ViewThatFits(in: .horizontal) {
-                InstrumentPageBar(title: "Binds", side: Self.side(width, style)) { HStack(spacing: 2) { layerButtons(counts) }.fixedSize().padding(.leading, 6); Spacer(minLength: 8); fittedControls }
+                InstrumentPageBar(title: "Binds", side: Self.side(width, style)) { pageTabs.padding(.leading, 8); HStack(spacing: 2) { layerButtons(counts) }.fixedSize().padding(.leading, 6); Spacer(minLength: 8); fittedControls }
+                VStack(spacing: 0) {
+                    InstrumentPageBar(title: "Binds", side: Self.side(width, style)) { pageTabs.padding(.leading, 8); Spacer(minLength: 8); fittedControls }
+                    underBar { layerButtons(counts) }
+                }
+                // The narrowest page: Keyboard and Mouse lead the line under the bar, so the title keeps its room.
                 VStack(spacing: 0) {
                     InstrumentPageBar(title: "Binds", side: Self.side(width, style)) { Spacer(minLength: 8); fittedControls }
-                    Flow(spacing: 2, lineSpacing: 4) { layerButtons(counts) }
-                        .padding(.horizontal, Self.side(width, style)).padding(.bottom, 10).frame(maxWidth: .infinity, alignment: .leading)
+                    underBar { pageTabs.padding(.trailing, 8); layerButtons(counts) }
                 }
             }
             InstrumentRule()
@@ -82,6 +86,20 @@ struct InstrumentBindsPage: View {
     }
 
     // MARK: Bar
+
+    /// Binds' parts, Keyboard and Mouse, as every page's toolbar shows its tabs (InstrumentToolbar): Binds draws its own
+    /// bar, so without them Mouse was reached only from the search (Sven, 2026-11-27). Mouse's page shows the same tabs back.
+    private var pageTabs: some View {
+        let selection = Binding<AppSection?>(get: { nil }, set: { acts.go(AppPlace(.binds, $0)) })
+        return InstrumentSegments(options: AppPage.binds.tabs, selection: selection).fixedSize()
+            .accessibilityLabel("Binds parts")
+    }
+
+    /// The line under the bar on a page too narrow for the tabs in it, as many a line as fit.
+    private func underBar(@ViewBuilder _ content: () -> some View) -> some View {
+        Flow(spacing: 2, lineSpacing: 4) { content() }
+            .padding(.horizontal, Self.side(width, style)).padding(.bottom, 10).frame(maxWidth: .infinity, alignment: .leading)
+    }
 
     /// How many binds each tab holds, in one pass over the binds.
     private var tabCounts: [BindsKeyboard.Layer: Int] {
@@ -135,7 +153,8 @@ struct InstrumentBindsPage: View {
     private func controls(compact: Bool) -> some View {
         let store = engine.binds.store
         return HStack(spacing: 8) {
-            // Abilities, Overlay and Mouse have one home each: Launcher › Abilities and Keys' own tabs (simplify-pages T2).
+            // Abilities, Overlay and Mouse have one home each: Launcher › Abilities, the overlay under the board and Mouse
+            // in the page's tabs (simplify-pages T2).
             // macOS shortcuts on a plain combo, and Pilot's defaults another action's key left without one.
             // Conflicts only while there is a clash (simplify-pages T14).
             let count = clashes.count + store.refused.count
