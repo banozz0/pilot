@@ -20,11 +20,28 @@ final class HyperTap: @unchecked Sendable {
     /// The event `handle` is on, nil outside it: a bind the press runs reads when its key went down (keyDownTime). Read
     /// and written only under `lock`.
     nonisolated(unsafe) private static var handling: CGEvent?
-    /// When the key-down whose bind runs now went down, from the event's own timestamp in systemUptime's seconds
-    /// (NSEvent's conversion, not the handler's clock); nil outside the tap or for any other event. Read inside the
-    /// callback (Engine's onRun), which hands it on to the main thread as `pressedAt`.
+    /// When the key-down whose bind runs now went down, in systemUptime's seconds: the event's own timestamp, not the
+    /// handler's clock. A real key-down carries it in mach ticks, so it is scaled by the tick's length; NSEvent(cgEvent:)
+    /// reads it as nanoseconds (build 3268 logged "751178360 ms from key down to first frame") and, on this thread, can
+    /// trap: its key-down path asks TSM for the input sources, which asserts the main queue (crash 2026-11-27). Nil
+    /// outside the tap or for any other event. Read inside the callback (Engine's onRun), which hands it on to the main
+    /// thread as `pressedAt`.
     static var keyDownTime: TimeInterval? {
-        handling.flatMap { $0.type == .keyDown ? NSEvent(cgEvent: $0)?.timestamp : nil }
+        handling.flatMap { $0.type == .keyDown ? Double($0.timestamp) * secondsPerTick : nil }
+    }
+    /// One mach tick in seconds (mach_timebase_info: 125/3 ns on Apple silicon, 1 ns on Intel).
+    private static let secondsPerTick: Double = {
+        var base = mach_timebase_info_data_t()
+        mach_timebase_info(&base)
+        return Double(base.numer) / Double(base.denom) / 1e9
+    }()
+    /// A system-defined event's subtype and data1 fields (undocumented): the storage NSEvent(cgEvent:) reads them from and
+    /// NSEvent.otherEvent writes them to, checked both ways on 2026-11-27. Read from the CGEvent, never through NSEvent,
+    /// on the tap thread. Nil if macOS ever drops them: the event then passes untouched.
+    static let systemDefinedFields = CGEventField(rawValue: 99).flatMap { subtype in CGEventField(rawValue: 149).map { (subtype, $0) } }
+
+    static func systemDefined(_ event: CGEvent) -> (subtype: Int, data1: Int)? {
+        systemDefinedFields.map { (Int(event.getIntegerValueField($0.0)), Int(event.getIntegerValueField($0.1))) }
     }
     /// The key-down of the bind running now on the main thread, as Engine's onRun sets it around the action: the menu
     /// times Hyper+Space to its first frame from it (spec pilot-1.1 T74). Nil outside a bind's run.
@@ -170,7 +187,10 @@ final class HyperTap: @unchecked Sendable {
     /// The lock ended, whichever way: the overlay closes.
     @TapLocked var onUnlock: (KeyboardLock.End) -> Void = { _ in }
 
-    init(layer: HyperLayer) { _layer = TapLocked(wrappedValue: layer) }
+    init(layer: HyperLayer) {
+        _layer = TapLocked(wrappedValue: layer)
+        _ = (Self.secondsPerTick, Self.systemDefinedFields)   // resolved as the tap is made, never first inside its callback
+    }
 
     var isRunning: Bool { lock.withLock { tap != nil } }
 
@@ -474,7 +494,7 @@ final class HyperTap: @unchecked Sendable {
         let now = ProcessInfo.processInfo.systemUptime
         if type.rawValue == BrightnessKeys.eventType {
             if now >= held.until { unlockKeyboard(.safety); return handle(type: type, event: event) == nil }
-            return NSEvent(cgEvent: event).map { KeyboardLock.takes(systemDefinedSubtype: Int($0.subtype.rawValue), data1: $0.data1) } ?? true
+            return Self.systemDefined(event).map { KeyboardLock.takes(systemDefinedSubtype: $0.subtype, data1: $0.data1) } ?? true
         }
         let kind: KeyEvent.Kind
         switch type {
@@ -509,8 +529,7 @@ final class HyperTap: @unchecked Sendable {
     /// onBrightness, which may take them; every other one (volume, media, the keyboard's own) passes untouched. Pilot's
     /// own media keys (Post.media) are never the mouse's.
     private func systemDefined(_ event: CGEvent, own: Bool) -> Bool {
-        guard let ns = NSEvent(cgEvent: event) else { return false }
-        let subtype = Int(ns.subtype.rawValue), data1 = ns.data1
+        guard let (subtype, data1) = Self.systemDefined(event) else { return false }
         if captureMouse != nil {
             log.notice("mouse learn: system-defined subtype \(subtype, privacy: .public) data1 0x\(String(data1, radix: 16), privacy: .public)\(own ? " (own)" : "", privacy: .public) fields \(Self.fields(of: event), privacy: .public)")
         }

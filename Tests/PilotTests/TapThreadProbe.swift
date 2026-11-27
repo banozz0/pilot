@@ -92,8 +92,8 @@ struct TapThreadProbe {
         let seen = Seen()
         tap.isBound = { $0 == hyperH }
         tap.onTyped = { _, characters in seen.typed += characters(); return false }   // HyperTap.characters: keyboardGetUnicodeString
-        tap.onRun = { _, _ in seen.pressedAt = HyperTap.keyDownTime }                    // NSEvent(cgEvent:)
-        tap.isFromMouse = { _, _ in seen.media = true; return false }                   // reached through NSEvent(cgEvent:)'s subtype
+        tap.onRun = { _, _ in seen.pressedAt = HyperTap.keyDownTime }                    // the CGEvent's timestamp in mach ticks
+        tap.isFromMouse = { _, _ in seen.media = true; return false }                   // reached through the CGEvent's subtype field
         tap.captureMouse = { _ in }   // a catch waiting: the media key asks isFromMouse
         let media = try #require(NSEvent.otherEvent(with: .systemDefined, location: .zero, modifierFlags: [], timestamp: 0, windowNumber: 0,
                                                     context: nil, subtype: 8, data1: 17 << 16 | 0x0A << 8, data2: -1)?.cgEvent)
