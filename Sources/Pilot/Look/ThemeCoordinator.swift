@@ -1012,10 +1012,15 @@ final class ThemeCoordinator {
     @discardableResult
     func restore(_ id: String) -> Bool { Look.shared.hiddenThemes.remove(id) != nil }
 
-    /// Whether `id` is the theme in use: the one applied, or the one Pilot wears. A ledger that does not read counts as yes.
+    /// Whether `id` is the theme in use. A ledger that does not read counts as yes.
     private func inUse(_ id: String) -> Bool {
-        do { return try appliedTheme().id == id || Look.shared.themeID == id } catch { return true }
+        do { return Self.inUse(id, applied: try appliedTheme().id) } catch { return true }
     }
+
+    /// The one rule for the theme in use, Remove's and Look › Catalogue's In use: the pack applied, else Pilot's own theme
+    /// Look wears. Look's `themeID` stays the pre-pack baseline Restore brings back while a pack is applied, so it is no
+    /// theme in use then (Sven, 2026-11-27: Dracula and Isle both read In use after Isle was applied).
+    static func inUse(_ id: String, applied: String?) -> Bool { (applied ?? Look.shared.themeID) == id }
 
     /// Compare filesystem identities along resolved ancestry, including aliases of any ancestor.
     /// Only export may project absent suffixes, using the actual volume's case policy.
@@ -1641,31 +1646,33 @@ final class ThemeCoordinator {
     func plan(_ id: String?, catalogue: Bool = true) async throws -> ThemePlan {
         // Ghostex answers through a child process, awaited with the pictures below, so the rest plans in one main-actor turn.
         let ghostexRead = Task { try await ghostexColours?.read() }
-        let copied = await loadedOffMain(id)
+        let (pack, copied) = await loadedOffMain(id)
         // Use my wallpaper folder for every theme: the folder's pictures, read off the main thread (it runs the tap), in
         // place of the pack's, so a shipped pack's are never fetched.
         if id != nil, try following().wallpapers, let folder = wallpaperFolder() {
             let pictures = try await Task.detached { try ThemePackStore.folderPictures(folder) }.value
-            return try await plan(id, ghostex: ghostexRead.value, folder: (folder, pictures.images, pictures.portraits))
+            return try await plan(id, pack, ghostex: ghostexRead.value, folder: (folder, pictures.images, pictures.portraits))
         }
         var note: String?
         if let id, catalogue || copied == false { note = await fetchShipped(id) } else if copied == true { shippedDue = id }
-        return try await plan(id, ghostex: ghostexRead.value, shippedNote: note)
+        return try await plan(id, pack, ghostex: ghostexRead.value, shippedNote: note)
     }
 
     /// A shipped pack a press planned from its fetched copy, its catalogue read once the switch is done.
     private var shippedDue: String?
 
     /// The pack and a shipped pack's fetched pictures loaded off the main thread (theme-switch, Sven on combined-14: a pick
-    /// waited 130 ms on a pack's first load there, decoding every picture whole). A picture decodes once by its bytes
-    /// (ThemePackStore's proved), so the plan's loads after this read it from there. Whether a shipped pack already has
-    /// its pictures; nil for any other pack, or one that does not load.
-    private func loadedOffMain(_ id: String?) async -> Bool? {
-        guard let id else { return nil }
+    /// waited 130 ms on a pack's first load there, decoding every picture whole), and the plan plans from this load: each
+    /// load reads and hashes every picture, which held the main thread 28 ms a press for two 3.4 MB ones (theme-switch-lag,
+    /// 2026-11-27); Apply's freshness check reads the revision again. Whether a shipped pack already has its pictures; nil
+    /// for any other pack, or one that does not load.
+    private func loadedOffMain(_ id: String?) async -> (ThemePackStore.Loaded?, Bool?) {
+        guard let id else { return (nil, nil) }
         let store = store, wallpapers = shipped?.wallpapers
-        return await Task.detached(priority: .userInitiated) { () -> Bool? in
-            guard let loaded = try? store.load(id), let wallpapers, ShippedWallpapers.wants(loaded) else { return nil }
-            return !wallpapers.picturing(loaded).images.isEmpty
+        return await Task.detached(priority: .userInitiated) { () -> (ThemePackStore.Loaded?, Bool?) in
+            guard let loaded = try? store.load(id) else { return (nil, nil) }
+            guard let wallpapers, ShippedWallpapers.wants(loaded) else { return (loaded, nil) }
+            return (loaded, !wallpapers.picturing(loaded).images.isEmpty)
         }.value
     }
 
@@ -1686,14 +1693,15 @@ final class ThemeCoordinator {
             return had() ? nil : "\(loaded.pack.title)'s wallpapers could not be downloaded. \(ExtensionCatalogue.Problem.reason(error))"
         }
     }
-    /// `folder`: the person's wallpaper folder and its pictures, which this plan sets in place of the pack's. The collection
-    /// becomes the folder itself, so Images from shows it as one entry; the pictures pick each screen's image.
-    private func plan(_ id: String?, ghostex ghostexState: [String: String]?, shippedNote: String? = nil,
+    /// `pack`: `id` as loadedOffMain read it, nil to load it here. `folder`: the person's wallpaper folder and its pictures,
+    /// which this plan sets in place of the pack's. The collection becomes the folder itself, so Images from shows it as one
+    /// entry; the pictures pick each screen's image.
+    private func plan(_ id: String?, _ pack: ThemePackStore.Loaded?, ghostex ghostexState: [String: String]?, shippedNote: String? = nil,
                       folder: (path: String, images: [String], portraits: Set<String>)? = nil) throws -> ThemePlan {
         guard try state("pending").bytes == nil else { throw ThemeFailure("pending recovery; restart/recover before planning") }
         let (recordFile, kept) = try ledger()
         let loaded = try id.map { id in
-            let pack = try store.load(id)
+            let pack = try pack.flatMap { $0.pack.id == id ? $0 : nil } ?? store.load(id)
             if let folder { return pack.picturing(folder.images, portraits: folder.portraits) }
             return try shipped?.wallpapers.picturing(pack) ?? pack
         }

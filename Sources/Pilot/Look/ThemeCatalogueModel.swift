@@ -70,11 +70,17 @@ final class ThemeCatalogueModel {
         guard let owner = try? ThemeCoordinator.production() else { return }
         let installer = Self.installer(owner), store = owner.store, ids = themes.map(\.id)
         // Off the main thread, which runs the key tap: every installed file is hashed, and a pack's load decodes its pictures.
-        (installed, builtIn, pictured) = await Task.detached {
+        let read = await Task.detached {
             let builtIn = Set(ids.filter(installer.isBuiltIn))
             return (installer.installed(ids), builtIn, builtIn.filter { id in (try? store.load(id)).map(ShippedWallpapers.wants) == true })
         }.value
-        applied = try? owner.appliedTheme().id
+        // Only what changed is set: each set redraws the whole gallery, even to the same value, and this runs after every
+        // Get, Update and Apply (theme-switch-lag, 2026-11-27: 25 to 40 ms a set with 16 tiles, debug).
+        if installed != read.0 { installed = read.0 }
+        if builtIn != read.1 { builtIn = read.1 }
+        if pictured != read.2 { pictured = read.2 }
+        let now = try? owner.appliedTheme().id
+        if applied != now { applied = now }
     }
 
     /// A built-in theme you removed (Look.hiddenThemes) stands as one to get: Get brings it back.
@@ -87,8 +93,8 @@ final class ThemeCatalogueModel {
         }
     }
 
-    /// Whether `id` is the theme in use, applied or worn: what Remove and Update refuse.
-    func inUse(_ id: String) -> Bool { applied == id || Look.shared.themeID == id }
+    /// Whether `id` is the theme in use: what Remove and Update refuse (ThemeCoordinator.inUse's rule).
+    func inUse(_ id: String) -> Bool { ThemeCoordinator.inUse(id, applied: applied) }
 
     /// Brings back the built-in theme `id` you removed; false when it is not one.
     func restore(_ id: String) async -> Bool {

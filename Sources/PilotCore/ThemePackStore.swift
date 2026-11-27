@@ -48,7 +48,16 @@ public struct ThemePackStore: Sendable {
         return (images.map(\.path), Set(images.filter { ImageShapes.read($0) == .portrait }.map(\.path)))
     }
     private static let images = DispatchQueue(label: "dev.banozz.pilot.theme-assets", qos: .userInitiated)
-    /// Each wallpaper a load has decoded whole, by the SHA-256 of its bytes, and whether it is tall (perf-round, Sven on
+    /// Whether a pack's picture decodes: the whole picture decoded, made at most 64 pixels on a side. A full-size decode
+    /// proved the same with a 33 MB bitmap per 4K picture (theme-switch-lag, 2026-11-27: eight cold presses of 4K-HEIC packs
+    /// peaked the theme fixture host at 160 MB against 105 MB this way), at the same speed.
+    static func decodes(_ source: CGImageSource) -> Bool {
+        guard CGImageSourceGetStatus(source) == .statusComplete,
+              let small = CGImageSourceCreateThumbnailAtIndex(source, 0, [kCGImageSourceCreateThumbnailFromImageAlways: true,
+                  kCGImageSourceThumbnailMaxPixelSize: 64, kCGImageSourceShouldCacheImmediately: true] as CFDictionary) else { return false }
+        return small.width > 0 && small.height > 0
+    }
+    /// Each wallpaper a load has decoded (`decodes`), by the SHA-256 of its bytes, and whether it is tall (perf-round, Sven on
     /// combined-5: applying a theme stalled). A press loads its pack about four times (its plan, the shipped copy, both
     /// freshness checks), and each load decoded every picture in full on the main thread's wait; the same bytes decode the
     /// same, so a picture is decoded once. Cleared past 512 pictures.
@@ -113,13 +122,12 @@ public struct ThemePackStore: Sendable {
                             let digest = ThemeDigest.of(data)
                             let portrait: Bool
                             if let known = Self.proved.withLock({ $0[digest] }) { portrait = known } else {
-                                guard let imageSource = CGImageSourceCreateWithData(data as CFData, nil),
-                                      CGImageSourceGetStatus(imageSource) == .statusComplete,
-                                      let image = CGImageSourceCreateImageAtIndex(imageSource, 0, [kCGImageSourceShouldCacheImmediately: true] as CFDictionary),
-                                      image.width > 0, image.height > 0 else { throw ThemeFailure("missing/escaping/undecodable wallpaper asset: \(file.lastPathComponent)") }
-                                let properties = CGImageSourceCopyPropertiesAtIndex(imageSource, 0, nil) as? [CFString: Any]
-                                portrait = ImageShapes.shape(width: image.width, height: image.height,
-                                                             orientation: properties?[kCGImagePropertyOrientation] as? Int ?? 1) == .portrait
+                                guard let imageSource = CGImageSourceCreateWithData(data as CFData, nil), Self.decodes(imageSource),
+                                      let properties = CGImageSourceCopyPropertiesAtIndex(imageSource, 0, nil) as? [CFString: Any],
+                                      let width = properties[kCGImagePropertyPixelWidth] as? Int, let height = properties[kCGImagePropertyPixelHeight] as? Int,
+                                      width > 0, height > 0 else { throw ThemeFailure("missing/escaping/undecodable wallpaper asset: \(file.lastPathComponent)") }
+                                portrait = ImageShapes.shape(width: width, height: height,
+                                                             orientation: properties[kCGImagePropertyOrientation] as? Int ?? 1) == .portrait
                                 Self.proved.withLock { if $0.count >= 512 { $0.removeAll() }; $0[digest] = portrait }
                             }
                             inputs.append(observed)
@@ -373,10 +381,7 @@ extension ThemePackStore {
         let error = Mutex<String?>(nil), ready = DispatchSemaphore(value: 0)
         images.async {
             for (path, bytes) in draft.files where path != "PROVENANCE.md" {
-                guard let source = CGImageSourceCreateWithData(bytes as CFData, nil),
-                      CGImageSourceGetStatus(source) == .statusComplete,
-                      let image = CGImageSourceCreateImageAtIndex(source, 0, [kCGImageSourceShouldCacheImmediately: true] as CFDictionary),
-                      image.width > 0, image.height > 0 else {
+                guard let source = CGImageSourceCreateWithData(bytes as CFData, nil), decodes(source) else {
                     error.withLock { $0 = "undecodable portable image: \(path)" }; break
                 }
             }
