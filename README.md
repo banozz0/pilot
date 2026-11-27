@@ -41,7 +41,7 @@
 
 <!-- video 1: Pilot in a minute -->
 
-https://github.com/user-attachments/assets/485f72d4-3fbf-4f48-a780-1e0db347512b
+https://github.com/user-attachments/assets/ebde2cf9-6db2-4b7d-9256-27761546cb73
 
 ## What it does
 
@@ -92,6 +92,10 @@ https://github.com/user-attachments/assets/53c56b39-1f21-4a22-9c8d-24db5a296f0a
 ### 📁 Files
 
 <kbd>Hyper</kbd>+<kbd>F</kbd> opens Pilot Files: folder sizes, <kbd>⌘</kbd>+<kbd>K</kbd> on every file and undo for every action. File search finds a file through a typo. [Pilot Files](https://pilotformac.com/pilotfiles.html) · [File search](https://pilotformac.com/files.html)
+
+<!-- video 6: Files -->
+
+https://github.com/user-attachments/assets/1530c639-d110-4349-b624-02e873b94fe5
 
 **Also in the box:** [Update and Clean](https://pilotformac.com/update.html) · [web apps](https://pilotformac.com/webapps.html) · [extensions](https://pilotformac.com/extensions.html) · a drop-down terminal · [menu bar stats](https://pilotformac.com/menubar.html) · the `pilot` command.
 
