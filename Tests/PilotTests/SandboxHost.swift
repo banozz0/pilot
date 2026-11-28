@@ -277,8 +277,11 @@ struct SandboxHost {
         let closeEditors = path.appendingPathExtension("close-editors").path(percentEncoded: false)
         // A `<socket>.stall` file holding seconds blocks the main thread that long; a `<socket>.spike` file holding megabytes
         // takes and touches that much memory for 8 s, past a tick of the checks. Each goes once read: the forced hang and
-        // spike `pilot status --part problems` then shows (setup-overhaul T40).
+        // spike `pilot status --part problems` then shows (setup-overhaul T40). A `<socket>.draw-stall` file holding seconds
+        // blocks that long inside the run loop's next beforeWaiting callout, at Core Animation's commit order, where layout
+        // and drawing run.
         let stall = path.appendingPathExtension("stall").path(percentEncoded: false), spike = path.appendingPathExtension("spike").path(percentEncoded: false)
+        let drawStall = path.appendingPathExtension("draw-stall").path(percentEncoded: false)
         func take(_ file: String) -> Double? {
             guard let text = try? String(contentsOfFile: file, encoding: .utf8) else { return nil }
             try? FileManager.default.removeItem(atPath: file)
@@ -287,6 +290,14 @@ struct SandboxHost {
         while FileManager.default.fileExists(atPath: hold.path(percentEncoded: false)) && Date.now < deadline {
             if FileManager.default.fileExists(atPath: closeEditors) { CaptureEditor.closeAll(); try? FileManager.default.removeItem(atPath: closeEditors) }
             if let seconds = take(stall) { print("stall: \(seconds) s on the main thread"); fflush(stdout); usleep(useconds_t(seconds * 1_000_000)) }
+            if let seconds = take(drawStall) {
+                let commitOrder = 2_000_000
+                let once = CFRunLoopObserverCreateWithHandler(nil, CFRunLoopActivity.beforeWaiting.rawValue, false, commitOrder) { _, _ in
+                    print("draw-stall: \(seconds) s inside beforeWaiting at order \(commitOrder)"); fflush(stdout)
+                    usleep(useconds_t(seconds * 1_000_000))
+                }
+                CFRunLoopAddObserver(CFRunLoopGetMain(), once, .commonModes)
+            }
             if let megabytes = take(spike) {
                 let bytes = Int(megabytes) << 20, memory = UnsafeMutableRawPointer.allocate(byteCount: bytes, alignment: 16_384)
                 memory.initializeMemory(as: UInt8.self, repeating: 1, count: bytes)

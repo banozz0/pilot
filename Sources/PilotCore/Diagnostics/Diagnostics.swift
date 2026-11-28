@@ -9,8 +9,10 @@ private let checksLog = Logger(subsystem: "dev.banozz.pilot", category: "checks"
 /// answering and a memory footprint that spikes, each kept with its time for `pilot status --part problems` and logged.
 /// No crash SDK (Q315): nothing here reads another thread's stack, stops the app or ends it.
 ///
-/// The main run loop's steps go to an observer that only swaps one atomic stamp; a gap of `stallSeconds` between two
-/// steps while it was not waiting for work is a stall, kept once it ends. A utility-queue timer, never the main thread,
+/// The main run loop's steps go to two observers that only swap one atomic stamp: the first of every callout when it
+/// wakes or takes a source, the last of every callout before it sleeps, so layout, drawing and the Core Animation commit
+/// (beforeWaiting callouts too) count as busy. A gap of `stallSeconds` between two steps while it was not waiting for
+/// work is a stall, kept once it ends. A utility-queue timer, never the main thread,
 /// logs a stall still going (so one that ends in a force quit is in the log) and reads the footprint. Times are uptime,
 /// which stops while the Mac sleeps, so a closed lid is never a stall.
 public final class Diagnostics: Sendable {
@@ -69,8 +71,9 @@ public final class Diagnostics: Sendable {
     private struct State {
         /// The beat a stall still going was logged at, so the timer logs it once.
         var loggedStallAt: UInt64 = 0
-        /// A spike is over the line and not yet back under its re-arm share; it is the newest memory finding.
-        var spikeOpen = false
+        /// The time of the spike over the line and not yet back under its re-arm share; its finding is matched on it, so
+        /// one evicted by newer findings is never mistaken for an older spike.
+        var openSpike: Date?
         var findings: [Finding] = []
         var started = false
     }
@@ -93,17 +96,22 @@ public final class Diagnostics: Sendable {
             return !s.started
         }
         guard first else { return }
-        // Before sources stamps a loop that never sleeps; before and after waiting bracket the idle time.
-        let activities: CFRunLoopActivity = [.beforeSources, .beforeWaiting, .afterWaiting]
-        let observer = CFRunLoopObserverCreateWithHandler(nil, activities.rawValue, true, 0) { [self] _, activity in
-            step(waiting: activity == .beforeWaiting, nanos: Self.uptime())
+        // Observers run in increasing order within a stage. Before sources stamps a loop that never sleeps, after waiting
+        // the end of a sleep, each ahead of every other callout; before waiting starts the sleep only after every other
+        // callout of that stage, the Core Animation commit (order 2000000) and the autorelease pool's drain among them.
+        let busy = CFRunLoopObserverCreateWithHandler(nil, CFRunLoopActivity([.beforeSources, .afterWaiting]).rawValue, true, .min) { [self] _, _ in
+            step(waiting: false, nanos: Self.uptime())
         }
-        CFRunLoopAddObserver(CFRunLoopGetMain(), observer, .commonModes)
+        let waits = CFRunLoopObserverCreateWithHandler(nil, CFRunLoopActivity.beforeWaiting.rawValue, true, .max) { [self] _, _ in
+            step(waiting: true, nanos: Self.uptime())
+        }
+        CFRunLoopAddObserver(CFRunLoopGetMain(), busy, .commonModes)
+        CFRunLoopAddObserver(CFRunLoopGetMain(), waits, .commonModes)
         let timer = DispatchSource.makeTimerSource(queue: .global(qos: .utility))
         timer.schedule(deadline: .now() + .seconds(Self.tickSeconds), repeating: .seconds(Self.tickSeconds), leeway: .seconds(1))
         timer.setEventHandler { [self] in tick(nanos: Self.uptime()) }
         timer.resume()
-        // Both live as long as the process: the observer in the main run loop, the timer by this retain.
+        // All three live as long as the process: the observers in the main run loop, the timer by this retain.
         _ = Unmanaged.passRetained(timer)
     }
 
@@ -125,15 +133,15 @@ public final class Diagnostics: Sendable {
         }
         guard let mb = footprint() else { return }
         let spike: Finding? = state.withLock { s in
-            if s.spikeOpen {
-                if mb < Self.memoryLimitMB * Self.rearmShare { s.spikeOpen = false }
-                else if let at = s.findings.lastIndex(where: { $0.kind == .memory }) { s.findings[at].amount = max(s.findings[at].amount, mb) }
+            if let open = s.openSpike {
+                if mb < Self.memoryLimitMB * Self.rearmShare { s.openSpike = nil }
+                else if let at = s.findings.lastIndex(where: { $0.kind == .memory && $0.time == open }) { s.findings[at].amount = max(s.findings[at].amount, mb) }
                 return nil
             }
             guard mb >= Self.memoryLimitMB else { return nil }
             let finding = Finding(kind: .memory, time: date(), amount: mb)
             Self.keep(finding, in: &s)
-            s.spikeOpen = true
+            s.openSpike = finding.time
             return finding
         }
         if let spike { checksLog.error("memory: footprint reached \(spike.amount, format: .fixed(precision: 0)) MB") }
