@@ -38,6 +38,7 @@ struct ControlStatusTests {
             app.onboardingState = { (nil, nil) }
             app.sample = { nil }
             app.refreshOccupied = { _ in }
+            app.checks = { [] }
             verbs.registerCore()
             verbs.registerStatus(app)
         }
@@ -84,6 +85,19 @@ struct ControlStatusTests {
         #expect(problems.map { Self.fields($0)["kind"] } == [.string("accessibility"), .string("tiler")])
         // Accessibility's Grant is Needs you on Pilot's front (simplify-pages T8).
         #expect(fixes == [.string("pilot open general"), .string("pilot run engine.restartTiler")])
+    }
+
+    @Test("problems end with the checks' stalls and spikes, each with its time and amount")
+    func checks() async throws {
+        let rig = try Rig()
+        let at = Date(timeIntervalSince1970: 1_800_000_000)
+        rig.app.checks = { [.init(kind: .stall, time: at, amount: 3.04), .init(kind: .memory, time: at.addingTimeInterval(60), amount: 1210.4)] }
+        guard case .array(let problems)? = await rig.object("status", "--part", "problems")["problems"] else { Issue.record("no problems"); return }
+        let found = problems.suffix(2).map(Self.fields)
+        #expect(found.map { $0["kind"] } == [.string("stall"), .string("memory")])
+        #expect(found.map { $0["time"] } == [.string("2027-01-15T08:00:00Z"), .string("2027-01-15T08:01:00Z")])
+        #expect(found[0]["seconds"] == .number(3) && found[1]["megabytes"] == .number(1210.4))
+        #expect(found[0]["title"] == .string("Pilot stopped answering for 3.0 s"))
     }
 
     @Test("--part reads only the parts named, the Mac's slow ones included")

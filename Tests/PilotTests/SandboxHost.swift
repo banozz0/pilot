@@ -275,8 +275,25 @@ struct SandboxHost {
         // A `<socket>.close-editors` file closes every capture editor, as Cancel would, and goes: `pilot clip markup` can
         // then be shown opening a copy's editor again (Q240).
         let closeEditors = path.appendingPathExtension("close-editors").path(percentEncoded: false)
+        // A `<socket>.stall` file holding seconds blocks the main thread that long; a `<socket>.spike` file holding megabytes
+        // takes and touches that much memory for 8 s, past a tick of the checks. Each goes once read: the forced hang and
+        // spike `pilot status --part problems` then shows (setup-overhaul T40).
+        let stall = path.appendingPathExtension("stall").path(percentEncoded: false), spike = path.appendingPathExtension("spike").path(percentEncoded: false)
+        func take(_ file: String) -> Double? {
+            guard let text = try? String(contentsOfFile: file, encoding: .utf8) else { return nil }
+            try? FileManager.default.removeItem(atPath: file)
+            return Double(text.trimmingCharacters(in: .whitespacesAndNewlines))
+        }
         while FileManager.default.fileExists(atPath: hold.path(percentEncoded: false)) && Date.now < deadline {
             if FileManager.default.fileExists(atPath: closeEditors) { CaptureEditor.closeAll(); try? FileManager.default.removeItem(atPath: closeEditors) }
+            if let seconds = take(stall) { print("stall: \(seconds) s on the main thread"); fflush(stdout); usleep(useconds_t(seconds * 1_000_000)) }
+            if let megabytes = take(spike) {
+                let bytes = Int(megabytes) << 20, memory = UnsafeMutableRawPointer.allocate(byteCount: bytes, alignment: 16_384)
+                memory.initializeMemory(as: UInt8.self, repeating: 1, count: bytes)
+                print("spike: \(Int(megabytes)) MB held 8 s"); fflush(stdout)
+                try await Task.sleep(for: .seconds(8))
+                memory.deallocate()
+            }
             if listsBar, ExtensionBar.shared.items.isEmpty { await ExtensionBar.shared.round() }
             try await Task.sleep(for: .milliseconds(200))
         }
