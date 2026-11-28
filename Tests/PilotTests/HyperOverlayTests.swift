@@ -36,4 +36,29 @@ struct HyperOverlayTests {
         #expect(overlay.panel !== first)
         #expect(overlay.panel?.frame.size == fresh(.hyper))
     }
+
+    @Test("Switched off, holding Hyper past its delay shows no overlay; on, it shows once: off still showed it (Sven, 2026-10-30)")
+    func offShowsNothing() async throws {
+        testApp()
+        let (look, _) = LookPageTests().look()
+        /// How many times holding Hyper put the overlay up, waiting up to `wait` for it: awaited, never a nested run loop,
+        /// which would leave the draw the timer queues on the main queue undone.
+        func shows(enabled: Bool, wait: Double) async throws -> Int {
+            let overlay = HyperOverlay(look: look)
+            var ordered = 0
+            overlay.order = { _ in ordered += 1 }
+            overlay.rows = { _ in SharedLook.InstrumentPanelsTests.overlayRows }
+            overlay.delay = { 0.05 }
+            overlay.enabled = { enabled }
+            overlay.layer(down: true)
+            let deadline = Date.now + wait
+            while ordered == 0, Date.now < deadline { try await Task.sleep(for: .milliseconds(10)) }
+            overlay.layer(down: false)
+            #expect(overlay.panel?.isVisible != true)
+            return ordered
+        }
+        // Off: six times its delay with nothing shown. On, the same hold shows it once.
+        #expect(try await shows(enabled: false, wait: 0.3) == 0)
+        #expect(try await shows(enabled: true, wait: 2) == 1)
+    }
 }

@@ -75,6 +75,34 @@ private func drawn(_ w: NSWindow, scale: Int) -> NSBitmapImageRep? {
     return snapshot(host, scale: scale)
 }
 
+/// The size `view` draws at, hosted at its own size in a borderless window that is never shown: a picture test's
+/// measure, so it checks a number rather than leaving a picture for eyes (setup-overhaul T37). Read by a GeometryReader
+/// overlaid on it (behind it, a view built from a ForEach never reports and measures 0×0), the run loop pumped in short
+/// steps until it lands. Nothing drawn, or the window put on screen, fails here: a 0×0 would pass any "narrower than".
+@MainActor
+func drawnSize(of view: some View) throws -> CGSize {
+    let box = DrawnSize.Box()
+    let w = hosted(view.overlay(GeometryReader { Color.clear.preference(key: DrawnSize.self, value: $0.size) })
+        .onPreferenceChange(DrawnSize.self) { size in MainActor.assumeIsolated { box.size = size } })
+    defer { w.close() }
+    w.contentView?.layoutSubtreeIfNeeded()
+    let deadline = Date.now + 2
+    while box.size == nil, Date.now < deadline { PanelTestSupport.pump(0.02) }
+    #expect(!w.isVisible, "the measuring window went on screen")
+    let size = try #require(box.size, "no size reported")
+    try #require(size.width > 0 && size.height > 0, "drawn at \(size)")
+    return size
+}
+
+private struct DrawnSize: PreferenceKey {
+    static let defaultValue: CGSize? = nil
+    static func reduce(value: inout CGSize?, nextValue: () -> CGSize?) { value = nextValue() ?? value }
+    @MainActor final class Box { var size: CGSize? }
+}
+
+/// Whether `a` and `b` share a column on screen: some x lies in both. A panel opened beside another sits in its column.
+func sharesColumn(_ a: CGRect, _ b: CGRect) -> Bool { a.minX < b.maxX && b.minX < a.maxX }
+
 /// `view` drawn as `snapshot(rendering:)` draws it, as its device RGB bytes: two draws of one picture are equal.
 @MainActor
 func pixels(rendering view: some View) async throws -> Data {

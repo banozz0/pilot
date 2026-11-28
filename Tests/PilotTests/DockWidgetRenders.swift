@@ -77,6 +77,20 @@ struct DockWidgetRenders {
         ]
     }
 
+    /// Measured, not drawn for eyes, so it runs in every suite run (setup-overhaul T37).
+    @Test("Now playing set to Just ♫ is the artwork alone in the dock, as on its bar: its title still showed (Sven, 2026-11-13)")
+    func justNoteIsArtworkAlone() throws {
+        let track = #""blocks":[{"type":"list","items":[{"id":"t","title":"Can't Do Without You","subtitle":"Caribou","image":"\#(Self.cover())"}]}]"#
+        func width(showing text: String) throws -> CGFloat {
+            let face = try #require(DockFaces.nowPlaying(Self.answer(#"{"type":"bar","text":"\#(text)",\#(track)}"#)))
+            return try drawnSize(of: DockWidgetBodyView(widget: .nowPlaying, shown: .faces([face]))).width
+        }
+        let alone = try width(showing: "♫"), titled = try width(showing: "♫ Caribou – Can't Do Without You")
+        // The artwork alone is about as wide as it is tall; the artist over the title draws far wider.
+        #expect(alone < 60, "Just ♫ drew \(alone) pt wide")
+        #expect(titled > alone + 60, "the artist and title drew \(titled) pt, Just ♫ \(alone) pt")
+    }
+
     @Test("All eleven widgets on the ultrawide and the laptop", .enabled(if: env["PILOT_RENDER_DIR"] != nil && env["CFFIXED_USER_HOME"] != nil))
     func render() throws {
         let dir = try ClockRenders.dir("dock-widgets")
