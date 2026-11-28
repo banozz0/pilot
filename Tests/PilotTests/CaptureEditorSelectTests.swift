@@ -49,10 +49,22 @@ struct CaptureEditorSelectTests {
         func window(_ p: CGPoint) -> CGPoint { CGPoint(x: canvas.x + p.x, y: size.height - (canvas.y + p.y)) }
 
         func send(_ type: NSEvent.EventType, _ p: CGPoint) {
+            keysUp()
             let event = NSEvent.mouseEvent(with: type, location: window(p), modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
                                            windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: 1)!
             window.sendEvent(event)
             settle(0.02)
+        }
+
+        /// Waits, up to 10 s, until the Mac's own keyboard holds no Shift or Option: the canvas reads the live keys
+        /// (`NSEvent.modifierFlags`), not the event's, and the Hyper key holds Shift, so a click sent while it was down
+        /// was a Shift-click that took the picked text out of the pick, and its Delete removed nothing (one run in 30).
+        func keysUp() {
+            let read: NSEvent.ModifierFlags = [.shift, .option]
+            let deadline = Date.now + 10
+            while !NSEvent.modifierFlags.isDisjoint(with: read), Date.now < deadline { settle(0.05) }
+            let held = NSEvent.modifierFlags.intersection(read)
+            if !held.isEmpty { Issue.record("Shift or Option held on the keyboard for 10 s (flags \(held.rawValue)): the clicks would carry it") }
         }
 
         /// A press at `a`, a drag through to `b`, a release there; a click when they are the same.
