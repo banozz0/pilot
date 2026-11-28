@@ -493,7 +493,8 @@ def join(a, feed):
 
 
 def leave(a, feed):
-    url = own_feed(a)
+    # The way back to the public feed: the key goes first, whatever the installed copy's Info.plist says.
+    url = installed(a.app).get("SUFeedURL", PUBLIC_FEED)
     if a.real:
         subprocess.run(["defaults", "delete", DOMAIN, "SUFeedURL"], capture_output=True)
         print(f"Pilot reads its own feed again: {url}")
@@ -578,6 +579,12 @@ def rollback(a, feed):
             check_signature(archive, target.get("signature"), key)
             fresh = unpack(archive, Path(tmp))
             check_bundle(fresh, a, target, key)
+            # The bundle it replaces goes to the Trash, never straight away; where is settled before Pilot is asked to quit.
+            trash = Path.home() / ".Trash" if a.real else a.app.parent / "Trash"
+            trash.mkdir(exist_ok=True)
+            moved = trash / f"Pilot-{current}.app"
+            if moved.exists():
+                moved = moved.with_name(f"Pilot-{current}-{int(time.time())}.app")
             pids = running(a)
             if pids and not may_signal:
                 raise Refused(f"{a.app} runs with Pilot's bundle id; a proof never quits a Pilot")
@@ -589,12 +596,6 @@ def rollback(a, feed):
                     pass
             if not gone(pids, 10):
                 raise Refused(f"{a.app} did not quit within 10 s of SIGTERM; nothing was replaced")
-            # The bundle it replaces goes to the Trash, never straight away.
-            trash = Path.home() / ".Trash" if a.real else a.app.parent / "Trash"
-            trash.mkdir(exist_ok=True)
-            moved = trash / f"Pilot-{current}.app"
-            if moved.exists():
-                moved = moved.with_name(f"Pilot-{current}-{int(time.time())}.app")
             a.app.rename(moved)
             try:
                 fresh.rename(a.app)
