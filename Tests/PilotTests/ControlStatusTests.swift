@@ -39,6 +39,7 @@ struct ControlStatusTests {
             app.sample = { nil }
             app.refreshOccupied = { _ in }
             app.checks = { [] }
+            app.startChecks = {}
             verbs.registerCore()
             verbs.registerStatus(app)
         }

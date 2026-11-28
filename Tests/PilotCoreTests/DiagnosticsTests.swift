@@ -8,15 +8,17 @@ import Testing
 struct DiagnosticsTests {
     let start = Date(timeIntervalSince1970: 1_800_000_000)
 
+    func ns(_ seconds: Double) -> UInt64 { UInt64(seconds * 1e9) }
+
     @Test("A busy gap past the line is one stall, timed from its start; a wait for work is none")
     func stall() {
         let checks = Diagnostics(footprint: { nil })
-        checks.step(waiting: false, uptime: 100, date: start)
-        checks.step(waiting: true, uptime: 100.1, date: start.addingTimeInterval(0.1))
-        checks.step(waiting: false, uptime: 160, date: start.addingTimeInterval(60))   // a minute asleep waiting: no stall
-        checks.step(waiting: false, uptime: 161, date: start.addingTimeInterval(61))   // 1 s busy: under the line
-        checks.tick(uptime: 164, date: start.addingTimeInterval(64))                   // still going: logged, not kept
-        checks.step(waiting: false, uptime: 164.2, date: start.addingTimeInterval(64.2))
+        checks.step(waiting: false, nanos: ns(100), date: start)
+        checks.step(waiting: true, nanos: ns(100.1), date: start.addingTimeInterval(0.1))
+        checks.step(waiting: false, nanos: ns(160), date: start.addingTimeInterval(60))   // a minute asleep waiting: no stall
+        checks.step(waiting: false, nanos: ns(161), date: start.addingTimeInterval(61))   // 1 s busy: under the line
+        checks.tick(nanos: ns(164), date: start.addingTimeInterval(64))                   // still going: logged, not kept
+        checks.step(waiting: false, nanos: ns(164.2), date: start.addingTimeInterval(64.2))
         #expect(checks.findings.count == 1)
         let stall = checks.findings.first
         #expect(stall?.kind == .stall)
@@ -28,7 +30,7 @@ struct DiagnosticsTests {
     func spike() {
         let readings = ReadingQueue([300, 1100, 1300, 900, 700, 1200])
         let checks = Diagnostics(footprint: { readings.next() })
-        for n in 0..<6 { checks.tick(uptime: Double(n * 5), date: start.addingTimeInterval(Double(n * 5))) }
+        for n in 0..<6 { checks.tick(nanos: ns(Double(n * 5)), date: start.addingTimeInterval(Double(n * 5))) }
         #expect(checks.findings.map(\.kind) == [.memory, .memory])
         #expect(checks.findings.map(\.amount) == [1300, 1200])
         #expect(checks.findings.map(\.time) == [start.addingTimeInterval(5), start.addingTimeInterval(25)])
