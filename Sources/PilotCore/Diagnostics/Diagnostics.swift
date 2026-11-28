@@ -38,7 +38,7 @@ public final class Diagnostics: Sendable {
 
         public var title: String {
             switch kind {
-            case .stall: "Pilot stopped answering for \(amount.formatted(.number.precision(.fractionLength(1)))) s"
+            case .stall: "Pilot stopped answering for \(String(format: "%.1f", amount)) s"
             case .memory: "Pilot's memory reached \(SystemStats.memorySize(UInt64(amount * 1_048_576)))"
             }
         }
@@ -53,7 +53,7 @@ public final class Diagnostics: Sendable {
 
     /// Two seconds: well past Apple's 250 ms hang line, and the length a person notices keys gone dead.
     public static let stallSeconds = 2.0
-    /// About five times Pilot's footprint after a day's use (212 MB, 2026-11-28) and over twenty times its idle budget.
+    /// About five times one reading of Pilot's footprint in use (212 MB, 2026-11-28) and over twenty times its idle budget.
     public static let memoryLimitMB = 1024.0
     /// A spike ends once the footprint is back under this share of the line, so one spike is one finding.
     static let rearmShare = 0.75
