@@ -10,7 +10,7 @@ starter: "Check Pilot's status and tell me the cause and the fix."
 
 Read first:
 - `pilot status --part hyper,switch,permissions,engine,problems,presses`: the Hyper key, Pilot's switch, permissions,
-  the key engine, open problems, and the last presses.
+  the key engine, problems, and the last presses.
 - `pilot conflicts` when a plain combo does nothing; `pilot key <combo>` for one key.
 - `pilot list helpers` when a feature needs a tool (Homebrew, mas, npm).
 - `pilot log --last 10m`: Pilot's own errors and warnings, newest first; `--last 1h` reaches further back.
