@@ -41,25 +41,27 @@ struct HyperOverlayTests {
     func offShowsNothing() async throws {
         testApp()
         let (look, _) = LookPageTests().look()
-        /// How many times holding Hyper put the overlay up, waiting up to `wait` for it: awaited, never a nested run loop,
-        /// which would leave the draw the timer queues on the main queue undone.
-        func shows(enabled: Bool, wait: Double) async throws -> Int {
-            let overlay = HyperOverlay(look: look)
-            var ordered = 0
-            overlay.order = { _ in ordered += 1 }
+        final class Shown { var times = 0 }
+        /// An overlay with Hyper held down, counting the times it is put up.
+        func held(enabled: Bool) -> (overlay: HyperOverlay, shown: Shown) {
+            let overlay = HyperOverlay(look: look), shown = Shown()
+            overlay.order = { _ in shown.times += 1 }
             overlay.rows = { _ in SharedLook.InstrumentPanelsTests.overlayRows }
             overlay.delay = { 0.05 }
             overlay.enabled = { enabled }
             overlay.layer(down: true)
-            _ = try await SystemSamplerTests.wait(seconds: wait) { ordered > 0 }
-            overlay.layer(down: false)
-            #expect(overlay.panel?.isVisible != true)
-            return ordered
+            return (overlay, shown)
         }
-        // Off: three times its delay with nothing shown. On, the same hold shows it once; a long deadline, as the full
-        // suite held the main actor past 10 s.
-        let off = try await shows(enabled: false, wait: 0.15), on = try await shows(enabled: true, wait: 120)
-        #expect(off == 0, "switched off, it showed \(off) times")
-        #expect(on == 1, "switched on, it showed \(on) times")
+        // The same hold, off first: a show it wrongly makes is timed and queued ahead of the on one's, so once the on one
+        // shows, the off one's count is final, however long a busy suite holds the main actor (past 10 s in one run).
+        // Awaited, never a nested run loop, which leaves the draws the timers queue undone.
+        let off = held(enabled: false), on = held(enabled: true)
+        _ = try await SystemSamplerTests.wait(seconds: 120) { on.shown.times > 0 }
+        for hold in [off, on] {
+            hold.overlay.layer(down: false)
+            #expect(hold.overlay.panel?.isVisible != true)
+        }
+        #expect(off.shown.times == 0, "switched off, it showed \(off.shown.times) times")
+        #expect(on.shown.times == 1, "switched on, it showed \(on.shown.times) times")
     }
 }
