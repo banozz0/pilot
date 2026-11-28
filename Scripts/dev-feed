@@ -1,0 +1,407 @@
+#!/usr/bin/env python3
+"""The dev feed: test builds reach the maintainer's own Pilot through Sparkle, one update per finished batch.
+
+    Scripts/dev-feed publish --release-key [--notes <file>]   build HEAD, sign it, add it to the feed
+    Scripts/dev-feed publish --key-file <scratch key> ...      the same, signed with a throwaway key (a proof, never installed)
+    Scripts/dev-feed join                                      keep the installed Pilot as the rollback base; point it at the feed
+    Scripts/dev-feed rollback                                  put the build before the installed one back, and withdraw it
+    Scripts/dev-feed leave                                     point the installed Pilot back at the public feed
+    Scripts/dev-feed status                                    the installed build, the feed, the server
+    Scripts/dev-feed serve --install | --uninstall             the loopback server (a socket-activated launch agent)
+  Every command takes --feed <dir> (default ~/pilot-builds/feed), --port <n> (default 47613) and --app <Pilot.app>
+  (default /Applications/Pilot.app). Any other --app is a sandbox: no defaults are written, nothing quits or opens.
+
+Where it lives: a folder on this Mac served on 127.0.0.1 alone, so no build leaves the Mac and no Pilot user but this
+one can reach it. Sparkle 2 fetches the feed and its archives over http or https only (SPUDownloader), so a private
+GitHub repo, which needs a token, cannot be a feed; Pilot's NSAllowsLocalNetworking lets it read loopback http. The
+server is a launch agent launchd starts per connection (inetd mode), so nothing runs between checks.
+How a copy joins: Sparkle reads SUFeedURL from the app's user defaults before Info.plist (SPUUpdater retrieveFeedURL),
+so `join` writes it to dev.banozz.pilot's defaults and the installed release follows the feed with no reinstall;
+`leave` deletes it. Every build here carries the release EdDSA public key, the one the installed copy trusts, so
+each archive's signature is checked against that key before the feed lists it.
+One update per batch: a publish refuses a commit already published, a dirty tree, and a build number Sparkle would not
+offer (not above the feed's newest and the installed build). Its item lists what is in the batch: --notes (one line
+each), else the commit subjects since the last published commit. The public appcast's newest entry is read before and
+after, and a publish that sees it change says so.
+Rollback: Sparkle only offers higher builds, so `rollback` swaps the bundle itself: the installed build's item is
+withdrawn from the feed (Sparkle would offer it again), Pilot quits on SIGTERM (it undoes its remaps), the previous
+build (an older item, else the base `join` kept) is unpacked in its place and opened.
+Exit 0 done, 1 refused or failed, 2 a bad argument.
+"""
+import argparse
+import email.utils
+import html
+import json
+import os
+import plistlib
+import re
+import shutil
+import signal
+import subprocess
+import sys
+import tempfile
+import time
+import urllib.request
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent
+SPARKLE_BIN = ROOT / ".build/artifacts/sparkle/Sparkle/bin"
+PUBLIC_FEED = "https://github.com/banozz0/pilot/releases/latest/download/appcast.xml"
+DOMAIN = "dev.banozz.pilot"
+LABEL = "dev.banozz.pilot.dev-feed"
+REAL_APP = Path("/Applications/Pilot.app")
+KEEP = 5  # live items whose archives stay; older ones are pruned
+SPARKLE_NS = "http://www.andymatuschak.org/xml-namespaces/sparkle"
+
+# Ed25519 through CryptoKit, which ships with the Swift toolchain the build already needs: `pub` turns a 32-byte seed
+# (Sparkle's key-file format) into its public key, `verify` checks an archive's signature against a public key.
+# Keys and seeds come on stdin, never on the command line.
+ED25519 = r"""
+import CryptoKit
+import Foundation
+let args = CommandLine.arguments
+let input = readLine(strippingNewline: true) ?? ""
+guard let key = Data(base64Encoded: input) else { print("bad key"); exit(1) }
+if args[1] == "pub" {
+    print(try Curve25519.Signing.PrivateKey(rawRepresentation: key).publicKey.rawRepresentation.base64EncodedString())
+} else {
+    let pub = try Curve25519.Signing.PublicKey(rawRepresentation: key)
+    let data = try Data(contentsOf: URL(fileURLWithPath: args[3]), options: .mappedIfSafe)
+    print(pub.isValidSignature(Data(base64Encoded: args[2]) ?? Data(), for: data) ? "valid" : "invalid")
+}
+"""
+
+# The loopback server, run by launchd once per connection with the socket on stdin and stdout (inetd mode).
+HANDLER = r"""
+import http.server, os, socket, sys
+class Quiet(http.server.SimpleHTTPRequestHandler):
+    def log_message(self, *args): pass
+class Server:
+    server_name, server_port = "127.0.0.1", 0
+conn = socket.socket(fileno=os.dup(0))
+Quiet(conn, conn.getpeername(), Server(), directory=sys.argv[1])
+conn.close()
+"""
+
+
+class Refused(Exception):
+    pass
+
+
+def run(cmd, **kw):
+    return subprocess.run(cmd, check=True, text=True, capture_output=True, **kw).stdout.strip()
+
+
+def git(*args):
+    return run(["git", "-C", str(ROOT), *args])
+
+
+def info(app):
+    with open(app / "Contents/Info.plist", "rb") as f:
+        return plistlib.load(f)
+
+
+def build_number(app):
+    try:
+        return int(info(app)["CFBundleVersion"])
+    except (OSError, KeyError, ValueError):
+        return 0
+
+
+def ed25519(mode, key, *args):
+    with tempfile.NamedTemporaryFile("w", suffix=".swift", delete=False) as f:
+        f.write(ED25519)
+    try:
+        return subprocess.run(["/usr/bin/swift", f.name, mode, *args], input=key + "\n", text=True,
+                              capture_output=True, check=True).stdout.strip()
+    finally:
+        os.unlink(f.name)
+
+
+def release_key():
+    return (ROOT / "Packaging/sparkle-public-key.txt").read_text().strip()
+
+
+def feed_url(port):
+    return f"http://127.0.0.1:{port}/appcast.xml"
+
+
+def load(feed):
+    try:
+        return json.loads((feed / "feed.json").read_text())
+    except FileNotFoundError:
+        return {"base": None, "items": []}
+
+
+def live(state):
+    return [i for i in state["items"] if not i.get("withdrawn")]
+
+
+def appcast(state, port):
+    rows = []
+    for item in sorted(live(state), key=lambda i: -i["build"]):
+        notes = "".join(f"<li>{html.escape(n)}</li>" for n in item["notes"])
+        rows.append(f"""    <item>
+      <title>{html.escape(item["version"])}</title>
+      <pubDate>{item["date"]}</pubDate>
+      <sparkle:version>{item["build"]}</sparkle:version>
+      <sparkle:shortVersionString>{html.escape(item["version"])}</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>{item["minimumSystemVersion"]}</sparkle:minimumSystemVersion>
+      <description><![CDATA[<h3>In this build ({item["commit"][:7]})</h3><ul>{notes}</ul>]]></description>
+      <enclosure url="http://127.0.0.1:{port}/{item["zip"]}" length="{item["length"]}" type="application/octet-stream" sparkle:edSignature="{item["signature"]}"/>
+    </item>""")
+    return (f'<?xml version="1.0" encoding="utf-8"?>\n<rss version="2.0" xmlns:sparkle="{SPARKLE_NS}">\n'
+            f"  <channel>\n    <title>Pilot dev feed</title>\n" + "\n".join(rows) + "\n  </channel>\n</rss>\n")
+
+
+def save(feed, state, port):
+    feed.mkdir(parents=True, exist_ok=True)
+    for name, text in (("feed.json", json.dumps(state, indent=2) + "\n"), ("appcast.xml", appcast(state, port))):
+        tmp = feed / f".{name}.tmp"
+        tmp.write_text(text)
+        tmp.replace(feed / name)
+
+
+def public_newest():
+    """The public appcast's newest sparkle:version, or None when it cannot be read."""
+    try:
+        with urllib.request.urlopen(PUBLIC_FEED, timeout=20) as r:
+            builds = [int(b) for b in re.findall(r"<sparkle:version>(\d+)</sparkle:version>", r.read().decode())]
+        return max(builds) if builds else None
+    except Exception:
+        return None
+
+
+def notes_since(base, given):
+    if given:
+        lines = [l.strip() for l in Path(given).read_text().splitlines() if l.strip()]
+    else:
+        rng = f"{base}..HEAD" if base and subprocess.run(["git", "-C", str(ROOT), "merge-base", "--is-ancestor", base,
+                                                           "HEAD"]).returncode == 0 else "-20"
+        lines = git("log", "--no-merges", "--format=%s", *rng.split()).splitlines()
+    if not lines:
+        raise Refused("the batch lists nothing; pass --notes with what is in it")
+    return lines
+
+
+def publish(a, feed):
+    state = load(feed)
+    head = git("rev-parse", "HEAD")
+    if git("status", "--porcelain"):
+        raise Refused("the tree has uncommitted changes; a batch is a commit")
+    if head in {i["commit"] for i in state["items"]}:
+        raise Refused(f"{head[:7]} is already published; a new batch needs new commits")
+    base = int(next(l for l in (ROOT / "Packaging/build-number-base.txt").read_text().splitlines() if not l.startswith("#")))
+    build = int(git("rev-list", "--count", "HEAD")) + base
+    floor = max([i["build"] for i in live(state)] + [build_number(a.app)])
+    if build <= floor:
+        raise Refused(f"build {build} is not above {floor} (the feed's newest or the installed build); Sparkle would not offer it")
+    trusted = release_key()
+    if a.key_file:
+        seed = Path(a.key_file).read_text().strip()
+        check_key = ed25519("pub", seed)
+    else:
+        check_key = trusted
+        installed = info(a.app).get("SUPublicEDKey") if a.app.exists() else trusted
+        if installed != trusted:
+            raise Refused(f"{a.app} trusts another EdDSA key than Packaging/sparkle-public-key.txt")
+    prior = live(state)
+    since = max(prior, key=lambda i: i["build"])["commit"] if prior else (info(a.app).get("PilotCommit") if a.app.exists() else None)
+    notes = notes_since(since, a.notes)
+    previous = public_newest()
+    tag = git("describe", "--tags", "--abbrev=0", "--match", "v*").lstrip("v")
+    version = f"{tag}-dev.{build}"
+    if a.built:
+        app = a.built
+    else:
+        env = {k: v for k, v in os.environ.items() if k not in ("SPARKLE_FEED", "PILOT_VERSION")}
+        flags = env.get("SWIFTFLAGS", "")
+        env.update(PILOT_DEV="1", CONFIG="release", SPARKLE_ED_KEY=trusted, PILOT_VERSION=version,
+                   SWIFTFLAGS=flags if re.search(r"(^|\s)-j", flags) else f"{flags} -j 4".strip(),
+                   CARGO_BUILD_JOBS=env.get("CARGO_BUILD_JOBS", "4"))
+        subprocess.run(["nice", "-n", "10", str(ROOT / "Scripts/build-app.sh")], env=env, check=True)
+        app = ROOT / "build/Pilot.app"
+    plist = info(app)
+    for key, want in (("PilotCommit", head), ("CFBundleVersion", str(build)), ("SUPublicEDKey", trusted)):
+        if plist.get(key) != want:
+            raise Refused(f"{app} has {key} {plist.get(key)}, not {want}")
+    run(["codesign", "--verify", "--strict", "--deep", str(app)])
+    feed.mkdir(parents=True, exist_ok=True)
+    zipname = f"Pilot-{build}.zip"
+    with tempfile.TemporaryDirectory() as tmp:
+        staged = Path(tmp) / zipname
+        run(["ditto", "-c", "-k", "--sequesterRsrc", "--keepParent", str(app), str(staged)])
+        # Unpacked as Sparkle unpacks a zip (ditto -x -k): the copy must still verify, every helper's signature included.
+        run(["ditto", "-x", "-k", str(staged), f"{tmp}/x"])
+        run(["codesign", "--verify", "--strict", "--deep", f"{tmp}/x/Pilot.app"])
+        sign = [str(SPARKLE_BIN / "sign_update"), "-p", str(staged)]
+        if a.key_file:
+            sign[1:1] = ["--ed-key-file", a.key_file]
+        signature = run(sign)
+        if ed25519("verify", check_key, signature, str(staged)) != "valid":
+            raise Refused("the archive's EdDSA signature does not verify against the key the installed Pilot trusts")
+        length = staged.stat().st_size
+        shutil.move(str(staged), str(feed / zipname))
+    state["items"].append({"build": build, "version": version, "commit": head, "date": email.utils.formatdate(usegmt=True),
+                           "zip": zipname, "length": length, "signature": signature,
+                           "minimumSystemVersion": plist.get("LSMinimumSystemVersion", "27.0"),
+                           "notes": notes})
+    kept = sorted(live(state), key=lambda i: -i["build"])[:KEEP]
+    for item in state["items"]:
+        if item not in kept and (feed / item["zip"]).exists():
+            (feed / item["zip"]).unlink()
+    state["items"] = [i for i in state["items"] if i in kept or i.get("withdrawn")]
+    save(feed, state, a.port)
+    after = public_newest()
+    print(f"published {version} (build {build}, {head[:7]}) with {len(state['items'][-1]['notes'])} lines in it: {feed / zipname}")
+    print(f"feed {feed_url(a.port)} lists {len(live(state))} builds; the newest is offered at the next check")
+    if previous is None or after is None:
+        print("public feed: could not be read; its newest entry is unchecked")
+    elif previous != after:
+        print(f"public feed: its newest entry changed from {previous} to {after} during this publish (not by this script)")
+    else:
+        print(f"public feed: newest entry {after}, unchanged")
+
+
+def sandbox(app):
+    return app.resolve() != REAL_APP
+
+
+def join(a, feed):
+    state = load(feed)
+    build = build_number(a.app)
+    if not build:
+        raise Refused(f"no Pilot at {a.app}")
+    if not state["base"] or state["base"]["build"] != build and build not in {i["build"] for i in state["items"]}:
+        zipname = f"Pilot-{build}-base.zip"
+        feed.mkdir(parents=True, exist_ok=True)
+        run(["ditto", "-c", "-k", "--sequesterRsrc", "--keepParent", str(a.app), str(feed / zipname)])
+        if state["base"] and state["base"]["zip"] != zipname:
+            (feed / state["base"]["zip"]).unlink(missing_ok=True)
+        state["base"] = {"build": build, "version": info(a.app).get("CFBundleShortVersionString"), "zip": zipname}
+        save(feed, state, a.port)
+        print(f"kept build {build} as the rollback base: {feed / zipname}")
+    if sandbox(a.app):
+        print(f"sandbox {a.app}: defaults not written")
+    else:
+        run(["defaults", "write", DOMAIN, "SUFeedURL", feed_url(a.port)])
+        print(f"Pilot now reads {feed_url(a.port)}; Check for updates on General looks now")
+
+
+def leave(a, feed):
+    subprocess.run(["defaults", "delete", DOMAIN, "SUFeedURL"], capture_output=True)
+    print(f"Pilot reads its own feed again: {info(REAL_APP).get('SUFeedURL') if REAL_APP.exists() else PUBLIC_FEED}")
+
+
+def running(app):
+    """Pids of processes started from this bundle's main program."""
+    out = subprocess.run(["pgrep", "-f", str(app / "Contents/MacOS/")], capture_output=True, text=True).stdout
+    return [int(p) for p in out.split()]
+
+
+def rollback(a, feed):
+    state = load(feed)
+    current = build_number(a.app)
+    older = [i for i in live(state) if i["build"] < current]
+    target = max(older, key=lambda i: i["build"]) if older else state["base"] if state["base"] and state["base"]["build"] < current else None
+    if not target:
+        raise Refused(f"nothing older than build {current} is kept in {feed}")
+    archive = feed / target["zip"]
+    with tempfile.TemporaryDirectory(dir=a.app.parent) as tmp:
+        run(["ditto", "-x", "-k", str(archive), tmp])
+        fresh = Path(tmp) / "Pilot.app"
+        run(["codesign", "--verify", "--strict", "--deep", str(fresh)])
+        pids = running(a.app)
+        if pids and sandbox(a.app):
+            raise Refused(f"{a.app} is running; a sandbox rollback never quits an app")
+        for pid in pids:
+            os.kill(pid, signal.SIGTERM)
+        for _ in range(100):
+            if not running(a.app):
+                break
+            time.sleep(0.1)
+        else:
+            raise Refused("Pilot did not quit within 10 s; nothing was replaced")
+        # The bundle it replaces goes to the Trash (a sandbox's goes with its folder), never straight away.
+        trash = Path.home() / f".Trash/Pilot-{current}.app" if not sandbox(a.app) else Path(tmp) / "replaced.app"
+        if trash.exists():
+            trash = trash.with_name(f"Pilot-{current}-{int(time.time())}.app")
+        a.app.rename(trash)
+        fresh.rename(a.app)
+        for item in state["items"]:
+            if item["build"] == current:
+                item["withdrawn"] = True
+        save(feed, state, a.port)
+    print(f"rolled back from build {current} to {target['build']} ({target.get('version')}); build {current} is withdrawn from the feed")
+    if not sandbox(a.app):
+        subprocess.run(["open", str(a.app)], check=True)
+        print("Pilot opened")
+
+
+def status(a, feed):
+    state = load(feed)
+    joined = subprocess.run(["defaults", "read", DOMAIN, "SUFeedURL"], capture_output=True, text=True).stdout.strip()
+    served = subprocess.run(["launchctl", "print", f"gui/{os.getuid()}/{LABEL}"], capture_output=True).returncode == 0
+    newest = max(live(state), key=lambda i: i["build"], default=None)
+    print(f"installed: build {build_number(a.app)} at {a.app}")
+    print(f"reads: {joined or 'its own Info.plist feed (not joined)'}")
+    print(f"feed: {len(live(state))} builds, newest {newest['version'] + ' (' + newest['commit'][:7] + ')' if newest else 'none'}; base {state['base']['build'] if state['base'] else 'none'}")
+    print(f"server: {'loaded' if served else 'not loaded'} on 127.0.0.1:{a.port}")
+
+
+def serve(a, feed):
+    plist = Path.home() / f"Library/LaunchAgents/{LABEL}.plist"
+    if a.uninstall:
+        subprocess.run(["launchctl", "bootout", f"gui/{os.getuid()}/{LABEL}"], capture_output=True)
+        plist.unlink(missing_ok=True)
+        print(f"server removed ({plist})")
+        return
+    if not a.install:
+        raise Refused("serve takes --install or --uninstall")
+    plist.write_bytes(launch_agent(feed, a.port))
+    run(["launchctl", "bootstrap", f"gui/{os.getuid()}", str(plist)])
+    print(f"server loaded: {feed_url(a.port)} (launchd starts it per connection)")
+
+
+def launch_agent(feed, port):
+    return plistlib.dumps({
+        "Label": LABEL,
+        "ProgramArguments": ["/usr/bin/python3", "-I", "-c", HANDLER, str(feed)],
+        "inetdCompatibility": {"Wait": False},
+        "Sockets": {"Listener": {"SockNodeName": "127.0.0.1", "SockServiceName": str(port), "SockType": "stream",
+                                 "SockFamily": "IPv4"}},
+        "StandardErrorPath": "/dev/null",
+        "ProcessType": "Background",
+    })
+
+
+def main(argv):
+    p = argparse.ArgumentParser(prog="Scripts/dev-feed", description=__doc__.split("\n")[0])
+    p.add_argument("command", choices=["publish", "join", "rollback", "leave", "status", "serve"])
+    p.add_argument("--feed", type=Path, default=Path.home() / "pilot-builds/feed")
+    p.add_argument("--port", type=int, default=47613)
+    p.add_argument("--app", type=Path, default=REAL_APP)
+    keys = p.add_mutually_exclusive_group()
+    keys.add_argument("--release-key", action="store_true", help="sign with Sparkle's release key from the login Keychain")
+    keys.add_argument("--key-file", help="sign with this throwaway seed file instead (a proof; no Pilot accepts it)")
+    p.add_argument("--notes", help="what is in the batch, one line each")
+    p.add_argument("--built", type=Path, help="publish this bundle, already built from HEAD, instead of building")
+    p.add_argument("--install", action="store_true")
+    p.add_argument("--uninstall", action="store_true")
+    a = p.parse_args(argv)
+    if a.command == "publish" and not (a.release_key or a.key_file):
+        p.error("publish signs with --release-key or a throwaway --key-file; it never picks one itself")
+    try:
+        {"publish": publish, "join": join, "rollback": rollback, "leave": leave, "status": status,
+         "serve": serve}[a.command](a, a.feed.expanduser())
+    except Refused as e:
+        print(f"refused: {e}", file=sys.stderr)
+        return 1
+    except subprocess.CalledProcessError as e:
+        print(f"failed: {' '.join(map(str, e.cmd))[:200]}\n{(e.stderr or '').strip()[-800:]}", file=sys.stderr)
+        return 1
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))
