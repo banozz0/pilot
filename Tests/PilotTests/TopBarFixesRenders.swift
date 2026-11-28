@@ -138,13 +138,15 @@ struct TopBarFixesRenders {
         model.cards = [NotificationEntry(NotificationRead(id: "r", kind: .banner, app: "Messages", title: "Maya", subtitle: "", body: "Dinner at eight?",
                                                           actions: [], opensReply: false), at: Date())]
         let size = try drawnSize(of: NotificationCardStack(model: model).styled(.barPopovers).pilotTheme())
-        let visible = CGRect(x: 0, y: 0, width: 3440, height: 1410), side = NotificationPlacement.bell.width, m = NotificationPlacement.margin
-        let corners = [("bottom left", CGPoint(x: m, y: m)), ("bottom right", CGPoint(x: visible.maxX - m - side, y: m)),
-                       ("top left", CGPoint(x: m, y: visible.maxY - m - side)), ("top right", CGPoint(x: visible.maxX - m - side, y: visible.maxY - m - side))]
-        for (corner, origin) in corners {
-            let bell = CGRect(origin: origin, size: CGSize(width: side, height: side))
+        let visible = CGRect(x: 0, y: 0, width: 3440, height: 1410), side = NotificationPlacement.bell.width
+        let (left, bottom) = (NotificationPlacement.margin, NotificationPlacement.margin)
+        let (right, top) = (visible.maxX - left - side, visible.maxY - bottom - side)
+        let corners = [("bottom left", left, bottom), ("bottom right", right, bottom), ("top left", left, top), ("top right", right, top)]
+        for (corner, x, y) in corners {
+            let bell = CGRect(x: x, y: y, width: side, height: side)
             let cards = NotificationPlacement.cards(nextTo: bell, in: visible, size: size)
-            #expect(sharesColumn(cards, bell), "\(corner): cards at \(cards), bell at \(bell)")
+            // In the bell's column: some x lies in both.
+            #expect(cards.minX < bell.maxX && bell.minX < cards.maxX, "\(corner): cards at \(cards), bell at \(bell)")
             #expect(!cards.intersects(bell), "\(corner): cards over the bell")
             #expect(visible.contains(cards), "\(corner): cards off the display")
         }

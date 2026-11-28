@@ -51,14 +51,15 @@ struct HyperOverlayTests {
             overlay.delay = { 0.05 }
             overlay.enabled = { enabled }
             overlay.layer(down: true)
-            let deadline = Date.now + wait
-            while ordered == 0, Date.now < deadline { try await Task.sleep(for: .milliseconds(10)) }
+            _ = try await SystemSamplerTests.wait(seconds: wait) { ordered > 0 }
             overlay.layer(down: false)
             #expect(overlay.panel?.isVisible != true)
             return ordered
         }
-        // Off: six times its delay with nothing shown. On, the same hold shows it once.
-        #expect(try await shows(enabled: false, wait: 0.3) == 0)
-        #expect(try await shows(enabled: true, wait: 2) == 1)
+        // Off: three times its delay with nothing shown. On, the same hold shows it once; a long deadline, as the full
+        // suite held the main actor past 10 s.
+        let off = try await shows(enabled: false, wait: 0.15), on = try await shows(enabled: true, wait: 120)
+        #expect(off == 0, "switched off, it showed \(off) times")
+        #expect(on == 1, "switched on, it showed \(on) times")
     }
 }

@@ -81,27 +81,15 @@ private func drawn(_ w: NSWindow, scale: Int) -> NSBitmapImageRep? {
 /// steps until it lands. Nothing drawn, or the window put on screen, fails here: a 0×0 would pass any "narrower than".
 @MainActor
 func drawnSize(of view: some View) throws -> CGSize {
-    let box = DrawnSize.Box()
-    let w = hosted(view.overlay(GeometryReader { Color.clear.preference(key: DrawnSize.self, value: $0.size) })
-        .onPreferenceChange(DrawnSize.self) { size in MainActor.assumeIsolated { box.size = size } })
+    let box = ExtensionDetailViewTests.Box()
+    let w = hosted(ExtensionDetailViewTests.measured(view, box))
     defer { w.close() }
     w.contentView?.layoutSubtreeIfNeeded()
-    let deadline = Date.now + 2
-    while box.size == nil, Date.now < deadline { PanelTestSupport.pump(0.02) }
+    _ = AliasesListTests.until { box.size.width > 0 && box.size.height > 0 }
     #expect(!w.isVisible, "the measuring window went on screen")
-    let size = try #require(box.size, "no size reported")
-    try #require(size.width > 0 && size.height > 0, "drawn at \(size)")
-    return size
+    try #require(box.size.width > 0 && box.size.height > 0, "drawn at \(box.size)")
+    return box.size
 }
-
-private struct DrawnSize: PreferenceKey {
-    static let defaultValue: CGSize? = nil
-    static func reduce(value: inout CGSize?, nextValue: () -> CGSize?) { value = nextValue() ?? value }
-    @MainActor final class Box { var size: CGSize? }
-}
-
-/// Whether `a` and `b` share a column on screen: some x lies in both. A panel opened beside another sits in its column.
-func sharesColumn(_ a: CGRect, _ b: CGRect) -> Bool { a.minX < b.maxX && b.minX < a.maxX }
 
 /// `view` drawn as `snapshot(rendering:)` draws it, as its device RGB bytes: two draws of one picture are equal.
 @MainActor
