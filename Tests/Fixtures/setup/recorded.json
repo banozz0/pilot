@@ -1,0 +1,172 @@
+{
+  "about": "The shape of one real Mac's setup, every personal name made up (Scripts/record-setup).",
+  "temp_folder": {
+    "spelled": "/var/folders",
+    "resolves": "/private/var"
+  },
+  "home_apps": [
+    "~/Sorrel/Willow.app"
+  ],
+  "configs": {
+    ".config/ghostty/config": {
+      "kind": "link",
+      "to": "~/heath/glade/gorse/ghostty/config",
+      "lands": "file"
+    },
+    ".config/ghostty/themes": {
+      "kind": "link",
+      "to": "~/heath/glade/gorse/ghostty/themes",
+      "lands": "folder"
+    },
+    ".config/zed": {
+      "kind": "folder"
+    },
+    ".config/zed/settings.json": {
+      "kind": "file"
+    },
+    ".config/btop": {
+      "kind": "folder"
+    },
+    ".config/btop/btop.conf": {
+      "kind": "file"
+    },
+    ".config/kitty/kitty.conf": {
+      "kind": "missing"
+    },
+    ".config/alacritty/alacritty.toml": {
+      "kind": "missing"
+    },
+    ".config/wezterm": {
+      "kind": "missing"
+    },
+    ".config/nvim": {
+      "kind": "folder"
+    },
+    ".config/fish": {
+      "kind": "folder"
+    },
+    ".aerospace.toml": {
+      "kind": "missing"
+    },
+    "Library/Application Support/Pilot": {
+      "kind": "folder"
+    },
+    "Library/Application Support/Pilot/ThemeSystem": {
+      "kind": "folder"
+    }
+  },
+  "support_folders": {
+    "obsidian": "obsidian",
+    "Zed": "Zed",
+    "Code": "Code",
+    "Cursor": "Cursor",
+    "VSCodium": null,
+    "Windsurf": null,
+    "iTerm2": null,
+    "lazygit": "lazygit",
+    "vesktop": "vesktop",
+    "Pilot": "Pilot"
+  },
+  "browsers": [
+    {
+      "family": "chromium",
+      "folder": "Arc/User Data",
+      "bundles": [
+        "company.thebrowser.Browser"
+      ],
+      "installed": false,
+      "profiles": []
+    },
+    {
+      "family": "chromium",
+      "folder": "BraveSoftware/Brave-Browser",
+      "bundles": [
+        "com.brave.Browser"
+      ],
+      "installed": false,
+      "profiles": []
+    },
+    {
+      "family": "chromium",
+      "folder": "Chromium",
+      "bundles": [
+        "org.chromium.Chromium"
+      ],
+      "installed": false,
+      "profiles": []
+    },
+    {
+      "family": "chromium",
+      "folder": "Google/Chrome",
+      "bundles": [
+        "com.google.Chrome"
+      ],
+      "installed": true,
+      "profiles": [
+        {
+          "name": "Default",
+          "bookmarks": {
+            "Bookmarks": 0,
+            "AccountBookmarks": 103
+          }
+        }
+      ]
+    },
+    {
+      "family": "chromium",
+      "folder": "Microsoft Edge",
+      "bundles": [
+        "com.microsoft.edgemac"
+      ],
+      "installed": false,
+      "profiles": []
+    },
+    {
+      "family": "chromium",
+      "folder": "Vivaldi",
+      "bundles": [
+        "com.vivaldi.Vivaldi"
+      ],
+      "installed": false,
+      "profiles": []
+    },
+    {
+      "family": "firefox",
+      "folder": "Firefox",
+      "bundles": [
+        "org.mozilla.firefox",
+        "org.mozilla.firefoxdeveloperedition",
+        "org.mozilla.nightly"
+      ],
+      "installed": false,
+      "profiles": []
+    },
+    {
+      "family": "firefox",
+      "folder": "zen",
+      "bundles": [
+        "app.zen-browser.zen"
+      ],
+      "installed": false,
+      "profiles": [
+        {
+          "name": "p0001",
+          "places": true
+        },
+        {
+          "name": "p0002",
+          "places": false
+        },
+        {
+          "name": "p0003",
+          "places": false
+        }
+      ]
+    }
+  ],
+  "accounts": {
+    "count": 1,
+    "home_folder": "lowercase",
+    "home_is_user_name": true
+  }
+}
