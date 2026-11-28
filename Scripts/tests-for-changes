@@ -55,7 +55,8 @@ NESTED = re.compile(r"^(?: {4}|\t)" + MODS + r"(?:struct|class|enum|actor)\s+([A
 def git(*args, check=True):
     r = subprocess.run(["git", *args], capture_output=True, text=True, cwd=ROOT)
     if check and r.returncode != 0:
-        sys.exit(f"tests-for-changes: git {' '.join(args)}: {r.stderr.strip()}")
+        print(f"tests-for-changes: git {' '.join(args)}: {r.stderr.strip()}", file=sys.stderr)
+        sys.exit(2)
     return r.stdout
 
 
