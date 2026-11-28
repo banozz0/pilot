@@ -21,6 +21,10 @@ struct CaptureEditorSelectTests {
         let window: NSWindow
         let size: CGSize
         let canvas: CGPoint
+        /// Set once Shift or Option stayed down past `keysUp`'s wait, so a stuck key costs one wait and one issue.
+        private var keysStuck = false
+        /// The keys the canvas reads off the live keyboard.
+        private static let readKeys: NSEvent.ModifierFlags = [.shift, .option]
 
         init(panel: Bool = false) {
             let look = Look.shared
@@ -49,10 +53,24 @@ struct CaptureEditorSelectTests {
         func window(_ p: CGPoint) -> CGPoint { CGPoint(x: canvas.x + p.x, y: size.height - (canvas.y + p.y)) }
 
         func send(_ type: NSEvent.EventType, _ p: CGPoint) {
+            keysUp()
             let event = NSEvent.mouseEvent(with: type, location: window(p), modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
                                            windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: 1)!
             window.sendEvent(event)
             settle(0.02)
+        }
+
+        /// Waits, up to 10 s once per rig, until the Mac's own keyboard holds no Shift or Option: the canvas reads the live
+        /// keys (`NSEvent.modifierFlags`), not the event's, so a click sent while Shift was down was a Shift-click that
+        /// took the picked text out of the pick, and its Delete removed nothing (one run in 38).
+        func keysUp() {
+            guard !keysStuck else { return }
+            let deadline = Date.now + 10
+            while !NSEvent.modifierFlags.isDisjoint(with: Self.readKeys), Date.now < deadline { settle(0.05) }
+            let held = NSEvent.modifierFlags.intersection(Self.readKeys)
+            guard !held.isEmpty else { return }
+            keysStuck = true
+            Issue.record("Shift or Option held on the keyboard for 10 s (flags \(held.rawValue)): the clicks carry it")
         }
 
         /// A press at `a`, a drag through to `b`, a release there; a click when they are the same.
