@@ -36,4 +36,32 @@ struct HyperOverlayTests {
         #expect(overlay.panel !== first)
         #expect(overlay.panel?.frame.size == fresh(.hyper))
     }
+
+    @Test("Switched off, holding Hyper past its delay shows no overlay; on, it shows once: off still showed it (Sven, 2026-10-30)")
+    func offShowsNothing() async throws {
+        testApp()
+        let (look, _) = LookPageTests().look()
+        final class Shown { var times = 0 }
+        /// An overlay with Hyper held down, counting the times it is put up.
+        func held(enabled: Bool) -> (overlay: HyperOverlay, shown: Shown) {
+            let overlay = HyperOverlay(look: look), shown = Shown()
+            overlay.order = { _ in shown.times += 1 }
+            overlay.rows = { _ in SharedLook.InstrumentPanelsTests.overlayRows }
+            overlay.delay = { 0.05 }
+            overlay.enabled = { enabled }
+            overlay.layer(down: true)
+            return (overlay, shown)
+        }
+        // The same hold, off first: a show it wrongly makes is timed and queued ahead of the on one's, so once the on one
+        // shows, the off one's count is final, however long a busy suite holds the main actor (past 10 s in one run).
+        // Awaited, never a nested run loop, which leaves the draws the timers queue undone.
+        let off = held(enabled: false), on = held(enabled: true)
+        _ = try await SystemSamplerTests.wait(seconds: 120) { on.shown.times > 0 }
+        for hold in [off, on] {
+            hold.overlay.layer(down: false)
+            #expect(hold.overlay.panel?.isVisible != true)
+        }
+        #expect(off.shown.times == 0, "switched off, it showed \(off.shown.times) times")
+        #expect(on.shown.times == 1, "switched on, it showed \(on.shown.times) times")
+    }
 }

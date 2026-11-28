@@ -129,6 +129,29 @@ struct TopBarFixesRenders {
         try writeRender(floating, to: dir.appendingPathComponent("floating.png"), wait: 0.8)
     }
 
+    /// Measured, not drawn for eyes, so it runs in every suite run (setup-overhaul T37): the floating cards, at the size a
+    /// card stack draws, placed against a bell in each corner of a display as the app's panels place them.
+    @Test("Floating cards open beside the bell in every corner, never over it: they opened bottom right with the bell bottom left (Sven, 2026-11-16)")
+    func cardsBesideBell() throws {
+        testApp()
+        let model = NotificationCardsModel()
+        model.cards = [NotificationEntry(NotificationRead(id: "r", kind: .banner, app: "Messages", title: "Maya", subtitle: "", body: "Dinner at eight?",
+                                                          actions: [], opensReply: false), at: Date())]
+        let size = try drawnSize(of: NotificationCardStack(model: model).styled(.barPopovers).pilotTheme())
+        let visible = CGRect(x: 0, y: 0, width: 3440, height: 1410), side = NotificationPlacement.bell.width
+        let (left, bottom) = (NotificationPlacement.margin, NotificationPlacement.margin)
+        let (right, top) = (visible.maxX - left - side, visible.maxY - bottom - side)
+        let corners = [("bottom left", left, bottom), ("bottom right", right, bottom), ("top left", left, top), ("top right", right, top)]
+        for (corner, x, y) in corners {
+            let bell = CGRect(x: x, y: y, width: side, height: side)
+            let cards = NotificationPlacement.cards(nextTo: bell, in: visible, size: size)
+            // In the bell's column: some x lies in both.
+            #expect(cards.minX < bell.maxX && bell.minX < cards.maxX, "\(corner): cards at \(cards), bell at \(bell)")
+            #expect(!cards.intersects(bell), "\(corner): cards over the bell")
+            #expect(visible.contains(cards), "\(corner): cards off the display")
+        }
+    }
+
     /// The bell's two-digit count in each place it shows (Sven on build 2687: the floating bell's "11" cut at its top
     /// right). The floating bell is drawn clipped to its own square, as its panel is exactly the bell; then the top bar's
     /// item and the dock's bell (Sven, 2026-11-17). Layout and words only: glass is off, the dock Solid.

@@ -139,6 +139,38 @@ struct TopBarControllerTests {
         #expect(panel.constrainFrameRect(above, to: NSScreen.screens.first) == above)
     }
 
+    /// Content AppKit's constraints hold at `width`, whatever frame its window is pinned to, as a Pills island's was. Each
+    /// pass of AppKit's layout counts; past 50 the hold lets go, so a put-back that loops ends as a failed count rather
+    /// than the stack overflow Sven's Pilot died of.
+    final class HeldContent: NSView {
+        private(set) var passes = 0
+        private var hold: NSLayoutConstraint!
+        init(width: CGFloat) {
+            super.init(frame: .zero)
+            hold = widthAnchor.constraint(equalToConstant: width)
+            hold.isActive = true
+        }
+        required init?(coder: NSCoder) { nil }
+        override func layout() {
+            passes += 1
+            if passes > 50 { hold.isActive = false }
+            super.layout()
+        }
+    }
+
+    @Test("A bar pinned to a frame its content will not take keeps AppKit's frame and settles: switching to solid pills crashed Pilot (Sven, 2026-11-13)")
+    func refusedFrameSettles() {
+        let content = HeldContent(width: 242)
+        let panel = TopBarWindows.panel(content, level: TopBarWindows.aboveMenuBar)
+        defer { panel.close() }
+        // Far off every display; never ordered in.
+        panel.pin(NSRect(x: -20000, y: -20000, width: 30, height: 30))
+        panel.layoutIfNeeded()
+        #expect(content.passes < 10, "\(content.passes) layout passes")
+        #expect(panel.frame.width == 242)
+        #expect(!panel.isVisible)
+    }
+
     @Test("The bars sit above the menu bar, so an autohidden menu bar revealing on hover slides out under them (card agent-bo-95423007)")
     func aboveMenuBar() {
         #expect(TopBarWindows.aboveMenuBar > .mainMenu)

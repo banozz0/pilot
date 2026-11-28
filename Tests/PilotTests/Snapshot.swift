@@ -75,6 +75,22 @@ private func drawn(_ w: NSWindow, scale: Int) -> NSBitmapImageRep? {
     return snapshot(host, scale: scale)
 }
 
+/// The size `view` draws at, hosted at its own size in a borderless window that is never shown: a picture test's
+/// measure, so it checks a number rather than leaving a picture for eyes (setup-overhaul T37). Read by a GeometryReader
+/// overlaid on it (behind it, a view built from a ForEach never reports and measures 0×0), the run loop pumped in short
+/// steps until it lands. Nothing drawn, or the window put on screen, fails here: a 0×0 would pass any "narrower than".
+@MainActor
+func drawnSize(of view: some View) throws -> CGSize {
+    let box = ExtensionDetailViewTests.Box()
+    let w = hosted(ExtensionDetailViewTests.measured(view, box))
+    defer { w.close() }
+    w.contentView?.layoutSubtreeIfNeeded()
+    _ = AliasesListTests.until { box.size.width > 0 && box.size.height > 0 }
+    #expect(!w.isVisible, "the measuring window went on screen")
+    try #require(box.size.width > 0 && box.size.height > 0, "drawn at \(box.size)")
+    return box.size
+}
+
 /// `view` drawn as `snapshot(rendering:)` draws it, as its device RGB bytes: two draws of one picture are equal.
 @MainActor
 func pixels(rendering view: some View) async throws -> Data {
