@@ -10,6 +10,7 @@ Sven's own agents: the rest of this brief (his Mac, his vault, threads and slots
 ## Commands
 - `swift build` and `swift test`, at most 4 jobs (`-j 4`). Opt-in tests are env-gated: `PILOT_LIVE=1`, `PILOT_FOCUS=1` (the `.pilotFocus`
   tests take the keyboard or show a window), and renders with `CFFIXED_USER_HOME=<tmp> PILOT_RENDER_DIR=<tmp> swift test --filter <X>Renders`.
+- While working, `Scripts/tests-for-changes` instead of a hand-picked `--filter`: it runs the suites that name what the branch changed since main (`<rev>` for one commit, `--list` to only name them).
 - No new unit, component or UI tests unless Sven asks (2026-10-17; `tdd` is off here); existing ones stay.
   The one exception: the designer may add env-gated offscreen `<X>Renders` tests (Sven, 2026-10-17, Q67).
   Prove behaviour end to end through the `pilot` command against a sandbox, output quoted. Acting verbs (`run`, keys, system, wallpaper,
