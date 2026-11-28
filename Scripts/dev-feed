@@ -128,6 +128,10 @@ def git(*args):
     return run(["git", "-C", str(ROOT), *args])
 
 
+def git_ok(*args):
+    return subprocess.run(["git", "-C", str(ROOT), *args], capture_output=True).returncode == 0
+
+
 def info(app):
     with open(app / "Contents/Info.plist", "rb") as f:
         return plistlib.load(f)
@@ -166,11 +170,6 @@ def resolve(a):
                       f"{', '.join(k for k, v in real.items() if not v)} not: the real run leaves all three at their defaults, a proof sets all three")
 
 
-def real_only(a, what):
-    if not a.real:
-        raise Refused(f"a proof never {what}")
-
-
 def verify(app):
     run(["codesign", "--verify", "--strict", "--deep", str(app)])
 
@@ -203,15 +202,25 @@ def trusted_key(a):
     return key
 
 
-def check_signature(archive, signature, key):
+def check_signature(archive, signature, key, whose="the key the installed copy trusts"):
     if not signature or ed25519("verify", key, signature, str(archive)) != "valid":
-        raise Refused(f"{archive.name}'s EdDSA signature does not verify against the key the installed copy trusts")
+        raise Refused(f"{archive.name}'s EdDSA signature does not verify against {whose}")
+
+
+def expect(label, plist, pairs):
+    for k, want in pairs:
+        if plist.get(k) != want:
+            raise Refused(f"{label} has {k} {plist.get(k)}, not {want}")
+
+
+def checked(name):
+    if not isinstance(name, str) or not ARCHIVE.fullmatch(name):
+        raise Refused(f"feed.json names the archive {name!r}, not Pilot-<build>[-base].zip|dmg")
+    return name
 
 
 def archive_path(feed, name):
-    if not isinstance(name, str) or not ARCHIVE.fullmatch(name):
-        raise Refused(f"feed.json names the archive {name!r}, not Pilot-<build>[-base].zip|dmg")
-    return feed / name
+    return feed / checked(name)
 
 
 def signer(app):
@@ -241,11 +250,8 @@ def check_bundle(fresh, a, target, key):
     r = subprocess.run(["codesign", "--verify", "--strict", "--deep", f"-R={req}", str(fresh)], capture_output=True, text=True)
     if r.returncode:
         raise Refused(f"the target bundle does not meet {req}: {r.stderr.strip()[-300:]}")
-    plist = info(fresh)
-    for k, want in (("CFBundleIdentifier", installed(a.app).get("CFBundleIdentifier")),
-                    ("CFBundleVersion", str(target["build"])), ("SUPublicEDKey", key)):
-        if plist.get(k) != want:
-            raise Refused(f"the target bundle has {k} {plist.get(k)}, not {want}")
+    expect("the target bundle", info(fresh), (("CFBundleIdentifier", installed(a.app).get("CFBundleIdentifier")),
+                                              ("CFBundleVersion", str(target["build"])), ("SUPublicEDKey", key)))
 
 
 def unpack(archive, dest):
@@ -285,8 +291,10 @@ def releases(url):
     out = {}
     for item in root.iter("item"):
         enc = item.find("enclosure")
-        build = item.findtext(f"{{{SPARKLE_NS}}}version") or (enc is not None and enc.get(f"{{{SPARKLE_NS}}}version"))
-        if enc is not None and build and build.isdigit():
+        if enc is None:
+            continue
+        build = item.findtext(f"{{{SPARKLE_NS}}}version") or enc.get(f"{{{SPARKLE_NS}}}version") or ""
+        if build.isdigit():
             out[int(build)] = (enc.get("url"), enc.get(f"{{{SPARKLE_NS}}}edSignature"))
     return out
 
@@ -319,7 +327,7 @@ def appcast(state, port):
       <sparkle:shortVersionString>{html.escape(item["version"])}</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>{item["minimumSystemVersion"]}</sparkle:minimumSystemVersion>
       <description><![CDATA[<h3>In this build ({item["commit"][:7]})</h3><ul>{notes}</ul>]]></description>
-      <enclosure url="http://127.0.0.1:{port}/{archive_path(Path(), item["zip"])}" length="{item["length"]}" type="application/octet-stream" sparkle:edSignature="{item["signature"]}"/>
+      <enclosure url="http://127.0.0.1:{port}/{checked(item["zip"])}" length="{item["length"]}" type="application/octet-stream" sparkle:edSignature="{item["signature"]}"/>
     </item>""")
     return (f'<?xml version="1.0" encoding="utf-8"?>\n<rss version="2.0" xmlns:sparkle="{SPARKLE_NS}">\n'
             f"  <channel>\n    <title>Pilot dev feed</title>\n" + "\n".join(rows) + "\n  </channel>\n</rss>\n")
@@ -337,7 +345,7 @@ def notes_since(base, given):
     if given:
         lines = [l.strip() for l in Path(given).read_text().splitlines() if l.strip()]
     else:
-        ancestor = base and subprocess.run(["git", "-C", str(ROOT), "merge-base", "--is-ancestor", base, "HEAD"]).returncode == 0
+        ancestor = base and git_ok("merge-base", "--is-ancestor", base, "HEAD")
         lines = git("log", "--no-merges", "--format=%s", f"{base}..HEAD" if ancestor else "-20").splitlines()
     if not lines:
         raise Refused("the batch lists nothing; pass --notes with what is in it")
@@ -356,11 +364,9 @@ def branch_check(a):
         print(f"branch build of {branch}, as asked: its catalogue reads that branch, and nothing once it is deleted")
         return
     ask = "; a branch build Sven asked for takes --asked-for-branch <its name>"
-    if subprocess.run(["git", "-C", str(ROOT), "merge-base", "--is-ancestor", "HEAD", "origin/main"]).returncode:
+    if not git_ok("merge-base", "--is-ancestor", "HEAD", "origin/main"):
         raise Refused(f"HEAD is not in origin/main{ask}")
-    pushed = subprocess.run(["git", "-C", str(ROOT), "rev-parse", "--verify", "-q", f"refs/remotes/origin/{branch}"],
-                            capture_output=True).returncode == 0
-    if branch and branch != "main" and pushed:
+    if branch and branch != "main" and git_ok("rev-parse", "--verify", "-q", f"refs/remotes/origin/{branch}"):
         raise Refused(f"HEAD is on the pushed branch {branch}, so the build would read its catalogue, gone once it is "
                       f"deleted; publish from main or a detached HEAD{ask}")
 
@@ -406,10 +412,8 @@ def publish(a, feed):
         subprocess.run(["nice", "-n", "10", str(ROOT / "Scripts/build-app.sh")], env=env, check=True)
         app = ROOT / "build/Pilot.app"
     plist = info(app)
-    for key, want in (("PilotCommit", head), ("CFBundleVersion", str(build)), ("CFBundleShortVersionString", version),
-                      ("SUPublicEDKey", trusted)):
-        if plist.get(key) != want:
-            raise Refused(f"{app} has {key} {plist.get(key)}, not {want}")
+    expect(app, plist, (("PilotCommit", head), ("CFBundleVersion", str(build)), ("CFBundleShortVersionString", version),
+                        ("SUPublicEDKey", trusted)))
     if plist.get("PilotCatalogueBranch") and plist["PilotCatalogueBranch"] != a.asked_for_branch:
         raise Refused(f"{app} reads branch {plist['PilotCatalogueBranch']}'s catalogue, a branch build nobody asked for")
     feed.mkdir(parents=True, exist_ok=True)
@@ -424,8 +428,7 @@ def publish(a, feed):
         if a.key_file:
             sign[1:1] = ["--ed-key-file", a.key_file]
         signature = run(sign)
-        if ed25519("verify", sign_key, signature, str(staged)) != "valid":
-            raise Refused("the archive's EdDSA signature does not verify against the key it was signed with")
+        check_signature(staged, signature, sign_key, "the key it was signed with")
         length = staged.stat().st_size
         shutil.move(str(staged), str(feed / zipname))
     state["items"].append({"build": build, "version": version, "commit": head, "date": email.utils.formatdate(usegmt=True),
@@ -471,14 +474,13 @@ def join(a, feed):
         dest = archive_path(feed, name)
         feed.mkdir(parents=True, exist_ok=True)
         tmp = feed / f".{name}.tmp"
-        with urllib.request.urlopen(src, timeout=120) as r, open(tmp, "wb") as f:
-            shutil.copyfileobj(r, f)
         try:
+            with urllib.request.urlopen(src, timeout=120) as r, open(tmp, "wb") as f:
+                shutil.copyfileobj(r, f)
             check_signature(tmp, signature, trusted)
-        except Refused:
-            tmp.unlink()
-            raise
-        tmp.replace(dest)
+            tmp.replace(dest)
+        finally:
+            tmp.unlink(missing_ok=True)
         state["base"] = {"build": build, "version": installed(a.app).get("CFBundleShortVersionString"), "zip": name,
                          "signature": signature}
         save(feed, state, a.port)
@@ -491,12 +493,13 @@ def join(a, feed):
 
 
 def leave(a, feed):
+    url = own_feed(a)
     if a.real:
         subprocess.run(["defaults", "delete", DOMAIN, "SUFeedURL"], capture_output=True)
-        print(f"Pilot reads its own feed again: {own_feed(a)}")
+        print(f"Pilot reads its own feed again: {url}")
     else:
         print(f"proof {a.app}: defaults not touched")
-    build, newest = build_number(a.app), public_newest(own_feed(a))
+    build, newest = build_number(a.app), public_newest(url)
     if newest is None:
         print("public feed: could not be read, so whether it offers an update is unchecked")
     elif build > newest:
@@ -566,8 +569,8 @@ def rollback(a, feed):
         raise Refused(f"nothing older than build {current} is kept in {feed}")
     archive = archive_path(feed, target["zip"])
     key = trusted_key(a)
-    pilot = installed(a.app).get("CFBundleIdentifier") == DOMAIN
-    # Opened again once it was asked to quit, or the real copy was swapped; a proof never opens a Pilot.
+    # A proof never signals or opens a Pilot. Opened again once it was asked to quit, or the real copy was swapped.
+    may_signal = a.real or installed(a.app).get("CFBundleIdentifier") != DOMAIN
     pids, reopen = [], False
     try:
         with tempfile.TemporaryDirectory(dir=a.app.parent) as tmp:
@@ -576,7 +579,7 @@ def rollback(a, feed):
             fresh = unpack(archive, Path(tmp))
             check_bundle(fresh, a, target, key)
             pids = running(a)
-            if pids and not a.real and pilot:
+            if pids and not may_signal:
                 raise Refused(f"{a.app} runs with Pilot's bundle id; a proof never quits a Pilot")
             reopen = bool(pids)
             for pid in pids:
@@ -607,11 +610,12 @@ def rollback(a, feed):
         print(f"rolled back from build {current} to {target['build']} ({target.get('version')}); "
               f"withdrawn from the feed: {', '.join(str(i['build']) for i in above) or 'nothing'}; replaced bundle: {moved}")
     finally:
-        if reopen and not gone(pids, 20):
-            print(f"{a.app} is still running (pid {', '.join(map(str, pids))}); not reopened")
-        elif reopen and not (pilot and not a.real):
-            subprocess.run(["open", str(a.app)])
-            print(f"opened {a.app} (build {build_number(a.app)})")
+        if reopen and may_signal:
+            if gone(pids, 20):
+                subprocess.run(["open", str(a.app)])
+                print(f"opened {a.app} (build {build_number(a.app)})")
+            else:
+                print(f"{a.app} is still running (pid {', '.join(map(str, pids))}); not reopened")
 
 
 def status(a, feed):
@@ -629,7 +633,8 @@ def status(a, feed):
 def serve(a, feed):
     if a.install == a.uninstall:
         raise Refused("serve takes --install or --uninstall")
-    real_only(a, "loads or removes the launch agent")
+    if not a.real:
+        raise Refused("a proof never loads or removes the launch agent")
     plist = Path.home() / f"Library/LaunchAgents/{LABEL}.plist"
     # Booted out first, so a reinstall over a loaded agent bootstraps the new plist instead of failing on the old one.
     subprocess.run(["launchctl", "bootout", f"gui/{os.getuid()}/{LABEL}"], capture_output=True)
