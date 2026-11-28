@@ -46,7 +46,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 SPARKLE_BIN = ROOT / ".build/artifacts/sparkle/Sparkle/bin"
-PUBLIC_FEED = "https://github.com/banozz0/pilot/releases/latest/download/appcast.xml"
+with open(ROOT / "Packaging/Info.plist", "rb") as _f:
+    PUBLIC_FEED = plistlib.load(_f)["SUFeedURL"]  # the feed every release reads
 DOMAIN = "dev.banozz.pilot"
 LABEL = "dev.banozz.pilot.dev-feed"
 REAL_APP = Path("/Applications/Pilot.app")
@@ -76,10 +77,8 @@ HANDLER = r"""
 import http.server, os, socket, sys
 class Quiet(http.server.SimpleHTTPRequestHandler):
     def log_message(self, *args): pass
-class Server:
-    server_name, server_port = "127.0.0.1", 0
 conn = socket.socket(fileno=os.dup(0))
-Quiet(conn, conn.getpeername(), Server(), directory=sys.argv[1])
+Quiet(conn, conn.getpeername(), None, directory=sys.argv[1])
 conn.close()
 """
 
@@ -101,11 +100,24 @@ def info(app):
         return plistlib.load(f)
 
 
-def build_number(app):
+def installed(app):
+    """The bundle's Info.plist, or {} when there is none."""
     try:
-        return int(info(app)["CFBundleVersion"])
-    except (OSError, KeyError, ValueError):
-        return 0
+        return info(app)
+    except OSError:
+        return {}
+
+
+def build_number(app):
+    return int(installed(app).get("CFBundleVersion", 0))
+
+
+def verify(app):
+    run(["codesign", "--verify", "--strict", "--deep", str(app)])
+
+
+def pack(app, dest):
+    run(["ditto", "-c", "-k", "--sequesterRsrc", "--keepParent", str(app), str(dest)])
 
 
 def ed25519(mode, key, *args):
@@ -134,12 +146,13 @@ def load(feed):
 
 
 def live(state):
-    return [i for i in state["items"] if not i.get("withdrawn")]
+    """The items the feed offers, newest first."""
+    return sorted((i for i in state["items"] if not i.get("withdrawn")), key=lambda i: -i["build"])
 
 
 def appcast(state, port):
     rows = []
-    for item in sorted(live(state), key=lambda i: -i["build"]):
+    for item in live(state):
         notes = "".join(f"<li>{html.escape(n)}</li>" for n in item["notes"])
         rows.append(f"""    <item>
       <title>{html.escape(item["version"])}</title>
@@ -176,9 +189,8 @@ def notes_since(base, given):
     if given:
         lines = [l.strip() for l in Path(given).read_text().splitlines() if l.strip()]
     else:
-        rng = f"{base}..HEAD" if base and subprocess.run(["git", "-C", str(ROOT), "merge-base", "--is-ancestor", base,
-                                                           "HEAD"]).returncode == 0 else "-20"
-        lines = git("log", "--no-merges", "--format=%s", *rng.split()).splitlines()
+        ancestor = base and subprocess.run(["git", "-C", str(ROOT), "merge-base", "--is-ancestor", base, "HEAD"]).returncode == 0
+        lines = git("log", "--no-merges", "--format=%s", f"{base}..HEAD" if ancestor else "-20").splitlines()
     if not lines:
         raise Refused("the batch lists nothing; pass --notes with what is in it")
     return lines
@@ -193,21 +205,21 @@ def publish(a, feed):
         raise Refused(f"{head[:7]} is already published; a new batch needs new commits")
     base = int(next(l for l in (ROOT / "Packaging/build-number-base.txt").read_text().splitlines() if not l.startswith("#")))
     build = int(git("rev-list", "--count", "HEAD")) + base
-    floor = max([i["build"] for i in live(state)] + [build_number(a.app)])
+    current, prior = installed(a.app), live(state)
+    floor = max([i["build"] for i in prior[:1]] + [int(current.get("CFBundleVersion", 0))])
     if build <= floor:
         raise Refused(f"build {build} is not above {floor} (the feed's newest or the installed build); Sparkle would not offer it")
     trusted = release_key()
+    if current.get("SUPublicEDKey", trusted) != trusted:
+        raise Refused(f"{a.app} trusts another EdDSA key than Packaging/sparkle-public-key.txt")
     if a.key_file:
-        seed = Path(a.key_file).read_text().strip()
-        check_key = ed25519("pub", seed)
+        check_key = ed25519("pub", Path(a.key_file).read_text().strip())
     else:
+        # Checked before minutes of building: the Keychain's key must be the one Pilot trusts, or every item is refused.
         check_key = trusted
-        installed = info(a.app).get("SUPublicEDKey") if a.app.exists() else trusted
-        if installed != trusted:
-            raise Refused(f"{a.app} trusts another EdDSA key than Packaging/sparkle-public-key.txt")
-    prior = live(state)
-    since = max(prior, key=lambda i: i["build"])["commit"] if prior else (info(a.app).get("PilotCommit") if a.app.exists() else None)
-    notes = notes_since(since, a.notes)
+        if run([str(SPARKLE_BIN / "generate_keys"), "-p"]) != trusted:
+            raise Refused("the login Keychain's Sparkle key is not Packaging/sparkle-public-key.txt's")
+    notes = notes_since(prior[0]["commit"] if prior else current.get("PilotCommit"), a.notes)
     previous = public_newest()
     tag = git("describe", "--tags", "--abbrev=0", "--match", "v*").lstrip("v")
     version = f"{tag}-dev.{build}"
@@ -225,15 +237,14 @@ def publish(a, feed):
     for key, want in (("PilotCommit", head), ("CFBundleVersion", str(build)), ("SUPublicEDKey", trusted)):
         if plist.get(key) != want:
             raise Refused(f"{app} has {key} {plist.get(key)}, not {want}")
-    run(["codesign", "--verify", "--strict", "--deep", str(app)])
     feed.mkdir(parents=True, exist_ok=True)
     zipname = f"Pilot-{build}.zip"
     with tempfile.TemporaryDirectory() as tmp:
         staged = Path(tmp) / zipname
-        run(["ditto", "-c", "-k", "--sequesterRsrc", "--keepParent", str(app), str(staged)])
+        pack(app, staged)
         # Unpacked as Sparkle unpacks a zip (ditto -x -k): the copy must still verify, every helper's signature included.
         run(["ditto", "-x", "-k", str(staged), f"{tmp}/x"])
-        run(["codesign", "--verify", "--strict", "--deep", f"{tmp}/x/Pilot.app"])
+        verify(f"{tmp}/x/Pilot.app")
         sign = [str(SPARKLE_BIN / "sign_update"), "-p", str(staged)]
         if a.key_file:
             sign[1:1] = ["--ed-key-file", a.key_file]
@@ -246,14 +257,12 @@ def publish(a, feed):
                            "zip": zipname, "length": length, "signature": signature,
                            "minimumSystemVersion": plist.get("LSMinimumSystemVersion", "27.0"),
                            "notes": notes})
-    kept = sorted(live(state), key=lambda i: -i["build"])[:KEEP]
-    for item in state["items"]:
-        if item not in kept and (feed / item["zip"]).exists():
-            (feed / item["zip"]).unlink()
-    state["items"] = [i for i in state["items"] if i in kept or i.get("withdrawn")]
+    for old in live(state)[KEEP:]:
+        (feed / old["zip"]).unlink(missing_ok=True)
+        state["items"].remove(old)
     save(feed, state, a.port)
     after = public_newest()
-    print(f"published {version} (build {build}, {head[:7]}) with {len(state['items'][-1]['notes'])} lines in it: {feed / zipname}")
+    print(f"published {version} (build {build}, {head[:7]}) with {len(notes)} lines in it: {feed / zipname}")
     print(f"feed {feed_url(a.port)} lists {len(live(state))} builds; the newest is offered at the next check")
     if previous is None or after is None:
         print("public feed: could not be read; its newest entry is unchecked")
@@ -272,10 +281,11 @@ def join(a, feed):
     build = build_number(a.app)
     if not build:
         raise Refused(f"no Pilot at {a.app}")
-    if not state["base"] or state["base"]["build"] != build and build not in {i["build"] for i in state["items"]}:
+    kept = (state["base"] and state["base"]["build"] == build) or build in {i["build"] for i in state["items"]}
+    if not kept:
         zipname = f"Pilot-{build}-base.zip"
         feed.mkdir(parents=True, exist_ok=True)
-        run(["ditto", "-c", "-k", "--sequesterRsrc", "--keepParent", str(a.app), str(feed / zipname)])
+        pack(a.app, feed / zipname)
         if state["base"] and state["base"]["zip"] != zipname:
             (feed / state["base"]["zip"]).unlink(missing_ok=True)
         state["base"] = {"build": build, "version": info(a.app).get("CFBundleShortVersionString"), "zip": zipname}
@@ -290,7 +300,7 @@ def join(a, feed):
 
 def leave(a, feed):
     subprocess.run(["defaults", "delete", DOMAIN, "SUFeedURL"], capture_output=True)
-    print(f"Pilot reads its own feed again: {info(REAL_APP).get('SUFeedURL') if REAL_APP.exists() else PUBLIC_FEED}")
+    print(f"Pilot reads its own feed again: {installed(REAL_APP).get('SUFeedURL', PUBLIC_FEED)}")
 
 
 def running(app):
@@ -299,31 +309,37 @@ def running(app):
     return [int(p) for p in out.split()]
 
 
+def alive(pid):
+    try:
+        os.kill(pid, 0)
+        return True
+    except ProcessLookupError:
+        return False
+
+
 def rollback(a, feed):
     state = load(feed)
-    current = build_number(a.app)
-    older = [i for i in live(state) if i["build"] < current]
-    target = max(older, key=lambda i: i["build"]) if older else state["base"] if state["base"] and state["base"]["build"] < current else None
+    current, base, boxed = build_number(a.app), state["base"], sandbox(a.app)
+    target = next((i for i in live(state) if i["build"] < current), None) or (base if base and base["build"] < current else None)
     if not target:
         raise Refused(f"nothing older than build {current} is kept in {feed}")
-    archive = feed / target["zip"]
     with tempfile.TemporaryDirectory(dir=a.app.parent) as tmp:
-        run(["ditto", "-x", "-k", str(archive), tmp])
+        run(["ditto", "-x", "-k", str(feed / target["zip"]), tmp])
         fresh = Path(tmp) / "Pilot.app"
-        run(["codesign", "--verify", "--strict", "--deep", str(fresh)])
+        verify(fresh)
         pids = running(a.app)
-        if pids and sandbox(a.app):
+        if pids and boxed:
             raise Refused(f"{a.app} is running; a sandbox rollback never quits an app")
         for pid in pids:
             os.kill(pid, signal.SIGTERM)
         for _ in range(100):
-            if not running(a.app):
+            if not any(alive(p) for p in pids):
                 break
             time.sleep(0.1)
         else:
             raise Refused("Pilot did not quit within 10 s; nothing was replaced")
         # The bundle it replaces goes to the Trash (a sandbox's goes with its folder), never straight away.
-        trash = Path.home() / f".Trash/Pilot-{current}.app" if not sandbox(a.app) else Path(tmp) / "replaced.app"
+        trash = Path(tmp) / "replaced.app" if boxed else Path.home() / f".Trash/Pilot-{current}.app"
         if trash.exists():
             trash = trash.with_name(f"Pilot-{current}-{int(time.time())}.app")
         a.app.rename(trash)
@@ -333,7 +349,7 @@ def rollback(a, feed):
                 item["withdrawn"] = True
         save(feed, state, a.port)
     print(f"rolled back from build {current} to {target['build']} ({target.get('version')}); build {current} is withdrawn from the feed")
-    if not sandbox(a.app):
+    if not boxed:
         subprocess.run(["open", str(a.app)], check=True)
         print("Pilot opened")
 
@@ -342,10 +358,11 @@ def status(a, feed):
     state = load(feed)
     joined = subprocess.run(["defaults", "read", DOMAIN, "SUFeedURL"], capture_output=True, text=True).stdout.strip()
     served = subprocess.run(["launchctl", "print", f"gui/{os.getuid()}/{LABEL}"], capture_output=True).returncode == 0
-    newest = max(live(state), key=lambda i: i["build"], default=None)
+    items = live(state)
+    newest = f"{items[0]['version']} ({items[0]['commit'][:7]})" if items else "none"
     print(f"installed: build {build_number(a.app)} at {a.app}")
     print(f"reads: {joined or 'its own Info.plist feed (not joined)'}")
-    print(f"feed: {len(live(state))} builds, newest {newest['version'] + ' (' + newest['commit'][:7] + ')' if newest else 'none'}; base {state['base']['build'] if state['base'] else 'none'}")
+    print(f"feed: {len(items)} builds, newest {newest}; base {state['base']['build'] if state['base'] else 'none'}")
     print(f"server: {'loaded' if served else 'not loaded'} on 127.0.0.1:{a.port}")
 
 
