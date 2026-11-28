@@ -1,11 +1,5 @@
 {
-  "recorded": "2026-11-28",
   "about": "The shape of one real Mac's setup, every personal name made up (Scripts/record-setup).",
-  "system_links": {
-    "/tmp": "private/tmp",
-    "/var": "private/var",
-    "/etc": "private/etc"
-  },
   "temp_folder": {
     "spelled": "/var/folders",
     "resolves": "/private/var"
@@ -16,21 +10,13 @@
   "configs": {
     ".config/ghostty/config": {
       "kind": "link",
-      "absolute": true,
       "to": "~/heath/glade/gorse/ghostty/config",
-      "lands": "file",
-      "inside_home": true,
-      "inside_own_folder": false,
-      "git_repo_up": 3
+      "lands": "file"
     },
     ".config/ghostty/themes": {
       "kind": "link",
-      "absolute": true,
       "to": "~/heath/glade/gorse/ghostty/themes",
-      "lands": "folder",
-      "inside_home": true,
-      "inside_own_folder": false,
-      "git_repo_up": 3
+      "lands": "folder"
     },
     ".config/zed": {
       "kind": "folder"
@@ -164,15 +150,15 @@
       "installed": false,
       "profiles": [
         {
-          "name": "p0001.Default (release)-1792432644774",
+          "name": "p0001",
           "places": true
         },
         {
-          "name": "p0002.Default (release)",
+          "name": "p0002",
           "places": false
         },
         {
-          "name": "p0003.Default Profile",
+          "name": "p0003",
           "places": false
         }
       ]
@@ -182,10 +168,5 @@
     "count": 1,
     "home_folder": "lowercase",
     "home_is_user_name": true
-  },
-  "pilot_app": [
-    "/Applications"
-  ],
-  "appearance": "dark",
-  "appearance_automatic": false
+  }
 }

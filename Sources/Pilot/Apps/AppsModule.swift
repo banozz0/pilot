@@ -242,12 +242,14 @@ enum AppsModule {
     /// folder); never inside a package, ~/Library, a dot folder (the Trash), a link or a build tool's tree. Spotlight is
     /// off on Sven's Mac (2026-10-24) and the file index runs only while the menu is used, so this reads the disk: about 30 folders,
     /// whose change dates each menu open compares in about a millisecond. Desktop, Documents and Downloads are read only
-    /// with Full Disk Access: without it macOS asks in Pilot's name.
-    nonisolated static func homeApps() -> (folders: [String], apps: [(dir: String, entry: String)]) {
+    /// with Full Disk Access: without it macOS asks in Pilot's name. `home` and `fullDiskAccess` are a test's stand-ins
+    /// (SetupFixtureTests).
+    nonisolated static func homeApps(home: String = NSHomeDirectory(), fullDiskAccess: Bool = FileIndex.hasFullDiskAccess())
+        -> (folders: [String], apps: [(dir: String, entry: String)]) {
         let keys: Set<URLResourceKey> = [.isDirectoryKey, .isPackageKey, .isSymbolicLinkKey]
         let deeper: Set<String> = ["Downloads", "Desktop", "Documents"]
-        let skipped = Set(["Library", "Applications"]).union(FileIndex.hasFullDiskAccess() ? [] : deeper)
-        var folders: [String] = [], apps: [(dir: String, entry: String)] = [], level = [URL(filePath: NSHomeDirectory())]
+        let skipped = Set(["Library", "Applications"]).union(fullDiskAccess ? [] : deeper)
+        var folders: [String] = [], apps: [(dir: String, entry: String)] = [], level = [URL(filePath: home)]
         for depth in 0..<3 {
             var next: [URL] = []
             for dir in level {
