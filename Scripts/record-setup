@@ -184,7 +184,12 @@ def url_count(node):
     return 0
 
 
-def browsers(names, ids):
+# A Firefox-family profile folder's suffix the browser names itself (default-release, Zen's "Default (release)-<n>").
+DEFAULT_PROFILE = re.compile(r"(default(-release|-esr|-nightly)?|dev-edition-default|"
+                             r"Default \((release|alpha|beta|twilight)\)(-\d+)?|Default Profile)")
+
+
+def browsers(names, ids, secret):
     chromium, firefox = browser_tables()
     out = []
     for folder in sorted(set(chromium.values())):
@@ -213,7 +218,10 @@ def browsers(names, ids):
         profiles = []
         for n, p in enumerate(e for e in listing(root) if os.path.isdir(os.path.join(root, e))):
             suffix = p.split(".", 1)[1] if "." in p else ""
-            # A profile folder's prefix is random; a made-up one keeps its suffix (default-release).
+            # A profile folder's prefix is random; a made-up one keeps the browser's own suffix (default-release), and
+            # a suffix a person named is made up and checked like every other name.
+            if suffix and not DEFAULT_PROFILE.fullmatch(suffix):
+                secret.add(suffix); suffix = names(suffix)
             profiles.append({"name": f"p{n + 1:04d}" + ("." + suffix if suffix else ""),
                              "places": os.path.isfile(os.path.join(root, p, "places.sqlite"))})
         bundles = sorted(b for b, f in firefox.items() if f == folder)
@@ -256,7 +264,7 @@ def record():
         "home_apps": home_apps(names),
         "configs": {c: entry(os.path.join(HOME, c), names) for c in CONFIGS},
         "support_folders": {n: next((e for e in listing(SUPPORT) if e.lower() == n.lower()), None) for n in SUPPORT_NAMES},
-        "browsers": browsers(names, ids),
+        "browsers": browsers(names, ids, secret),
         "accounts": accounts(secret),
         "pilot_app": [names.path(f) for f in APP_FOLDERS if os.path.isdir(os.path.join(f, "Pilot.app"))],
         "appearance": "dark" if run("/usr/bin/defaults", "read", "-g", "AppleInterfaceStyle") == "Dark" else "light",
