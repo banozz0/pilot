@@ -21,6 +21,10 @@ struct CaptureEditorSelectTests {
         let window: NSWindow
         let size: CGSize
         let canvas: CGPoint
+        /// Set once Shift or Option stayed down past `keysUp`'s wait, so a stuck key costs one wait and one issue.
+        private var keysStuck = false
+        /// The keys the canvas reads off the live keyboard.
+        private static let readKeys: NSEvent.ModifierFlags = [.shift, .option]
 
         init(panel: Bool = false) {
             let look = Look.shared
@@ -56,15 +60,17 @@ struct CaptureEditorSelectTests {
             settle(0.02)
         }
 
-        /// Waits, up to 10 s, until the Mac's own keyboard holds no Shift or Option: the canvas reads the live keys
-        /// (`NSEvent.modifierFlags`), not the event's, and the Hyper key holds Shift, so a click sent while it was down
-        /// was a Shift-click that took the picked text out of the pick, and its Delete removed nothing (one run in 30).
+        /// Waits, up to 10 s once per rig, until the Mac's own keyboard holds no Shift or Option: the canvas reads the live
+        /// keys (`NSEvent.modifierFlags`), not the event's, so a click sent while Shift was down was a Shift-click that
+        /// took the picked text out of the pick, and its Delete removed nothing (one run in 38).
         func keysUp() {
-            let read: NSEvent.ModifierFlags = [.shift, .option]
+            guard !keysStuck else { return }
             let deadline = Date.now + 10
-            while !NSEvent.modifierFlags.isDisjoint(with: read), Date.now < deadline { settle(0.05) }
-            let held = NSEvent.modifierFlags.intersection(read)
-            if !held.isEmpty { Issue.record("Shift or Option held on the keyboard for 10 s (flags \(held.rawValue)): the clicks would carry it") }
+            while !NSEvent.modifierFlags.isDisjoint(with: Self.readKeys), Date.now < deadline { settle(0.05) }
+            let held = NSEvent.modifierFlags.intersection(Self.readKeys)
+            guard !held.isEmpty else { return }
+            keysStuck = true
+            Issue.record("Shift or Option held on the keyboard for 10 s (flags \(held.rawValue)): the clicks carry it")
         }
 
         /// A press at `a`, a drag through to `b`, a release there; a click when they are the same.

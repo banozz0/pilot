@@ -177,13 +177,13 @@ struct RemoveAppTests {
         hung.standardOutput = out
         try hung.run()
         defer { if hung.isRunning { hung.terminate() } }
-        // "hung" is read off the main actor, so the other suites run while the fixture starts; one silent for 60 s is
-        // ended, and its empty read fails here.
-        let reading = out.fileHandleForReading
-        let said = Task.detached { reading.availableData }, limit = Task { try await Task.sleep(for: .seconds(60)); hung.terminate() }
-        let line = String(decoding: await said.value, as: UTF8.self)
-        limit.cancel()
-        try #require(line.hasPrefix("hung"), "the fixture said \(line.debugDescription)")
+        // "hung" is awaited, never read blocking, so the other suites run while the fixture starts; one silent for 60 s is
+        // ended, and its stream's end fails here.
+        let limit = Task { try await Task.sleep(for: .seconds(60)); hung.terminate() }
+        defer { limit.cancel() }
+        var line: String?
+        for try await read in out.fileHandleForReading.bytes.lines { line = read; break }
+        try #require(line == "hung", "the fixture said \(String(describing: line))")
         let running = try #require(NSRunningApplication(processIdentifier: hung.processIdentifier))
         var asked = 0
         let quit = await RemoveApp.quit([running], name: "HungAppFixture", wait: .seconds(1)) { _ in asked += 1; return true }
