@@ -234,7 +234,8 @@ def publish(a, feed):
         subprocess.run(["nice", "-n", "10", str(ROOT / "Scripts/build-app.sh")], env=env, check=True)
         app = ROOT / "build/Pilot.app"
     plist = info(app)
-    for key, want in (("PilotCommit", head), ("CFBundleVersion", str(build)), ("SUPublicEDKey", trusted)):
+    for key, want in (("PilotCommit", head), ("CFBundleVersion", str(build)), ("CFBundleShortVersionString", version),
+                      ("SUPublicEDKey", trusted)):
         if plist.get(key) != want:
             raise Refused(f"{app} has {key} {plist.get(key)}, not {want}")
     feed.mkdir(parents=True, exist_ok=True)
@@ -264,6 +265,9 @@ def publish(a, feed):
     after = public_newest()
     print(f"published {version} (build {build}, {head[:7]}) with {len(notes)} lines in it: {feed / zipname}")
     print(f"feed {feed_url(a.port)} lists {len(live(state))} builds; the newest is offered at the next check")
+    if plist.get("PilotCatalogueBranch"):
+        # build-app.sh's PILOT_DEV reads the catalogue from a pushed branch; ExtensionCatalogue has no fall back to main.
+        print(f"catalogue: this build reads branch {plist['PilotCatalogueBranch']}'s; once that branch is deleted it reads nothing until a newer batch")
     if previous is None or after is None:
         print("public feed: could not be read; its newest entry is unchecked")
     elif previous != after:
@@ -299,14 +303,18 @@ def join(a, feed):
 
 
 def leave(a, feed):
+    if sandbox(a.app):
+        print(f"sandbox {a.app}: defaults not touched")
+        return
     subprocess.run(["defaults", "delete", DOMAIN, "SUFeedURL"], capture_output=True)
     print(f"Pilot reads its own feed again: {installed(REAL_APP).get('SUFeedURL', PUBLIC_FEED)}")
 
 
 def running(app):
-    """Pids of processes started from this bundle's main program."""
-    out = subprocess.run(["pgrep", "-f", str(app / "Contents/MacOS/")], capture_output=True, text=True).stdout
-    return [int(p) for p in out.split()]
+    """Pids of this bundle's main program (CFBundleExecutable), never its helpers or the CLI beside it."""
+    main = str(app / "Contents/MacOS" / installed(app).get("CFBundleExecutable", "Pilot"))
+    rows = (line.strip().split(None, 1) for line in run(["ps", "-axo", "pid=,args="]).splitlines())
+    return [int(r[0]) for r in rows if len(r) == 2 and (r[1] == main or r[1].startswith(main + " "))]
 
 
 def alive(pid):
@@ -323,35 +331,49 @@ def rollback(a, feed):
     target = next((i for i in live(state) if i["build"] < current), None) or (base if base and base["build"] < current else None)
     if not target:
         raise Refused(f"nothing older than build {current} is kept in {feed}")
-    with tempfile.TemporaryDirectory(dir=a.app.parent) as tmp:
-        run(["ditto", "-x", "-k", str(feed / target["zip"]), tmp])
-        fresh = Path(tmp) / "Pilot.app"
-        verify(fresh)
-        pids = running(a.app)
-        if pids and boxed:
-            raise Refused(f"{a.app} is running; a sandbox rollback never quits an app")
-        for pid in pids:
-            os.kill(pid, signal.SIGTERM)
-        for _ in range(100):
-            if not any(alive(p) for p in pids):
-                break
-            time.sleep(0.1)
-        else:
-            raise Refused("Pilot did not quit within 10 s; nothing was replaced")
-        # The bundle it replaces goes to the Trash (a sandbox's goes with its folder), never straight away.
-        trash = Path(tmp) / "replaced.app" if boxed else Path.home() / f".Trash/Pilot-{current}.app"
-        if trash.exists():
-            trash = trash.with_name(f"Pilot-{current}-{int(time.time())}.app")
-        a.app.rename(trash)
-        fresh.rename(a.app)
-        for item in state["items"]:
-            if item["build"] == current:
-                item["withdrawn"] = True
-        save(feed, state, a.port)
-    print(f"rolled back from build {current} to {target['build']} ({target.get('version')}); build {current} is withdrawn from the feed")
-    if not boxed:
-        subprocess.run(["open", str(a.app)], check=True)
-        print("Pilot opened")
+    # Once Pilot was asked to quit, whatever bundle sits at the path is opened again, whether the swap finished or not.
+    quitting = False
+    try:
+        with tempfile.TemporaryDirectory(dir=a.app.parent) as tmp:
+            run(["ditto", "-x", "-k", str(feed / target["zip"]), tmp])
+            fresh = Path(tmp) / "Pilot.app"
+            verify(fresh)
+            pids = running(a.app)
+            if pids and boxed:
+                raise Refused(f"{a.app} is running; a sandbox rollback never quits an app")
+            for pid in pids:
+                quitting = True
+                try:
+                    os.kill(pid, signal.SIGTERM)
+                except ProcessLookupError:
+                    pass
+            for _ in range(100):
+                if not any(alive(p) for p in pids):
+                    break
+                time.sleep(0.1)
+            else:
+                raise Refused("Pilot did not quit within 10 s; nothing was replaced")
+            # The bundle it replaces goes to the Trash (a sandbox's goes with its folder), never straight away.
+            trash = Path(tmp) / "replaced.app" if boxed else Path.home() / f".Trash/Pilot-{current}.app"
+            if trash.exists():
+                trash = trash.with_name(f"Pilot-{current}-{int(time.time())}.app")
+            a.app.rename(trash)
+            try:
+                fresh.rename(a.app)
+            except OSError:
+                trash.rename(a.app)
+                raise
+            for item in state["items"]:
+                if item["build"] == current:
+                    item["withdrawn"] = True
+                    (feed / item["zip"]).unlink(missing_ok=True)
+            save(feed, state, a.port)
+        print(f"rolled back from build {current} to {target['build']} ({target.get('version')}); build {current} is withdrawn from the feed")
+        quitting = quitting or not boxed
+    finally:
+        if quitting and not boxed:
+            subprocess.run(["open", str(a.app)])
+            print(f"opened {a.app} (build {build_number(a.app)})")
 
 
 def status(a, feed):
