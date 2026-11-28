@@ -167,19 +167,27 @@ struct RemoveAppTests {
     }
 
     /// HungAppFixture's main thread stops answering, so a normal quit never reaches it: the real NSRunningApplication
-    /// path to Force quit.
+    /// path to Force quit. It stays hung for 300 s, far past any main-actor stall of the full suite: a 30 s hang ended on
+    /// its own behind a 45 s one (release 1.4.2's run), the normal quit then "worked", and Force quit was never asked.
     @Test("A hung app's normal quit times out, and Force quit's yes ends it")
     func forceQuitsAHungApp() async throws {
         let hung = Process(), out = Pipe()
         hung.executableURL = AXTimeoutTests.fixture
-        hung.arguments = ["30"]
+        hung.arguments = ["300"]
         hung.standardOutput = out
         try hung.run()
         defer { if hung.isRunning { hung.terminate() } }
-        _ = out.fileHandleForReading.availableData   // "hung"
+        // "hung" is read off the main actor, so the other suites run while the fixture starts; one silent for 60 s is
+        // ended, and its empty read fails here.
+        let reading = out.fileHandleForReading
+        let said = Task.detached { reading.availableData }, limit = Task { try await Task.sleep(for: .seconds(60)); hung.terminate() }
+        let line = String(decoding: await said.value, as: UTF8.self)
+        limit.cancel()
+        try #require(line.hasPrefix("hung"), "the fixture said \(line.debugDescription)")
         let running = try #require(NSRunningApplication(processIdentifier: hung.processIdentifier))
         var asked = 0
         let quit = await RemoveApp.quit([running], name: "HungAppFixture", wait: .seconds(1)) { _ in asked += 1; return true }
-        #expect(quit && asked == 1 && running.isTerminated)
+        #expect(asked == 1, "the normal quit timed out and Force quit was asked")
+        #expect(quit && running.isTerminated)
     }
 }
