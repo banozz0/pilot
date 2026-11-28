@@ -1,0 +1,312 @@
+#!/usr/bin/env python3
+"""Records the shape of this Mac's setup as test data, every personal name replaced by a made-up one.
+
+    Scripts/record-setup                 writes Tests/Fixtures/setup/recorded.json
+    Scripts/record-setup --out <file>    writes there instead
+    Scripts/record-setup --print         prints the recording, writes nothing
+    Scripts/record-setup --check <file>  checks a fixture holds none of this Mac's names; writes nothing
+
+Read-only. It records what Pilot's setup bugs turned on (build-test.md rule 7), never contents:
+- the system links (/tmp, /var, /etc into /private) and the temp folder's spelling;
+- apps kept in the home folder outside ~/Applications, as Pilot's home walk reaches them;
+- each config Pilot themes or reads: missing, a file, a folder or a link, and where a link points (inside home, a git repo);
+- Application Support folder names in their own letter case, for the apps Pilot looks up;
+- browsers: which support folders exist, whether the app is installed, each profile's bookmark files and their counts
+  (Chromium's Bookmarks and AccountBookmarks are counted; Preferences, Local State, history and Firefox's database are
+  never opened);
+- local accounts (a count and the home folder's case), Pilot.app's install folders and the light or dark setting.
+Names: macOS's own folders and the product names Pilot's tables use stay; every other name (user, host, account,
+folder, app, profile) becomes a made-up word in the same letter case, the same every run. Before writing, the output
+is searched for every original name, the home path and every host name, case ignored; one hit and nothing is written.
+Exit 0 written or clean, 1 a name slipped through (the file is not written), 2 a bad argument.
+"""
+import hashlib
+import json
+import os
+import plistlib
+import re
+import socket
+import subprocess
+import sys
+from datetime import date
+
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+OUT = os.path.join(ROOT, "Tests", "Fixtures", "setup", "recorded.json")
+HOME = os.path.expanduser("~")
+SUPPORT = os.path.join(HOME, "Library", "Application Support")
+
+# Names that are the shape itself: macOS's folders and the products Pilot reads. Kept as they are, case included.
+KEEP = {
+    "Applications", "Desktop", "Documents", "Downloads", "Library", "Movies", "Music", "Pictures", "Public",
+    "Application Support", ".config", "User", "Profiles", "Default", "Bookmarks", "AccountBookmarks", "places.sqlite",
+    "Google", "Chrome", "Chrome Beta", "Chrome Canary", "Chromium", "BraveSoftware", "Brave-Browser", "Microsoft Edge",
+    "Vivaldi", "Arc", "User Data", "Firefox", "zen", "librewolf", "Floorp", "Waterfox", "Safari",
+    "obsidian", "Obsidian", "obsidian.json", "Zed", "zed", "settings.json", "Code", "Cursor", "VSCodium", "Windsurf",
+    "ghostty", "config", "themes", "kitty", "kitty.conf", "alacritty", "alacritty.toml", "wezterm", "btop", "btop.conf",
+    "nvim", "init.lua", "init.vim", "fish", "iTerm2", "lazygit", "config.yml", "vesktop", "Pilot", "Pilot.app",
+    "ThemeSystem", "packs", "state",
+}
+# The configs Pilot themes or reads, under home.
+CONFIGS = [
+    ".config/ghostty/config", ".config/ghostty/themes", ".config/zed", ".config/zed/settings.json",
+    ".config/btop", ".config/btop/btop.conf", ".config/kitty/kitty.conf", ".config/alacritty/alacritty.toml",
+    ".config/wezterm", ".config/nvim", ".config/fish", ".aerospace.toml",
+    "Library/Application Support/Pilot", "Library/Application Support/Pilot/ThemeSystem",
+]
+# Application Support folders Pilot looks up, by the name its code spells; the disk's own spelling is recorded.
+SUPPORT_NAMES = ["obsidian", "Zed", "Code", "Cursor", "VSCodium", "Windsurf", "iTerm2", "lazygit", "vesktop", "Pilot"]
+APP_FOLDERS = ["/Applications", "/System/Applications", "/System/Applications/Utilities",
+               "/System/Library/CoreServices/Applications", os.path.join(HOME, "Applications")]
+WORDS = ["alder", "birch", "cedar", "dune", "ember", "fjord", "glade", "heath", "inlet", "juniper", "kestrel", "larch",
+         "marsh", "nettle", "oriel", "pebble", "quill", "rowan", "sorrel", "thistle", "umber", "vetch", "willow", "yarrow",
+         "zephyr", "acorn", "bramble", "clover", "delta", "fennel", "gorse", "hazel", "iris", "kelp", "lichen", "moss"]
+
+
+class Names:
+    """One made-up name per original, in its letter case, the same every run (from a hash, not the order met)."""
+
+    def __init__(self):
+        self.real, self.made = {}, set()
+
+    def __call__(self, name):
+        if name in KEEP or re.fullmatch(r"Profile \d+", name):
+            return name
+        stem, ext = os.path.splitext(name) if name.endswith((".app", ".json", ".toml", ".conf")) else (name, "")
+        if stem not in self.real:
+            i = int(hashlib.sha256(stem.encode()).hexdigest(), 16)
+            word = WORDS[i % len(WORDS)]
+            while word in self.made:
+                i //= len(WORDS); word = WORDS[i % len(WORDS)] + str(len(self.made))
+            self.made.add(word)
+            if stem.isupper(): word = word.upper()
+            elif stem[:1].isupper(): word = word.capitalize()
+            if stem.startswith("."): word = "." + word
+            self.real[stem] = word
+        return self.real[stem] + ext
+
+    def path(self, path):
+        """A path in the fixture's spelling: ~ for home, system folders as they are, every other part made up."""
+        if path == HOME or path.startswith(HOME + "/"):
+            return "/".join(["~"] + [self(p) for p in path[len(HOME) + 1:].split("/") if p])
+        if re.match(r"^/(System|Applications|Library|usr|bin|sbin|opt/homebrew|private|tmp|var|etc)(/|$)", path) \
+                and not path.startswith(("/Users", "/Volumes")):
+            return path
+        return "/" + "/".join(self(p) for p in path.split("/") if p)
+
+
+def run(*cmd):
+    try:
+        return subprocess.run(cmd, capture_output=True, text=True, timeout=10).stdout.strip()
+    except (OSError, subprocess.SubprocessError):
+        return ""
+
+
+def git_repo(path):
+    """How many folders up from `path` the nearest git repo starts, or None."""
+    d, up = os.path.dirname(path), 1
+    while d not in ("", "/"):
+        if os.path.exists(os.path.join(d, ".git")): return up
+        d, up = os.path.dirname(d), up + 1
+    return None
+
+
+def entry(path, names):
+    """What a path is: missing, file, folder, or a link and where it lands."""
+    if os.path.islink(path):
+        target = os.readlink(path)
+        real = os.path.realpath(path)
+        shape = {"kind": "link", "absolute": target.startswith("/"), "to": names.path(real),
+                 "lands": "missing" if not os.path.exists(real) else "folder" if os.path.isdir(real) else "file",
+                 "inside_home": real.startswith(HOME + "/"), "inside_own_folder": real.startswith(os.path.dirname(path) + "/")}
+        if git_repo(real): shape["git_repo_up"] = git_repo(real)
+        return shape
+    if os.path.isdir(path): return {"kind": "folder"}
+    if os.path.exists(path): return {"kind": "file"}
+    return {"kind": "missing"}
+
+
+def listing(path):
+    try:
+        return sorted(os.listdir(path))
+    except OSError:
+        return []
+
+
+def bundle_id(app):
+    try:
+        with open(os.path.join(app, "Contents", "Info.plist"), "rb") as f:
+            return plistlib.load(f).get("CFBundleIdentifier")
+    except (OSError, plistlib.InvalidFileException, ValueError):
+        return None
+
+
+def home_apps(names):
+    """App bundles in home outside ~/Applications and Library: two folders deep, three in Downloads, Desktop, Documents."""
+    found = []
+    def walk(d, depth):
+        for e in listing(d):
+            p = os.path.join(d, e)
+            if e.startswith(".") or os.path.islink(p) or not os.path.isdir(p): continue
+            if e.endswith(".app"): found.append(names.path(p)); continue
+            if depth > 1: walk(p, depth - 1)
+    for top in listing(HOME):
+        p = os.path.join(HOME, top)
+        if top.startswith(".") or top in ("Library", "Applications") or os.path.islink(p) or not os.path.isdir(p): continue
+        if top.endswith(".app"): found.append(names.path(p)); continue
+        walk(p, 2 if top in ("Downloads", "Desktop", "Documents") else 1)
+    return sorted(found)
+
+
+def installed_ids():
+    ids = set()
+    for folder in APP_FOLDERS:
+        for e in listing(folder):
+            if e.endswith(".app"):
+                b = bundle_id(os.path.join(folder, e))
+                if b: ids.add(b)
+    return ids
+
+
+def browser_tables():
+    """Pilot's own browser tables (Sources/PilotCore/WebSearch.swift): Chromium's and the Firefox family's folders."""
+    with open(os.path.join(ROOT, "Sources", "PilotCore", "WebSearch.swift")) as f:
+        src = f.read()
+    chromium = dict(re.findall(r'"([\w.-]+)": \("([^"]+)", ', src))
+    block = re.search(r"static let firefox: \[String: String\] = \[(.*?)\]", src, re.S)
+    firefox = dict(re.findall(r'"([\w.-]+)": "([^"]+)"', block.group(1))) if block else {}
+    if not chromium or not firefox: sys.exit("record-setup: WebSearch.swift's browser tables not found")
+    return chromium, firefox
+
+
+def url_count(node):
+    if isinstance(node, dict):
+        return (1 if node.get("type") == "url" else 0) + sum(url_count(v) for v in node.get("children", []) or [])
+    return 0
+
+
+def browsers(names, ids):
+    chromium, firefox = browser_tables()
+    out = []
+    for folder in sorted(set(chromium.values())):
+        root = os.path.join(SUPPORT, folder)
+        if not os.path.isdir(root): continue
+        profiles = []
+        for p in listing(root):
+            if p != "Default" and not re.fullmatch(r"Profile \d+", p): continue
+            files = {}
+            for f in ("Bookmarks", "AccountBookmarks"):
+                fp = os.path.join(root, p, f)
+                if not os.path.isfile(fp): continue
+                try:
+                    with open(fp, "rb") as fh:
+                        roots = json.load(fh).get("roots", {})
+                    files[f] = sum(url_count(v) for v in roots.values())
+                except (OSError, ValueError, AttributeError):
+                    files[f] = "unreadable"
+            profiles.append({"name": p, "bookmarks": files})
+        bundles = sorted(b for b, f in chromium.items() if f == folder)
+        out.append({"family": "chromium", "folder": folder, "bundles": bundles,
+                    "installed": any(b in ids for b in bundles), "profiles": profiles})
+    for folder in sorted(set(firefox.values())):
+        root = os.path.join(SUPPORT, folder, "Profiles")
+        if not os.path.isdir(os.path.join(SUPPORT, folder)): continue
+        profiles = []
+        for n, p in enumerate(e for e in listing(root) if os.path.isdir(os.path.join(root, e))):
+            suffix = p.split(".", 1)[1] if "." in p else ""
+            # A profile folder's prefix is random; a made-up one keeps its suffix (default-release).
+            profiles.append({"name": f"p{n + 1:04d}" + ("." + suffix if suffix else ""),
+                             "places": os.path.isfile(os.path.join(root, p, "places.sqlite"))})
+        bundles = sorted(b for b, f in firefox.items() if f == folder)
+        out.append({"family": "firefox", "folder": folder, "bundles": bundles,
+                    "installed": any(b in ids for b in bundles), "profiles": profiles})
+    return out
+
+
+def accounts(secret):
+    """Local accounts people log in to: a count, and whether each home folder is spelled lowercase."""
+    people = []
+    for line in run("/usr/bin/dscl", ".", "-list", "/Users", "UniqueID").splitlines():
+        parts = line.split()
+        if len(parts) == 2 and parts[1].isdigit() and int(parts[1]) >= 501 and not parts[0].startswith("_"):
+            people.append(parts[0])
+    for user in people:
+        secret.add(user)
+        real = run("/usr/bin/dscl", ".", "-read", "/Users/" + user, "RealName").replace("RealName:", "")
+        secret.update(w for w in re.split(r"\s+", real) if len(w) >= 3)
+    own = os.path.basename(HOME)
+    return {"count": len(people), "home_folder": "lowercase" if own == own.lower() else "mixed case",
+            "home_is_user_name": own in people}
+
+
+def record():
+    names, secret = Names(), {os.path.basename(HOME), HOME}
+    for host in (run("/usr/sbin/scutil", "--get", "ComputerName"), run("/usr/sbin/scutil", "--get", "LocalHostName"),
+                 run("/usr/sbin/scutil", "--get", "HostName"), socket.gethostname()):
+        if host:
+            secret.add(host); secret.update(w for w in re.split(r"[\s.'’-]+", host) if len(w) >= 3 and w.lower() not in ("local", "mac", "mini", "macbook", "pro", "air"))
+    ids = installed_ids()
+    tmp = os.environ.get("TMPDIR", "/tmp")
+    data = {
+        "recorded": date.today().isoformat(),
+        "about": "The shape of one real Mac's setup, every personal name made up (Scripts/record-setup).",
+        "system_links": {p: (os.readlink(p) if os.path.islink(p) else None) for p in ("/tmp", "/var", "/etc")},
+        # The temp folder's first two parts as spelled and as resolved (/var/folders against /private/var).
+        "temp_folder": {"spelled": "/" + "/".join(tmp.strip("/").split("/")[:2]),
+                        "resolves": "/" + "/".join(os.path.realpath(tmp).strip("/").split("/")[:2])},
+        "home_apps": home_apps(names),
+        "configs": {c: entry(os.path.join(HOME, c), names) for c in CONFIGS},
+        "support_folders": {n: next((e for e in listing(SUPPORT) if e.lower() == n.lower()), None) for n in SUPPORT_NAMES},
+        "browsers": browsers(names, ids),
+        "accounts": accounts(secret),
+        "pilot_app": [names.path(f) for f in APP_FOLDERS if os.path.isdir(os.path.join(f, "Pilot.app"))],
+        "appearance": "dark" if run("/usr/bin/defaults", "read", "-g", "AppleInterfaceStyle") == "Dark" else "light",
+        "appearance_automatic": run("/usr/bin/defaults", "read", "-g", "AppleInterfaceStyleSwitchesAutomatically") == "1",
+    }
+    secret.update(n for n in names.real if len(n.strip(".")) >= 3)
+    return data, secret
+
+
+def leaks(text, secret):
+    """How many original names appear in the text, case ignored; short ones only as a whole word."""
+    lower = text.lower()
+    hits = 0
+    for s in secret:
+        s = s.lower().strip(".")
+        if not s or s in (k.lower() for k in KEEP): continue
+        if s.startswith("/") or len(s) >= 5:
+            hits += s in lower
+        else:
+            hits += re.search(r"(?<![a-z0-9])" + re.escape(s) + r"(?![a-z0-9])", lower) is not None
+    return hits
+
+
+def main(argv):
+    out, mode = OUT, "write"
+    if argv[:1] == ["--print"] and len(argv) == 1: mode = "print"
+    elif argv[:1] == ["--out"] and len(argv) == 2: out = os.path.abspath(argv[1])
+    elif argv[:1] == ["--check"] and len(argv) == 2: mode, out = "check", argv[1]
+    elif argv:
+        print(__doc__.split("\n\n")[1], file=sys.stderr); return 2
+    data, secret = record()
+    if mode == "check":
+        with open(out) as f: text = f.read()
+        n = leaks(text, secret)
+        print(f"record-setup: {out}: " + ("clean, none of this Mac's names" if n == 0 else f"{n} of this Mac's names found"))
+        return 0 if n == 0 else 1
+    text = json.dumps(data, indent=2, ensure_ascii=False) + "\n"
+    n = leaks(text, secret)
+    if n:
+        print(f"record-setup: {n} original names would be written; nothing written", file=sys.stderr); return 1
+    if mode == "print":
+        sys.stdout.write(text); return 0
+    os.makedirs(os.path.dirname(out), exist_ok=True)
+    with open(out, "w") as f: f.write(text)
+    b = data["browsers"]
+    print(f"record-setup: {os.path.relpath(out, ROOT)}: {len(data['home_apps'])} home apps, "
+          f"{sum(e['kind'] == 'link' for e in data['configs'].values())} linked configs, {len(b)} browser folders "
+          f"({sum(not x['installed'] for x in b)} without their app), {data['accounts']['count']} accounts; names made up")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))
