@@ -32,6 +32,10 @@ final class ControlStatus {
     /// makes the rate).
     var sample: @MainActor () async -> (raw: SystemStats.Raw, values: SystemStats.Values?)? = ControlStatus.sampleThisMac
     var refreshOccupied: @MainActor (Engine) async -> Void = { await $0.observers.tiler.refreshOccupied() }
+    /// The stalls and memory spikes Pilot's checks found this run (setup-overhaul T40); the tests hand in their own.
+    var checks: @Sendable () -> [Diagnostics.Finding] = { Diagnostics.shared.findings }
+    /// Starts those checks, once a process; the tests hand in their own.
+    var startChecks: @Sendable () -> Void = { Diagnostics.shared.start() }
     /// The last answer onboarding's System Events row kept: the probe says procNotFound whenever System Events is idle.
     private var systemEventsAllowed = false
     /// Whether the login shell's PATH was asked this run.
@@ -57,7 +61,7 @@ final class ControlStatus {
             case .switch: "Pilot's on/off switch: on"
             case .permissions: "Accessibility, Full Disk Access, and Screen Recording (null while Show exact menu bar items is off)"
             case .engine: "the key engine, secure input, Pilot's tiler and its tiling switch, the last error"
-            case .problems: "Home's Needs you, each with the command that fixes it"
+            case .problems: "Home's Needs you, each with the command that fixes it, then the stalls and memory spikes Pilot's checks found this run (not on Home), each with its time"
             case .today: "today's presses: total, most used, by hour"
             case .loginItem: "Launch at login: the wish, the login item's state, its problem"
             case .commandLink: "~/.local/bin/pilot: linked or not, on the PATH (read once, from the login shell)"
@@ -123,7 +127,7 @@ final class ControlStatus {
                                               "tiling": .bool(engine.tilingSwitch.isOn)]),
                             "lastError": Self.json(engine.lastError)])
         case .problems:
-            return .array(engine.homeProblems.map(Self.problem))
+            return .array(engine.homeProblems.map(Self.problem) + checks().map(Self.finding))
         case .today:
             let today = engine.today, now = Date()
             return .object(["total": .number(Double(today.total(now: now))), "top": Self.counts(today.top(10, now: now)),
@@ -187,6 +191,12 @@ final class ControlStatus {
                         "fix": json(fix), "action": json(p.action)])
     }
 
+    /// A check's finding as a problem: when it began, and its length in seconds or its footprint in MB; no fix.
+    static func finding(_ f: Diagnostics.Finding) -> JSONValue {
+        .object(["kind": .string(f.kind.rawValue), "title": .string(f.title), "detail": .string(f.detail), "fix": .null, "action": .null,
+                 "time": .string(f.time.ISO8601Format()), f.kind.unit: .number((f.amount * 10).rounded() / 10)])
+    }
+
     /// Onboarding: its step and the steps in order, Keys' pick (null until onboarding opens) and the active preset
     /// (T12), and its Permissions as its window fills them, each row with whether it is done.
     private func onboarding(_ engine: Engine) async -> JSONValue {
@@ -247,6 +257,9 @@ final class ControlStatus {
 extension ControlVerbs {
     /// `status` and `link`: what Home and General show about Pilot itself.
     func registerStatus(_ app: ControlStatus) {
+        // The checks start with the verbs that read them, so the app (ControlSocket.serve at launch) and the sandbox host
+        // watch the same way; a test rig hands in its own start.
+        app.startChecks()
         let names = ControlStatus.Part.allCases.map(\.rawValue)
         register(ControlVerb("status", help: "Pilot's live state as Home and General show it: Hyper, permissions, engine, problems, today; --part reads more.",
                              usage: "pilot status [--part <part>[,<part>…]] [--check]",
