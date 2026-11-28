@@ -1,0 +1,292 @@
+#!/usr/bin/env python3
+"""Pilot's tests for a change: picks the Swift test suites that touch the changed files, then runs only those.
+
+    Scripts/tests-for-changes                 the branch's changes since main, committed or not; runs the pick
+    Scripts/tests-for-changes <rev>           one commit's changes (<a>..<b> for a range); runs the pick in this checkout
+    Scripts/tests-for-changes --list [rev]    names the pick and its swift test command; runs nothing
+
+The pick, per changed file (no build, no index: names and Package.swift only):
+- a test file with @Test is picked itself; its own types, and a test helper's (no @Test), pick the files of its test
+  target that name them;
+- a source file in Sources/<Target> picks the test files of every test target that depends on <Target> (transitively,
+  per Package.swift) and names a top-level type the file declares or a member its extensions add (one declared in
+  fewer than 3 files), or carries the file's name (Foo.swift, Foo+Bar.swift: FooTests, FooBarRenders and the like);
+- any other file under Sources or Tests (a resource, a dump) picks the test files of those targets that name it;
+- any changed file picks the test files, in any target, that name it as Foo.swift (a test that reads the source);
+- Package.swift and Package.resolved ask for the full suite, which this never runs; files elsewhere are not Swift tests.
+A wide pick runs whole: it is never trimmed to save time.
+
+The run is `nice swift test -j 4 --filter <the suites>`; every line of it goes to .build/tests-for-changes.log, and this
+prints at most 10 lines. Exit 1 when the build or a test fails or the filter runs no test, 2 on a bad argument.
+"""
+import functools
+import os
+import re
+import shlex
+import subprocess
+import sys
+import time
+
+ROOT = subprocess.run(["git", "rev-parse", "--show-toplevel"], capture_output=True, text=True,
+                      cwd=os.path.dirname(os.path.abspath(__file__))).stdout.strip()
+LOG = os.path.join(ROOT, ".build", "tests-for-changes.log")
+MAX_LINES = 10
+FULL_SUITE = {"Package.swift", "Package.resolved"}
+SWIFT_TEST = ["nice", "swift", "test", "-j", "4"]
+TEST_SUFFIX = re.compile(r"(UITests|Tests|Renders|Probe)$")
+MODS = r"(?:@\w+(?:\([^)\n]*\))?\s+)*(?:(?:final|private|fileprivate|internal|public|open|nonisolated|indirect)\s+)*"
+# Top-level declarations only (column 0): a nested Row or Model would name half the tests.
+DECL = re.compile(r"^" + MODS + r"(?:class|struct|enum|protocol|actor|typealias)\s+(?!func\b|var\b|let\b)([A-Za-z_]\w*)", re.M)
+PRIVATE = re.compile(r"^(?:@\w+(?:\([^)\n]*\))?\s+)*(?:private|fileprivate)\s+(?:final\s+)?"
+                     r"(?:class|struct|enum|protocol|actor|typealias|func)\s+([A-Za-z_]\w*)", re.M)
+TOP_FUNC = re.compile(r"^" + MODS + r"func\s+([A-Za-z_]\w*)", re.M)
+EXTENSION = re.compile(r"^" + MODS + r"extension\s+[A-Za-z_][\w.<>, ]*\{?[^\n]*\n(.*?)^\}", re.M | re.S)
+# What an extension adds that a test can call: its non-private members, one level in.
+MEMBER = re.compile(r"^ {4}(?:@\w+(?:\([^)\n]*\))?\s+)*(?!private\b|fileprivate\b)(?:(?:public|internal|static|class|"
+                    r"final|override|nonisolated|mutating|convenience|@MainActor)\s+)*(?:func|var|let|case)\s+([A-Za-z_]\w*)",
+                    re.M)
+ANY_MEMBER = r"(^|[^A-Za-z0-9_])(func|var|let|case)[[:space:]]+[A-Za-z_][A-Za-z0-9_]*"   # git grep: POSIX ERE
+GENERIC_AT = 3   # a member name declared in this many files or more (body, run, title) names no one file
+# A suite is a top-level type (or extension of one) whose body holds @Test; Swift Testing names it Target.Type/test().
+SUITE = re.compile(r"^" + MODS + r"(?P<kind>struct|class|enum|actor|extension)\s+(?P<name>[A-Za-z_]\w*)", re.M)
+NESTED = re.compile(r"^(?: {4}|\t)" + MODS + r"(?:struct|class|enum|actor)\s+([A-Za-z_]\w*)", re.M)
+
+
+def git(*args, check=True):
+    r = subprocess.run(["git", *args], capture_output=True, text=True, cwd=ROOT)
+    if check and r.returncode != 0:
+        print(f"tests-for-changes: git {' '.join(args)}: {r.stderr.strip()}", file=sys.stderr)
+        sys.exit(2)
+    return r.stdout
+
+
+def strip_comments(text):
+    return re.sub(r"/\*.*?\*/", "", re.sub(r"//[^\n]*", "", text), flags=re.S)
+
+
+def targets():
+    """Package.swift's targets: name -> (kind, source dir, direct dependencies)."""
+    text = strip_comments(open(os.path.join(ROOT, "Package.swift")).read())
+    heads = list(re.finditer(r"\.(target|executableTarget|testTarget|systemLibrary)\(\s*name:\s*\"(\w+)\"", text))
+    found = {}
+    for i, m in enumerate(heads):
+        body = text[m.end():heads[i + 1].start() if i + 1 < len(heads) else len(text)]
+        deps = re.search(r"dependencies:\s*\[(.*?)\]", body, re.S)
+        path = re.search(r"path:\s*\"([^\"]+)\"", body)
+        kind, name = m.group(1), m.group(2)
+        found[name] = (kind, path.group(1) if path else ("Tests/" if kind == "testTarget" else "Sources/") + name,
+                       re.findall(r"\"(\w+)\"", deps.group(1)) if deps else [])
+    return found
+
+
+def reach(name, graph, seen=None):
+    seen = set() if seen is None else seen
+    for dep in graph.get(name, (None, None, []))[2]:
+        if dep in graph and dep not in seen:
+            seen.add(dep)
+            reach(dep, graph, seen)
+    return seen
+
+
+def changes(spec):
+    """(label, tree to read new files from or None for the working tree, base rev, [(status, path)])."""
+    if spec is None:
+        base_ref = "main" if git("rev-parse", "--verify", "-q", "main", check=False) else "origin/main"
+        base = git("merge-base", "HEAD", base_ref).strip()
+        rows = [l.split("\t") for l in git("diff", "--name-status", "--no-renames", base).splitlines()]
+        rows += [["A", p] for p in git("ls-files", "--others", "--exclude-standard").splitlines()]
+        return f"since {base_ref} ({base[:8]}), uncommitted included", None, base, rows
+    old, new = spec.split("..", 1) if ".." in spec else (spec + "^", spec)
+    rows = [l.split("\t") for l in git("diff", "--name-status", "--no-renames", old, new).splitlines()]
+    return spec, git("rev-parse", "--short", new).strip(), old, rows
+
+
+def read(tree, path):
+    if tree is None:
+        try:
+            return open(os.path.join(ROOT, path), errors="replace").read()
+        except OSError:
+            return ""
+    return git("show", f"{tree}:{path}", check=False)
+
+
+def grep_files(tree, words, dirs):
+    """Swift files under dirs (in tree, or the working tree with untracked files) naming any of words."""
+    words = sorted(w for w in words if len(w) > 2)
+    if not words or not dirs:
+        return set()
+    args = ["grep", "-l", "-w", "-F"] + [a for w in words for a in ("-e", w)]
+    args += ["--untracked"] if tree is None else [tree]
+    out = git(*args, "--", *[f"{d}/*.swift" for d in dirs], check=False)
+    return {l.split(":", 1)[1] if tree else l for l in out.splitlines()}
+
+
+@functools.cache
+def test_files(tree, d):
+    out = git("ls-files", "--", d) if tree is None else git("ls-tree", "-r", "--name-only", tree, "--", d)
+    files = out.splitlines()
+    if tree is None:
+        files += git("ls-files", "--others", "--exclude-standard", "--", d).splitlines()
+    return [f for f in files if f.endswith(".swift")]
+
+
+@functools.cache
+def generic(tree):
+    """Member names declared in GENERIC_AT or more Swift files: too common to tie a test to one file."""
+    args = ["grep", "-o", "-E", ANY_MEMBER] + (["--untracked"] if tree is None else [tree])
+    seen = {}
+    for line in git(*args, "--", "Sources/*.swift", "Tests/*.swift", check=False).splitlines():
+        parts = line.split(":")
+        seen.setdefault(parts[-1].split()[-1], set()).add(parts[-2])
+    return {n for n, files in seen.items() if len(files) >= GENERIC_AT}
+
+
+def suite_names(code):
+    """The suites a test file declares: each top-level type whose body holds @Test. A suite inside a top-level
+    extension (extension SharedLook { struct FooRenders { … } }) is named by itself, not the extension, so the
+    filter runs that suite and not every suite the extension holds."""
+    heads = list(SUITE.finditer(code))
+    names = set()
+    for i, m in enumerate(heads):
+        body = code[m.end():heads[i + 1].start() if i + 1 < len(heads) else len(code)]
+        if "@Test" not in body:
+            continue
+        inner = list(NESTED.finditer(body)) if m["kind"] == "extension" else []
+        held = [n.group(1) for j, n in enumerate(inner)
+                if "@Test" in body[n.end():inner[j + 1].start() if j + 1 < len(inner) else len(body)]]
+        names |= set(held) if held and "@Test" not in body[:inner[0].start()] else {m["name"]}
+    return names
+
+
+def owner(path, dirs):
+    """The target whose directory holds path; dirs is [(directory, target)], longest first."""
+    return next((name for d, name in dirs if path.startswith(d.rstrip("/") + "/")), None)
+
+
+def pick(spec):
+    graph = targets()
+    by_dir = sorted(((v[1], k) for k, v in graph.items()), key=lambda t: -len(t[0]))
+    tests = {k: v[1] for k, v in graph.items() if v[0] == "testTarget"}
+    users = {t: {t} | reach(t, graph) for t in tests}   # test target -> every target it reaches
+    label, tree, base, rows = changes(spec)
+    picked, full, other, unmapped = set(), [], [], []
+    for status, path in rows:
+        if path in FULL_SUITE:
+            full.append(path)
+            continue
+        target = owner(path, by_dir)
+        if target is None:
+            other.append(path)
+            continue
+        # Both sides of the change: a type it removed or renamed names the tests that used it.
+        versions = ([read(tree, path)] if status != "D" else []) + ([git("show", f"{base}:{path}", check=False)]
+                                                                     if status != "A" else [])
+        stem = os.path.splitext(os.path.basename(path))[0]
+        dirs = [tests[target]] if target in tests else [d for t, d in tests.items() if target in users[t]]
+        hits = set()
+        if path.endswith(".swift"):
+            words = set()
+            for code in map(strip_comments, versions):
+                own = suite_names(code) if target in tests else set()
+                if own and status != "D":
+                    hits.add(path)
+                words |= set(DECL.findall(code)) - own
+                members = {m for body in EXTENSION.findall(code) for m in MEMBER.findall(body)}
+                words |= members - generic(tree) if members else set()
+                if target in tests:   # a test file's private helpers are its own
+                    words = (words | set(TOP_FUNC.findall(code))) - set(PRIVATE.findall(code))
+            hits |= grep_files(tree, words, dirs) - {path}
+            names = {stem.replace("+", "")} | set(stem.split("+")[1:])
+            hits |= {f for d in dirs for f in test_files(tree, d)
+                     if TEST_SUFFIX.sub("", os.path.splitext(os.path.basename(f))[0]) in names}
+        else:
+            hits |= grep_files(tree, {stem, *path.split("/")[2:3]}, dirs)
+        # A test that reads the file itself (a source check, a fixture) names it, whatever it links.
+        hits |= grep_files(tree, {os.path.basename(path)}, list(tests.values())) - {path}
+        if not hits and status != "D":
+            unmapped.append(path)
+        picked |= hits
+    return label, tree, picked, full, other, unmapped, tests
+
+
+def suites(tree, picked, tests):
+    """{test target: sorted suite names} for the picked files."""
+    dirs = [(d, t) for t, d in tests.items()]
+    out = {}
+    for f in sorted(picked):
+        target, names = owner(f, dirs), suite_names(strip_comments(read(tree, f)))
+        if target and names:
+            out.setdefault(target, set()).update(names)
+    return {t: sorted(s) for t, s in sorted(out.items())}
+
+
+def short(items, room=110):
+    line, shown = "", 0
+    for item in items:
+        add = (", " if line else "") + item
+        if len(line) + len(add) > room:
+            return f"{line} … (+{len(items) - shown})"
+        line, shown = line + add, shown + 1
+    return line
+
+
+def main(argv):
+    listing = "--list" in argv
+    rest = [a for a in argv if a != "--list"]
+    if any(a.startswith("-") for a in rest) or len(rest) > 1:
+        print(__doc__.strip().split("\n\n")[1])
+        return 2
+    label, tree, picked, full, other, unmapped, tests = pick(rest[0] if rest else None)
+    by_target = suites(tree, picked, tests)
+    count = sum(len(s) for s in by_target.values())
+    lines = [f"Change: {label}"]
+    lines.append(f"Pick: {count} suites from {len(picked)} test files" if count else "Pick: no Swift test touches it")
+    lines += [f"  {t}: {short(s)}" for t, s in by_target.items()]
+    if full:
+        lines.append(f"Full suite asked by {', '.join(full)}: run `{shlex.join(SWIFT_TEST)}` once before landing")
+    if unmapped:
+        lines.append(f"Named by no test: {short(unmapped, 90)}")
+    if other:
+        lines.append(f"Not Swift tests: {len(other)} files ({short(sorted({p.split('/')[0] for p in other}), 70)})")
+    if not count:
+        return emit(lines, 0)
+    # A suite can sit inside a column-0 extension (PilotTests.SharedLook/GiphyRenders/test()): any level matches.
+    regex = "^(" + "|".join(f"{t}\\.([A-Za-z0-9_]+/)*({'|'.join(s)})" for t, s in by_target.items()) + ")(/|$)"
+    command = SWIFT_TEST + ["--filter", regex]
+    if listing:
+        return emit(lines + ["Run: " + shlex.join(command)], 0)
+    os.makedirs(os.path.dirname(LOG), exist_ok=True)
+    start = time.monotonic()
+    with open(LOG, "w") as log:
+        log.write("$ " + shlex.join(command) + "\n")
+        log.flush()
+        code = subprocess.run(command, cwd=ROOT, stdout=log, stderr=subprocess.STDOUT).returncode
+    seconds = time.monotonic() - start
+    text = open(LOG, errors="replace").read()
+    ran = sum(int(n) for n in re.findall(r"Test run with (\d+) tests?", text))
+    failed = [t for t in re.findall(r"^✘ Test (.+?) failed after", text, re.M) if not t.startswith("run with")]
+    errors = re.findall(r"^.*error: .*$", text, re.M)
+    where = os.path.relpath(LOG, ROOT)
+    if code == 0 and ran:
+        lines.append(f"PASS {ran} tests, {seconds:.0f} s (log {where})")
+        return emit(lines, 0)
+    if failed:
+        lines.append(f"FAIL {len(set(failed))} tests of {ran}: {short(sorted(set(failed)), 80)} (log {where})")
+    elif errors and not ran:
+        lines.append(f"FAIL build: {errors[0].strip()[:120]} (log {where})")
+    elif code == 0:
+        lines.append(f"FAIL the filter ran no test (log {where})")
+    else:
+        lines.append(f"FAIL swift test exited {code}, {ran} tests ran (log {where})")
+    return emit(lines, 1)
+
+
+def emit(lines, code):
+    if len(lines) > MAX_LINES:
+        lines = lines[:MAX_LINES - 2] + [f"  … {len(lines) - MAX_LINES + 1} more lines", lines[-1]]
+    print("\n".join(lines))
+    return code
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))
