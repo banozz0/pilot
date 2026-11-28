@@ -63,6 +63,9 @@ public final class Diagnostics: Sendable {
     static let kept = 20
     /// The background check's period: a stall still going is logged and the footprint read this often.
     static let tickSeconds = 5
+    /// The order of the observer that stamps the start of a wait: the last of every beforeWaiting callout. Pilot's own
+    /// late observers (AfterCommit) sit below it, since of two at one order the one added later runs later.
+    public static let waitOrder = CFIndex.max
 
     /// The main run loop's last step, in uptime nanoseconds, with the low bit set while it waits for work. Only the main
     /// thread writes it, so a step never takes a lock; it starts waiting.
@@ -96,17 +99,15 @@ public final class Diagnostics: Sendable {
             return !s.started
         }
         guard first else { return }
-        // Observers run in increasing order within a stage. Before sources stamps a loop that never sleeps, after waiting
-        // the end of a sleep, each ahead of every other callout; before waiting starts the sleep only after every other
-        // callout of that stage, the Core Animation commit (order 2000000) and the autorelease pool's drain among them.
-        let busy = CFRunLoopObserverCreateWithHandler(nil, CFRunLoopActivity([.beforeSources, .afterWaiting]).rawValue, true, .min) { [self] _, _ in
-            step(waiting: false, nanos: Self.uptime())
+        // Observers run in increasing order within a stage: busy first, the wait last (the CA commit is order 2000000).
+        func observe(_ activities: CFRunLoopActivity, order: CFIndex, waiting: Bool) {
+            let observer = CFRunLoopObserverCreateWithHandler(nil, activities.rawValue, true, order) { [self] _, _ in
+                step(waiting: waiting, nanos: Self.uptime())
+            }
+            CFRunLoopAddObserver(CFRunLoopGetMain(), observer, .commonModes)
         }
-        let waits = CFRunLoopObserverCreateWithHandler(nil, CFRunLoopActivity.beforeWaiting.rawValue, true, .max) { [self] _, _ in
-            step(waiting: true, nanos: Self.uptime())
-        }
-        CFRunLoopAddObserver(CFRunLoopGetMain(), busy, .commonModes)
-        CFRunLoopAddObserver(CFRunLoopGetMain(), waits, .commonModes)
+        observe([.beforeSources, .afterWaiting], order: .min, waiting: false)
+        observe(.beforeWaiting, order: Self.waitOrder, waiting: true)
         let timer = DispatchSource.makeTimerSource(queue: .global(qos: .utility))
         timer.schedule(deadline: .now() + .seconds(Self.tickSeconds), repeating: .seconds(Self.tickSeconds), leeway: .seconds(1))
         timer.setEventHandler { [self] in tick(nanos: Self.uptime()) }

@@ -780,14 +780,15 @@ final class SwitchFrames: NSObject {
 }
 
 /// The main run loop about to wait, after Core Animation's commit (an observer ordered after the commit's): what a page
-/// switch drew is committed by then (page-switch-3; PageSwitchTiming, PageDeck).
+/// switch drew is committed by then (page-switch-3; PageSwitchTiming, PageDeck). One below Pilot's checks' wait stamp, so
+/// the work here counts as busy, never as waiting (setup-overhaul T40).
 @MainActor
 enum AfterCommit {
     /// Runs `action` each time the main run loop is about to wait, after the commit, until the observer is removed; once
     /// when `repeats` is false.
     @discardableResult
     static func observe(repeats: Bool, _ action: @escaping @MainActor () -> Void) -> CFRunLoopObserver? {
-        let observer = CFRunLoopObserverCreateWithHandler(nil, CFRunLoopActivity.beforeWaiting.rawValue, repeats, CFIndex.max) { _, _ in
+        let observer = CFRunLoopObserverCreateWithHandler(nil, CFRunLoopActivity.beforeWaiting.rawValue, repeats, Diagnostics.waitOrder - 1) { _, _ in
             MainActor.assumeIsolated { action() }
         }
         CFRunLoopAddObserver(CFRunLoopGetMain(), observer, .commonModes)

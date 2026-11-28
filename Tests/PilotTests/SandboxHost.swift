@@ -279,9 +279,10 @@ struct SandboxHost {
         // takes and touches that much memory for 8 s, past a tick of the checks. Each goes once read: the forced hang and
         // spike `pilot status --part problems` then shows (setup-overhaul T40). A `<socket>.draw-stall` file holding seconds
         // blocks that long inside the run loop's next beforeWaiting callout, at Core Animation's commit order, where layout
-        // and drawing run.
+        // and drawing run; a `<socket>.after-commit-stall` file blocks inside Pilot's own AfterCommit, added after the checks.
         let stall = path.appendingPathExtension("stall").path(percentEncoded: false), spike = path.appendingPathExtension("spike").path(percentEncoded: false)
         let drawStall = path.appendingPathExtension("draw-stall").path(percentEncoded: false)
+        let afterCommitStall = path.appendingPathExtension("after-commit-stall").path(percentEncoded: false)
         func take(_ file: String) -> Double? {
             guard let text = try? String(contentsOfFile: file, encoding: .utf8) else { return nil }
             try? FileManager.default.removeItem(atPath: file)
@@ -297,6 +298,12 @@ struct SandboxHost {
                     usleep(useconds_t(seconds * 1_000_000))
                 }
                 CFRunLoopAddObserver(CFRunLoopGetMain(), once, .commonModes)
+            }
+            if let seconds = take(afterCommitStall) {
+                AfterCommit.observe(repeats: false) {
+                    print("after-commit-stall: \(seconds) s inside AfterCommit"); fflush(stdout)
+                    usleep(useconds_t(seconds * 1_000_000))
+                }
             }
             if let megabytes = take(spike) {
                 let bytes = Int(megabytes) << 20, memory = UnsafeMutableRawPointer.allocate(byteCount: bytes, alignment: 16_384)
